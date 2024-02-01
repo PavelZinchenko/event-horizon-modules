@@ -59,7 +59,7 @@ namespace Gui.ComponentList
         public bool IsExpanded { get; set; }
 
         public string Name { get { return "$GroupShips"; ; } }
-        public SpriteId Icon { get { return new SpriteId("textures/icons/icon_fleet", SpriteId.Type.Default); } }
+        public SpriteId Icon { get { return new SpriteId("icons/icon_fleet", SpriteId.Type.Default); } }
         public UnityEngine.Color Color { get { return CommonNode.DefaultColor; } }
         public void Add(ComponentInfo componentInfo) { throw new InvalidOperationException(); }
         public int ItemCount { get { return _nodes.Count; } }

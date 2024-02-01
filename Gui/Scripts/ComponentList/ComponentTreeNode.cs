@@ -14,11 +14,11 @@ namespace Gui.ComponentList
             _quantityProvider = quantityProvider;
             _weaponNode = new WeaponNode(this);
 
-            _armorNode = CreateNode("$GroupArmor", new SpriteId("textures/icons/icon_shield", SpriteId.Type.Default));
-            _energyNode = CreateNode("$GroupEnergy", new SpriteId("textures/icons/icon_battery", SpriteId.Type.Default));
-            _droneNode = CreateNode("$GroupDrones", new SpriteId("textures/icons/icon_drone", SpriteId.Type.Default));
-            _engineNode = CreateNode("$GroupEngines", new SpriteId("textures/icons/icon_engine", SpriteId.Type.Default));
-            _specialNode = CreateNode("$GroupSpecial", new SpriteId("textures/icons/icon_gear", SpriteId.Type.Default));
+            _armorNode = CreateNode("$GroupArmor", new SpriteId("icons/icon_shield", SpriteId.Type.Default));
+            _energyNode = CreateNode("$GroupEnergy", new SpriteId("icons/icon_battery", SpriteId.Type.Default));
+            _droneNode = CreateNode("$GroupDrones", new SpriteId("icons/icon_drone", SpriteId.Type.Default));
+            _engineNode = CreateNode("$GroupEngines", new SpriteId("icons/icon_engine", SpriteId.Type.Default));
+            _specialNode = CreateNode("$GroupSpecial", new SpriteId("icons/icon_gear", SpriteId.Type.Default));
 
             IsVisible = true;
         }
@@ -42,7 +42,7 @@ namespace Gui.ComponentList
         public IComponentTreeNode Special { get { return _specialNode; } }
 
         public string Name { get { return "$GroupAll"; } }
-        public SpriteId Icon { get { return new SpriteId("textures/icons/icon_gear", SpriteId.Type.Default); } }
+        public SpriteId Icon { get { return new SpriteId("icons/icon_gear", SpriteId.Type.Default); } }
         public UnityEngine.Color Color { get { return CommonNode.DefaultColor; } }
         public bool IsVisible { get; set; }
 
@@ -141,12 +141,12 @@ namespace Gui.ComponentList
         public WeaponNode(IComponentTreeNode parent)
         {
             _parent = parent;
-            _projectileNode = CreateNode("$GroupWeaponC", new SpriteId("textures/weapongroup/icon_weapon_c", SpriteId.Type.Default));
-            _beamNode = CreateNode("$GroupWeaponL", new SpriteId("textures/weapongroup/icon_weapon_l", SpriteId.Type.Default));
-            _missileNode = CreateNode("$GroupWeaponM", new SpriteId("textures/weapongroup/icon_weapon_m", SpriteId.Type.Default));
-            _torpedoNode = CreateNode("$GroupWeaponT", new SpriteId("textures/weapongroup/icon_weapon_t", SpriteId.Type.Default));
-            _specialNode = CreateNode("$GroupWeaponS", new SpriteId("textures/weapongroup/icon_weapon_s", SpriteId.Type.Default));
-            _universalNode = CreateNode("$GroupWeaponAny", new SpriteId("textures/weapongroup/icon_weapon_x", SpriteId.Type.Default));
+            _projectileNode = CreateNode("$GroupWeaponC", new SpriteId("icons/weapongroup/icon_weapon_c", SpriteId.Type.Default));
+            _beamNode = CreateNode("$GroupWeaponL", new SpriteId("icons/weapongroup/icon_weapon_l", SpriteId.Type.Default));
+            _missileNode = CreateNode("$GroupWeaponM", new SpriteId("icons/weapongroup/icon_weapon_m", SpriteId.Type.Default));
+            _torpedoNode = CreateNode("$GroupWeaponT", new SpriteId("icons/weapongroup/icon_weapon_t", SpriteId.Type.Default));
+            _specialNode = CreateNode("$GroupWeaponS", new SpriteId("icons/weapongroup/icon_weapon_s", SpriteId.Type.Default));
+            _universalNode = CreateNode("$GroupWeaponAny", new SpriteId("icons/weapongroup/icon_weapon_x", SpriteId.Type.Default));
         }
 
         public IComponentTreeNode Parent { get { return _parent; } }
@@ -329,7 +329,7 @@ namespace Gui.ComponentList
         private readonly IComponentTreeNode _parent;
         private readonly Dictionary<int, IComponentTreeNode> _components = new Dictionary<int, IComponentTreeNode>();
 
-        public static readonly UnityEngine.Color DefaultColor = new UnityEngine.Color32(80,192,255,255);
+        public static readonly UnityEngine.Color DefaultColor = AppConfiguration.ColorTable.ComponentTreeNodeColor;
     }
 
     public class ComponentListNode : IComponentTreeNode

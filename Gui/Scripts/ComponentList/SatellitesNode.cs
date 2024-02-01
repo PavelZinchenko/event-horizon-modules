@@ -34,7 +34,7 @@ namespace Gui.ComponentList
 		public bool IsVisible { get; set; } = true;
 
 		public string Name { get; }
-        public SpriteId Icon => new SpriteId("textures/icons/icon_scanner", SpriteId.Type.Default);
+        public SpriteId Icon => new SpriteId("icons/icon_scanner", SpriteId.Type.Default);
         public UnityEngine.Color Color => CommonNode.DefaultColor;
         public void Add(ComponentInfo componentInfo) { throw new InvalidOperationException(); }
         public int ItemCount => 10; // TODO;
