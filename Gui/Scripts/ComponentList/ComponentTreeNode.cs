@@ -329,7 +329,7 @@ namespace Gui.ComponentList
         private readonly IComponentTreeNode _parent;
         private readonly Dictionary<int, IComponentTreeNode> _components = new Dictionary<int, IComponentTreeNode>();
 
-        public static readonly UnityEngine.Color DefaultColor = AppConfiguration.ColorTable.ComponentTreeNodeColor;
+        public static readonly UnityEngine.Color DefaultColor = Gui.Theme.UiTheme.Current.GetColor(Theme.ThemeColor.ButtonIcon);
     }
 
     public class ComponentListNode : IComponentTreeNode

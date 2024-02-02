@@ -14,6 +14,7 @@ using Services.Resources;
 using Constructor.Component;
 using GameDatabase.Extensions;
 using ShipEditor.Model;
+using Gui.Theme;
 
 namespace ShipEditor.UI
 {
@@ -83,7 +84,7 @@ namespace ShipEditor.UI
 			var component = info.CreateComponent(_shipEditor.Ship.Model.Layout.CellCount);
 
 			_name.text = info.GetName(_localization);
-		    _name.color = info.ItemQuality.ToColor();
+		    _name.color = UiTheme.Current.GetQualityColor(info.ItemQuality);
 
 			_icon.sprite = _resourceLocator.GetSprite(info.Data.Icon);
 			_icon.color = info.Data.Color;

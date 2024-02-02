@@ -9,7 +9,8 @@
         "Zenject",
         "ShipConstructor",
         "Localization",
-        "Database"
+        "Database",
+        "Diagnostics"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -56,7 +56,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8720497758534549372}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Script: {fileID: 11500000, guid: 9111079df60566940a316b73ad641512, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
@@ -77,6 +77,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+  _themeColor: 53
 --- !u!114 &8720497758534549374
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -294,7 +295,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8720497759176866745}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Script: {fileID: 11500000, guid: 9111079df60566940a316b73ad641512, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
@@ -315,6 +316,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+  _themeColor: 53
 --- !u!114 &8720497759176866747
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -391,7 +393,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8720497759198266593}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Script: {fileID: 11500000, guid: 9111079df60566940a316b73ad641512, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
@@ -412,6 +414,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+  _themeColor: 51
 --- !u!114 &8720497759198266595
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -487,7 +490,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8720497759847299190}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Script: {fileID: 11500000, guid: 9111079df60566940a316b73ad641512, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
@@ -508,6 +511,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+  _themeColor: 3
 --- !u!1 &8720497759950617940
 GameObject:
   m_ObjectHideFlags: 0
@@ -644,6 +648,41 @@ PrefabInstance:
       propertyPath: m_Text
       value: Name
       objectReference: {fileID: 0}
+    - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
+        type: 3}
+      propertyPath: _themeFont
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
+        type: 3}
+      propertyPath: _themeColor
+      value: 52
+      objectReference: {fileID: 0}
+    - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
+        type: 3}
+      propertyPath: _themeFontSize
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
+        type: 3}
+      propertyPath: m_FontData.m_BestFit
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
+        type: 3}
+      propertyPath: m_FontData.m_MaxSize
+      value: 300
+      objectReference: {fileID: 0}
+    - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
+        type: 3}
+      propertyPath: m_FontData.m_MinSize
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
+        type: 3}
+      propertyPath: m_FontData.m_FontSize
+      value: 32
+      objectReference: {fileID: 0}
     - target: {fileID: 3421231610098575330, guid: 8991454e9b62ed14a834957d9433bcdc,
         type: 3}
       propertyPath: m_Pivot.x
@@ -771,7 +810,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8715002441552565930}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
+  m_Script: {fileID: 11500000, guid: a57811ade5f43264f96354d7400cca71, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
 --- !u!1 &8715002441552565930 stripped
