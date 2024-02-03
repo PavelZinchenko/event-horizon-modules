@@ -12,6 +12,12 @@ namespace Gui.Theme
         InnerPanel = 5,
         Selection = 6,
 
+        LowQuality = 20,
+        CommonQuality = 21,
+        MediumQuality = 22,
+        HighQuality = 23,
+        PerfectQuality = 24,
+
         Button = 50,
         ButtonFocus = 51,
         ButtonText = 52,
@@ -21,6 +27,13 @@ namespace Gui.Theme
         WarningButtonFocus = 61,
         WarningButtonText = 62,
         WarningButtonIcon = 63,
+
+        PremiumButton = 70,
+        PremiumButtonFocus = 71,
+        PremiumButtonText = 72,
+        PremiumButtonIcon = 73,
+
+        BackgroundDark = 90,
 
         Text = 100,
         HeaderText = 101,
@@ -63,15 +76,22 @@ namespace Gui.Theme
         [SerializeField] private Color _iconColor = new Color32(128, 255, 255, 255);
         [SerializeField] private Color _selectionColor = new Color32(128, 255, 255, 255);
 
+        [SerializeField] private Color _backgroundDark = Color.black;
+
         [SerializeField] private Color _buttonColor = new Color32(80, 192, 255, 255);
         [SerializeField] private Color _buttonFocusColor = new Color32(80, 192, 255, 64);
         [SerializeField] private Color _buttonTextColor = new Color32(128, 255, 255, 255);
-        [SerializeField] private Color _buttonIconColor = new Color32(80, 192, 255, 255);
+        [SerializeField] private Color _buttonIconColor = new Color32(128, 255, 255, 224);
 
         [SerializeField] private Color _warningButtonColor = new Color32(255, 128, 80, 255);
         [SerializeField] private Color _warningButtonFocusColor = new Color32(255, 192, 80, 32);
         [SerializeField] private Color _warningButtonTextColor = new Color32(255, 255, 192, 255);
         [SerializeField] private Color _warningButtonIconColor = new Color32(255, 255, 192, 255);
+
+        [SerializeField] private Color _premiumButtonColor = new Color32(255, 255, 192, 255);
+        [SerializeField] private Color _premiumButtonFocusColor = new Color32(255, 255, 192, 64);
+        [SerializeField] private Color _premiumButtonTextColor = new Color32(255, 255, 224, 255);
+        [SerializeField] private Color _premiumButtonIconColor = new Color32(255, 255, 192, 255);
 
         [SerializeField] private Color _textColor = new Color32(128, 255, 255, 255);
         [SerializeField] private Color _errorTextColor = new Color32(255, 192, 0, 255);
@@ -122,6 +142,8 @@ namespace Gui.Theme
                 case ThemeColor.InnerPanel: return _windowColor.Transparent(0.5f);
                 case ThemeColor.Selection: return _selectionColor;
 
+                case ThemeColor.BackgroundDark: return _selectionColor;
+
                 case ThemeColor.Button: return _buttonColor;
                 case ThemeColor.ButtonFocus: return _buttonFocusColor;
                 case ThemeColor.ButtonText: return _buttonTextColor;
@@ -132,11 +154,22 @@ namespace Gui.Theme
                 case ThemeColor.WarningButtonText: return _warningButtonTextColor;
                 case ThemeColor.WarningButtonIcon: return _warningButtonIconColor;
 
+                case ThemeColor.PremiumButton: return _premiumButtonColor;
+                case ThemeColor.PremiumButtonFocus: return _premiumButtonFocusColor;
+                case ThemeColor.PremiumButtonText: return _premiumButtonTextColor;
+                case ThemeColor.PremiumButtonIcon: return _premiumButtonIconColor;
+
                 case ThemeColor.Text: return _textColor;
                 case ThemeColor.HeaderText: return _headerTextColor;
                 case ThemeColor.PaleText: return _paleTextColor;
                 case ThemeColor.BrightText: return _brightTextColor;
                 case ThemeColor.ErrorText: return _errorTextColor;
+
+                case ThemeColor.LowQuality: return _itemLowQualityColor;
+                case ThemeColor.CommonQuality: return _itemCommonQualityColor;
+                case ThemeColor.MediumQuality: return _itemMediumQualityColor;
+                case ThemeColor.HighQuality: return _itemHighQualityColor;
+                case ThemeColor.PerfectQuality: return _itemPerfectQualityColor;
             }
 
             throw new System.InvalidOperationException($"Invalid color type {themeColor}");
@@ -206,6 +239,8 @@ namespace Gui.Theme
             _iconColor = settings.IconColor;
             _selectionColor = settings.SelectionColor;
 
+            _backgroundDark = settings.BackgroundDark;
+
             _buttonColor = settings.ButtonColor;
             _buttonFocusColor = settings.ButtonFocusColor;
             _buttonTextColor = settings.ButtonTextColor;
@@ -215,6 +250,12 @@ namespace Gui.Theme
             _warningButtonFocusColor = settings.WarningButtonFocusColor;
             _warningButtonTextColor = settings.WarningButtonTextColor;
             _warningButtonIconColor = settings.WarningButtonIconColor;
+
+            _premiumButtonColor = settings.PremiumButtonColor;
+            _premiumButtonFocusColor = settings.PremiumButtonFocusColor;
+            _premiumButtonTextColor = settings.PremiumButtonTextColor;
+            _premiumButtonIconColor = settings.PremiumButtonIconColor;
+
             _errorTextColor = settings.ErrorTextColor;
 
             _textColor = settings.TextColor;
