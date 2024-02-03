@@ -15,8 +15,16 @@ namespace Gui.Theme.Wrappers
             if (!UnityEditor.EditorApplication.isPlaying) return;
 #endif
 
-            if (_themeColor != ThemeColor.Default)
-                color = UiTheme.Current.GetColor(_themeColor);
+            try
+            {
+
+                if (_themeColor != ThemeColor.Default)
+                    color = UiTheme.Current.GetColor(_themeColor);
+            }
+            catch (System.Exception e)
+            {
+                GameDiagnostics.Debug.LogException(e);
+            }
         }
     }
 }

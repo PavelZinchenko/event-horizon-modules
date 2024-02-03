@@ -17,20 +17,27 @@ namespace Gui.Theme.Wrappers
             if (!UnityEditor.EditorApplication.isPlaying) return;
 #endif
 
-            if (_themeColor != ThemeColor.Default)
-                color = UiTheme.Current.GetColor(_themeColor);
-
-            if (_themeFont == ThemeFont.Default) return;
-
-            var fontInfo = UiTheme.Current.GetFont(_themeFont);
-            int baseFontSize = _themeFontSize != ThemeFontSize.Default ? UiTheme.Current.GetFontSize(_themeFontSize) : fontSize;
-
-            font = fontInfo.Font;
-            fontSize = Mathf.RoundToInt(baseFontSize * fontInfo.SizeMultiplier);
-            if (resizeTextForBestFit)
+            try
             {
-                resizeTextMinSize = Mathf.RoundToInt(resizeTextMinSize * fontInfo.SizeMultiplier);
-                resizeTextMaxSize = Mathf.RoundToInt(baseFontSize * fontInfo.SizeMultiplier);
+                if (_themeColor != ThemeColor.Default)
+                    color = UiTheme.Current.GetColor(_themeColor);
+
+                if (_themeFont == ThemeFont.Default) return;
+
+                var fontInfo = UiTheme.Current.GetFont(_themeFont);
+                int baseFontSize = _themeFontSize != ThemeFontSize.Default ? UiTheme.Current.GetFontSize(_themeFontSize) : fontSize;
+
+                font = fontInfo.Font;
+                fontSize = Mathf.RoundToInt(baseFontSize * fontInfo.SizeMultiplier);
+                if (resizeTextForBestFit)
+                {
+                    resizeTextMinSize = Mathf.RoundToInt(resizeTextMinSize * fontInfo.SizeMultiplier);
+                    resizeTextMaxSize = Mathf.RoundToInt(baseFontSize * fontInfo.SizeMultiplier);
+                }
+            }
+            catch (System.Exception e)
+            {
+                GameDiagnostics.Debug.LogException(e);
             }
         }
     }
