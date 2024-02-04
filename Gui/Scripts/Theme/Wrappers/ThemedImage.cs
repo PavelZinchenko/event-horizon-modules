@@ -1,14 +1,16 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace Gui.Theme.Wrappers
 {
+    [AddComponentMenu("UI/ThemedImage")]
     public class ThemedImage : Image
     {
         [SerializeField] private ThemeColor _themeColor;
         [SerializeField] private ThemeColorMode _colorMode;
 
-        private bool _colorInitialized;
+        [NonSerialized] private bool _colorInitialized;
 
         public override Color color 
         {

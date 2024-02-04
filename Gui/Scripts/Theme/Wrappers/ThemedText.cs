@@ -1,8 +1,10 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace Gui.Theme.Wrappers
 {
+    [AddComponentMenu("UI/ThemedText")]
     public class ThemedText : Text
     {
         [SerializeField] private ThemeColor _themeColor;
@@ -10,7 +12,7 @@ namespace Gui.Theme.Wrappers
         [SerializeField] private ThemeFont _themeFont;
         [SerializeField] private ThemeFontSize _themeFontSize;
 
-        private bool _colorInitialized;
+        [NonSerialized] private bool _colorInitialized;
 
         public override Color color
         {
