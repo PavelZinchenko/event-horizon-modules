@@ -30,7 +30,7 @@ namespace Gui.Theme
         private void OnDatabaseLoaded()
         {
             if (_database.UiSettings == null) return;
-            _defaultTheme.Import(_database.UiSettings);
+            _defaultTheme.Import(_database);
         }
     }
 }

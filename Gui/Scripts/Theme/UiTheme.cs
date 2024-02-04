@@ -11,12 +11,6 @@ namespace Gui.Theme
         Icon = 3,
         Selection = 6,
 
-        LowQuality = 20,
-        CommonQuality = 21,
-        MediumQuality = 22,
-        HighQuality = 23,
-        PerfectQuality = 24,
-
         Button = 50,
         ButtonFocus = 51,
         ButtonText = 52,
@@ -39,6 +33,21 @@ namespace Gui.Theme
         PaleText = 102,
         BrightText = 103,
         ErrorText = 104,
+
+        Credits = 200,
+        Stars = 201,
+        Money = 202,
+        Fuel = 203,
+        Tokens = 204,
+        Snowflakes = 205,
+    }
+
+    public enum TechColor
+    {
+        Available = 1,
+        NotAvailable = 2,
+        Obtained = 3,
+        Hidden = 4,
     }
 
     public enum ThemeColorMode
@@ -117,6 +126,18 @@ namespace Gui.Theme
         [SerializeField] private Color _itemHighQualityColor = new Color32(240, 159, 255, 255);
         [SerializeField] private Color _itemPerfectQualityColor = new Color32(255, 223, 81, 255);
 
+        [SerializeField] private Color _availableTechColor = new Color32(255, 255, 192, 255);
+        [SerializeField] private Color _unavailableTechColor = new Color32(128, 128, 128, 255);
+        [SerializeField] private Color _obtainedTechColor = new Color32(80, 192, 255, 255);
+        [SerializeField] private Color _hiddenTechColor = new Color32(128, 128, 255, 255);
+
+        [SerializeField] private Color _creditsColor = new Color32(0, 255, 0, 255);
+        [SerializeField] private Color _starsColor = new Color32(255, 240, 160, 255);
+        [SerializeField] private Color _moneyColor = new Color32(255, 240, 160, 255);
+        [SerializeField] private Color _tokensColor = new Color32(128, 128, 255, 255);
+        [SerializeField] private Color _fuelColor = new Color32(0, 255, 255, 255);
+        [SerializeField] private Color _snowflakesColor = new Color32(192, 255, 255, 255);
+
         [SerializeField] private int _smallText_18 = 18;
         [SerializeField] private int _smallText_20 = 20;
         [SerializeField] private int _compactText_22 = 22;
@@ -153,7 +174,7 @@ namespace Gui.Theme
                 case ThemeColor.Icon: return _iconColor;
                 case ThemeColor.Selection: return _selectionColor;
 
-                case ThemeColor.BackgroundDark: return _selectionColor;
+                case ThemeColor.BackgroundDark: return _backgroundDark;
 
                 case ThemeColor.Button: return _buttonColor;
                 case ThemeColor.ButtonFocus: return _buttonFocusColor;
@@ -176,11 +197,12 @@ namespace Gui.Theme
                 case ThemeColor.BrightText: return _brightTextColor;
                 case ThemeColor.ErrorText: return _errorTextColor;
 
-                case ThemeColor.LowQuality: return _itemLowQualityColor;
-                case ThemeColor.CommonQuality: return _itemCommonQualityColor;
-                case ThemeColor.MediumQuality: return _itemMediumQualityColor;
-                case ThemeColor.HighQuality: return _itemHighQualityColor;
-                case ThemeColor.PerfectQuality: return _itemPerfectQualityColor;
+                case ThemeColor.Credits: return _creditsColor;
+                case ThemeColor.Stars: return _starsColor;
+                case ThemeColor.Money: return _moneyColor;
+                case ThemeColor.Fuel: return _fuelColor;
+                case ThemeColor.Tokens: return _tokensColor;
+                case ThemeColor.Snowflakes: return _snowflakesColor;
             }
 
             throw new System.InvalidOperationException($"Invalid color type {themeColor}");
@@ -243,8 +265,38 @@ namespace Gui.Theme
             throw new System.InvalidOperationException($"Invalid quality value {quality}");
         }
 
-        public void Import(GameDatabase.DataModel.UiSettings settings)
+        public Color GetCurrencyColor(Economy.Currency currency)
         {
+            switch (currency)
+            {
+                case Economy.Currency.Credits: return _creditsColor;
+                case Economy.Currency.Stars: return _starsColor;
+                case Economy.Currency.Money: return _moneyColor;
+                case Economy.Currency.Tokens: return _tokensColor;
+                case Economy.Currency.Snowflakes: return _snowflakesColor;
+                case Economy.Currency.None: return Color.white;
+            }
+
+            throw new System.InvalidOperationException($"Invalid currency {currency}");
+        }
+
+        public Color GetTechColor(TechColor techColor)
+        {
+            switch (techColor)
+            {
+                case TechColor.Available: return _availableTechColor;
+                case TechColor.NotAvailable: return _unavailableTechColor;
+                case TechColor.Obtained: return _obtainedTechColor;
+                case TechColor.Hidden: return _hiddenTechColor;
+            }
+
+            throw new System.InvalidOperationException($"Invalid TechColor value {techColor}");
+        }
+
+        public void Import(GameDatabase.IDatabase database)
+        {
+            var settings = database.UiSettings;
+
             _windowColor = settings.WindowColor;
             _scrollBarColor = settings.ScrollBarColor;
             _iconColor = settings.IconColor;
@@ -267,6 +319,17 @@ namespace Gui.Theme
             _premiumButtonTextColor = settings.PremiumButtonTextColor;
             _premiumButtonIconColor = settings.PremiumButtonIconColor;
 
+            _availableTechColor = settings.AvailableTechColor;
+            _unavailableTechColor = settings.UnavailableTechColor;
+            _obtainedTechColor = settings.ObtainedTechColor;
+            _hiddenTechColor = settings.HiddenTechColor;
+
+            _creditsColor = settings.CreditsColor;
+            _starsColor = settings.StarsColor;
+            _moneyColor = settings.MoneyColor;
+            _fuelColor = settings.FuelColor;
+            _tokensColor = settings.TokensColor;
+
             _errorTextColor = settings.ErrorTextColor;
 
             _textColor = settings.TextColor;
@@ -279,6 +342,9 @@ namespace Gui.Theme
             _itemMediumQualityColor = settings.MediumQualityItemColor;
             _itemHighQualityColor = settings.HighQualityItemColor;
             _itemPerfectQualityColor = settings.PerfectQualityItemColor;
+
+            var snowflakes = database.GetQuestItem(GameDatabase.Model.ItemId<GameDatabase.DataModel.QuestItem>.Create(25)); // TODO: add ID to settings
+            if (snowflakes != null) _snowflakesColor = snowflakes.Color;
         }
 
         [System.Serializable]
