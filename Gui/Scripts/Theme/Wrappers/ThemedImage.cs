@@ -6,6 +6,19 @@ namespace Gui.Theme.Wrappers
     public class ThemedImage : Image
     {
         [SerializeField] private ThemeColor _themeColor;
+        [SerializeField] private ThemeColorMode _colorMode;
+
+        private bool _colorInitialized;
+
+        public override Color color 
+        {
+            get => base.color;
+            set
+            {
+                base.color = value;
+                _colorInitialized = true;
+            }
+        }
 
         protected override void Start()
         {
@@ -17,13 +30,12 @@ namespace Gui.Theme.Wrappers
 
             try
             {
-
-                if (_themeColor != ThemeColor.Default)
-                    color = UiTheme.Current.GetColor(_themeColor);
+                if (!_colorInitialized && _themeColor != ThemeColor.Default)
+                    color = UiTheme.Current.GetColor(_themeColor).ApplyColorMode(_colorMode);
             }
             catch (System.Exception e)
             {
-                GameDiagnostics.Debug.LogException(e);
+                GameDiagnostics.Debug.LogException(e, gameObject);
             }
         }
     }

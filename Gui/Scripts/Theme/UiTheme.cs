@@ -9,7 +9,6 @@ namespace Gui.Theme
         Window = 1,
         ScrollBar = 2,
         Icon = 3,
-        InnerPanel = 5,
         Selection = 6,
 
         LowQuality = 20,
@@ -40,6 +39,19 @@ namespace Gui.Theme
         PaleText = 102,
         BrightText = 103,
         ErrorText = 104,
+    }
+
+    public enum ThemeColorMode
+    {
+        Default = 0,
+     
+        SemiTransparent25 = 1,
+        SemiTransparent50 = 2,
+        SemiTransparent75 = 3,
+
+        Brightness25 = 12,
+        Brightness50 = 11,
+        Brightbess75 = 10,
     }
 
     public enum ThemeFont
@@ -139,7 +151,6 @@ namespace Gui.Theme
                 case ThemeColor.Window: return _windowColor;
                 case ThemeColor.ScrollBar: return _scrollBarColor;
                 case ThemeColor.Icon: return _iconColor;
-                case ThemeColor.InnerPanel: return _windowColor.Transparent(0.5f);
                 case ThemeColor.Selection: return _selectionColor;
 
                 case ThemeColor.BackgroundDark: return _selectionColor;
@@ -281,5 +292,22 @@ namespace Gui.Theme
     public static class ColorExtension
     {
         public static Color Transparent(this Color color, float alpha) => new Color(color.r, color.g, color.b, color.a * alpha);
+        public static Color Multiply(this Color color, float value) => new Color(color.r*value, color.g*value, color.b*value, color.a);
+
+        public static Color ApplyColorMode(this Color color, ThemeColorMode colorMode)
+        {
+            switch (colorMode)
+            {
+                case ThemeColorMode.SemiTransparent25: return color.Transparent(0.25f);
+                case ThemeColorMode.SemiTransparent50: return color.Transparent(0.5f);
+                case ThemeColorMode.SemiTransparent75: return color.Transparent(0.75f);
+
+                case ThemeColorMode.Brightness25: return color.Multiply(0.25f);
+                case ThemeColorMode.Brightness50: return color.Multiply(0.5f);
+                case ThemeColorMode.Brightbess75: return color.Multiply(0.75f);
+            }
+
+            return color;
+        }
     }
 }

@@ -11,6 +11,7 @@ namespace Gui.Theme.Wrappers
         {
             serializedObject.Update();
             EditorGUILayout.PropertyField(serializedObject.FindProperty("_themeColor"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("_colorMode"));
             serializedObject.ApplyModifiedProperties();
 
             base.OnInspectorGUI();

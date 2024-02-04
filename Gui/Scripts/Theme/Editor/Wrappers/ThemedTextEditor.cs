@@ -11,6 +11,7 @@ namespace Gui.Theme.Wrappers
         {
             serializedObject.Update();
             EditorGUILayout.PropertyField(serializedObject.FindProperty("_themeColor"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("_colorMode"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("_themeFont"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("_themeFontSize"));
             serializedObject.ApplyModifiedProperties();
