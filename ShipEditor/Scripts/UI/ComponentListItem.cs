@@ -59,7 +59,7 @@ namespace ShipEditor.UI
 		private void UpdateDescription(IComponent component)
 		{
 			_name.text = _component.GetName(_localization);
-		    _name.color = _component.ItemQuality.ToColor();
+		    _name.color = Gui.Theme.UiTheme.Current.GetQualityColor(_component.ItemQuality);
 
 			_icon.sprite = _resourceLocator.GetSprite(_component.Data.Icon);
 			_icon.color = _component.Data.Color;

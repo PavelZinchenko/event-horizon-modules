@@ -91,7 +91,7 @@ namespace ShipEditor.UI
 
 		    var modification = component.Modification ?? EmptyModification.Instance;
 		    _modification.gameObject.SetActive(!string.IsNullOrEmpty(_modification.text = modification.GetDescription(_localization)));
-		    _modification.color = info.ItemQuality.ToColor();
+		    _modification.color = UiTheme.Current.GetQualityColor(info.ItemQuality);
 
 			if (_description)
 			{
