@@ -23,7 +23,9 @@ namespace ShipEditor.Context
 
 		public IShip Ship { get; }
 		public IInventoryProvider Inventory { get; }
-		public bool IsTechResearched(Component component)
+        public bool IsShipNameEditable => false;
+
+        public bool CanBeUnlocked(Component component)
 		{
 			var technology = _database.TechnologyList.FirstOrDefault(item => item is Technology_Component tech && tech.Component == component);
 			return technology != null;

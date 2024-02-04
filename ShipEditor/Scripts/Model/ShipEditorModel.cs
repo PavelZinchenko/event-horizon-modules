@@ -31,6 +31,7 @@ namespace ShipEditor.Model
 		IInventoryProvider Inventory { get; }
 		ICompatibilityChecker CompatibilityChecker { get; }
 		IEnumerable<IComponentModel> InstalledComponents { get; }
+        bool IsShipNameEditable { get; }
 		string ShipName { get; set; }
 
 		IShipLayoutModel Layout(SatelliteLocation location);
@@ -90,11 +91,16 @@ namespace ShipEditor.Model
 		public IShipLayoutModel Layout(ShipElementType elementType) => _layout[elementType];
 		public bool HasSatellite(SatelliteLocation location) => _layout[location] != null;
 		public Satellite Satellite(SatelliteLocation location) => _satellite[location]?.Information;
+        public bool IsShipNameEditable => _context.IsShipNameEditable;
 
-		public string ShipName 
+        public string ShipName 
 		{
 			get => _shipName ?? _ship?.Name;
-			set => _shipName = value;
+            set
+            {
+                if (!IsShipNameEditable) return;
+                _shipName = value;
+            }
 		}
 
 		public ShipEditorModel(IShipEditorContext context)
@@ -180,7 +186,7 @@ namespace ShipEditor.Model
 			if (component.Info.Data.Availability == Availability.Common)
 				return true;
 
-			return _context.IsTechResearched(component.Data);
+			return _context.CanBeUnlocked(component.Data);
 		}
 
 		public void UnlockComponent(IComponentModel component)

@@ -11,8 +11,9 @@ namespace ShipEditor.Context
 	{
 		IShip Ship { get; }
 		IInventoryProvider Inventory { get; }
-		public bool IsTechResearched(Component component);
-	}
+		public bool CanBeUnlocked(Component component);
+        bool IsShipNameEditable { get; }
+    }
 
 	public interface IInventoryProvider 
 	{

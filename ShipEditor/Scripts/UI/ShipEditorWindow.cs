@@ -84,7 +84,9 @@ namespace ShipEditor.UI
 			OnSatelliteChanged(SatelliteLocation.Right);
 			OpenComponentList();
 			ZoomToShip();
-		}
+
+            _shipNameInputField.interactable = _shipEditor.IsShipNameEditable;
+        }
 
 		public void OpenShipList() => ShowPanel(PanelType.ShipList);
 

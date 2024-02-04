@@ -11,6 +11,7 @@ namespace Gui.Windows
 		[SerializeField] private WindowClass _class = WindowClass.Singleton;
 		[SerializeField] private bool _waitOpenAnimationDone = false;
         [SerializeField] private bool _waitCloseAnimationDone = false;
+        [SerializeField] private bool _initiallyHidden = false;
         [SerializeField] private EscapeKeyAction _escapeKeyAction = EscapeKeyAction.None;
 
         public WindowInitializedEvent OnInitializedEvent = new WindowInitializedEvent();
@@ -29,6 +30,9 @@ namespace Gui.Windows
             _windowClosedTrigger = windowClosedTrigger;
 
             _canvasGroup = GetComponent<CanvasGroup>();
+
+            if (_initiallyHidden)
+                gameObject.SetActive(false);
         }
 
         protected override void OnWindowClosed()
