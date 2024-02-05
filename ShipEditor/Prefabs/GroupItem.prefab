@@ -78,6 +78,7 @@ MonoBehaviour:
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
   _themeColor: 53
+  _colorMode: 0
 --- !u!114 &8720497758534549374
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -317,6 +318,7 @@ MonoBehaviour:
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
   _themeColor: 53
+  _colorMode: 0
 --- !u!114 &8720497759176866747
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -415,6 +417,7 @@ MonoBehaviour:
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
   _themeColor: 51
+  _colorMode: 0
 --- !u!114 &8720497759198266595
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -512,6 +515,7 @@ MonoBehaviour:
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
   _themeColor: 3
+  _colorMode: 0
 --- !u!1 &8720497759950617940
 GameObject:
   m_ObjectHideFlags: 0
@@ -666,22 +670,27 @@ PrefabInstance:
     - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
         type: 3}
       propertyPath: m_FontData.m_BestFit
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
         type: 3}
       propertyPath: m_FontData.m_MaxSize
-      value: 300
+      value: 32
       objectReference: {fileID: 0}
     - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
         type: 3}
       propertyPath: m_FontData.m_MinSize
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
         type: 3}
       propertyPath: m_FontData.m_FontSize
-      value: 32
+      value: 24
+      objectReference: {fileID: 0}
+    - target: {fileID: 3421231610098575328, guid: 8991454e9b62ed14a834957d9433bcdc,
+        type: 3}
+      propertyPath: m_FontData.m_AlignByGeometry
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3421231610098575330, guid: 8991454e9b62ed14a834957d9433bcdc,
         type: 3}
