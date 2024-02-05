@@ -313,7 +313,7 @@ namespace ShipEditor.Model
 				if (!layout.IsSuitableLocation(component.X, component.Y, component.Info.Data) || 
 					!_compatibilityChecker.IsCompatible(component.Info.Data))
 				{
-					UnityEngine.Debug.LogError($"Invalid component {component.Info.Data.Name} at [{component.X},{component.Y}]");
+					GameDiagnostics.Trace.LogError($"Invalid component {component.Info.Data.Name} at [{component.X},{component.Y}]");
 					continue;
 				}
 

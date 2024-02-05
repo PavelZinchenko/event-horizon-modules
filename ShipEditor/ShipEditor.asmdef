@@ -8,7 +8,8 @@
         "ServicesFacade",
         "ShipConstructor",
         "Gui",
-        "Localization"
+        "Localization",
+        "Diagnostics"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -68,7 +68,7 @@ namespace Services.Localization
             if (_defaultLocalization != null && _defaultLocalization.TryGetString(key, new Parameters(parameters), out result))
                 return result;
 
-            Debug.Log("key not found: '" + key + "'");
+            GameDiagnostics.Trace.LogError("localized string not found: '" + key + "'");
             return key;
 		}
 
@@ -80,7 +80,7 @@ namespace Services.Localization
 			var result = _localization?.GetKey(key, parameters) ?? _defaultLocalization?.GetKey(key, parameters);
 			if (result == null)
 			{
-				Debug.LogError("key not found: '" + key + "'");
+				GameDiagnostics.Trace.LogError("localized string not found: '" + key + "'");
 				return key;
 			}
 

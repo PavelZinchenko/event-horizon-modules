@@ -6,7 +6,8 @@
         "CommonComponents",
         "Database",
         "Unity.InputSystem",
-        "Zenject"
+        "Zenject",
+        "Diagnostics"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
