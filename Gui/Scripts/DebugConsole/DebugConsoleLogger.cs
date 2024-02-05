@@ -16,7 +16,7 @@ namespace Gui.DebugConsole
     public class DebugConsoleLogger : IInitializable, IDisposable, ITickable, IDebugConsoleLogger, GameDiagnostics.ILogger
     {
         private readonly IDatabase _database;
-        private readonly Queue<LogEntry> _messages = new();
+        private readonly List<LogEntry> _messages = new();
         private bool _enabled;
         private bool _gotErrorsSinceLastCheck;
 
@@ -76,22 +76,9 @@ namespace Gui.DebugConsole
                     list.AddRange(_messages);
                 else
                     list.AddRange(_messages.Skip(_messages.Count - maxAmount).Take(maxAmount));
+
+                _messages.Clear();
             }
-        }
-
-        public IReadOnlyList<LogEntry> GetMessages(int maxAmount)
-        {
-            IReadOnlyList<LogEntry> messages;
-
-            lock (_messages)
-            {
-                if (_messages.Count <= maxAmount)
-                    messages = _messages.ToArray();
-                else
-                    messages = _messages.Skip(_messages.Count - maxAmount).Take(maxAmount).ToArray();
-            }
-
-            return messages;
         }
 
         public void Log(string message, GameObject context = null)
@@ -122,7 +109,7 @@ namespace Gui.DebugConsole
         {
             lock (_messages)
             {
-                _messages.Enqueue(logEntry);
+                _messages.Add(logEntry);
                 
                 if (logEntry.IsError) 
                     _gotErrorsSinceLastCheck = true;
@@ -146,7 +133,12 @@ namespace Gui.DebugConsole
             WriteLogMessage(new LogEntry(logString, stackTrace, type));
         }
 
-        private bool IsEnabled(IDatabase database) => _database.IsEditable || _database.DebugSettings.EnableDebugConsole;
+        private bool IsEnabled(IDatabase database)
+        {
+            if (_database.IsEditable) return true;
+            if (_database.DebugSettings != null && _database.DebugSettings.EnableDebugConsole) return true;
+            return false;
+        }
     }
 
     public readonly struct LogEntry
