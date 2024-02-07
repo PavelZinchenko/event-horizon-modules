@@ -28,9 +28,11 @@ namespace ShipEditor.UI
 		[SerializeField] private Text _name;
         [SerializeField] private Text _modification;
         [SerializeField] private Sprite _emptyIcon;
-        [SerializeField] private LayoutGroup _description;
+        [SerializeField] private LayoutGroup _stats;
+        [SerializeField] private Text _description;
+        [SerializeField] private GameObject _descriptionBlock;
 
-		[SerializeField] private Text _sizeText;
+        [SerializeField] private Text _sizeText;
 		[SerializeField] private Image _requiredCellIcon;
 		[SerializeField] private Text _requiredCellText;
 
@@ -93,9 +95,20 @@ namespace ShipEditor.UI
 		    _modification.gameObject.SetActive(!string.IsNullOrEmpty(_modification.text = modification.GetDescription(_localization)));
 		    _modification.color = UiTheme.Current.GetQualityColor(info.ItemQuality);
 
-			if (_description)
+            if (_descriptionBlock)
+            {
+                if (string.IsNullOrEmpty(info.Data.Description))
+                    _descriptionBlock.SetActive(false);
+                else
+                {
+                    _descriptionBlock.SetActive(true);
+                    _description.text = _localization.Localize(info.Data.Description);
+                }
+            }
+
+			if (_stats)
 			{
-				_description.transform.InitializeElements<NameValueItem, KeyValuePair<string, string>>(
+				_stats.transform.InitializeElements<NameValueItem, KeyValuePair<string, string>>(
 					GetDescription(component, _localization), UpdateTextField);
 			}
 		}
