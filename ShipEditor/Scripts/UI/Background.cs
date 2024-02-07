@@ -59,15 +59,17 @@ namespace ShipEditor.UI
         private void UpdateSize()
         {
             var scale = new Vector3(_camera.Width, _camera.Height, 1.0f);
-			var offset = _camera.Offset;
+			var offset = _camera.FocusOffset;
             transform.localScale = scale;
 			transform.localPosition = new Vector3(offset.x, offset.y, transform.localPosition.z);
         }
 
         private void UpdateMaterial()
         {
+            var cameraPosition = (Vector2)_camera.transform.localPosition;
+            var offset = RotationHelpers.Transform(cameraPosition, -_camera.transform.localEulerAngles.z) + (Vector2)transform.localPosition;
+            _materialCopy.SetVector("_Offset", offset);
             _materialCopy.SetVector("_Size", new Vector2(_camera.Width, _camera.Height));
-            _materialCopy.SetVector("_Offset", transform.position);
         }
 
         private void OnDestroy()

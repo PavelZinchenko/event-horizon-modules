@@ -20,6 +20,11 @@ namespace ShipEditor.UI
 			_elements[ShipElementType.SatelliteR].Height), 
 			_elements[ShipElementType.Ship].Height);
 
+        public Vector2 Position { get => transform.localPosition; set => transform.localPosition = value; }
+        public float Rotation { get => transform.localEulerAngles.z; set => transform.localEulerAngles = new Vector3(0, 0, value); }
+        public float Scale { get => transform.localScale.z; set => transform.localScale = value * Vector3.one; }
+        public float CellSize => _cellSize * transform.localScale.z;
+
 		public void InitializeShip(IShipLayoutModel layout, Sprite sprite)
 		{
 			_elements[ShipElementType.Ship].Initialize(layout, sprite, _cellSize);
@@ -47,10 +52,11 @@ namespace ShipEditor.UI
 		public Vector2Int WorldToCell(Vector2 center, ShipElementType element, int componentSize)
 		{
 			var view = _elements[element];
-			var offset = transform.localPosition + view.ContentOffset + view.transform.localPosition;
-			var x = Mathf.RoundToInt((center.x - offset.x) / _cellSize - 0.5f * componentSize);
-			var y = Mathf.RoundToInt((offset.y - center.y) / _cellSize - 0.5f * componentSize);
-			return new Vector2Int(x, y);
+            center = transform.InverseTransformPoint(center.x, center.y, 0);
+			var offset = view.ContentOffset + view.transform.localPosition;
+			var x = (center.x - offset.x) / _cellSize - 0.5f * componentSize;
+			var y = (offset.y - center.y) / _cellSize - 0.5f * componentSize;
+			return new Vector2Int(Mathf.RoundToInt(x), Mathf.RoundToInt(y));
 		}
 
 		public void ShowSelection(Vector2 position, GameDatabase.DataModel.Component component)

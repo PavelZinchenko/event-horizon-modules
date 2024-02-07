@@ -1,4 +1,5 @@
 ﻿using System.Linq;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
 using ShipEditor.Model;
@@ -33,15 +34,17 @@ namespace ShipEditor.UI
 
 		[SerializeField] private ShipView _shipView;
 
-		[SerializeField] private RectTransform _editorWindow;
+        [SerializeField] private RectTransform _editorWindow;
 		[SerializeField] private ComponentsPanel _componentListPanel;
 		[SerializeField] private ShipsPanel _shipListPanel;
 		[SerializeField] private SatellitesPanel _satelliteListPanel;
 		[SerializeField] private ComponentPanel _componentPanel;
 		[SerializeField] private DraggableComponent _draggableComponent;
 		[SerializeField] private UnityEngine.UI.Button _undoButton;
-		[SerializeField] private UnityEngine.UI.InputField _shipNameInputField;
-		[SerializeField] private AudioClip _installSound;
+        [SerializeField] private UnityEngine.UI.Button _backButton;
+        [SerializeField] private UnityEngine.UI.InputField _shipNameInputField;
+        [SerializeField] private GameObject _shipsButton;
+        [SerializeField] private AudioClip _installSound;
 
 		[SerializeField] private float _cameraZoomMin = 3;
 		[SerializeField] private float _cameraZoomMax = 25;
@@ -77,15 +80,19 @@ namespace ShipEditor.UI
 			_shipEditor.Events.MultipleComponentsChanged -= OnMultipleComponentsChanged;
 		}
 
-		private void Start()
+		private IEnumerator Start()
 		{
+            _shipsButton.SetActive(_shipEditor.Inventory.Ships.Any());
+            _shipNameInputField.interactable = _shipEditor.IsShipNameEditable;
+            UpdateBackButton();
+
+            yield return new WaitForEndOfFrame();
+
 			OnShipChanged(_shipEditor.Ship);
 			OnSatelliteChanged(SatelliteLocation.Left);
 			OnSatelliteChanged(SatelliteLocation.Right);
 			OpenComponentList();
 			ZoomToShip();
-
-            _shipNameInputField.interactable = _shipEditor.IsShipNameEditable;
         }
 
 		public void OpenShipList() => ShowPanel(PanelType.ShipList);
@@ -177,10 +184,13 @@ namespace ShipEditor.UI
 
 		public void OnMove(Vector2 offset)
 		{
-			var position = _camera.Position - offset;
-			position.x = Mathf.Clamp(position.x, -_shipView.Width / 2, _shipView.Width / 2);
-			position.y = Mathf.Clamp(position.y, -_shipView.Height / 2, _shipView.Height / 2);
-			_camera.Position = position;
+			var cameraPosition = _camera.Position - offset;
+            var shipPosition = _shipView.Position;
+            var boundingRect = GetShipBoundingRect();
+            var position = RotationHelpers.Transform(cameraPosition - shipPosition, -_camera.Rotation);
+            position.x = Mathf.Clamp(position.x, -boundingRect.x/2, boundingRect.x/2);
+            position.y = Mathf.Clamp(position.y, -boundingRect.y/2, boundingRect.y/2);
+            _camera.Position = RotationHelpers.Transform(position, _camera.Rotation) + shipPosition;
 		}
 
 		public void OnDrag(UnityEngine.EventSystems.PointerEventData eventData)
@@ -198,8 +208,8 @@ namespace ShipEditor.UI
 
 		public void OnZoom(float zoom)
 		{
-			var cameraZoomMax = _overviewMode ? GetBestCameraZoom() : _cameraZoomMax;
-			_camera.OrthographicSize = Mathf.Clamp(_camera.OrthographicSize * zoom, _cameraZoomMin, cameraZoomMax);
+			var cameraZoomMax = _overviewMode ? GetBestCameraZoom() : _cameraZoomMax * _shipView.Scale;
+			_camera.OrthographicSize = Mathf.Clamp(_camera.OrthographicSize * zoom, _cameraZoomMin * _shipView.Scale, cameraZoomMax);
 		}
 
 		public void OnNameChanged(string name)
@@ -213,8 +223,8 @@ namespace ShipEditor.UI
 			_overviewMode = enabled;
 
 			_camera.Focus = _overviewMode ? _cameraFocusCenter : _cameraFocusDefault;
-			_camera.Position = Vector2.zero;
-			ZoomToShip();
+            _camera.Position = _shipView.transform.localPosition;
+            ZoomToShip();
 
 			if (_overviewMode)
 				_overviewModeEnabled?.Invoke();
@@ -222,7 +232,13 @@ namespace ShipEditor.UI
 				_overviewModeDisabled?.Invoke();
 		}
 
-		private void RemoveAllCompoents()
+        private void UpdateBackButton()
+        {
+            if (!_componentListPanel.Visible)
+                _backButton.interactable = true;
+        }
+
+        private void RemoveAllCompoents()
 		{
 			_shipEditor.RemoveAllComponents();
 
@@ -236,33 +252,51 @@ namespace ShipEditor.UI
 			_satelliteListPanel.Visible = panel == PanelType.SatelliteList;
 			_componentListPanel.Visible = panel == PanelType.ComponentList;
 			_componentPanel.Visible = panel == PanelType.Component;
+            UpdateBackButton();
 		}
 
 		private void OnShipChanged(IShip ship)
 		{
-			var sprite = _resourceLocator.GetSprite(ship.Model.ModelImage);
-			_shipView.InitializeShip(_shipEditor.Layout(ShipElementType.Ship), sprite);
+            if (!_shipEditor.ShipDataProvider.TryGet(ship, out var data))
+                data = _shipEditor.ShipDataProvider.Default;
+
+            var sprite = data.HasImage ? null : _resourceLocator.GetSprite(ship.Model.ModelImage);
+
+            _shipView.InitializeShip(_shipEditor.Layout(ShipElementType.Ship), sprite);
 			_shipInitialName = _localization.GetString(_shipEditor.ShipName);
 			_shipNameInputField.text = _shipInitialName;
-			_commandList.Clear();
-			_camera.Position = Vector2.zero;
-			ZoomToShip();
+
+            _shipView.Position = data.Position;
+            _shipView.Rotation = data.Rotation;
+            _shipView.Scale = data.Size > 0 ? data.Size / ship.Model.Layout.Size : 1.0f;
+
+            _commandList.Clear();
+			_camera.Position = data.Position;
+            _camera.Rotation = data.Rotation;
+            ZoomToShip();
 		}
 
 		private void ZoomToShip()
 		{
 			var cameraZoom = GetBestCameraZoom();
-			var cameraZoomMax = _overviewMode ? cameraZoom : _cameraZoomMax;
-			_camera.OrthographicSize = Mathf.Clamp(cameraZoom, _cameraZoomMin, cameraZoomMax);
+			var cameraZoomMax = _overviewMode ? cameraZoom : _cameraZoomMax * _shipView.Scale;
+			_camera.OrthographicSize = Mathf.Clamp(cameraZoom, _cameraZoomMin * _shipView.Scale, cameraZoomMax);
 		}
 
 		private float GetBestCameraZoom()
 		{
-			var zoom = Mathf.Max(_shipView.Height, _shipView.Width / _camera.AspectFromFocus) / 2;
+            var boundingRect = GetShipBoundingRect();
+            var zoom = Mathf.Max(boundingRect.y, boundingRect.x / _camera.AspectFromFocus) / 2;
 			return zoom + zoom * _cameraMargins;
 		}
 
-		private void OnComponentAdded(IComponentModel component)
+        private Vector2 GetShipBoundingRect()
+        {
+            var scale = _shipView.Scale;
+            return RotationHelpers.BoundingRect(_shipView.Width * scale, _shipView.Height * scale, _shipView.Rotation - _camera.Rotation);
+        }
+
+        private void OnComponentAdded(IComponentModel component)
 		{
 			_shipView.AddComponent(component);
 			_soundPlayer.Play(_installSound);

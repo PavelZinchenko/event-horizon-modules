@@ -19,10 +19,12 @@ namespace ShipEditor.Context
 			_database = database;
 			Ship = ship;
 			Inventory = new DatabaseInventoryProvider(database);
+            ShipDataProvider = new EmptyDataProvider();
 		}
 
 		public IShip Ship { get; }
 		public IInventoryProvider Inventory { get; }
+        public IShipDataProvider ShipDataProvider { get; }
         public bool IsShipNameEditable => false;
 
         public bool CanBeUnlocked(Component component)

@@ -1,14 +1,13 @@
 ﻿using UnityEngine;
-using UnityEngine.UI;
 
 namespace ShipEditor.UI
 {
 	[RequireComponent(typeof(Canvas))]
 	public class CanvasTransformHelper : MonoBehaviour
 	{
-		[SerializeField] private float _cellSize = 1.0f;
-
-		private Canvas _canvas;
+        [SerializeField] private ShipView _shipView;
+        
+        private Canvas _canvas;
 		private Camera _camera;
 		private RectTransform _rectTransform;
 
@@ -19,10 +18,14 @@ namespace ShipEditor.UI
 			_rectTransform = GetComponent<RectTransform>();
 		}
 
-		public Vector2 GetCellSize()
+        public float GetShipRotation() => _shipView.transform.localEulerAngles.z - _camera.transform.localEulerAngles.z;
+
+        public Vector2 GetCellSize() => GetUnitSquare() *_shipView.Scale;
+
+        public Vector2 GetUnitSquare()
 		{
 			var screenPointZero = _camera.WorldToScreenPoint(Vector3.zero);
-			var screenPointOne = _camera.WorldToScreenPoint(Vector3.one);
+			var screenPointOne = _camera.WorldToScreenPoint(_camera.transform.up + _camera.transform.right);
 			var canvasRect = _rectTransform.rect;
 			var scale = new Vector2(canvasRect.width / Screen.width, canvasRect.height / Screen.height);
 

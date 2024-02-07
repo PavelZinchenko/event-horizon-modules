@@ -366,6 +366,18 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 85e1db4aa92e3eb4ca36abd13bc9f651, type: 3}
+--- !u!114 &69864948 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 114496545421506836, guid: 85e1db4aa92e3eb4ca36abd13bc9f651,
+    type: 3}
+  m_PrefabInstance: {fileID: 69864947}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!114 &74253024 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 9012668144941815395, guid: 3031962e47925654f9eb4bb24f843af6,
@@ -2187,10 +2199,10 @@ RectTransform:
   m_Father: {fileID: 880758692}
   m_RootOrder: 1
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 272, y: -60}
-  m_SizeDelta: {x: 352, y: 120}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &207966574
 MonoBehaviour:
@@ -5960,7 +5972,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e68b38fd4314c764c856eabc8ac41a86, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _cellSize: 1
+  _shipView: {fileID: 1324167042}
 --- !u!1 &480846395
 GameObject:
   m_ObjectHideFlags: 0
@@ -11829,16 +11841,16 @@ PrefabInstance:
         type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Target
       value: 
-      objectReference: {fileID: 2087046441}
+      objectReference: {fileID: 2087046439}
     - target: {fileID: 114496545421506836, guid: 85e1db4aa92e3eb4ca36abd13bc9f651,
         type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName
-      value: Exit
+      value: Close
       objectReference: {fileID: 0}
     - target: {fileID: 114496545421506836, guid: 85e1db4aa92e3eb4ca36abd13bc9f651,
         type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_TargetAssemblyTypeName
-      value: ShipEditor.UI.ShipEditorWindow, ShipEditor
+      value: Gui.Windows.AnimatedWindow, Gui
       objectReference: {fileID: 0}
     - target: {fileID: 114496545421506836, guid: 85e1db4aa92e3eb4ca36abd13bc9f651,
         type: 3}
@@ -18016,10 +18028,10 @@ RectTransform:
   m_Father: {fileID: 880758692}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 0, y: -4}
-  m_SizeDelta: {x: 96, y: 112}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &1298583324
 MonoBehaviour:
@@ -18886,6 +18898,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1324167043}
   - component: {fileID: 1324167042}
+  - component: {fileID: 1324167044}
   m_Layer: 0
   m_Name: ShipView
   m_TagString: Untagged
@@ -18930,6 +18943,17 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 2
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!210 &1324167044
+SortingGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1324167041}
+  m_Enabled: 1
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 5
 --- !u!1001 &1330155352
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -21172,6 +21196,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _focus: {fileID: 835367688}
   _smoothTime: 0.1
+  _minSpeed: 5
 --- !u!224 &1432188388 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 8720497758704250164, guid: 63b3ccfa7bbe81949a86fa65c9e36fbd,
@@ -26388,7 +26413,7 @@ PrefabInstance:
     - target: {fileID: 8964689328677497580, guid: 1ffa4a6ce85bf8949800f869ca83ad04,
         type: 3}
       propertyPath: m_AnchorMax.y
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8964689328677497580, guid: 1ffa4a6ce85bf8949800f869ca83ad04,
         type: 3}
@@ -26398,17 +26423,17 @@ PrefabInstance:
     - target: {fileID: 8964689328677497580, guid: 1ffa4a6ce85bf8949800f869ca83ad04,
         type: 3}
       propertyPath: m_AnchorMin.y
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8964689328677497580, guid: 1ffa4a6ce85bf8949800f869ca83ad04,
         type: 3}
       propertyPath: m_SizeDelta.x
-      value: 344
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8964689328677497580, guid: 1ffa4a6ce85bf8949800f869ca83ad04,
         type: 3}
       propertyPath: m_SizeDelta.y
-      value: 24.797674
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8964689328677497580, guid: 1ffa4a6ce85bf8949800f869ca83ad04,
         type: 3}
@@ -26448,12 +26473,12 @@ PrefabInstance:
     - target: {fileID: 8964689328677497580, guid: 1ffa4a6ce85bf8949800f869ca83ad04,
         type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8964689328677497580, guid: 1ffa4a6ce85bf8949800f869ca83ad04,
         type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -67.62757
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8964689328677497580, guid: 1ffa4a6ce85bf8949800f869ca83ad04,
         type: 3}
@@ -28263,7 +28288,6 @@ GameObject:
   - component: {fileID: 2087046439}
   - component: {fileID: 2087046440}
   - component: {fileID: 2087046441}
-  - component: {fileID: 2087046442}
   m_Layer: 5
   m_Name: ShipEditorWindow
   m_TagString: Untagged
@@ -28323,17 +28347,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf0a3a3d24b568e49996b3a32441b42d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _class: 0
+  _class: 1
   _waitOpenAnimationDone: 0
   _waitCloseAnimationDone: 0
   _initiallyHidden: 0
-  _escapeKeyAction: 0
+  _escapeKeyAction: 2
   OnInitializedEvent:
     m_PersistentCalls:
       m_Calls: []
   OnWindowClosedEvent:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 2087046441}
+        m_TargetAssemblyTypeName: ShipEditor.UI.ShipEditorWindow, ShipEditor
+        m_MethodName: Exit
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   OnWindowClosingEvent:
     m_PersistentCalls:
       m_Calls: []
@@ -28355,7 +28391,7 @@ Animator:
   m_Avatar: {fileID: 0}
   m_Controller: {fileID: 9100000, guid: c5d0863890a619a46a38b4b74691d1ab, type: 2}
   m_CullingMode: 0
-  m_UpdateMode: 0
+  m_UpdateMode: 2
   m_ApplyRootMotion: 0
   m_LinearVelocityBlending: 0
   m_StabilizeFeet: 0
@@ -28384,7 +28420,9 @@ MonoBehaviour:
   _componentPanel: {fileID: 1278526895}
   _draggableComponent: {fileID: 91574766}
   _undoButton: {fileID: 1774719074}
+  _backButton: {fileID: 69864948}
   _shipNameInputField: {fileID: 2037148327}
+  _shipsButton: {fileID: 8359489390791378405}
   _installSound: {fileID: 8300000, guid: fa9bb077d14366540a57da4618ae77fb, type: 3}
   _cameraZoomMin: 3
   _cameraZoomMax: 25
@@ -28494,34 +28532,6 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
---- !u!114 &2087046442
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2087046434}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ebf9efc0ba55ce74eb66abf275d00705, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _backButtonPressed:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 2087046441}
-        m_TargetAssemblyTypeName: ShipEditor.UI.ShipEditorWindow, ShipEditor
-        m_MethodName: Exit
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
-  _ignoreIfStandaloneBuild: 0
 --- !u!1001 &2100233331
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -28567,7 +28577,7 @@ PrefabInstance:
     - target: {fileID: 4987534304841632051, guid: 93479f535507ced458113e3a6a97cd98,
         type: 3}
       propertyPath: m_AnchorMax.y
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4987534304841632051, guid: 93479f535507ced458113e3a6a97cd98,
         type: 3}
@@ -28577,17 +28587,17 @@ PrefabInstance:
     - target: {fileID: 4987534304841632051, guid: 93479f535507ced458113e3a6a97cd98,
         type: 3}
       propertyPath: m_AnchorMin.y
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4987534304841632051, guid: 93479f535507ced458113e3a6a97cd98,
         type: 3}
       propertyPath: m_SizeDelta.x
-      value: 344
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4987534304841632051, guid: 93479f535507ced458113e3a6a97cd98,
         type: 3}
       propertyPath: m_SizeDelta.y
-      value: 21.25515
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4987534304841632051, guid: 93479f535507ced458113e3a6a97cd98,
         type: 3}
@@ -28627,12 +28637,12 @@ PrefabInstance:
     - target: {fileID: 4987534304841632051, guid: 93479f535507ced458113e3a6a97cd98,
         type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4987534304841632051, guid: 93479f535507ced458113e3a6a97cd98,
         type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -50.601162
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4987534304841632051, guid: 93479f535507ced458113e3a6a97cd98,
         type: 3}
@@ -29665,6 +29675,7 @@ MonoBehaviour:
   _contentFiller: {fileID: 1909588362}
   _componentList: {fileID: 1292075098}
   _noItemsText: {fileID: 538449585}
+  _backButton: {fileID: 69864948}
   _leftSatelliteGroupSelected:
     m_PersistentCalls:
       m_Calls:
@@ -30195,6 +30206,12 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 85e1db4aa92e3eb4ca36abd13bc9f651, type: 3}
+--- !u!1 &8359489390791378405 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1645771249006806, guid: 85e1db4aa92e3eb4ca36abd13bc9f651,
+    type: 3}
+  m_PrefabInstance: {fileID: 8359489390791378404}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &8720497760001153232
 PrefabInstance:
   m_ObjectHideFlags: 0

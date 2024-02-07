@@ -28,8 +28,9 @@ namespace ShipEditor.Model
 		IShipEditorEvents Events { get; }
 
 		IShip Ship { get; }
-		IInventoryProvider Inventory { get; }
-		ICompatibilityChecker CompatibilityChecker { get; }
+        IInventoryProvider Inventory { get; }
+        IShipDataProvider ShipDataProvider { get; }
+        ICompatibilityChecker CompatibilityChecker { get; }
 		IEnumerable<IComponentModel> InstalledComponents { get; }
         bool IsShipNameEditable { get; }
 		string ShipName { get; set; }
@@ -71,7 +72,8 @@ namespace ShipEditor.Model
 
 		public IShip Ship => _ship;
 		public IInventoryProvider Inventory => _context.Inventory;
-		public ICompatibilityChecker CompatibilityChecker => _compatibilityChecker;
+        public IShipDataProvider ShipDataProvider => _context.ShipDataProvider;
+        public ICompatibilityChecker CompatibilityChecker => _compatibilityChecker;
 		
 		public IEnumerable<IComponentModel> InstalledComponents
 		{

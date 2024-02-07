@@ -6,22 +6,29 @@ namespace ShipEditor.UI
 	public class CameraController : MonoBehaviour
 	{
 		[SerializeField] private RectTransform _focus;
-		[SerializeField] private float _smoothTime;
+        [SerializeField] private float _smoothTime = 0.1f;
+        [SerializeField] private float _minSpeed = 5.0f;
 
-		private Camera _camera;
+        private const float _epsilon = 0.01f;
+
+        private Camera _camera;
 		private float _orthographicSize;
-		private float _zoomVelocity;
-		private int _screenWidth;
+        private float _zoomVelocity;
+        private int _screenWidth;
 		private int _screenHeight;
-		private Vector2 _focusPoint;
+        private Vector2 _focusPoint;
 		private Vector2 _focusVelocity;
+        private Vector2 _position;
+        private float _rotation;
+        private float _angularVelocity;
 
-		public float Width => Height * Aspect;
+        public float Width => Height * Aspect;
 		public float Height => 2*_orthographicSize;
 		public float Aspect => _screenHeight > 0 ? (float)_screenWidth / _screenHeight : 1f;
 		public float OrthographicSize { get => _camera.orthographicSize; set => _camera.orthographicSize = value; }
-		public Vector2 Position { get => transform.localPosition; set => transform.localPosition = new Vector3(value.x, value.y, transform.localPosition.z); }
-		public Vector2 Offset => new Vector2((0.5f - _focusPoint.x) * Width, (0.5f - _focusPoint.y) * Height);
+        public Vector2 Position { get => _position; set => _position = value; }
+        public float Rotation { get => _rotation; set => _rotation = value; }
+        public Vector2 FocusOffset => new Vector2((0.5f - _focusPoint.x) * Width, (0.5f - _focusPoint.y) * Height);
 		public RectTransform Focus  { get => _focus; set => _focus = value; }
 
 		public float AspectFromFocus
@@ -73,37 +80,61 @@ namespace ShipEditor.UI
 				dataChanged = true;
 			}
 
-			var orthographicSizeChanged = !Mathf.Approximately(_orthographicSize, _camera.orthographicSize);
-			if (orthographicSizeChanged)
-			{
-				_orthographicSize = CalculateOrthographicSize(_camera.orthographicSize);
-				dataChanged = true;
-			}
-
-			var focus = 0.5f * (_focus.anchorMin + _focus.anchorMax);
-			if (focus != _focusPoint)
-			{
-				_focusPoint = CalculateFocusPoint(focus);
-				dataChanged = true;
-			}
+            dataChanged |= UpdateOrthographicSize();
+            dataChanged |= UpdatePosition();
+            dataChanged |= UpdateFocusPoint();
+            dataChanged |= UpdateRotation();
 
 			return dataChanged;
 		}
 
-		private Vector2 CalculateFocusPoint(Vector2 value)
-		{
-			if (_smoothTime > 0)
-				return Vector2.SmoothDamp(_focusPoint, value, ref _focusVelocity, _smoothTime);
+        private bool UpdatePosition()
+        {
+            var cameraPositon = transform.localPosition;
+            var current = (Vector2)cameraPositon;
+            if (current == _position) return false;
 
-			return value;
+            var delta = Time.unscaledDeltaTime / _smoothTime;
+            var position = current.Lerp(_position, delta, _minSpeed*delta);
+            cameraPositon.x = position.x;
+            cameraPositon.y = position.y;
+
+            transform.localPosition = cameraPositon;
+
+            return true;
+        }
+
+        private bool UpdateFocusPoint()
+		{
+            var focus = 0.5f * (_focus.anchorMin + _focus.anchorMax);
+            if (focus == _focusPoint) return false;
+
+            _focusPoint = Vector2.SmoothDamp(_focusPoint, focus, ref _focusVelocity, _smoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
+            
+            return true;
 		}
 
-		private float CalculateOrthographicSize(float value)
+		private bool UpdateOrthographicSize()
 		{
-			if (_smoothTime > 0)
-				return Mathf.SmoothDamp(_orthographicSize, value, ref _zoomVelocity, _smoothTime);
+            if (Mathf.Abs(_orthographicSize - _camera.orthographicSize) <= _epsilon) return false;
 
-			return value;
+            _orthographicSize = Mathf.SmoothDamp(_orthographicSize, _camera.orthographicSize,
+                ref _zoomVelocity, _smoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
+
+			return true;
 		}
-	}
+
+        private bool UpdateRotation()
+        {
+            var currentRotation = transform.localEulerAngles.z;
+            var deltaAngle = Mathf.DeltaAngle(_rotation, currentRotation);
+            if (Mathf.Abs(deltaAngle) <= _epsilon) return false;
+
+            currentRotation = Mathf.SmoothDampAngle(currentRotation, _rotation, ref _angularVelocity, _smoothTime,
+                Mathf.Infinity, Time.unscaledDeltaTime);
+
+            transform.localEulerAngles = new Vector3(0, 0, currentRotation);
+            return true;
+        }
+    }
 }

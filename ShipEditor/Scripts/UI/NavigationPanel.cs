@@ -78,7 +78,7 @@ namespace ShipEditor.UI
 
         private void Update()
         {
-            _velocity *= 1 - Time.deltaTime*5;
+            _velocity *= 1 - Time.unscaledDeltaTime * 5;
 
             var count = _touches.Count;
             if (count > 0)
@@ -88,7 +88,7 @@ namespace ShipEditor.UI
                 var delta = (Vector2) Camera.main.ScreenToWorldPoint(_position) -
                             (Vector2) Camera.main.ScreenToWorldPoint(lastPosition);
                 _moved?.Invoke(delta);
-                var deltaTime = Mathf.Max(0.01f, Time.deltaTime);
+                var deltaTime = Mathf.Max(0.01f, Time.unscaledDeltaTime);
                 _velocity = _velocity*0.9f + 0.2f*delta/deltaTime;
 
                 var speedLimit = Camera.main.orthographicSize*10;
@@ -105,7 +105,7 @@ namespace ShipEditor.UI
             }
             else if (_velocity.magnitude > 0.1f)
             {
-                _moved?.Invoke(_velocity*Time.deltaTime);
+                _moved?.Invoke(_velocity*Time.unscaledDeltaTime);
             }
         }
 

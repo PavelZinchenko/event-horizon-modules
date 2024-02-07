@@ -15,8 +15,9 @@ namespace ShipEditor.UI
 		[SerializeField] private ComponentContentFiller _contentFiller;
         [SerializeField] private ListScrollRect _componentList;
         [SerializeField] private GameObject _noItemsText;
+        [SerializeField] private UnityEngine.UI.Button _backButton;
 
-		[SerializeField] private UnityEvent _leftSatelliteGroupSelected;
+        [SerializeField] private UnityEvent _leftSatelliteGroupSelected;
 		[SerializeField] private UnityEvent _rightSatelliteGroupSelected;
 		[SerializeField] private UnityEvent<ComponentInfo> _componentSelected;
 
@@ -123,9 +124,10 @@ namespace ShipEditor.UI
 			UpdateSatelliteGroups();
 			_contentFiller.InitializeItems(_selectedNode);
             _componentList.RefreshContent();
-		}
+            _backButton.interactable = _selectedNode != _rootNode;
+        }
 
-		private void OnShipSelected(IShip ship) => UpdateSatelliteGroups();
+        private void OnShipSelected(IShip ship) => UpdateSatelliteGroups();
 
 		private void OnSatelliteChanged(SatelliteLocation location) => UpdateSatelliteGroups();
 

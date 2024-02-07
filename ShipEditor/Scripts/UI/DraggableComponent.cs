@@ -42,6 +42,7 @@ namespace ShipEditor.UI
 			gameObject.SetActive(true);
             var size = content.Layout.Size * blockSize;
             RectTransform.position = eventData.position;
+            RectTransform.localEulerAngles = new Vector3(0, 0, _helper.GetShipRotation());
             RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
             RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
             _icon.SetIcon(_resourceLocator.GetSprite(content.Icon), content.Layout.Data, content.Layout.Size, content.Color);

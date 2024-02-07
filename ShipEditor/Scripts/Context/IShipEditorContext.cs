@@ -7,11 +7,12 @@ using GameDatabase.DataModel;
 
 namespace ShipEditor.Context
 {
-	public interface IShipEditorContext
+    public interface IShipEditorContext
 	{
 		IShip Ship { get; }
 		IInventoryProvider Inventory { get; }
-		public bool CanBeUnlocked(Component component);
+        IShipDataProvider ShipDataProvider { get; }
+        public bool CanBeUnlocked(Component component);
         bool IsShipNameEditable { get; }
     }
 
