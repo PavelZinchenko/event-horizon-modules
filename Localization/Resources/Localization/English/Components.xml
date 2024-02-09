@@ -312,6 +312,7 @@
   <string name="PulseMashineGun_M_1">Machine Gun</string>
   <string name="EmpTorpedo_M_1">EMP Torpedo</string>
   <string name="EmpTorpedo_L_1">Heavy EMP Torpedo</string>
+  <string name="EmpBomb">Heavy EMP Nuke</string>
   <string name="SingularityCannon_M_1">Singularity Cannon</string>
   <string name="FireworkCannon_M_1">Firework Cannon</string>
   <string name="ChargedTorpedo_L_1">Heavy Anti-Matter Torpedo</string>

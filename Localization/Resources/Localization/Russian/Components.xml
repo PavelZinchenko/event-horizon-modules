@@ -165,6 +165,7 @@
     <string name="PulseMashineGun_M_1">Пулемет</string>
     <string name="EmpTorpedo_M_1">EMP торпеда</string>
     <string name="EmpTorpedo_L_1">Большая EMP торпеда</string>
+    <string name="EmpBomb">Тяжелая ЭМИ-бомба</string>
     <string name="SingularityCannon_M_1">Генератор Сингулярности</string>
     <string name="FireworkCannon_M_1">Новогодняя ракета</string>
     <string name="ChargedTorpedo_L_1">Торпеда из антиматерии</string>
