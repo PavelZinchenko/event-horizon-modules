@@ -12,7 +12,7 @@ namespace ShipEditor.Model
 		int Width { get; }
 		int Height { get; }
 
-		IEnumerable<IComponentModel> Components { get; }
+		IReadOnlyList<IComponentModel> Components { get; }
 		Barrel Barrel(int x, int y);
 		bool TryGetComponentAt(int x, int y, out IComponentModel component);
 		bool IsCellCompatible(int x, int y, Component component);
@@ -41,7 +41,7 @@ namespace ShipEditor.Model
 			return cellType;
 		}
 
-		public IEnumerable<IComponentModel> Components => _components;
+		public IReadOnlyList<IComponentModel> Components => _components;
 
 		public Barrel Barrel(int x, int y)
 		{

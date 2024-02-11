@@ -27,21 +27,17 @@ namespace ShipEditor
 			var color = (Color)component.Color;
 
 			var sprite = _resourceLocator.GetSprite(component.Icon);
-			var spriteRect = new SpriteRect(sprite);
+			var spriteRect = SpriteRect.Create(sprite);
 			var rect = new ComponentRect(layout);
+            var size = layout.Size > 0 ? layout.Size : 1;
 
-			var xmin = rect.xmin;
-			var xmax = rect.xmax + 1;
-			var ymin = rect.ymin;
-			var ymax = rect.ymax + 1;
+            var aspect = spriteRect.Aspect;
+            var halfWidth = size * _cellSize * 0.5f * aspect.x;
+            var halfHeight = size * _cellSize * 0.5f * aspect.y;
+            var centerX = (x + 0.5f * (rect.xmax + rect.xmin + 1)) * _cellSize;
+            var centerY = (y + 0.5f * (rect.ymax + rect.ymin + 1)) * _cellSize;
 
-			var aspect = spriteRect.Aspect;
-			var centerX = x + 0.5f * (xmax + xmin) * _cellSize;
-			var centerY = y + 0.5f * (ymax + ymin) * _cellSize;
-			var halfWidth = rect.Size * _cellSize * 0.5f * aspect.x;
-			var halfHeight = rect.Size * _cellSize * 0.5f * aspect.y;
-
-			int index = _vertices.Count;
+            int index = _vertices.Count;
 			_vertices.Add(new Vector3(centerX - halfWidth, -centerY + halfHeight, 0));
 			_vertices.Add(new Vector3(centerX + halfWidth, -centerY + halfHeight, 0));
 			_vertices.Add(new Vector3(centerX + halfWidth, -centerY - halfHeight, 0));
@@ -85,7 +81,7 @@ namespace ShipEditor
 			public float ymin;
 			public float ymax;
 
-			public Vector2 TransformUV(Vector2 uv) => new Vector2(xmin + (xmax - xmin) * uv.x, ymax + (ymin - ymax) * uv.y);
+			public Vector2 TransformUV(Vector2 uv) => new(xmin + (xmax - xmin) * uv.x, ymax + (ymin - ymax) * uv.y);
 
 			public Vector2 Aspect
 			{
@@ -94,26 +90,40 @@ namespace ShipEditor
 					var width = xmax - xmin;
 					var height = ymax - ymin;
 					var max = Mathf.Max(width, height);
-					return new Vector2(width / max, height / max);
+					return max > 0 ? new Vector2(width / max, height / max) : Vector2.one;
 				}
 			}
 
-			public SpriteRect(Sprite sprite)
+            public static SpriteRect Create(Sprite sprite)
+            {
+                if (sprite.packed)
+                    return FromSpriteShape(sprite);
+                else
+                    return FullRect;
+            }
+
+			private static SpriteRect FromSpriteShape(Sprite sprite)
 			{
-				int count = sprite.uv.Length;
+                int count = sprite.uv.Length;
 
-				xmax = xmin = sprite.uv[0].x;
-				ymax = ymin = sprite.uv[0].y;
+                var xmax = sprite.uv[0].x;
+                var ymax = sprite.uv[0].y;
+                var xmin = xmax;
+                var ymin = ymax;
 
-				for (int i = 1; i < count; ++i)
-				{
-					var point = sprite.uv[i];
-					if (point.x < xmin) xmin = point.x;
-					if (point.x > xmax) xmax = point.x;
-					if (point.y < ymin) ymin = point.y;
-					if (point.y > ymax) ymax = point.y;
-				}
-			}
+                for (int i = 1; i < count; ++i)
+                {
+                    var point = sprite.uv[i];
+                    if (point.x < xmin) xmin = point.x;
+                    if (point.x > xmax) xmax = point.x;
+                    if (point.y < ymin) ymin = point.y;
+                    if (point.y > ymax) ymax = point.y;
+                }
+
+                return new SpriteRect { xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax };
+            }
+
+            private static SpriteRect FullRect => new SpriteRect { xmin = 0, ymin = 0, xmax = 1, ymax = 1 };
 		}
 
 		private struct ComponentRect
@@ -151,9 +161,6 @@ namespace ShipEditor
 						if (i > ymax) ymax = i;
 					}
 				}
-
-				if (xmin > xmax) xmin = xmax = 0;
-				if (ymin > ymax) ymin = ymax = 0;
 			}
 		}
 	}

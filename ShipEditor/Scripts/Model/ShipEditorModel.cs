@@ -79,7 +79,7 @@ namespace ShipEditor.Model
 		{
 			get 
 			{
-				var components = _layout[ShipElementType.Ship].Components;
+				var components = (IEnumerable<IComponentModel>)_layout[ShipElementType.Ship].Components;
 				if (_layout[ShipElementType.SatelliteL] != null)
 					components = components.Concat(_layout[ShipElementType.SatelliteL].Components);
 				if (_layout[ShipElementType.SatelliteR] != null)
