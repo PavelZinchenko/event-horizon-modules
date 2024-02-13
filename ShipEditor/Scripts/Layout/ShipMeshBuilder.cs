@@ -37,44 +37,51 @@ namespace ShipEditor
 			{
 				for (int j = 0; j < layout.Width; ++j)
 				{
-					var cellType1 = layout[j, i];
-					var cellType2 = cellType1;
-					var cellType3 = cellType1;
-					var cellType4 = cellType1;
+					var cellType = layout[j, i];
 
-					var even = (i + j) % 2 == 0;
+					if (!IsValidCell(cellType)) continue;
 
-					if (!IsValidCell(cellType1)) continue;
-					if (cellType1 == CellType.InnerOuter)
-					{
-						cellType1 = cellType2 = cellType3 = cellType4 = CellType.Inner;
-
-						if (even)
-						{
-							cellType2 = CellType.Outer;
-							cellType4 = CellType.Outer;
-						}
-						else
-						{
-							cellType1 = CellType.Outer;
-							cellType3 = CellType.Outer;
-						}
-					}
-
-					var v1 = GetVertex(j, i, cellType1);
-					var v2 = GetVertex(j + 1, i, cellType2);
-					var v3 = GetVertex(j + 1, i + 1, cellType3);
-					var v4 = GetVertex(j, i + 1, cellType4);
-
-					if (even)
-						AddFace(v1, v2, v3, v4);
-					else
-						AddFace(v2, v3, v4, v1);
+                    if (cellType == CellType.InnerOuter)
+                        AddMixedCell(j, i, CellType.Outer, CellType.Inner);
+                    else
+                        AddSolidCell(j, i, cellType);
 				}
 			}
 		}
 
-		public Mesh CreateMesh()
+        private void AddSolidCell(int x, int y, CellType cellType)
+        {
+            var v1 = GetVertex(x, y, cellType);
+            var v2 = GetVertex(x+1, y, cellType);
+            var v3 = GetVertex(x+1, y+1, cellType);
+            var v4 = GetVertex(x, y+1, cellType);
+
+            _triangles.Add(v1);
+            _triangles.Add(v2);
+            _triangles.Add(v3);
+            _triangles.Add(v3);
+            _triangles.Add(v4);
+            _triangles.Add(v1);
+        }
+
+        private void AddMixedCell(int x, int y, CellType cellType1, CellType cellType2)
+        {
+            var v0 = GetVertex(x, y + 1, cellType1);
+            var v1 = GetVertex(x, y, cellType1);
+            var v2 = GetVertex(x + 1, y, cellType1);
+            var v3 = GetVertex(x + 1, y, cellType2);
+            var v4 = GetVertex(x+1, y+1, cellType2);
+            var v5 = GetVertex(x, y + 1, cellType2);
+
+            _triangles.Add(v0);
+            _triangles.Add(v1);
+            _triangles.Add(v2);
+            _triangles.Add(v3);
+            _triangles.Add(v4);
+            _triangles.Add(v5);
+        }
+
+        public Mesh CreateMesh()
 		{
 			var mesh = new Mesh();
 			mesh.vertices = _vertices.ToArray();
@@ -133,16 +140,6 @@ namespace ShipEditor
 			}
 
 			return id;
-		}
-
-		private void AddFace(int v1, int v2, int v3, int v4)
-		{
-			_triangles.Add(v1);
-			_triangles.Add(v2);
-			_triangles.Add(v3);
-			_triangles.Add(v3);
-			_triangles.Add(v4);
-			_triangles.Add(v1);
 		}
 	}
 }
