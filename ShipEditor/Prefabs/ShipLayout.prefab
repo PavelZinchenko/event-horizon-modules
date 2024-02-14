@@ -347,7 +347,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_Sprite: {fileID: 21300000, guid: adc0e5349c0a1d2479ec93690f6b6c1c, type: 3}
-  m_Color: {r: 0.2509804, g: 0.2509804, b: 0.2509804, a: 1}
+  m_Color: {r: 0.5019608, g: 0.5019608, b: 0.5019608, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
@@ -538,10 +538,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7b064266c3a22954f9503cb01707fbd5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _innerCellColor: {r: 0.5019608, g: 1, b: 0.5019608, a: 0.7058824}
-  _outerCellColor: {r: 0.5019608, g: 1, b: 1, a: 0.7058824}
-  _engineCellColor: {r: 1, g: 1, b: 0.5019608, a: 0.7058824}
-  _weaponCellColor: {r: 1, g: 0.627451, b: 0.5019608, a: 0.7058824}
+  _innerCellColor: {r: 0.5019608, g: 1, b: 0.5019608, a: 1}
+  _outerCellColor: {r: 0.5019608, g: 1, b: 1, a: 1}
+  _engineCellColor: {r: 1, g: 1, b: 0.5019608, a: 1}
+  _weaponCellColor: {r: 1, g: 0.627451, b: 0.5019608, a: 1}
   _validCellColor: {r: 0, g: 1, b: 0, a: 0.7529412}
   _invalidCellColor: {r: 1, g: 0, b: 0, a: 0.7529412}
   _lockedCellColor: {r: 1, g: 0.5019608, b: 0.5019608, a: 1}
