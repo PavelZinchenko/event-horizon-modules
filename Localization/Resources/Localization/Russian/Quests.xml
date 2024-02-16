@@ -102,4 +102,9 @@
     <string name="Covidr_Message2">На нас напали!</string>
     <string name="Covidr_Message3">Мы премного благодарны вам, командир. Наша нация этого никогда не забудет.</string>
     <string name="AttackStarbase_Message">Вы точно хотите атаковать базу? Это испортит вашу репутацию.</string>
+    <string name="Mission_Delivery">Доставка</string>
+    <string name="Mission_Delivery_Intro">Судьба нашей колонии висит на волоске. Необходимо доставить важный груз в отдаленную звездную систему в крайне ограниченные сроки.</string>
+    <string name="Mission_Delivery_Return">Груз доставлен. Возвращайтесь на базу.</string>
+    <string name="Mission_Delivery_Completed">Миссия выполнена! Вы доставили груз в срок обеспечив выживание нашей колонии.</string>
+    <string name="Mission_Delivery_Failed">Груз потерян. Колонию ждут печальные последствия. Ваша репутация пострадала.</string>
 </resources>

@@ -102,6 +102,11 @@
     <string name="HappyEaster_Message2">Hey captain! Don\'t worry, nothing has happened. I just want to wish you happy Easter. Here is your egg.</string>
     <string name="HappyEaster_Message3">Greetings, Commander. I have a delivery for you. Have an egg-celent Easter!</string>
     <string name="AttackStarbase_Message">Are you sure you want to attack the starbase? It will ruin your reputation.</string>
+    <string name="Mission_Delivery">Delivery</string>
+    <string name="Mission_Delivery_Intro">A critical mission awaits, brave spacefarer! The fate of a struggling colony hangs in the balance as you take on the challenge of transporting a vital cargo to a distant star system within a tight timeframe.</string>
+    <string name="Mission_Delivery_Return">Cargo Delivered. Return to the mission origin.</string>
+    <string name="Mission_Delivery_Completed">Mission Accomplished! You delivered vital cargo to a struggling colony, ensuring their survival.</string>
+    <string name="Mission_Delivery_Failed">Cargo lost in space. Colony faces dire consequences. Reputation tarnished.</string>
 
     <string name="Quest_Covid">COVID-6019</string>
     <string name="Covidr_Message1">I send you an urgent appeal for help. We are faced with the unknown enemy. We won't last long...</string>
