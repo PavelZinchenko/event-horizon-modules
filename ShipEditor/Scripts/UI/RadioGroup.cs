@@ -8,8 +8,6 @@ namespace ShipEditor.UI
 {
 	public class RadioGroup : MonoBehaviour
 	{
-		public ToggleGroup Group;
-
 		public ValueChangedEvent OnValueChanged = new ValueChangedEvent();
 
 	    [SerializeField] private bool _allowSwitchOff;
@@ -19,11 +17,6 @@ namespace ShipEditor.UI
 
 	    private void Awake()
 	    {
-	        if (Group)
-	        {
-                throw new InvalidOperationException("RadioGroup: toggle group not null - " + gameObject.name);
-	        }
-
 	        foreach (Transform child in transform)
 	        {
 
