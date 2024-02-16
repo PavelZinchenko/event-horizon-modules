@@ -237,6 +237,16 @@ namespace ShipEditor.UI
                 yield return new KeyValuePair<string, string>("$WeaponDamage", data.Damage.Direct.ToString(_floatFormat) + damageSuffix);
             else if (data.Dps.Direct > 0)
                 yield return new KeyValuePair<string, string>("$WeaponDPS", data.Dps.Direct.ToString(_floatFormat) + damageSuffix);
+
+            if (data.Damage.Repair > 0)
+                yield return new KeyValuePair<string, string>("$WeaponRepair", data.Damage.Repair.ToString(_floatFormat) + damageSuffix);
+            else if (data.Dps.Repair > 0)
+                yield return new KeyValuePair<string, string>("$WeaponRepairPerSec", data.Dps.Repair.ToString(_floatFormat) + damageSuffix);
+
+            if (data.Damage.Shield > 0)
+                yield return new KeyValuePair<string, string>("$WeaponDamageShield", data.Damage.Shield.ToString(_floatFormat) + damageSuffix);
+            else if (data.Dps.Shield > 0)
+                yield return new KeyValuePair<string, string>("$WeaponShieldPerSec", data.Dps.Shield.ToString(_floatFormat) + damageSuffix);
         }
 
         private static IEnumerable<KeyValuePair<string, string>> GetWeaponDescription(WeaponDamageCalculator.WeaponInfo data, ILocalization localization)

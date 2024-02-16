@@ -80,6 +80,10 @@
     <string name="RemoveAllConfirmation">Remove all modules from the ship?</string>
     <string name="WeaponDamage">Damage</string>
     <string name="WeaponDPS">Damage per second</string>
+    <string name="WeaponRepair">Repair</string>
+    <string name="WeaponRepairPerSec">Repair per sec</string>
+    <string name="WeaponDamageShield">Shield Damage</string>
+    <string name="WeaponShieldPerSec">Shield Damage per sec</string>
     <string name="KineticDamage">Kinetic damage</string>
     <string name="KineticDPS">Kinetic DPS</string>
     <string name="HeatDamage">Heat damage</string>

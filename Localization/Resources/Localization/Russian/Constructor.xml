@@ -79,6 +79,10 @@
     <string name="RemoveAllConfirmation">Снять все модули с корабля?</string>
     <string name="WeaponDamage">Урон</string>
     <string name="WeaponDPS">Урон в секунду</string>
+    <string name="WeaponRepair">Ремонт</string>
+    <string name="WeaponRepairPerSec">Ремонт в секунду</string>
+    <string name="WeaponDamageShield">Урон по щиту</string>
+    <string name="WeaponShieldPerSec">Урон по щиту в секунду</string>
     <string name="KineticDamage">физический урон</string>
     <string name="KineticDPS">физический урон в сек</string>
     <string name="HeatDamage">Тепловой урон</string>
