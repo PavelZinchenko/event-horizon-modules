@@ -160,6 +160,7 @@ namespace ShipEditor.UI
 				return;
 			}
 
+            _shipEditor.SaveShip();
 			_closeEditorTrigger?.Fire();
 		}
 

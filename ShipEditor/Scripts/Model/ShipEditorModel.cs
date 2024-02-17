@@ -45,6 +45,7 @@ namespace ShipEditor.Model
 		void InstallSatellite(SatelliteLocation location, ISatellite satellite);
 
 		void SelectShip(IShip ship);
+        void SaveShip();
 
 		bool TryFindComponent(ShipElementType elementType, UnityEngine.Vector2Int position, ComponentInfo info, out IComponentModel component);
 		bool TryInstallComponent(ShipElementType shipElement, UnityEngine.Vector2Int position, ComponentInfo componentInfo, ComponentSettings settings);
@@ -128,6 +129,8 @@ namespace ShipEditor.Model
 
 			_events.OnShipChanged(ship);
 		}
+
+        public void SaveShip() => SaveShip(_ship);
 
 		public void InstallSatellite(SatelliteLocation location, ISatellite satellite)
 		{
