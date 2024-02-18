@@ -87,7 +87,7 @@ namespace ShipEditor.Context
 
 			public Price GetUnlockPrice(ComponentInfo component)
 			{
-				return component.Price * 2;
+				return Price.Common(100);
 			}
 
 			public bool TryPayForUnlock(ComponentInfo component)

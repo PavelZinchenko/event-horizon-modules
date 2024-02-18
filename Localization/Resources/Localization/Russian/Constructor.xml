@@ -60,6 +60,7 @@
     <string name="MinEnergy">Включать, если энергии больше $1%</string>
     <string name="Automatic">Система автомат</string>
     <string name="KeyBinding">Кнопка действия</string>
+    <string name="DroneBehaviour">Тактика:</string>
     <string name="RequiredCell">Тип ячейки</string>
     <string name="PressToInstall">Нажмите чтобы установить</string>
     <string name="NotEnoughSpace">Недостаточно места</string>
