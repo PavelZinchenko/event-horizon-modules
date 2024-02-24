@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using GameDatabase.DataModel;
 using GameDatabase.Extensions;
@@ -29,7 +28,8 @@ namespace ShipEditor.Model
 		private const int _actionKeyCount = 6;
 
 		private readonly IShip _ship;
-		private readonly HashSet<string> _uniqueids = new();
+        private readonly Inventory<Component> _limitedComponents = new();
+		private readonly Inventory<string> _uniqueComponents = new();
 		private readonly Dictionary<Component, int> _keyBindings = new();
 
 		public ComponentTracker(IShip ship)
@@ -39,9 +39,17 @@ namespace ShipEditor.Model
 
 		public bool UniqueComponentInstalled(Component component)
 		{
-			var key = component.GetUniqueKey();
-			return !string.IsNullOrEmpty(key) && _uniqueids.Contains(key);
-		}
+            var maxAmount = component.Restrictions.MaxComponentAmount;
+            var key = component.GetUniqueKey();
+
+            if (maxAmount == 0)
+                return !string.IsNullOrEmpty(key) && _uniqueComponents.Quantity(key) > 0;
+
+            if (string.IsNullOrEmpty(key))
+                return _limitedComponents.Quantity(component) >= maxAmount;
+            else
+                return _uniqueComponents.Quantity(key) >= maxAmount;
+        }
 
 		public bool IsCompatible(Satellite satellite)
 		{
@@ -76,18 +84,39 @@ namespace ShipEditor.Model
 
 		public void OnComponentAdded(Component component)
 		{
-			var key = component.GetUniqueKey();
-			if (!string.IsNullOrEmpty(key) && !_uniqueids.Add(key))
-				throw new InvalidOperationException();
-		}
+            var maxAmount = component.Restrictions.MaxComponentAmount;
+            var key = component.GetUniqueKey();
+
+            if (maxAmount == 0)
+            {
+                if (!string.IsNullOrEmpty(key) && _uniqueComponents.Add(key) > 1)
+                    GameDiagnostics.Trace.LogError($"A unique component with key '{key}' is already installed");
+            }
+            else if (!string.IsNullOrEmpty(key))
+            {
+                var quantity = _uniqueComponents.Add(key);
+                if (quantity > maxAmount)
+                    GameDiagnostics.Trace.LogError($"Too many components with key '{key}' were installed: ({quantity}/{maxAmount})");
+            }
+            else
+            {
+                var quantity = _limitedComponents.Add(component);
+                if (quantity > maxAmount)
+                    GameDiagnostics.Trace.LogError($"Too many {component.Name} were installed: ({quantity}/{maxAmount})");
+            }
+        }
 
 		public void OnComponentRemoved(Component component)
 		{
-			var key = component.GetUniqueKey();
-			if (!string.IsNullOrEmpty(key))
-				_uniqueids.Remove(key);
+            var maxAmount = component.Restrictions.MaxComponentAmount;
+            var key = component.GetUniqueKey();
 
-			_keyBindings.Remove(component);
+            if (!string.IsNullOrEmpty(key))
+                _uniqueComponents.Remove(key);
+            else if (maxAmount > 0)
+                _limitedComponents.Remove(component);
+
+            _keyBindings.Remove(component);
 		}
 
 		public void OnKeyBindingChanged(Component component, int keyBinding)
@@ -95,5 +124,35 @@ namespace ShipEditor.Model
 			if (component.GetActivationType() == ActivationType.None) return;
 			_keyBindings[component] = keyBinding;
 		}
-	}
+
+        private class Inventory<T>
+        {
+            private readonly Dictionary<T, int> _items = new();
+
+            public int Quantity(T key) => _items.TryGetValue(key, out var quantity) ? quantity : 0;
+
+            public int Add(T key)
+            {
+                var quantity = Quantity(key) + 1;
+                _items[key] = quantity;
+                return quantity;
+            }
+
+            public bool Remove(T key)
+            {
+                var quantity = Quantity(key);
+                if (quantity == 0) 
+                    return false;
+
+                if (quantity == 1)
+                {
+                    _items.Remove(key);
+                    return true;
+                }
+
+                _items[key] = quantity - 1;
+                return true;
+            }
+        }
+    }
 }
