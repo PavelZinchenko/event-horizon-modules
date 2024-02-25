@@ -141,4 +141,5 @@ Use these modules to upgrade the starbase:</string>
     <string name="TakeLoot">Take items</string>
     <string name="StarbaseLowLevelText">Reach level $1 to unlock</string>
     <string name="BuyNow">Buy now</string>
+    <string name="RespawnTimer">Respawn Countdown</string>
 </resources>
