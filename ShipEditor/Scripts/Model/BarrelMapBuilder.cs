@@ -34,16 +34,13 @@ namespace ShipEditor.Model
 			{
 				for (int j = 0; j < Size; ++j)
 				{
-					if (TryAssignBarrel(j, i, (byte)(BarrelCount + 1)))
-					{
-						BarrelCount++;
+					if (TryAssignNewBarrel(j, i))
 						ProcessCells();
-					}
 				}
 			}
-		}
+        }
 
-		private void ProcessCells()
+        private void ProcessCells()
 		{
 			while (_mapCells.Count > 0)
 			{
@@ -59,24 +56,41 @@ namespace ShipEditor.Model
 			}
 		}
 
-		private bool TryAssignBarrel(int x, int y, byte barrelId)
-		{
-			if (x < 0 || x >= Size) return false;
-			if (y < 0 || y >= Size) return false;
-
-			int index = x + y * Size;
-			if (_map[index] > 0) return false;
-            var cellType = (CellType)_layout[index];
-            if (!IsWeapon(cellType)) return false;
-
-            _map[index] = barrelId;
-
-            if (cellType == CellType.Weapon)
-                _mapCells.Enqueue(index);
-
+        private bool TryAssignNewBarrel(int x, int y)
+        {
+            if (!TryGetUnassignedWeaponCell(x, y, out int index, out bool isStock) || !isStock) return false;
+            _map[index] = ++BarrelCount;
+            _mapCells.Enqueue(index);
             return true;
-		}
+        }
 
-        private static bool IsWeapon(CellType cellType) => cellType == CellType.Weapon || cellType == Layout.CustomWeaponCell;
-	}
+        private bool TryAssignBarrel(int x, int y, byte barrelId)
+		{
+            if (!TryGetUnassignedWeaponCell(x, y, out int index, out bool isStock)) return false;
+            if (isStock) _mapCells.Enqueue(index);
+            _map[index] = barrelId;
+            return true;
+        }
+
+        private bool TryGetUnassignedWeaponCell(int x, int y, out int index, out bool isStock)
+        {
+            isStock = true;
+            index = x + y * Size;
+            if (x < 0 || x >= Size) return false;
+            if (y < 0 || y >= Size) return false;
+            if (_map[index] > 0) return false;
+
+            switch ((CellType)_layout[index])
+            {
+                case CellType.Weapon:
+                    isStock = true;
+                    return true;
+                case Layout.CustomWeaponCell:
+                    isStock = false;
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    }
 }
