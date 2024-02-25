@@ -13412,7 +13412,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7621b1f72e60ecd4b822320a2d55101b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Group: {fileID: 0}
   OnValueChanged:
     m_PersistentCalls:
       m_Calls:
@@ -17140,7 +17139,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7621b1f72e60ecd4b822320a2d55101b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Group: {fileID: 0}
   OnValueChanged:
     m_PersistentCalls:
       m_Calls:
@@ -26814,7 +26812,7 @@ PrefabInstance:
     - target: {fileID: 8964689328677497582, guid: 1ffa4a6ce85bf8949800f869ca83ad04,
         type: 3}
       propertyPath: m_FontData.m_AlignByGeometry
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 1ffa4a6ce85bf8949800f869ca83ad04, type: 3}
@@ -28866,7 +28864,7 @@ PrefabInstance:
     - target: {fileID: 4987534304841632049, guid: 93479f535507ced458113e3a6a97cd98,
         type: 3}
       propertyPath: m_FontData.m_AlignByGeometry
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4987534304841632051, guid: 93479f535507ced458113e3a6a97cd98,
         type: 3}
