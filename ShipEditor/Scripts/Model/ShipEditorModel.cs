@@ -322,7 +322,6 @@ namespace ShipEditor.Model
                     new ComponentSettings(component.KeyBinding, component.Behaviour, component.Locked));
             }
 
-            layout.DataChanged = false;
             return result;
         }
 
