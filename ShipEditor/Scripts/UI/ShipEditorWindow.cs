@@ -21,10 +21,11 @@ namespace ShipEditor.UI
 			ShipList,
 			ComponentList,
 			SatelliteList,
-			Component,
-		}
+            Component,
+            BuildList,
+        }
 
-		[Inject] private readonly IShipEditorModel _shipEditor;
+        [Inject] private readonly IShipEditorModel _shipEditor;
 		[Inject] private readonly IGuiManager _guiManager;
 		[Inject] private readonly ILocalization _localization;
 		[Inject] private readonly CommandList _commandList;
@@ -39,7 +40,8 @@ namespace ShipEditor.UI
 		[SerializeField] private ShipsPanel _shipListPanel;
 		[SerializeField] private SatellitesPanel _satelliteListPanel;
 		[SerializeField] private ComponentPanel _componentPanel;
-		[SerializeField] private DraggableComponent _draggableComponent;
+        [SerializeField] private BuildsPanel _buildsPanel;
+        [SerializeField] private DraggableComponent _draggableComponent;
 		[SerializeField] private UnityEngine.UI.Button _undoButton;
         [SerializeField] private UnityEngine.UI.Button _backButton;
         [SerializeField] private UnityEngine.UI.InputField _shipNameInputField;
@@ -111,7 +113,12 @@ namespace ShipEditor.UI
 			_componentListPanel.ShowAll();
 		}
 
-		public void OpenComponentPanel(ComponentInfo component)
+        public void OpenBuildList()
+        {
+            ShowPanel(PanelType.BuildList);
+        }
+
+        public void OpenComponentPanel(ComponentInfo component)
 		{
 			_componentPanel.SetInventoryComponent(component);
 			ShowPanel(PanelType.Component);
@@ -253,6 +260,7 @@ namespace ShipEditor.UI
 			_satelliteListPanel.Visible = panel == PanelType.SatelliteList;
 			_componentListPanel.Visible = panel == PanelType.ComponentList;
 			_componentPanel.Visible = panel == PanelType.Component;
+            _buildsPanel.Visible = panel == PanelType.BuildList;
             UpdateBackButton();
 		}
 

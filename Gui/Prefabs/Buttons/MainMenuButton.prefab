@@ -246,6 +246,7 @@ MonoBehaviour:
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
   _themeColor: 53
+  _colorMode: 0
 --- !u!114 &8214161446340433351
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -344,6 +345,7 @@ MonoBehaviour:
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
   _themeColor: 50
+  _colorMode: 0
 --- !u!114 &8214161446491993623
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -451,8 +453,9 @@ MonoBehaviour:
     m_LineSpacing: 1
   m_Text: TEXT
   _themeColor: 52
+  _colorMode: 0
   _themeFont: 1
-  _themeFontSize: 2
+  _themeFontSize: 8
 --- !u!114 &8214161447537931300
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -551,6 +554,7 @@ MonoBehaviour:
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
   _themeColor: 50
+  _colorMode: 0
 --- !u!114 &8214161447720988074
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -654,6 +658,7 @@ MonoBehaviour:
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
   _themeColor: 51
+  _colorMode: 0
 --- !u!114 &8214161447876431417
 MonoBehaviour:
   m_ObjectHideFlags: 0

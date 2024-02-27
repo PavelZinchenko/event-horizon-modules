@@ -4,7 +4,12 @@ namespace Gui.Utils
 {
 	public static class GuiManagerExtensions
 	{
-		public static void ShowConfirmationDialog(this IGuiManager guiManager, string message, System.Action action)
+        public static void ShowMessage(this IGuiManager guiManager, string message)
+        {
+            guiManager.OpenWindow(ShowMessageWindow, new WindowArgs(message));
+        }
+
+        public static void ShowConfirmationDialog(this IGuiManager guiManager, string message, System.Action action)
 		{
 			guiManager.OpenWindow(ConfirmationDialogName, new WindowArgs(message), result =>
 			{
@@ -22,7 +27,8 @@ namespace Gui.Utils
 			});
 		}
 
-		private const string ConfirmationDialogName = "ConfirmationDialog";
+        private const string ShowMessageWindow = "ShowMessageWindow";
+        private const string ConfirmationDialogName = "ConfirmationDialog";
 		private const string BuyConfirmationDialogName = "BuyConfirmationDialog";
 	}
 }

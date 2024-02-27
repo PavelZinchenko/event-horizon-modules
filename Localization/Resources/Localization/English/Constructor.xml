@@ -147,4 +147,11 @@
     <string name="ValuePerSecond">$1 / sec</string>
     <string name="None">None</string>
     <string name="TurretTurnRate">Turret turn rate</string>
+    <string name="NewPreset">New Preset</string>
+    <string name="LoadPreset">Load</string>
+    <string name="SavePreset">Save</string>
+    <string name="DeletePreset">Delete</string>
+    <string name="DeletePresetConfirmation">Are you sure you want to delete selected preset? This operation cannot be undone.</string>
+    <string name="OverwritePresetConfirmation">Are you sure you want to overwrite selected preset?</string>
+    <string name="PartiallyLoadedPreset">The preset was partially loaded due to missing modules in the inventory</string>
 </resources>

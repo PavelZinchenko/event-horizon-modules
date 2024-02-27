@@ -12,11 +12,12 @@ namespace ShipEditor.Context
 		IShip Ship { get; }
 		IInventoryProvider Inventory { get; }
         IShipDataProvider ShipDataProvider { get; }
+        IShipPresetStorage ShipPresetStorage { get; }
         public bool CanBeUnlocked(Component component);
         bool IsShipNameEditable { get; }
     }
 
-	public interface IInventoryProvider 
+    public interface IInventoryProvider 
 	{
 		IEnumerable<IShip> Ships { get; }
 		IReadOnlyCollection<ISatellite> SatelliteBuilds { get; }
@@ -32,4 +33,11 @@ namespace ShipEditor.Context
 		public Economy.Price GetUnlockPrice(ComponentInfo component);
 		public bool TryPayForUnlock(ComponentInfo component);
 	}
+
+    public interface IShipPresetStorage
+    {
+        IEnumerable<IShipPreset> GetPresets(Ship ship);
+        IShipPreset Create(Ship ship);
+        void Delete(IShipPreset preset);
+    }
 }

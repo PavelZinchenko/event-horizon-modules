@@ -20,12 +20,14 @@ namespace ShipEditor.Context
 			Ship = ship;
 			Inventory = new DatabaseInventoryProvider(database);
             ShipDataProvider = new EmptyDataProvider();
+            ShipPresetStorage = new EmptyShipPresetStorage();
 		}
 
 		public IShip Ship { get; }
 		public IInventoryProvider Inventory { get; }
         public IShipDataProvider ShipDataProvider { get; }
         public bool IsShipNameEditable => false;
+        public IShipPresetStorage ShipPresetStorage { get; }
 
         public bool CanBeUnlocked(Component component)
 		{
@@ -96,5 +98,27 @@ namespace ShipEditor.Context
 				return true;
 			}
 		}
-	}
+
+        private class EmptyShipPresetStorage : IShipPresetStorage
+        {
+            private List<IShipPreset> _presets = new();
+
+            public IShipPreset Create(Ship ship)
+            {
+                var preset = new ShipPreset(ship);
+                _presets.Add(preset);
+                return preset;
+            }
+
+            public void Delete(IShipPreset preset)
+            {
+                _presets.Remove(preset);
+            }
+
+            public IEnumerable<IShipPreset> GetPresets(Ship ship)
+            {
+                return _presets.Where(item => item.Ship == ship);
+            }
+        }
+    }
 }

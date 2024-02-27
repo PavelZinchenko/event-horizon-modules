@@ -69,7 +69,7 @@ namespace ShipEditor.UI
 			if (item.SatelliteBuild != null)
 				_shipEditor.InstallSatellite(_location, item.SatelliteBuild);
 			else
-				_shipEditor.InstallSatellite(_location, item.Satellite);
+				_shipEditor.TryInstallSatellite(_location, item.Satellite);
 		}
 
 		private void OnShipChanged(Constructor.Ships.IShip ship)

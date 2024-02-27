@@ -28,6 +28,7 @@ namespace ShipEditor.Model
 		IShipEditorEvents Events { get; }
 
 		IShip Ship { get; }
+        IShipPresetStorage Presets { get; }
         IInventoryProvider Inventory { get; }
         IShipDataProvider ShipDataProvider { get; }
         ICompatibilityChecker CompatibilityChecker { get; }
@@ -41,13 +42,15 @@ namespace ShipEditor.Model
 		Satellite Satellite(SatelliteLocation location);
 		bool HasSatellite(SatelliteLocation location);
 		void RemoveSatellite(SatelliteLocation location);
-		void InstallSatellite(SatelliteLocation location, Satellite satellite);
+		bool TryInstallSatellite(SatelliteLocation location, Satellite satellite);
 		void InstallSatellite(SatelliteLocation location, ISatellite satellite);
 
 		void SelectShip(IShip ship);
         void SaveShip();
+        void SaveShipToPreset(IShipPreset preset);
+        bool LoadShipFromPreset(IShipPreset preset);
 
-		bool TryFindComponent(ShipElementType elementType, UnityEngine.Vector2Int position, ComponentInfo info, out IComponentModel component);
+        bool TryFindComponent(ShipElementType elementType, UnityEngine.Vector2Int position, ComponentInfo info, out IComponentModel component);
 		bool TryInstallComponent(ShipElementType shipElement, UnityEngine.Vector2Int position, ComponentInfo componentInfo, ComponentSettings settings);
 		void RemoveComponent(IComponentModel component);
 		void RemoveAllComponents();
@@ -72,7 +75,8 @@ namespace ShipEditor.Model
 		public IShipEditorEvents Events => _events;
 
 		public IShip Ship => _ship;
-		public IInventoryProvider Inventory => _context.Inventory;
+        public IShipPresetStorage Presets => _context.ShipPresetStorage;
+        public IInventoryProvider Inventory => _context.Inventory;
         public IShipDataProvider ShipDataProvider => _context.ShipDataProvider;
         public ICompatibilityChecker CompatibilityChecker => _compatibilityChecker;
 		
@@ -132,26 +136,27 @@ namespace ShipEditor.Model
 
         public void SaveShip() => SaveShip(_ship);
 
-		public void InstallSatellite(SatelliteLocation location, ISatellite satellite)
+        public void InstallSatellite(SatelliteLocation location, ISatellite satellite)
 		{
 			RemoveSatellite(location);
 			InitializeSatellite(location, satellite);
 		}
 
-		public void InstallSatellite(SatelliteLocation location, Satellite satellite)
+		public bool TryInstallSatellite(SatelliteLocation location, Satellite satellite)
 		{
-			if (_satellite[location] == satellite) return;
+			if (_satellite[location] == satellite) return true;
 			RemoveSatellite(location);
 
-			if (satellite == null) return;
+			if (satellite == null) return true;
 
-			if (!_compatibilityChecker.IsCompatible(satellite))
-				throw new InvalidOperationException();
+            if (!_compatibilityChecker.IsCompatible(satellite))
+                return false;
 
-			if (!_context.Inventory.TryRemoveSatellite(satellite))
-				throw new InvalidOperationException();
+            if (!_context.Inventory.TryRemoveSatellite(satellite))
+                return false;
 
 			InitializeSatellite(location, new CommonSatellite(satellite, Enumerable.Empty<IntegratedComponent>()));
+            return true;
 		}
 
 		public void RemoveSatellite(SatelliteLocation location)
@@ -254,7 +259,74 @@ namespace ShipEditor.Model
 			return component != null;
 		}
 
-		private ISatellite SaveSatellite(SatelliteLocation location)
+        public void SaveShipToPreset(IShipPreset preset)
+        {
+            var shipLayout = _layout[ShipElementType.Ship];
+            preset.Components.Assign(ExportComponents(shipLayout));
+
+            var firstSatellite = _satellite[SatelliteLocation.Left];
+            if (firstSatellite != null)
+                firstSatellite = new CommonSatellite(firstSatellite.Information, ExportComponents(_layout[SatelliteLocation.Left]));
+
+            var secondSatellite = _satellite[SatelliteLocation.Right];
+            if (secondSatellite != null)
+                secondSatellite = new CommonSatellite(secondSatellite.Information, ExportComponents(_layout[SatelliteLocation.Right]));
+
+            preset.FirstSatellite = firstSatellite;
+            preset.SecondSatellite = secondSatellite;
+        }
+
+        public bool LoadShipFromPreset(IShipPreset preset)
+        {
+            if (preset.Ship != _ship.Model.OriginalShip) return false;
+
+            bool result = true;
+            RemoveAllComponents();
+            RemoveSatellite(SatelliteLocation.Left);
+            RemoveSatellite(SatelliteLocation.Right);
+
+            result &= InstallComponentsFromPreset(preset.Components, ShipElementType.Ship);
+
+            if (preset.FirstSatellite != null)
+                result &= TryInstallSatellite(SatelliteLocation.Left, preset.FirstSatellite.Information) && 
+                    InstallComponentsFromPreset(preset.FirstSatellite.Components, ShipElementType.SatelliteL);
+
+            if (preset.SecondSatellite != null)
+                result &= TryInstallSatellite(SatelliteLocation.Right, preset.SecondSatellite.Information) &&
+                    InstallComponentsFromPreset(preset.SecondSatellite.Components, ShipElementType.SatelliteR);
+
+            _events.OnSatelliteChanged(SatelliteLocation.Left);
+            _events.OnSatelliteChanged(SatelliteLocation.Right);
+            _events.OnMultipleComponentsChanged();
+
+            return result;
+        }
+
+        private bool InstallComponentsFromPreset(IEnumerable<IntegratedComponent> components, ShipElementType shipElement)
+        {
+            bool result = true;
+            var layout = _layout[shipElement];
+
+            foreach (var component in components)
+            {
+                if (layout.FindComponent(component.X, component.Y, component.Info) != null) continue;
+                if (!layout.IsSuitableLocation(component.X, component.Y, component.Info.Data) ||
+                    !_compatibilityChecker.IsCompatible(component.Info.Data) ||
+                    !_context.Inventory.TryRemoveComponent(component.Info))
+                {
+                    result = false;
+                    continue;
+                }
+
+                layout.InstallComponent(component.X, component.Y, component.Info,
+                    new ComponentSettings(component.KeyBinding, component.Behaviour, component.Locked));
+            }
+
+            layout.DataChanged = false;
+            return result;
+        }
+
+        private ISatellite SaveSatellite(SatelliteLocation location)
 		{
 			var satellite = _satellite[location];
 			if (satellite != null && _layout[location].DataChanged)
