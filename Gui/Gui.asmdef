@@ -10,7 +10,8 @@
         "ShipConstructor",
         "Localization",
         "Database",
-        "Diagnostics"
+        "Diagnostics",
+        "Utilites"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

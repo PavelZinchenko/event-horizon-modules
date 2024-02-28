@@ -9,7 +9,8 @@
         "ShipConstructor",
         "Gui",
         "Localization",
-        "Diagnostics"
+        "Diagnostics",
+        "Utilites"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
