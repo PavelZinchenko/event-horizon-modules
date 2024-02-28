@@ -137,7 +137,7 @@ namespace ShipEditor.UI
 			var haveSatellites = _shipEditor.Inventory.Satellites.Count > 0 || _shipEditor.Inventory.SatelliteBuilds.Count > 0;
 
 			_leftSatelliteNode.IsVisible = !isStarbase && (haveSatellites || _shipEditor.HasSatellite(SatelliteLocation.Left));
-			_rightSatelliteNode.IsVisible = !isStarbase && (haveSatellites || _shipEditor.HasSatellite(SatelliteLocation.Left));
+			_rightSatelliteNode.IsVisible = !isStarbase && (haveSatellites || _shipEditor.HasSatellite(SatelliteLocation.Right));
 		}
 	}
 }
