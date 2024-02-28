@@ -16,9 +16,20 @@ namespace ShipEditor.UI
 		public void Initialize(IShip ship, IResourceLocator resourceLocator, ILocalization localization)
         {
             Ship = ship;
-			_icon.sprite = resourceLocator.GetSprite(ship.Model.IconImage) ?? resourceLocator.GetSprite(ship.Model.ModelImage);
-			_icon.color = ship.ColorScheme.HsvColor;
-			_icon.rectTransform.localScale = 1.4f * ship.Model.IconScale * Vector3.one;
+            var icon = resourceLocator.GetSprite(ship.Model.IconImage);
+            if (icon != null)
+            {
+                _icon.sprite = icon;
+                _icon.rectTransform.localScale = 1.4f * ship.Model.IconScale * Vector3.one;
+            }
+            else
+            {
+                _icon.sprite = resourceLocator.GetSprite(ship.Model.ModelImage);
+                _icon.rectTransform.localScale = Vector3.one;
+            }
+
+            _icon.color = ship.ColorScheme.HsvColor;
+
 			_name.text = localization.GetString(ship.Name);
 			_classText.text = ship.Model.SizeClass.ToString(localization);
 			var level = ship.Experience.Level;
