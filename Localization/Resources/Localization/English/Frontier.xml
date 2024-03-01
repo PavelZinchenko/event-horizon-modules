@@ -142,4 +142,9 @@ Use these modules to upgrade the starbase:</string>
     <string name="StarbaseLowLevelText">Reach level $1 to unlock</string>
     <string name="BuyNow">Buy now</string>
     <string name="RespawnTimer">Respawn Countdown</string>
+    <string name="TotalKills">Ships destroyed:</string>
+    <string name="TotalDeaths">Ships lost:</string>
+    <string name="TotalDamageDealt">Damage dealt:</string>
+    <string name="TotalDamageReveived">Damage received:</string>
+    <string name="TotalDamageRepaired">Damage repaired:</string>
 </resources>
