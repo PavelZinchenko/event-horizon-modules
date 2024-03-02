@@ -145,6 +145,7 @@ Use these modules to upgrade the starbase:</string>
     <string name="TotalKills">Ships destroyed:</string>
     <string name="TotalDeaths">Ships lost:</string>
     <string name="TotalDamageDealt">Damage dealt:</string>
+    <string name="TotalDamageToAllies">Damage to allies:</string>
     <string name="TotalDamageReveived">Damage received:</string>
     <string name="TotalDamageRepaired">Damage repaired:</string>
 </resources>
