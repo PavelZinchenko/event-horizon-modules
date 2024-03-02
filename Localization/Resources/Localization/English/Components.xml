@@ -163,6 +163,8 @@
   <string name="NuclearDrive_M">Nuclear Drive</string>
   <string name="NuclearDrive_L">Large Nuclear Drive</string>
   <string name="NuclearDrive_T">Titan Drive</string>
+  <string name="AntiMatterDrive_L">Large Antimatter Drive</string>
+  <string name="AntiMatterDrive_T">Superme Antimatter Drive</string>
   <string name="FusionDrive_S">Small Fusion Drive</string>
   <string name="FusionDrive_M">Fusion Drive</string>
   <string name="FusionDrive_L">Large Fusion Drive</string>
@@ -251,8 +253,8 @@
   <string name="DroneFactory_L">Large Drone Factory</string>
   <string name="Pulsar_M_1">Pulsar</string>
   <string name="Pulsar_M_2">Pulsar M2</string>
-  <string name="AntiMatterBomb_L_1">Heavy Anti-Matter Bomb</string>
-  <string name="AntiMatterBomb_L_2">Heavy Anti-Matter Bomb M2</string>
+  <string name="AntiMatterBomb_L_1">Heavy Antimatter Bomb</string>
+  <string name="AntiMatterBomb_L_2">Heavy Antimatter Bomb M2</string>
   <string name="ProtoonTorpedo_S_1">Small Proton Torpedo</string>
   <string name="ProtoonTorpedo_M_1">Proton Torpedo</string>
   <string name="ProtoonTorpedo_M_2">Proton Torpedo M2</string>
