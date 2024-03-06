@@ -77,8 +77,8 @@ namespace ShipEditor.UI
 		{
             var x = (minX + maxX)/2;
             var y = (minY + maxY)/2;
-            var halfWidth = _scaleX*(maxX - minX)*0.5f;
-            var halfHeight = _scaleY*(maxY - minY)*0.5f;
+            var halfWidth = _scaleX*(maxX - minX)/2;
+            var halfHeight = _scaleY*(maxY - minY)/2;
 
 			_maxX = x + halfWidth;
 			_minX = x - halfWidth;

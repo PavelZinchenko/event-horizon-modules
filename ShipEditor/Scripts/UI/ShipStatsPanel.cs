@@ -6,6 +6,7 @@ using Zenject;
 using ShipEditor.Model;
 using Constructor.Model;
 using GameDatabase;
+using Gui.Theme;
 
 namespace ShipEditor.UI
 {
@@ -47,17 +48,20 @@ namespace ShipEditor.UI
 		[SerializeField] private GameObject _dronesBlock;
 		[SerializeField] private GameObject _resistanceBlock;
 
-		[SerializeField] private Color _normalColor;
-		[SerializeField] private Color _errorColor;
+        [SerializeField] private ThemeColor _normalColor;
+        [SerializeField] private ThemeColor _errorColor;
 
-		[SerializeField] private Text _hitPointsSummaryText;
+        [SerializeField] private Text _hitPointsSummaryText;
 		[SerializeField] private Text _energySummaryText;
 		[SerializeField] private Text _velocitySummaryText;
 		[SerializeField] private Text _turnRateSummaryText;
 
 		[SerializeField] private GameObject[] _hiddenForStarbases;
 
-		private void OnEnable()
+        private Color NormalColor => UiTheme.Current.GetColor(_normalColor);
+        private Color ErrorColor => UiTheme.Current.GetColor(_errorColor);
+
+        private void OnEnable()
 		{
 			_shipEditor.Events.ComponentAdded += OnComponentAdded;
 			_shipEditor.Events.ComponentRemoved += OnComponentRemoved;
@@ -111,20 +115,20 @@ namespace ShipEditor.UI
 		private void UpdateSummary(IShipStats stats)
 		{
 			_hitPointsSummaryText.text = stats.ArmorPoints.AsInteger();
-			_hitPointsSummaryText.color = stats.ArmorPoints > 0 ? _normalColor : _errorColor;
+			_hitPointsSummaryText.color = stats.ArmorPoints > 0 ? NormalColor : ErrorColor;
 			_energySummaryText.text = stats.EnergyPoints.AsInteger() + " [" + stats.EnergyRechargeRate.AsSignedInteger() + "]";
-			_energySummaryText.color = stats.EnergyRechargeRate > 0 ? _normalColor : _errorColor;
+			_energySummaryText.color = stats.EnergyRechargeRate > 0 ? NormalColor : ErrorColor;
 			_velocitySummaryText.text = stats.EnginePower.ToString("N1");
-			_velocitySummaryText.color = stats.EnginePower > 0 ? _normalColor : _errorColor;
+			_velocitySummaryText.color = stats.EnginePower > 0 ? NormalColor : ErrorColor;
 			_turnRateSummaryText.text = stats.TurnRate.ToString("N1");
-			_turnRateSummaryText.color = stats.TurnRate > 0 ? _normalColor : _errorColor;
+			_turnRateSummaryText.color = stats.TurnRate > 0 ? NormalColor : ErrorColor;
 		}
 
 		private void UpdateStats(IShipStats stats)
 		{
 			_armorPoints.gameObject.SetActive(!Mathf.Approximately(stats.ArmorPoints, 0));
             _armorPoints.Value.text = stats.ArmorPoints.AsInteger();
-            _armorPoints.Color = stats.ArmorPoints > 0 ? _normalColor : _errorColor;
+            _armorPoints.Color = stats.ArmorPoints > 0 ? NormalColor : ErrorColor;
 
             _repairRate.gameObject.SetActive(stats.ArmorRepairRate > 0);
 			_repairRate.Value.text = stats.ArmorRepairRate.AsDecimal();
@@ -141,13 +145,13 @@ namespace ShipEditor.UI
 			_weight.Value.text = Mathf.RoundToInt(stats.Weight * 1000).ToString();
 			_energy.Value.text = stats.EnergyPoints.AsInteger();
 			_rechargeRate.Value.text = stats.EnergyRechargeRate.AsDecimal();
-			_rechargeRate.Color = stats.EnergyRechargeRate > 0 ? _normalColor : _errorColor;
+			_rechargeRate.Color = stats.EnergyRechargeRate > 0 ? NormalColor : ErrorColor;
 			_rechargeCooldown.gameObject.SetActive(stats.EnergyRechargeRate > 0);
 			_rechargeCooldown.Value.text = stats.EnergyRechargeCooldown.AsDecimal();
 
-			_velocity.Color = stats.EnginePower > 0 ? _normalColor : _errorColor;
+			_velocity.Color = stats.EnginePower > 0 ? NormalColor : ErrorColor;
 			_velocity.Value.text = stats.EnginePower.AsDecimal();
-			_turnRate.Color = stats.TurnRate > 0 ? _normalColor : _errorColor;
+			_turnRate.Color = stats.TurnRate > 0 ? NormalColor : ErrorColor;
 			_turnRate.Value.text = stats.TurnRate.AsDecimal();
 
 			_weaponDamage.gameObject.SetActive(stats.WeaponDamageMultiplier.HasValue);
