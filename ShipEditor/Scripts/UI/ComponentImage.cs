@@ -10,6 +10,8 @@ namespace ShipEditor.UI
 		private float _maxX = 1;
 		private float _minY = 0;
 		private float _maxY = 1;
+        private float _scaleX;
+        private float _scaleY;
 
 		public void SetIcon(Sprite icon, string layout, int size, Color color)
 		{
@@ -18,7 +20,12 @@ namespace ShipEditor.UI
 
 			int x0 = size, x1 = 0, y0 = size, y1 = 0;
 
-			for (int i = 0; i < size; ++i)
+            var width = icon.rect.width;
+            var height = icon.rect.height;
+            _scaleX = width / Mathf.Max(width, height);
+            _scaleY = height / Mathf.Max(width, height);
+
+            for (int i = 0; i < size; ++i)
 			{
 				for (int j = 0; j < size; ++j)
 				{
@@ -34,7 +41,7 @@ namespace ShipEditor.UI
 			var x = -0.5f * (size - x0 - x1 - 1) / size;
 			var y = 0.5f * (size - y0 - y1 - 1) / size;
 
-			SetDisplayRect(x, y, x + 1, y + 1);
+			SetDisplayRect(x, y, (x + 1), (y + 1));
 		}
 
 		protected override void OnPopulateMesh(VertexHelper vertexHelper)
@@ -46,7 +53,6 @@ namespace ShipEditor.UI
 		
 			corner1 -= rectTransform.pivot;
 			corner2 -= rectTransform.pivot;
-		
 			corner1.x *= rectTransform.rect.width;
 			corner1.y *= rectTransform.rect.height;
 			corner2.x *= rectTransform.rect.width;
@@ -69,10 +75,15 @@ namespace ShipEditor.UI
 
 		private void SetDisplayRect(float minX, float minY, float maxX, float maxY)
 		{
-			_maxX = maxX;
-			_minX = minX;
-			_maxY = maxY;
-			_minY = minY;
+            var x = (minX + maxX)/2;
+            var y = (minY + maxY)/2;
+            var halfWidth = _scaleX*(maxX - minX)*0.5f;
+            var halfHeight = _scaleY*(maxY - minY)*0.5f;
+
+			_maxX = x + halfWidth;
+			_minX = x - halfWidth;
+			_maxY = y + halfHeight;
+			_minY = y - halfHeight;
 
 			SetVerticesDirty();
 		}
