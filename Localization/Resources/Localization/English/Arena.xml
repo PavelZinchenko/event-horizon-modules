@@ -17,4 +17,6 @@
     <string name="ArenaShipReady">Ready to fight</string>
     <string name="ArenaShipNotReady">Not allowed</string>
     <string name="ArenaWatchAd">Watch Video Ad</string>
+    <string name="NoTicketsText">You have exhausted all of your arena battles</string>
+    <string name="Leaderboard">Hall Of Fame</string>
 </resources>

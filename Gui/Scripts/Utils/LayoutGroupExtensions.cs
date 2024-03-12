@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Services.ObjectPool;
 using UnityEngine;
 using UnityEngine.UI;
@@ -61,7 +62,7 @@ public static class LayoutGroupExtensions
         where ViewModelType : Component
     {
         int count = 0;
-        var enumerator = data.GetEnumerator();
+        var enumerator = data?.GetEnumerator() ?? Enumerable.Empty<ModelType>().GetEnumerator();
         ViewModelType item = null;
         var noMoreItems = false;
         foreach (Transform transform in targetTransform)

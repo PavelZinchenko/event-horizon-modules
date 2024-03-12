@@ -20,8 +20,15 @@
     <string name="EmptyLevelName">Star system</string>
     <string name="EmptyLevelDescription">This is an empty star system.</string>
 
-    <string name="PvpStarbaseMatchName">Starbase battle</string>
-    <string name="PvpStarbaseMatchDescription">Try your hand at fighting other players' starbases</string>
+    <string name="PvpStarbaseMatchName">Starbase Battle $1</string>
+    <string name="PvpStarbaseMatchDescription">Test your skills by battling against other players' starbases.</string>
+    <string name="PvpStarbaseTrainingName">Starbase Practice Match</string>
+    <string name="PvpStarbaseTrainingDescription">Practice with your fleet or invite a friend.</string>
+    <string name="PvpPassCondition">Secure $1 consecutive victories to pass.</string>
+    <string name="InviteCode">Your invite code: $1</string>
+    <string name="EnterInviteCode">Enter Invite Code</string>
+    <string name="PvpMerchantName">Black Bazaar $1</string>
+    <string name="PvpMerchantDescription">A secret marketplace for rare and banned items from across the stars.</string>
 
     <string name="DifficultyLevel">Difficulty level - $1</string>
     <string name="Difficulty1">Normal</string>
