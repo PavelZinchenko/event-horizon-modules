@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources>
+    <string name="Muttering1">Bailemos</string>
+    <string name="Muttering2">Hora del espectáculo</string>
+    <string name="Muttering3">Sin vuelta atrás</string>
+    <string name="Muttering4">Nunca rendirse</string>
+    <string name="Muttering5">Waaagh</string>
+
+    <string name="Whining1">Sólo un rasguño</string>
+    <string name="Whining2">Me atraparon</string>
+    <string name="Whining3">Esto es malo</string>
+    <string name="Whining4">Estoy en problemas</string>
+    <string name="Whining5">Necesito refuerzos</string>
+
+    <string name="Battlecry1">Por la patria</string>
+    <string name="Battlecry2">Gloria en la muerte</string>
+    <string name="Battlecry3">Muerte antes que deshonra</string>
+    <string name="Battlecry4">¡A la carga!</string>
+    <string name="Battlecry5">¡Banzaaai!</string>
+</resources>

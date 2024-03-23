@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources>
+    <string name="GameLevel">Nivel $1</string>
+    <string name="CommonLevelDescription">Destruir todas las naves enemigas y proteger la base estelar.</string>
+    <string name="TutorialLevel">Tutorial $1</string>
+    <string name="TutorialLevelDescription">Esta es una misión tutorial en la que aprenderás lo básico.</string>
+    <string name="SurvivalLevelName">Supervivencia - $1</string>
+    <string name="SurvivalLevelDescription">En el modo supervivencia conservas todo el botín y la experiencia aunque pierdas la batalla. Además, habrá una recompensa especial si consigues ganar.</string>
+    <string name="DailyMissionName">Misión diaria</string>
+    <string name="DailyMissionDescription">Esta es una misión especial. Es bastante difícil, pero la recompensa vale la pena.</string>
+    <string name="DailyMissionRequirements">Esta misión se ha completado por hoy. Regresa mañana.</string>
+    <string name="DuelLevelName">Duelo - $1</string>
+    <string name="DuelLevelDescription">Gana un duelo para desbloquear esta nave. Las mejoras de ataque y defensa no funcionan aquí.</string>
+    <string name="DuelLevelRequirements">Tu clase de nave debe ser $1 o inferior.</string>
+    <string name="ExplorationLevelName">Desconocido</string>
+    <string name="ExplorationLevelDescription">Nuestros escáneres de largo alcance detectaron alguna actividad sospechosa aquí. Debemos investigarlo.</string>
+    <string name="ExplorationLevelWarning">¿Quieres abortar la misión? No podrás volver.</string>
+    <string name="InfectedLevelName">Colonia infectada</string>
+    <string name="InfectedLevelDescription">Esta colonia fue infectada con un patógeno desconocido</string>
+    <string name="EmptyLevelName">Sistema estelar</string>
+    <string name="EmptyLevelDescription">Este es un sistema estelar vacío.</string>
+
+    <string name="PvpStarbaseMatchName">Batalla estelar $1</string>
+    <string name="PvpStarbaseMatchDescription">Pon a prueba tus habilidades luchando contra las bases estelares de otros jugadores.</string>
+    <string name="PvpStarbaseTrainingName">Encuentro de Práctica de Bases Estelares</string>
+    <string name="PvpStarbaseTrainingDescription">Practica con tu flota o invita a un amigo.</string>
+    <string name="PvpPassCondition">Conseguir $1 victorias consecutivas para pasar.</string>
+    <string name="InviteCode">Tu código de invitación: $1</string>
+    <string name="EnterInviteCode">Ingresar código de invitación</string>
+    <string name="PvpMerchantName">Bazar Negro $1</string>
+    <string name="PvpMerchantDescription">Un mercado secreto de objetos raros y prohibidos de todas las estrellas.</string>
+
+    <string name="DifficultyLevel">Nivel de dificultad - $1</string>
+    <string name="Difficulty1">Normal</string>
+    <string name="Difficulty2">Difícil</string>
+    <string name="Difficulty3">Demente</string>
+    <string name="LevelEnemyCount">Enemigos totales: $1</string>
+    <string name="LevelEnemyPower">Poder enemigo: $1%</string>
+</resources>
