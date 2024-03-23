@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources>
+    <string name="MissionList">Lista de misiones</string>
+    <string name="ResetText">Se reiniciará en</string>
+    <string name="ProgressLabel">Progreso:</string>
+    <string name="RewardLabel">Recompensa:</string>
+    <string name="ClaimReward">¡Reclame su recompensa!</string>
+
+    <string name="CompleteOtherQuest">Completar $1 ${1|misión|misiones} más</string>
+    <string name="DestroyShipsQuest">Destruir $1 ${1|nave enemiga|naves enemigas}</string>
+    <string name="ExplorationQuest">Investigar $1 ${1|objeto|objetos} en las misiones de exploración</string>
+    <string name="LevelUpShipQuest">Mejorar el nivel de una de sus naves $1 ${1|vez|veces}</string>
+    <string name="ReachLevelQuest">Alcanzar el nivel $1</string>
+    <string name="SurvivalQuest">Completra una misión de supervivencia por primera vez</string>
+    <string name="ArenaQuest">Ganar un combate en la arena</string>
+    <string name="DisinfectionQuest">Destuir $1 ${1|base estelar infectada|bases estelares infectadas}</string>
+</resources>

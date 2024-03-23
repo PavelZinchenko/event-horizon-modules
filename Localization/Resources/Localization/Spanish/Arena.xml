@@ -1,17 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources>
-    <string name="PlayerRating">Valoración del jugador:</string>
-    <string name="ArenaRating">Clasificación de flota:</string>
-    <string name="ArenaRegistrationRequired">Todavía no estás registrado en la arena.</string>
-    <string name="ArenaSignInRequired">Inicie sesión en su cuenta antes de comenzar.</string>
-    <string name="ConnectionError">No se puede conectar al servidor. Por favor, inténtelo de nuevo más tarde.</string>
-    <string name="ArenaTraining">Entrena en combate en contra de tus propias naves.</string>
+    <string name="PlayerRating">Clasificación de jugador:</string>
+    <string name="ArenaRating">Nivel de flota:</string>
+    <string name="ArenaRegistrationRequired">Aún no estás registrado en la arena.</string>
+    <string name="ArenaSignInRequired">Inicie sesión en su cuenta antes de empezar.</string>
+    <string name="ConnectionError">No se puede conectar con el servidor. Vuelva a intentarlo más tarde.</string>
+    <string name="ArenaTraining">Entrenamiento de combate con tus propias naves.</string>
     <string name="ArenaOpponent">Oponente:</string>
-    <string name="ArenaFight">Desafíar al oponente.</string>
-    <string name="ArenaShop">Elige tu recompensa.</string>
-    <string name="ArenaFindOpponent">Encontrar un oponente.</string>
-    <string name="ArenaEmptyFleet">No tienes ninguna nave en el hangar</string>
-    <string name="ArenaShipNotAllowed">La nave $1 no está autorizada a participar.</string>
-    <string name="ArenaBattlesAvailable">$1 ${1|lucha|luchas} disponible</string>
-    <string name="ArenaMoreBattles">Comprar 10 luchas más</string>
+    <string name="ArenaFight">Desafiar al oponente.</string>
+    <string name="ArenaShop">Elegir recompensa.</string>
+    <string name="ArenaFindOpponent">Buscar un oponente.</string>
+    <string name="ArenaEmptyFleet">No tienes ninguna nave en el hangar.</string>
+    <string name="ArenaShipNotAllowed">Algunas naves no pueden participar.</string>
+    <string name="ArenaBattlesAvailable">$1 ${1|combate|combates} available</string>
+    <string name="ArenaMoreBattles">Comprar 10 combates más</string>
+    <string name="ArenaShipReady">Listo para combatir</string>
+    <string name="ArenaShipNotReady">No está permitido</string>
+    <string name="ArenaWatchAd">Ver vídeo de anuncio</string>
+    <string name="NoTicketsText">Ha agotado todas sus batallas en la arena</string>
+    <string name="Leaderboard">Salón de la Fama</string>
 </resources>

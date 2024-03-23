@@ -12,9 +12,13 @@
     <string name="Faction7">Zumbalari</string>
     <string name="Faction8">Neganari</string>
     <string name="Faction9">Daazen</string>
-    <string name="Faction10">Desconocidos.</string>
-    <string name="Faction11">Imperio.</string>
-    <string name="Faction12">Enjambre.</string>
-    <string name="Faction13">Sindicato.</string>
+    <string name="Faction10">Desconocidos</string>
+    <string name="Faction11">Imperio</string>
+    <string name="Faction12">Enjambre</string>
+    <string name="Faction13">Sindicato</string>
+    <string name="Faction14">???</string>
     <string name="Faction15">Carroñeros</string>
+    <string name="Faction16">Contagion</string>
+    <string name="Faction17">Nocturnix</string>
+    <string name="Faction18">Renegados</string>
 </resources>
