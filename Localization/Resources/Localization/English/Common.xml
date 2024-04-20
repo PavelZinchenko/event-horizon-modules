@@ -35,7 +35,7 @@
     <string name="CompanionWeapons">Weapon type</string>
     <string name="LevelBonus">Attack and Defense +$1%</string>
     <string name="ConstructorDescription">Equipment</string>
-    <string name="SelectShipDescription">Select ship</string>
+    <string name="SelectShipDescription">Select Ship</string>
     <string name="NotImplemented">Sorry, this feature is not available yet.</string>
     <string name="TakeItem">Take away</string>
     <string name="Explore">Explore</string>

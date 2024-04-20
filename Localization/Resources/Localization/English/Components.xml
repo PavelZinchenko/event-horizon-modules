@@ -105,6 +105,7 @@
   <string name="StarbaseXmas">Christmas Starbase</string>
   <string name="StarbaseR">Rotten Starbase</string>
   <string name="ResearchStation">Research Station</string>
+  <string name="StarbaseRed">Polyarnaya Zvezda</string>
   <string name="SmugglerShip">Smuggler ship</string>
   <string name="MerchantShip">Merchant ship</string>
   <string name="SpaceInvader">Space Invader</string>
@@ -122,6 +123,12 @@
   <string name="ship_11">Needle</string>
   <string name="ship_12">Scarab</string>
   <string name="ship_13">Priest</string>
+  <string name="redship1">Syberia</string>
+  <string name="redship2">Krasnyy Oktyabr</string>
+  <string name="redship3">Soyuz</string>
+  <string name="redship4">Pepelats</string>
+  <string name="redship5">Strela</string>
+  <string name="redship6">Leshy</string>
   <string name="Companion_1s">Pot M1</string>
   <string name="Companion_1m">Pot M2</string>
   <string name="Companion_1l">Pot M3</string>
@@ -144,6 +151,7 @@
   <string name="Companion_7m">Barrel M2</string>
   <string name="Companion_7l">Barrel M3</string>
   <string name="Hovertank">Hovertank</string>
+  <string name="IronBall">Iron Ball</string>
   <string name="Teleporter">Warp Drive</string>
   <string name="Afterburner">Afterburner</string>
   <string name="HighEnergyFocus_S">High Energy Focus</string>
@@ -364,4 +372,9 @@
   <string name="Parasite">Parasite Spawner</string>
   <string name="ParasiteL">Large Parasite Spawner</string>
   <string name="HeavyPlasmaEmitter">Heavy Plasma Emitter</string>
+  <string name="QuantumRiftTorpedo">Quantum Rift Torpedo</string>
+  <string name="EnergySiphonHarpoon">Energy Leech Harpoon</string>
+  <string name="DotHarpoon">Decay Harpoon</string>
+  <string name="Gravitsappa">Gravitsappa</string>
+  <string name="CircularSaw">Neutronium Cutter</string>
 </resources>

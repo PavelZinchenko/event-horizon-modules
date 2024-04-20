@@ -106,4 +106,14 @@ public static class LayoutGroupExtensions
 
         return count;
     }
+
+    public static IEnumerable<ComponentType> EnumerateElements<ComponentType>(this Transform targetTransform)
+        where ComponentType : Component
+    {
+        foreach (Transform transform in targetTransform)
+        {
+            var item = transform.GetComponent<ComponentType>();
+            if (item) yield return item;
+        }
+    }
 }

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources>
+    <string name="Captain">Captain</string>
+    <string name="SelectCaptainLabel">Select Captain</string>
     <string name="Name">Name:</string>
     <string name="Gender">Gender:</string>
     <string name="Experience">Experience:</string>
@@ -16,14 +18,14 @@
     <string name="Gender_Unknown">Unknown</string>
     <string name="PerkName_Attack">Cannoneer</string>
     <string name="PerkName_Defense">Armourer</string>
-    <string name="PerkName_CommandPoint">Rear Admiral</string>
+    <string name="PerkName_Instructor">Drill Sergeant</string>
     <string name="PerkName_FavoriteShip">Specialist</string>
     <string name="PerkName_QuickRecovery">Technician</string>
     <string name="PerkName_Scavenger">Scavenger</string>
     <string name="PerkName_Dev">Developer</string>
     <string name="PerkInfo_Attack">$1% attack bonus</string>
     <string name="PerkInfo_Defense">$1% defense bonus</string>
-    <string name="PerkInfo_CommandPoint">Gives an extra command point</string>
+    <string name="PerkInfo_Instructor">Ship crew earn more experience in battles</string>
     <string name="PerkInfo_FavoriteShip">Very skilled with the $1 ship</string>
     <string name="PerkInfo_QuickRecovery">Repairs the ship more quickly when shot down</string>
     <string name="PerkInfo_Scavenger">Drops valuable loot when destroyed</string>
@@ -37,4 +39,7 @@
     <string name="SpecialityCruiser">Cruisers</string>
     <string name="SpecialityBattleship">Battleships</string>
     <string name="SpecialityTitan">Capital Ships</string>
+    <string name="AssignedToShip">This captain is assigned to a ship</string>
+    <string name="CannotBeFired">This captain is indispensable</string>
+    <string name="DismissLabel">Dismiss captain</string>
 </resources>

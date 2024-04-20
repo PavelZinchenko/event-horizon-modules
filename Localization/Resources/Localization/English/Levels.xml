@@ -19,16 +19,25 @@
     <string name="InfectedLevelDescription">This colony was infected with an unknown pathogen</string>
     <string name="EmptyLevelName">Star system</string>
     <string name="EmptyLevelDescription">This is an empty star system.</string>
+    <string name="CaptureBaseLevelName">Citadel - $1</string>
+    <string name="CaptureBaseLevelDescription">This is an enemy citadel. Do you truly think you can conquer it?</string>
 
     <string name="PvpStarbaseMatchName">Starbase Battle $1</string>
     <string name="PvpStarbaseMatchDescription">Test your skills by battling against other players' starbases.</string>
     <string name="PvpStarbaseTrainingName">Starbase Practice Match</string>
     <string name="PvpStarbaseTrainingDescription">Practice with your fleet or invite a friend.</string>
+    <string name="PvpStarbaseChallengeName">Starbase Challenge Match</string>
+    <string name="PvpStarbaseChallengeDescription">Test your abilities against top players</string>
     <string name="PvpPassCondition">Secure $1 consecutive victories to pass.</string>
     <string name="InviteCode">Your invite code: $1</string>
     <string name="EnterInviteCode">Enter Invite Code</string>
     <string name="PvpMerchantName">Black Bazaar $1</string>
     <string name="PvpMerchantDescription">A secret marketplace for rare and banned items from across the stars.</string>
+    <string name="ComingSoon">Coming Soon...</string>
+    <string name="PvpDuelSeriesName">Duel series $1</string>
+    <string name="PvpDuelSeriesDescription">Take on other players' ships in one-on-one fights.</string>
+    <string name="PvpDuelTrainingName">Duel Practice Match</string>
+    <string name="PvpDuelChallengeName">Duel Challenge Match</string>
 
     <string name="DifficultyLevel">Difficulty level - $1</string>
     <string name="Difficulty1">Normal</string>

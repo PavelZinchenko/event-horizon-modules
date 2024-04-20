@@ -29,7 +29,7 @@ namespace Installers
 			var shipBuild = _database.GetShipBuild(ItemId<ShipBuild>.Create(_testShipBuildId));
 			if (shipBuild == null) shipBuild = _database.ShipBuildList.First();
 
-			return new DatabaseEditorContext(_database, _lockTestShipModules ? new CommonShip(shipBuild) : new EditorModeShip(shipBuild, _database));
+			return new DatabaseEditorContext(_database, _lockTestShipModules ? new CommonShip(shipBuild, _database) : new EditorModeShip(shipBuild, _database));
 		}
 	}
 }

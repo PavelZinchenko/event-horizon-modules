@@ -14,4 +14,6 @@
     <string name="SurvivalQuest">Complete a survival mission for the first time</string>
     <string name="ArenaQuest">Win one arena match</string>
     <string name="DisinfectionQuest">Destroy $1 infected ${1|starbase|starbases}</string>
+    <string name="ScientistQuest">Collect $1 units of each rare resource</string>
+    <string name="ScientistQuestReward">Scientist arriving at your station</string>
 </resources>

@@ -1,7 +1,6 @@
 ﻿using Constructor;
-using Constructor.Ships;
 using GameDatabase.DataModel;
-using CommonComponents.Utils;
+using Utilites.Collections;
 
 namespace Gui.ComponentList
 {
@@ -12,7 +11,7 @@ namespace Gui.ComponentList
 
     public class ComponentQuantityProvider : IComponentQuantityProvider
     {
-        public ComponentQuantityProvider(IReadOnlyGameItemCollection<ComponentInfo> components)
+        public ComponentQuantityProvider(IReadOnlyInventory<ComponentInfo> components)
         {
             _components = components;
         }
@@ -22,12 +21,12 @@ namespace Gui.ComponentList
             return _components.GetQuantity(component);
         }
 
-        private readonly IReadOnlyGameItemCollection<ComponentInfo> _components;
+        private readonly IReadOnlyInventory<ComponentInfo> _components;
     }
 
     public class BlueprintQuantityProvider : IComponentQuantityProvider
     {
-        public BlueprintQuantityProvider(IReadOnlyGameItemCollection<Component> blueprints)
+        public BlueprintQuantityProvider(IReadOnlyInventory<Component> blueprints)
         {
             _blueprints = blueprints;
         }
@@ -37,6 +36,6 @@ namespace Gui.ComponentList
             return _blueprints.GetQuantity(component.Data);
         }
 
-        private readonly IReadOnlyGameItemCollection<Component> _blueprints;
+        private readonly IReadOnlyInventory<Component> _blueprints;
     }
 }

@@ -21,6 +21,7 @@ namespace ShipEditor.Context
 			Inventory = new DatabaseInventoryProvider(database);
             ShipDataProvider = new EmptyDataProvider();
             ShipPresetStorage = new EmptyShipPresetStorage();
+            UpgradesProvider = new EmptyUpgradesProvider();
 		}
 
 		public IShip Ship { get; }
@@ -28,6 +29,7 @@ namespace ShipEditor.Context
         public IShipDataProvider ShipDataProvider { get; }
         public bool IsShipNameEditable => false;
         public IShipPresetStorage ShipPresetStorage { get; }
+        public IComponentUpgradesProvider UpgradesProvider { get; }
 
         public bool CanBeUnlocked(Component component)
 		{
@@ -37,27 +39,26 @@ namespace ShipEditor.Context
 
 		private class DatabaseInventoryProvider : IInventoryProvider
 		{
-			private readonly GameItemCollection<Satellite> _satellites = new();
-			private readonly GameItemCollection<ComponentInfo> _components;
+			private readonly List<Satellite> _satellites = new();
+			private readonly List<ComponentInfo> _components = new();
 			private readonly List<ISatellite> _satelliteBuilds;
 			private readonly List<IShip> _ships;
 
-			public IReadOnlyGameItemCollection<ComponentInfo> Components => _components;
-			public IReadOnlyGameItemCollection<Satellite> Satellites => _satellites;
+			public IReadOnlyCollection<ComponentInfo> Components => _components;
+			public IReadOnlyCollection<Satellite> Satellites => _satellites;
 			public IReadOnlyCollection<ISatellite> SatelliteBuilds => _satelliteBuilds;
 			public IEnumerable<IShip> Ships => _ships;
 
 			public DatabaseInventoryProvider(IDatabase database)
 			{
-				_components = new();
 				foreach (var item in database.ComponentList)
 				{
 					var common = new ComponentInfo(item);
-					_components.Add(common, 999);
+					_components.Add(common);
 					foreach (var mod in item.PossibleModifications)
 					{
 						var component = new ComponentInfo(item, mod, GameDatabase.Enums.ModificationQuality.P3);
-						_components.Add(component, 999);
+						_components.Add(component);
 					}
 				}
 
@@ -65,7 +66,10 @@ namespace ShipEditor.Context
 				_satelliteBuilds = database.SatelliteBuildList.Select<SatelliteBuild, ISatellite>(build => new EditorModeSatellite(build, database)).ToList();
 			}
 
-			public void AddComponent(ComponentInfo component)
+            public int GetQuantity(Satellite satellite) => 999;
+            public int GetQuantity(ComponentInfo component) => 999;
+
+            public void AddComponent(ComponentInfo component)
 			{
 				//UnityEngine.Debug.LogError($"AddComopnent {component.Data.Name}");
 			}
@@ -97,7 +101,7 @@ namespace ShipEditor.Context
 				//UnityEngine.Debug.LogError($"TryPayForUnlock - {GetUnlockPrice(component)}");
 				return true;
 			}
-		}
+        }
 
         private class EmptyShipPresetStorage : IShipPresetStorage
         {
@@ -119,6 +123,12 @@ namespace ShipEditor.Context
             {
                 return _presets.Where(item => item.Ship == ship);
             }
+        }
+
+        private class EmptyUpgradesProvider : IComponentUpgradesProvider
+        {
+            public IEnumerable<ComponentUpgradeLevel> GetAllUpgrades() => Enumerable.Empty<ComponentUpgradeLevel>();
+            public IComponentUpgrades GetComponentUpgrades(Component component) => null;
         }
     }
 }

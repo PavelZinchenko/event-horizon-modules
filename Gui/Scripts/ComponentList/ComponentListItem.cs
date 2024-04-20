@@ -27,7 +27,7 @@ namespace Gui.ComponentList
             var descriptionText = item.CreateModification().GetDescription(_localization);
             DescriptionText.gameObject.SetActive(!string.IsNullOrEmpty(DescriptionText.text = descriptionText));
             NameText.color = Theme.UiTheme.Current.GetQualityColor(item.ItemQuality);
-            _quantityText.text = quantity.ToString();
+            if (_quantityText) _quantityText.text = quantity.ToString();
         }
 
         public override ComponentInfo Component { get { return _component; } }

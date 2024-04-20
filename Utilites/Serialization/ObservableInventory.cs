@@ -38,10 +38,19 @@ namespace Session.Utils
 			else
 				_items[item] = quantity;
 
-			return quantity >= 0 ? amount : amount + quantity;
+            _callback?.OnDataChanged();
+            return quantity >= 0 ? amount : amount + quantity;
 		}
 
-		public void SetValue(T item, int quantity)
+        public int RemoveAll(T item)
+        {
+            if (!_items.TryGetValue(item, out var quantity)) return 0;
+            _items.Remove(item);
+            _callback?.OnDataChanged();
+            return quantity;
+        }
+
+        public void SetValue(T item, int quantity)
 		{ 
 			_items[item] = quantity;
 			_callback?.OnDataChanged();

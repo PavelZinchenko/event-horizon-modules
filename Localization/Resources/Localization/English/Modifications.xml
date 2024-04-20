@@ -28,4 +28,7 @@
     <string name="Ship_Infected">$1% less armor, regenerates $2% / sec</string>
     <string name="Ship_UnlimitedRespawn">Can respawn up to $1 ${1|time|times} per battle</string>
     <string name="Ship_WeaponClassMod">Can use any weapon type, $1% less damage</string>
+    <string name="Ship_SatelliteSizeMod">Can support larger satellite sizes</string>
+    <string name="Ship_EnergyCooldownMod">Has $1% less energy, yet recharges without any cooldown</string>
+    <string name="Ship_ShieldCooldownMod">Has $1% less shield, yet recharges without any cooldown</string>
 </resources>

@@ -8,7 +8,6 @@ using Constructor.Model;
 using Constructor.Modification;
 using GameDatabase.DataModel;
 using GameDatabase.Enums;
-using Economy.ItemType;
 using Services.Localization;
 using Services.Resources;
 using Constructor.Component;
@@ -84,6 +83,7 @@ namespace ShipEditor.UI
 		private void UpdateDescription(ComponentInfo info)
 		{
 			var component = info.CreateComponent(_shipEditor.Ship.Model.Layout.CellCount);
+            component.Upgrades = _shipEditor.UpgradesProvider.GetComponentUpgrades(info.Data);
 
 			_name.text = info.GetName(_localization);
 		    _name.color = UiTheme.Current.GetQualityColor(info.ItemQuality);
@@ -254,14 +254,17 @@ namespace ShipEditor.UI
             foreach (var item in GetWeaponDamageText(data))
                 yield return item;
 
-            if (data.Continuous)
-	        {
-	            yield return new KeyValuePair<string, string>("$WeaponEPS", data.EnergyCost.ToString(_floatFormat));
-	        }
-	        else
-	        {
-	            yield return new KeyValuePair<string, string>("$WeaponEnergy", data.EnergyCost.ToString(_floatFormat));
-	            yield return new KeyValuePair<string, string>("$WeaponCooldown", (1.0f / data.FireRate).ToString(_floatFormat));
+            if (data.EnergyCost > 0)
+            {
+                if (data.Continuous)
+                {
+                    yield return new KeyValuePair<string, string>("$WeaponEPS", data.EnergyCost.ToString(_floatFormat));
+                }
+                else
+                {
+                    yield return new KeyValuePair<string, string>("$WeaponEnergy", data.EnergyCost.ToString(_floatFormat));
+                    yield return new KeyValuePair<string, string>("$WeaponCooldown", (1.0f / data.FireRate).ToString(_floatFormat));
+                }
             }
 
             if (data.Range > 0)

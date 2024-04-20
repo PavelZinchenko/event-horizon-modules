@@ -48,6 +48,7 @@
     <string name="EnergyDamageResistance">Energy resistance</string>
     <string name="Size">Size</string>
     <string name="EnergyConsumption">Energy consumption</string>
+    <string name="ActivationEnergy">Activation energy</string>
     <string name="MenuWeapon">Attack</string>
     <string name="MenuEnergy">Energy</string>
     <string name="MenuDefense">Defense</string>
@@ -154,4 +155,13 @@
     <string name="DeletePresetConfirmation">Are you sure you want to delete selected preset? This operation cannot be undone.</string>
     <string name="OverwritePresetConfirmation">Are you sure you want to overwrite selected preset?</string>
     <string name="PartiallyLoadedPreset">The preset was partially loaded due to missing modules in the inventory</string>
+    <string name="EnterFleetName">Fleet Name</string>
+    <string name="DefaultFleetName">Fleet $1</string>
+    <string name="SelectFleetLabel">Select Your Fleet</string>
+    <string name="CreateNewFleet">Create New Fleet</string>
+    <string name="DeleteFleetConfirmation">Are you certain you wish to delete fleet "$1"? Please note, this action is irreversible.</string>
+    <string name="AddShip">Add New Ship</string>
+    <string name="ShipModifications">Modifications:</string>
+    <string name="MissingModulesError">Some modules that were previously on this ship are missing from your inventory. They might have been sold or installed on another ship.</string>
+    <string name="ReplacedModulesError">Some modules that were previously on this ship are missing from your inventory and have been replaced with suitable ones.</string>
 </resources>

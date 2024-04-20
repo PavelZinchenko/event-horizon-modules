@@ -105,6 +105,7 @@ namespace ShipEditor.UI
 			foreach (var item in _shipEditor.InstalledComponents)
 			{
 				var component = item.Info.CreateComponent(ship.Layout.CellCount);
+                component.Upgrades = _shipEditor.UpgradesProvider.GetComponentUpgrades(item.Info.Data);
 				component.UpdateStats(ref stats.EquipmentStats);
 			}
 

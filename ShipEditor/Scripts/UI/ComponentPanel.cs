@@ -137,7 +137,7 @@ namespace ShipEditor.UI
 
 		private void OnComponentAdded(IComponentModel model)
 		{
-			if (_shipEditor.Inventory.Components.GetQuantity(_componentInfo) == 0)
+			if (_shipEditor.Inventory.GetQuantity(_componentInfo) == 0)
 				_closeRequested?.Invoke();
 		}
 

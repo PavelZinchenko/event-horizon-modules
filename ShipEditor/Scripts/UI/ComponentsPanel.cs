@@ -29,7 +29,7 @@ namespace ShipEditor.UI
 		private void Start()
 		{
 			var components = _shipEditor.Inventory.Components;
-			_rootNode = new RootNode(new ComponentQuantityProvider(components));
+			_rootNode = new RootNode(new ComponentQuantityProvider(_shipEditor.Inventory));
 			_rootNode.Assign(components);
 			_rootNode.IsVisible = true;
 			_leftSatelliteNode = new SatellitesNode(_rootNode, SatellitesNode.Location.Left);
@@ -139,5 +139,20 @@ namespace ShipEditor.UI
 			_leftSatelliteNode.IsVisible = !isStarbase && (haveSatellites || _shipEditor.HasSatellite(SatelliteLocation.Left));
 			_rightSatelliteNode.IsVisible = !isStarbase && (haveSatellites || _shipEditor.HasSatellite(SatelliteLocation.Right));
 		}
-	}
+
+        private class ComponentQuantityProvider : IComponentQuantityProvider
+        {
+            public ComponentQuantityProvider(Context.IInventoryProvider inventoryProvider)
+            {
+                _inventoryProvider = inventoryProvider;
+            }
+
+            public int GetQuantity(ComponentInfo component)
+            {
+                return _inventoryProvider.GetQuantity(component);
+            }
+
+            private readonly Context.IInventoryProvider _inventoryProvider;
+        }
+    }
 }

@@ -3,6 +3,7 @@ using System.Linq;
 using Constructor;
 using GameDatabase.Model;
 using CommonComponents.Utils;
+using Utilites.Collections;
 
 namespace Gui.ComponentList
 {
@@ -52,7 +53,7 @@ namespace Gui.ComponentList
         {
             var count = 0;
             foreach (var node in nodes)
-                count += node.ShouldExpand() ? node.ItemCount : 1;
+                count += node.ShouldExpand() ? node.ItemCount : (node.IsVisible ? 1 : 0);
 
             return count;
         }
@@ -103,12 +104,12 @@ namespace Gui.ComponentList
                 node.Add(component);
         }
 
-        public static void Assign(this IComponentTreeNode node, IReadOnlyGameItemCollection<ComponentInfo> components)
+        public static void Assign(this IComponentTreeNode node, IReadOnlyInventory<ComponentInfo> components)
         {
             node.Clear();
 
             foreach (var component in components.Items)
-                node.Add(component.Key);
+                node.Add(component);
         }
 
         private const int MinElementsInGroup = 3;

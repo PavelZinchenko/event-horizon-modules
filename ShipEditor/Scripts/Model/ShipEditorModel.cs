@@ -31,6 +31,7 @@ namespace ShipEditor.Model
         IShipPresetStorage Presets { get; }
         IInventoryProvider Inventory { get; }
         IShipDataProvider ShipDataProvider { get; }
+        IComponentUpgradesProvider UpgradesProvider { get; }
         ICompatibilityChecker CompatibilityChecker { get; }
 		IEnumerable<IComponentModel> InstalledComponents { get; }
         bool IsShipNameEditable { get; }
@@ -78,6 +79,7 @@ namespace ShipEditor.Model
         public IShipPresetStorage Presets => _context.ShipPresetStorage;
         public IInventoryProvider Inventory => _context.Inventory;
         public IShipDataProvider ShipDataProvider => _context.ShipDataProvider;
+        public IComponentUpgradesProvider UpgradesProvider => _context.UpgradesProvider;
         public ICompatibilityChecker CompatibilityChecker => _compatibilityChecker;
 		
 		public IEnumerable<IComponentModel> InstalledComponents

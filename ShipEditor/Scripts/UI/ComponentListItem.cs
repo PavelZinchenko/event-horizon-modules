@@ -40,6 +40,7 @@ namespace ShipEditor.UI
 			_component = data;
 			var ship = _shipEditor.Ship.Model;
             var model = _component.CreateComponent(ship.Layout.CellCount);
+            model.Upgrades = _shipEditor.UpgradesProvider.GetComponentUpgrades(_component.Data);
 			var canInstall = model.IsSuitable(ship);
 
 			_button.interactable = canInstall;

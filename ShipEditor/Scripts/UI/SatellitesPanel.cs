@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using Gui.ComponentList;
 using Zenject;
@@ -92,8 +91,8 @@ namespace ShipEditor.UI
 				_itemsLayoutGroup.transform.InitializeElements<SatelliteItem, ISatellite>(
 					_shipEditor.Inventory.SatelliteBuilds, UpdateSatellite);
 			else
-				_itemsLayoutGroup.transform.InitializeElements<SatelliteItem, KeyValuePair<Satellite, ObscuredInt>>(
-					_shipEditor.Inventory.Satellites.Items, UpdateSatellite);
+				_itemsLayoutGroup.transform.InitializeElements<SatelliteItem, Satellite>(
+					_shipEditor.Inventory.Satellites, UpdateSatellite);
 		}
 
 		private void UpdateSatellite(SatelliteItem item, ISatellite satellite)
@@ -102,10 +101,11 @@ namespace ShipEditor.UI
 			item.Initialize(satellite, canBeInstalled, _resourceLocator, _localization);
 		}
 
-		private void UpdateSatellite(SatelliteItem item, KeyValuePair<Satellite, ObscuredInt> data)
+		private void UpdateSatellite(SatelliteItem item, Satellite satellite)
 		{
-			var canBeInstalled = _shipEditor.CompatibilityChecker.IsCompatible(data.Key);
-			item.Initialize(data.Key, data.Value, canBeInstalled, _resourceLocator, _localization);
+            var quantity = _shipEditor.Inventory.GetQuantity(satellite);
+			var canBeInstalled = _shipEditor.CompatibilityChecker.IsCompatible(satellite);
+			item.Initialize(satellite, quantity, canBeInstalled, _resourceLocator, _localization);
 		}
 	}
 }
