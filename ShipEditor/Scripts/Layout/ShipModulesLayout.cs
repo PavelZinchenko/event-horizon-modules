@@ -13,11 +13,15 @@ namespace ShipEditor
 
 		private Dictionary<Texture2D, ModuleGroup> _groups = new();
 		private float _cellSize;
+        private int _x0;
+        private int _y0;
 
-		public void Initialize(float cellSize)
+		public void Initialize(float cellSize, int x0, int y0)
 		{
 			Cleanup();
 			_cellSize = cellSize;
+            _x0 = x0;
+            _y0 = y0;
 		}
 
 		public void AddComponent(int x, int y, GameDatabase.DataModel.Component component, bool updateImmediately = true)
@@ -33,7 +37,7 @@ namespace ShipEditor
 				_groups.Add(texture, group);
 			}
 
-			group.Builder.AddComponent(x, y, component);
+			group.Builder.AddComponent(x - _x0, y - _y0, component);
 			
 			if (updateImmediately) 
 				group.Update();

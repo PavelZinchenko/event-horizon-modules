@@ -7,6 +7,7 @@ using Constructor.Ships;
 using Constructor.Satellites;
 using GameDatabase.DataModel;
 using GameDatabase.Enums;
+using Constructor.Model;
 
 namespace ShipEditor.Model
 {
@@ -408,7 +409,7 @@ namespace ShipEditor.Model
 			if (satellite != null)
 			{
 				_layout[location] = new ShipLayoutModel(location.ToShipElement(),
-					satellite.Information.Layout, satellite.Information.Barrels, _compatibilityChecker);
+					new ShipLayoutAdapter(satellite.Information.Layout), satellite.Information.Barrels, _compatibilityChecker);
 				InitializeLayout(_layout[location], satellite.Components);
 			}
 			else

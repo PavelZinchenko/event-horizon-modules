@@ -11,13 +11,17 @@ namespace ShipEditor
 		private readonly float _cellSize;
 		private readonly float _iconHalfSize;
 		private readonly HashSet<ulong> _map = new();
+        private readonly int _x0;
+        private readonly int _y0;
 
 		public Color Color { get; set; } = Color.white;
 
-		public LockedCellsMeshBuilder(float cellSize, float iconSize = 0.5f)
+		public LockedCellsMeshBuilder(float cellSize, int x0, int y0, float iconSize = 0.5f)
 		{
 			_cellSize = cellSize;
 			_iconHalfSize = iconSize / 2;
+            _x0 = x0;
+            _y0 = y0;
 		}
 
 		public bool TryAddElement(Layout layout, int x0, int y0)
@@ -86,7 +90,7 @@ namespace ShipEditor
 		private int AddVertex(List<Vector3> vertices, float x, float y)
 		{
 			var id = vertices.Count;
-			vertices.Add(new Vector3(x * _cellSize, -y * _cellSize));
+			vertices.Add(new Vector3((x - _x0) * _cellSize, (_y0 - y) * _cellSize));
 			return id;
 		}
 	}

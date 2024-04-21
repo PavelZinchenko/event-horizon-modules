@@ -56,7 +56,7 @@ namespace ShipEditor.UI
 			var offset = view.ContentOffset + view.transform.localPosition;
 			var x = (center.x - offset.x) / _cellSize - 0.5f * componentSize;
 			var y = (offset.y - center.y) / _cellSize - 0.5f * componentSize;
-			return new Vector2Int(Mathf.RoundToInt(x), Mathf.RoundToInt(y));
+			return new Vector2Int(Mathf.RoundToInt(x + view.X0), Mathf.RoundToInt(y + view.Y0));
 		}
 
 		public void ShowSelection(Vector2 position, GameDatabase.DataModel.Component component)

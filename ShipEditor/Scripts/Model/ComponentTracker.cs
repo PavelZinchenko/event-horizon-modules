@@ -5,6 +5,7 @@ using GameDatabase.Extensions;
 using GameDatabase.Enums;
 using Constructor.Ships;
 using Constructor;
+using Constructor.Extensions;
 
 namespace ShipEditor.Model
 {

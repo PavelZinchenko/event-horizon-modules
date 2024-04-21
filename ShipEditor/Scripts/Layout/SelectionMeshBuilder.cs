@@ -18,18 +18,22 @@ namespace ShipEditor
 		private readonly List<Color32> _colors = new();
 		private readonly List<int> _triangles = new();
 		private readonly float _cellSize;
+        private readonly int _x0;
+        private readonly int _y0;
 		private readonly ICellValidator _cellValidator;
 
 		public Color ValidCellColor { get; set; } = Color.white;
 		public Color InvalidCellColor { get; set; } = Color.white;
 
-		public SelectionMeshBuilder(ICellValidator cellValidator, float cellSize)
+		public SelectionMeshBuilder(ICellValidator cellValidator, float cellSize, int x0, int y0)
 		{
 			_cellValidator = cellValidator;
 			_cellSize = cellSize;
-		}
+            _x0 = x0;
+            _y0 = y0;
+        }
 
-		public void Build(Layout layout, int x0, int y0)
+        public void Build(Layout layout, int x0, int y0)
 		{
 			var size = layout.Size;
 
@@ -43,7 +47,7 @@ namespace ShipEditor
 					if ((CellType)layout[j, i] == CellType.Empty) continue;
 					if (!_cellValidator.IsVisible(x, y)) continue;
 
-					var color = _cellValidator.IsValid(x, y) ? ValidCellColor : InvalidCellColor;
+                    var color = _cellValidator.IsValid(x, y) ? ValidCellColor : InvalidCellColor;
 					var v1 = GetVertex(x, y, color);
 					var v2 = GetVertex(x + 1, y, color);
 					var v3 = GetVertex(x + 1, y + 1, color);
@@ -69,7 +73,7 @@ namespace ShipEditor
 		private int GetVertex(int x, int y, Color color)
 		{
 			var id = _vertices.Count;
-			_vertices.Add(new Vector3(x * _cellSize, -y*_cellSize, 0));
+			_vertices.Add(new Vector3((x - _x0) * _cellSize, (_y0 - y)*_cellSize, 0));
 			_uv.Add(new Vector2(x % 2 == 0 ? 0f : 1f, y % 2 == 0 ? 0f : 1f));
 			_colors.Add(color);
 			return id;

@@ -3,16 +3,15 @@ using GameDatabase.Model;
 using GameDatabase.Enums;
 using GameDatabase.DataModel;
 using Constructor;
+using Constructor.Model;
 
 namespace ShipEditor.Model
 {
 	public interface IShipLayoutModel
 	{
-		CellType Cell(int x, int y);
-		int Width { get; }
-		int Height { get; }
-
-		IReadOnlyList<IComponentModel> Components { get; }
+        ref readonly LayoutRect Rect { get; }
+        CellType Cell(int x, int y);
+        IReadOnlyList<IComponentModel> Components { get; }
 		Barrel Barrel(int x, int y);
 		bool TryGetComponentAt(int x, int y, out IComponentModel component);
 		bool IsCellCompatible(int x, int y, Component component);
@@ -26,16 +25,15 @@ namespace ShipEditor.Model
 		private readonly ImmutableCollection<Barrel> _barrels;
 		private readonly IComponentTracker _tracker;
 		private readonly ShipElementType _elementType;
-		private readonly Layout _layout;
+		private readonly IShipLayout _layout;
 
 		public bool DataChanged { get; set; }
 
-		public int Width => _layout.Size;
-		public int Height => _layout.Size;
+        public ref readonly LayoutRect Rect => ref _layout.Rect;
 
 		public CellType Cell(int x, int y)
 		{
-			var cellType = (CellType)_layout[x, y];
+			var cellType = _layout[x, y];
 			if (cellType == Layout.CustomWeaponCell) return CellType.Weapon;
 			if (cellType == Layout.CustomizableCell) return CellType.Empty;
 			return cellType;
@@ -49,7 +47,7 @@ namespace ShipEditor.Model
 			return id >= 0 ? _barrels[id] : null;
 		}
 
-		public ShipLayoutModel(ShipElementType elementType, Layout layout, ImmutableCollection<Barrel> barrels, IComponentTracker tracker)
+		public ShipLayoutModel(ShipElementType elementType, IShipLayout layout, ImmutableCollection<Barrel> barrels, IComponentTracker tracker)
 		{
 			_layout = layout;
 			_barrels = barrels;
@@ -151,9 +149,7 @@ namespace ShipEditor.Model
 
 		public bool IsCellCompatible(int x, int y, Component component)
 		{
-			var size = _layout.Size;
-
-			if (x < 0 || x >= size || y < 0 || y >= size)
+            if (!_layout.Rect.IsInsideRect(x, y))
 				return false;
 
 			var index = CellIndex.FromXY(x, y);

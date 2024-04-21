@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using CommonComponents.Utils;
 using GameDatabase;
 using GameDatabase.DataModel;
 using Constructor.Ships;
@@ -14,13 +13,13 @@ namespace ShipEditor.Context
 	{
 		private readonly IDatabase _database;
 
-		public DatabaseEditorContext(IDatabase database, IShip ship)
+		public DatabaseEditorContext(IDatabase database, IShip ship, [Zenject.InjectOptional] IShipPresetStorage shipPresetStorage = null)
 		{
 			_database = database;
 			Ship = ship;
 			Inventory = new DatabaseInventoryProvider(database);
             ShipDataProvider = new EmptyDataProvider();
-            ShipPresetStorage = new EmptyShipPresetStorage();
+            ShipPresetStorage = shipPresetStorage ?? new EmptyShipPresetStorage();
             UpgradesProvider = new EmptyUpgradesProvider();
 		}
 

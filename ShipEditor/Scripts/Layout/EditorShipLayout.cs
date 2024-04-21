@@ -1,5 +1,6 @@
 using UnityEngine;
 using GameDatabase.Enums;
+using Constructor.Model;
 
 namespace ShipEditor
 {
@@ -25,8 +26,10 @@ namespace ShipEditor
 
 		private float _cellSize;
 
-		public float Width => _shipLayout == null ? 0 : _shipLayout.Width * _cellSize;
-		public float Height => _shipLayout == null ? 0 : _shipLayout.Height * _cellSize;
+        public float X0 => _shipLayout == null ? 0 : _shipLayout.Rect.xMin;
+        public float Y0 => _shipLayout == null ? 0 : _shipLayout.Rect.yMin;
+        public float Width => _shipLayout == null ? 0 : _shipLayout.Rect.Width * _cellSize;
+		public float Height => _shipLayout == null ? 0 : _shipLayout.Rect.Height * _cellSize;
 
 		public Vector3 ContentOffset => _content.localPosition;
 
@@ -57,10 +60,14 @@ namespace ShipEditor
 
 		public void GenerateModules()
 		{
-			_modules.Initialize(_cellSize);
-			if (_shipLayout == null) return;
+			if (_shipLayout == null)
+            {
+                _modules.Initialize(_cellSize,0,0);
+                return;
+            }
 
-			foreach (var item in _shipLayout.Components)
+            _modules.Initialize(_cellSize, _shipLayout.Rect.xMin, _shipLayout.Rect.yMin);
+            foreach (var item in _shipLayout.Components)
 				_modules.AddComponent(item.X, item.Y, item.Data, false);
 
 			_modules.UpdateMesh();
@@ -94,7 +101,7 @@ namespace ShipEditor
 			_selectedPosition = position;
 
 			var cellValidator = new CellValidator(_shipLayout, component);
-			var builder = new SelectionMeshBuilder(cellValidator, _cellSize);
+			var builder = new SelectionMeshBuilder(cellValidator, _cellSize, _shipLayout.Rect.xMin, _shipLayout.Rect.yMin);
 			builder.ValidCellColor = _validCellColor;
 			builder.InvalidCellColor = _invalidCellColor;
 			builder.Build(component.Layout, position.x, position.y);
@@ -143,7 +150,7 @@ namespace ShipEditor
 			_lockedCells.SetMesh(null);
 			if (_shipLayout == null) return;
 
-			_lockedCellBuilder = new(_cellSize, _lockSize);
+			_lockedCellBuilder = new(_cellSize, _shipLayout.Rect.xMin, _shipLayout.Rect.yMin, _lockSize);
 			_lockedCellBuilder.Color = _lockedCellColor;
 
 			foreach (var item in _shipLayout.Components)
@@ -171,7 +178,7 @@ namespace ShipEditor
 
 			public bool IsVisible(int x, int y)
 			{
-				return x >= 0 && y >= 0 && x < _model.Width && y < _model.Height;
+				return _model.Rect.IsInsideRect(x,y);
 			}
 		}
 
@@ -179,9 +186,8 @@ namespace ShipEditor
 		{
 			private readonly Model.IShipLayoutModel _model;
 			public LayoutAdapter(Model.IShipLayoutModel model) => _model = model;
-			public CellType this[int x, int y] => _model.Cell(x,y);
-			public int Width => _model.Width;
-			public int Height => _model.Height;
+            public ref readonly LayoutRect Rect => ref _model.Rect;
+            public CellType this[int x, int y] => _model.Cell(x,y);
 			public string GetWeaponClasses(int x, int y) => _model.Barrel(x,y)?.WeaponClass;
 		}
 	}

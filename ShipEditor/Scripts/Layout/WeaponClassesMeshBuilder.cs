@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using GameDatabase.Model;
 using GameDatabase.Enums;
+using Constructor.Model;
 
 namespace ShipEditor
 {
@@ -23,8 +24,8 @@ namespace ShipEditor
 			_cellSize = cellSize;
 			_letterMaxSize = letterMaxSize;
 
-			for (int i = 0; i < layout.Height; ++i)
-				for (int j = 0; j < layout.Width; ++j)
+			for (int i = layout.Rect.yMin; i <= layout.Rect.yMax; ++i)
+				for (int j = layout.Rect.xMin; j < layout.Rect.xMax; ++j)
 					if (TryGetWeaponClass(j, i, out _))
 						_map.Add(Index(j, i));
 		}
@@ -73,9 +74,7 @@ namespace ShipEditor
 
 			foreach (int index in _map)
 			{
-				var x = index % _layout.Width;
-				var y = index / _layout.Width;
-
+                _layout.Rect.ArrayIndexToXY(index, out var x, out var y);
 				if (!TryGetWeaponClass(x, y, out var weaponClass))
 					continue;
 
@@ -92,9 +91,9 @@ namespace ShipEditor
 
 					var spriteRect = new SpriteRect(sprite);
 
-					var x0 = x + 0.5f - width*length/2 + i*width;
+					var x0 = x - _layout.Rect.xMin + 0.5f - width*length/2 + i*width;
 					var x1 = x0 + width;
-					var y0 = y + 0.5f - height/2;
+					var y0 = y - _layout.Rect.yMin + 0.5f - height/2;
 					var y1 = y0 + height;
 
 					var v1 = AddVertex(vertices, x0, y0);
@@ -139,7 +138,7 @@ namespace ShipEditor
 			public float ymin;
 			public float ymax;
 
-			public Vector2 TransformUV(Vector2 uv) => new Vector2(xmin + (xmax - xmin) * uv.x, ymax + (ymin - ymax) * uv.y);
+			public Vector2 TransformUV(Vector2 uv) => new(xmin + (xmax - xmin) * uv.x, ymax + (ymin - ymax) * uv.y);
 
 			public SpriteRect(Sprite sprite)
 			{
@@ -159,6 +158,6 @@ namespace ShipEditor
 			}
 		}
 
-		private int Index(int x, int y) => x + y * _layout.Width;
+		private int Index(int x, int y) => _layout.Rect.ToArrayIndex(x,y);
 	}
 }

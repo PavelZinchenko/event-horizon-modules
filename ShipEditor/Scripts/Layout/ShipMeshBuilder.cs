@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using GameDatabase.Enums;
+using Constructor.Model;
 
 namespace ShipEditor
 {
@@ -8,9 +9,8 @@ namespace ShipEditor
 	{
 		public interface ILayout
 		{
-			int Width { get; }
-			int Height { get; }
-			CellType this[int x, int y] { get; }
+            ref readonly LayoutRect Rect { get; }
+            CellType this[int x, int y] { get; }
 			string GetWeaponClasses(int x, int y);
 		}
 
@@ -33,18 +33,18 @@ namespace ShipEditor
 
 		public void Build(ILayout layout)
 		{
-			for (int i = 0; i < layout.Height; ++i)
+			for (int i = layout.Rect.yMin; i <= layout.Rect.yMax; ++i)
 			{
-				for (int j = 0; j < layout.Width; ++j)
+				for (int j = layout.Rect.xMin; j <= layout.Rect.xMax; ++j)
 				{
 					var cellType = layout[j, i];
 
 					if (!IsValidCell(cellType)) continue;
 
                     if (cellType == CellType.InnerOuter)
-                        AddMixedCell(j, i, CellType.Outer, CellType.Inner);
+                        AddMixedCell(j - layout.Rect.xMin, i - layout.Rect.yMin, CellType.Outer, CellType.Inner);
                     else
-                        AddSolidCell(j, i, cellType);
+                        AddSolidCell(j - layout.Rect.xMin, i - layout.Rect.yMin, cellType);
 				}
 			}
 		}
@@ -96,7 +96,11 @@ namespace ShipEditor
 
 		private static int Key(int x, int y, CellType cell)
 		{
-			return ((((y & 0xfff) << 12) + (x & 0xfff)) << 12) + (byte)cell;
+            const int minValue = -15;
+            const int coordinateBits = 12;
+            const int coordinateMask = (1 << coordinateBits) - 1;
+
+			return (((((y-minValue) & coordinateMask) << coordinateBits) + ((x-minValue) & coordinateMask)) << coordinateBits) + (byte)cell;
 		}
 
 		private static bool IsValidCell(CellType cell)
