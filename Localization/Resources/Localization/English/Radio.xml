@@ -6,7 +6,7 @@
     <string name="Muttering4">Never surrender</string>
     <string name="Muttering5">Waaagh</string>
 
-    <string name="Whining1">Just a scratch</string>
+    <string name="Whining1">Tis but a scratch</string>
     <string name="Whining2">They got me</string>
     <string name="Whining3">It's bad</string>
     <string name="Whining4">I'm in trouble</string>
@@ -17,4 +17,10 @@
     <string name="Battlecry3">Death before dishonor</string>
     <string name="Battlecry4">Charge!</string>
     <string name="Battlecry5">Banzaaai!</string>
+
+    <string name="Provoking1">Ready to lose?</string>
+    <string name="Provoking2">Come closer</string>
+    <string name="Provoking3">Try harder</string>
+    <string name="Provoking4">Nice try!</string>
+    <string name="Provoking5">Your move</string>
 </resources>

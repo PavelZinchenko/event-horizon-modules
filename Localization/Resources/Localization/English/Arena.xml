@@ -2,6 +2,8 @@
 <resources>
     <string name="PlayerRating">Player rating:</string>
     <string name="ArenaRating">Fleet rating:</string>
+    <string name="PlayerRatingDescription">Indicates a player's strength when attacking other players' fleets</string>
+    <string name="ArenaRatingDescription">Reflects the effectiveness of your fleet in defending against attacks from other players</string>
     <string name="ArenaRegistrationRequired">You are not registered in the arena yet.</string>
     <string name="ArenaSignInRequired">Sign in to your account before you start.</string>
     <string name="ConnectionError">Cannot connect to the server. Please try again later.</string>
@@ -23,4 +25,8 @@
     <string name="ArenaPrice">The Celestial Trophy</string>
     <string name="SelectArenaShip">Choose Your Ship</string>
     <string name="RatingUnknown">--</string>
+    <string name="ArenaPlayerSettings">Player Settings</string>
+    <string name="FleetUploadTime">Time since fleet update:</string>
+    <string name="FleetUploadTimeDescription">Time elapsed since your fleet was last uploaded to the server. Other players will encounter this fleet.</string>
+    <string name="ArenaCheaterWarning">It appears that your opponent may be cheating. A report has already been sent to the server. Would you like to continue the fight regardless? If not, you can skip this opponent.</string>
 </resources>

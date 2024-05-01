@@ -127,7 +127,7 @@ Use these modules to upgrade the starbase:</string>
     <string name="CommandPoints">Command Points:</string>
     <string name="DismissCaptainWarning">Are you sure you want to dismiss the captain? You will not be able to recruit him again.</string>
     <string name="NotEnoughCP">Not enough command points</string>
-    <string name="Salary">Salary:</string>
+    <string name="Salary">Price:</string>
     <string name="NoRecruitsAvailable">There are no recruits right now.\nCome back later.</string>
     <string name="NoCaptainsText">You don\'t have any captains yet.</string>
     <string name="RefreshRecruitListConfirmation">Are you sure you want to refresh the list?</string>
