@@ -7,6 +7,8 @@ using ShipEditor.Model;
 using Constructor.Model;
 using GameDatabase;
 using Gui.Theme;
+using System.Collections.Generic;
+using Constructor.Component;
 
 namespace ShipEditor.UI
 {
@@ -58,6 +60,9 @@ namespace ShipEditor.UI
 
 		[SerializeField] private GameObject[] _hiddenForStarbases;
 
+        private List<IComponent> _energyDependentComponents = new();
+        private List<IComponent> _energyIndependentComponents = new();
+
         private Color NormalColor => UiTheme.Current.GetColor(_normalColor);
         private Color ErrorColor => UiTheme.Current.GetColor(_errorColor);
 
@@ -102,14 +107,30 @@ namespace ShipEditor.UI
 			foreach (var item in _hiddenForStarbases)
 				item.gameObject.SetActive(!isStarbase);
 
-			foreach (var item in _shipEditor.InstalledComponents)
+            _energyDependentComponents.Clear();
+            _energyIndependentComponents.Clear();
+            foreach (var item in _shipEditor.InstalledComponents)
 			{
 				var component = item.Info.CreateComponent(ship.Layout.CellCount);
                 component.Upgrades = _shipEditor.UpgradesProvider.GetComponentUpgrades(item.Info.Data);
-				component.UpdateStats(ref stats.EquipmentStats);
+                if (component.RequiresEnergyToInstall())
+                    _energyDependentComponents.Add(component);
+                else
+                    _energyIndependentComponents.Add(component);
 			}
 
-			UpdateSummary(stats);
+            foreach (var component in _energyIndependentComponents)
+                stats.EquipmentStats.AddStats(component.GetStats());
+            foreach (var component in _energyDependentComponents)
+            {
+                var componentStats = component.GetStats();
+                if (stats.EnergyRechargeRate < componentStats.EnergyConsumption)
+                    stats.EquipmentStats.AddNegativeStatsOnly(componentStats);
+                else
+                    stats.EquipmentStats.AddStats(componentStats);
+            }
+
+            UpdateSummary(stats);
 			UpdateStats(stats);
 		}
 

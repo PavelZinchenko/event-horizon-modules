@@ -121,8 +121,7 @@ namespace ShipEditor.UI
 
 		public static IEnumerable<KeyValuePair<string, string>> GetDescription(IComponent component, ILocalization localization)
 		{
-			var stats = new ShipEquipmentStats();
-			component.UpdateStats(ref stats);
+			var stats = component.GetStats();
 
 			if (stats.ArmorPoints != 0)
 				yield return new KeyValuePair<string, string>("$HitPoints", FormatFloat(stats.ArmorPoints));

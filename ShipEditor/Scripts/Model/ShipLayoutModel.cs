@@ -10,6 +10,7 @@ namespace ShipEditor.Model
 	public interface IShipLayoutModel
 	{
         ref readonly LayoutRect Rect { get; }
+        int OriginalSize { get; }
         CellType Cell(int x, int y);
         IReadOnlyList<IComponentModel> Components { get; }
 		Barrel Barrel(int x, int y);
@@ -30,8 +31,9 @@ namespace ShipEditor.Model
 		public bool DataChanged { get; set; }
 
         public ref readonly LayoutRect Rect => ref _layout.Rect;
+        public int OriginalSize => _layout.Size;
 
-		public CellType Cell(int x, int y)
+        public CellType Cell(int x, int y)
 		{
 			var cellType = _layout[x, y];
 			if (cellType == Layout.CustomWeaponCell) return CellType.Weapon;

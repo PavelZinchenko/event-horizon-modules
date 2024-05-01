@@ -30,8 +30,9 @@ namespace ShipEditor
         public float Y0 => _shipLayout == null ? 0 : _shipLayout.Rect.yMin;
         public float Width => _shipLayout == null ? 0 : _shipLayout.Rect.Width * _cellSize;
 		public float Height => _shipLayout == null ? 0 : _shipLayout.Rect.Height * _cellSize;
+        public int OriginalSize => _shipLayout.OriginalSize;
 
-		public Vector3 ContentOffset => _content.localPosition;
+        public Vector3 ContentOffset => _content.localPosition;
 
 		private LockedCellsMeshBuilder _lockedCellBuilder;
 		private Model.IShipLayoutModel _shipLayout;
@@ -51,8 +52,12 @@ namespace ShipEditor
 			if (sprite != null)
 			{
 				_shipImage.sprite = sprite;
-				_shipImage.transform.localPosition = new Vector3(Width/2, -Height/2, _shipImage.transform.localPosition.z);
-				_shipImage.transform.localScale = Mathf.Max(Width, Height) * _cellSize * Vector3.one;
+                var size = _shipLayout == null ? 0 : _shipLayout.OriginalSize;
+                var offsetX = _shipLayout == null ? 0 : (0.5f*size - _shipLayout.Rect.xMin) * _cellSize;
+                var offsetY = _shipLayout == null ? 0 : (0.5f*size - _shipLayout.Rect.yMin) * _cellSize;
+
+                _shipImage.transform.localPosition = new Vector3(offsetX, -offsetY, _shipImage.transform.localPosition.z);
+				_shipImage.transform.localScale = size * _cellSize * Vector3.one;
 			}
 
 			_content.localPosition = new Vector3(-Width / 2, Height / 2, 0);

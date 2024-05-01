@@ -25,7 +25,7 @@ namespace ShipEditor
 			_letterMaxSize = letterMaxSize;
 
 			for (int i = layout.Rect.yMin; i <= layout.Rect.yMax; ++i)
-				for (int j = layout.Rect.xMin; j < layout.Rect.xMax; ++j)
+				for (int j = layout.Rect.xMin; j <= layout.Rect.xMax; ++j)
 					if (TryGetWeaponClass(j, i, out _))
 						_map.Add(Index(j, i));
 		}
