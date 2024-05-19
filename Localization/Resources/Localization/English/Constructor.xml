@@ -31,13 +31,16 @@
     <string name="EquipmentWeight">Equipment Mass</string>
     <string name="RamDamage">Ramming damage</string>
     <string name="DamageAbsorption">Energy absorption</string>
-    <string name="Velocity">Velocity</string>
+    <string name="Velocity">Speed</string>
     <string name="TurnRate">Turn rate</string>
+    <string name="Acceleration">Forward accel</string>
+    <string name="AngularAcceleration">Angular accel</string>
     <string name="WeaponModifiers">Weapon</string>
     <string name="DamageModifier">Damage</string>
     <string name="FireRateModifier">Fire rate</string>
     <string name="RangeModifier">Firing range</string>
     <string name="EnergyModifier">Energy cost</string>
+    <string name="DevicePower">Effect power</string>
     <string name="DroneDamageModifier">Drone damage</string>
     <string name="DroneRangeModifier">Drone range</string>
     <string name="DroneSpeedModifier">Drone speed</string>
@@ -91,6 +94,8 @@
     <string name="HeatDPS">Heat DPS</string>
     <string name="EnergyDamage">Energy damage</string>
     <string name="EnergyDPS">Energy DPS</string>
+    <string name="CorrosiveDamage">Corrosive damage</string>
+    <string name="CorrosiveDPS">Corrosive DPS</string>
     <string name="WeaponEnergy">Energy consumption</string>
     <string name="WeaponEPS">Energy per second</string>
     <string name="WeaponRange">Range</string>

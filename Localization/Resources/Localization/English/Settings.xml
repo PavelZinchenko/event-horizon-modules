@@ -49,7 +49,6 @@
     <string name="ControlsAction5">Weapon 6</string>
     <string name="ControlEnabled">Enabled</string>
     <string name="DoubleTapToHold">Double-Tap to Hold</string>
-    <string name="LoadPreset">Load preset:</string>
     <string name="Test">Test</string>
     <string name="SlideToMove">Move the ship by sliding your finger across the screen</string>
     <string name="UseJoystickForThrust">Control the engine using a joystick</string>

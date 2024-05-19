@@ -151,6 +151,7 @@
   <string name="Companion_7m">Barrel M2</string>
   <string name="Companion_7l">Barrel M3</string>
   <string name="Hovertank">Hovertank</string>
+  <string name="PowerBank">Power Bank</string>
   <string name="IronBall">Iron Ball</string>
   <string name="Teleporter">Warp Drive</string>
   <string name="Afterburner">Afterburner</string>
@@ -244,6 +245,9 @@
   <string name="DroneBay_M_S1">Drone Bay S1</string>
   <string name="DroneBay_L_S1">Large Drone Bay S1</string>
   <string name="DroneBay_Santa">Santa\'s Drone Bay</string>
+  <string name="DroneBay_L_1">Interceptor Hangar 1</string>
+  <string name="DroneBay_L_17">Interceptor Hangar 17</string>
+  <string name="DroneBay_L_18">Interceptor Hangar 18</string>
   <string name="DroneControlUnit_S">Small Drone Speed Booster</string>
   <string name="DroneControlUnit_M">Drone Speed Booster</string>
   <string name="DroneControlUnit_L">Large Drone Speed Booster</string>
@@ -330,6 +334,7 @@
   <string name="ChargedLaser_M_1">Small Tachyon Beam</string>
   <string name="ChargedLaser_L_1">Tachyon Beam</string>
   <string name="ChargedLaser_L_3">Death Ray</string>
+  <string name="ChargedLaser_L_2">Annihilation Ray</string>
   <string name="FortificationSystem">Fortification Module</string>
   <string name="RepairBeam_S_1">Small Repair Ray</string>
   <string name="RepairBeam_M_1">Repair Ray</string>
@@ -339,7 +344,9 @@
   <string name="RocketLauncher_M_1">Rocket Launcher</string>
   <string name="RocketLauncher_M_2">Rocket Launcher M2</string>
   <string name="IonCannon_M_1">Ion Cannon</string>
+  <string name="IonCannon_M_2">Ion Cannon M2</string>
   <string name="IonCannon_L_1">Heavy Ion Cannon</string>
+  <string name="IonCannon_L_2">Heavy Ion Cannon M2</string>
   <string name="AcidMissile_L_1">Heavy Acid Missile</string>
   <string name="HolyCannon">Holy Cannon</string>
   <string name="Autopilot">Autopilot</string>
@@ -363,7 +370,6 @@
   <string name="PirateCannon">Pirate Cannon</string>
   <string name="EnergyWave">Energy Wave</string>
   <string name="EnergyWaveL">Heavy Energy Wave</string>
-  <string name="DroneBay_L_18">Interceptor Hangar 18</string>
   <string name="PixieTorpedo">Pixie Torpedo</string>
   <string name="MissileCamouflage">Missile Camouflage</string>
   <string name="DroneCamouflage">Drone Camouflage</string>

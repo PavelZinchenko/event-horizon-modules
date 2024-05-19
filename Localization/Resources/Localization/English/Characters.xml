@@ -29,7 +29,7 @@
     <string name="PerkName_Doppelganger">Doppelganger</string>
     <string name="PerkName_Provocator">Provocator</string>
     <string name="PerkName_Veteran">Veteran</string>
-    <string name="PerkName_Hacker">Hacker</string>
+    <string name="PerkName_Hacker">Robotnik</string>
     <string name="PerkName_Berserker">Berserker</string>
     <string name="NewPerk">Learn New Skill</string>
     <string name="SelecNewPerk">Select Skill To Learn</string>
@@ -39,12 +39,12 @@
     <string name="PerkInfo_Instructor">Ship crew earn more experience in battles</string>
     <string name="PerkInfo_FavoriteShip">Very skilled with the $1 ship</string>
     <string name="PerkInfo_QuickRecovery">Repairs the ship more quickly when shot down</string>
-    <string name="PerkInfo_Scavenger">Drops valuable loot when destroyed</string>
+    <string name="PerkInfo_Scavenger">Ships destroyed by this captain may drop valuable loot</string>
     <string name="PerkInfo_Dev">Can cause bugs</string>
     <string name="PerkInfo_Doppelganger">Starts with two ships instead of one</string>
     <string name="PerkInfo_Provocator">Draws enemy fire to protect allies</string>
     <string name="PerkInfo_Veteran">$1% attack and defense bonus</string>
-    <string name="PerkInfo_Hacker">Can hack enemy drones</string>
+    <string name="PerkInfo_Hacker">Adds an extra drone to each drone bay</string>
     <string name="PerkInfo_Berserker">+$1% attack but can harm allies</string>
     <string name="ShipLevelText">Ship Level:</string>
     <string name="AttackBonusText">Attack Bonus:</string>
