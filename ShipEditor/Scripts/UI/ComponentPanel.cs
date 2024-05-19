@@ -95,7 +95,9 @@ namespace ShipEditor.UI
 
 			var component = _componentInfo.Data;
 			_controlsPanel.Initialize(component, model.KeyBinding, _shipEditor.CompatibilityChecker.GetDefaultKey(component), model.Behaviour);
-			_dragHandler.gameObject.SetActive(false);
+
+            var canInstall = _shipEditor.CompatibilityChecker.IsCompatible(component) && _shipEditor.Inventory.GetQuantity(_componentInfo) > 0;
+            _dragHandler.gameObject.SetActive(canInstall);
 
 			if (!model.Locked)
 				_actionPanel.Show(ComponentActionPanel.Status.CanRemove);

@@ -232,10 +232,10 @@ namespace ShipEditor.UI
             else if (data.Dps.Heat > 0)
                 yield return new KeyValuePair<string, string>("$HeatDPS", data.Dps.Heat.ToString(_floatFormat) + damageSuffix);
 
-            if (data.Damage.Direct > 0)
-                yield return new KeyValuePair<string, string>("$WeaponDamage", data.Damage.Direct.ToString(_floatFormat) + damageSuffix);
-            else if (data.Dps.Direct > 0)
-                yield return new KeyValuePair<string, string>("$WeaponDPS", data.Dps.Direct.ToString(_floatFormat) + damageSuffix);
+            if (data.Damage.Corrosive > 0)
+                yield return new KeyValuePair<string, string>("$CorrosiveDamage", data.Damage.Corrosive.ToString(_floatFormat) + damageSuffix);
+            else if (data.Dps.Corrosive > 0)
+                yield return new KeyValuePair<string, string>("$CorrosiveDPS", data.Dps.Corrosive.ToString(_floatFormat) + damageSuffix);
 
             if (data.Damage.Repair > 0)
                 yield return new KeyValuePair<string, string>("$WeaponRepair", data.Damage.Repair.ToString(_floatFormat) + damageSuffix);
@@ -256,14 +256,12 @@ namespace ShipEditor.UI
             if (data.EnergyCost > 0)
             {
                 if (data.Continuous)
-                {
                     yield return new KeyValuePair<string, string>("$WeaponEPS", data.EnergyCost.ToString(_floatFormat));
-                }
                 else
-                {
                     yield return new KeyValuePair<string, string>("$WeaponEnergy", data.EnergyCost.ToString(_floatFormat));
+
+                if (!data.Continuous)
                     yield return new KeyValuePair<string, string>("$WeaponCooldown", (1.0f / data.FireRate).ToString(_floatFormat));
-                }
             }
 
             if (data.Range > 0)

@@ -23,6 +23,9 @@ namespace Session.Utils
 
         public int FindIndex(System.Predicate<T> match) => _list.FindIndex(match);
 
+        public void Sort(System.Comparison<T> comparison) => _list.Sort(comparison);
+        public void Sort(IComparer<T> comparer) => _list.Sort(comparer);
+
         public bool Equals(ObservableList<T> other, IEqualityComparer<T> equalityComparer)
         {
             if (_list == other._list) return true;
@@ -41,23 +44,22 @@ namespace Session.Utils
             _callback?.OnDataChanged();
         }
 
-        public void Assign(IEnumerable<T> items, IEqualityComparer<T> equalityComparer)
+        public int Assign(IEnumerable<T> items, IEqualityComparer<T> equalityComparer)
         {
             var oldCount = _list.Count;
-            bool dataChanged = false;
-
+            int changedItems = 0;
             int index = 0;
             foreach (var item in items)
             {
                 if (index >= oldCount)
                 {
                     _list.Add(item);
-                    dataChanged = true;
+                    changedItems++;
                 }
-                else if (dataChanged || !equalityComparer.Equals(_list[index], item))
+                else if (changedItems > 0 || !equalityComparer.Equals(_list[index], item))
                 {
                     _list[index] = item;
-                    dataChanged = true;
+                    changedItems++;
                 }
 
                 index++;
@@ -66,11 +68,13 @@ namespace Session.Utils
             if (index < oldCount)
             {
                 _list.RemoveRange(index, oldCount - index);
-                dataChanged = true;
+                changedItems += oldCount - index;
             }
 
-            if (dataChanged)
+            if (changedItems > 0)
                 _callback?.OnDataChanged();
+
+            return changedItems;
         }
 
         public void SetValue(int index, T value, IEqualityComparer<T> equalityComparer)
@@ -117,12 +121,39 @@ namespace Session.Utils
 			_callback?.OnDataChanged();
 		}
 
+        public void QuickRemove(int index)
+        {
+            var count = _list.Count;
+            if (index < 0 || index >= count)
+                return;
+
+            if (index + 1 < count)
+                _list[index] = _list[count - 1];
+
+            _list.RemoveAt(count - 1);
+
+            _callback?.OnDataChanged();
+        }
+
         public void RemoveRange(int index, int count)
         {
             if (index >= _list.Count || count <= 0) return;
 
             _list.TrimExcess();
             _callback?.OnDataChanged();
+        }
+
+        public override int GetHashCode()
+        {
+            const int seed = 17;
+            const int modifier = 31;
+
+            int hash = seed;
+            for (int i = 0; i < _list.Count; i++)
+                if (_list[i] != null)
+                    hash = hash * modifier + _list[i].GetHashCode();
+
+            return hash;
         }
 
         public IEnumerator<T> GetEnumerator() => _list.GetEnumerator();

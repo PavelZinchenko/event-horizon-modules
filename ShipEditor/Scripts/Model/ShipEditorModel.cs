@@ -361,10 +361,15 @@ namespace ShipEditor.Model
 		private static IEnumerable<IntegratedComponent> ExportComponents(ShipLayoutModel layout)
 		{
 			if (layout == null) yield break;
-			foreach (var model in layout.Components)
+			foreach (var model in layout.Components.OrderBy(GetComponentSortOrder))
 				yield return new IntegratedComponent(model.Info, model.X, model.Y, 
 					layout.GetBarrelId(model), model.KeyBinding, model.Behaviour, model.Locked);
 		}
+
+        private static int GetComponentSortOrder(IComponentModel componentModel)
+        {
+            return componentModel.Y * 10000 + componentModel.X;
+        }
 
 		private void RemoveAllComopnents(ShipLayoutModel layout, bool keepLocked = true)
 		{

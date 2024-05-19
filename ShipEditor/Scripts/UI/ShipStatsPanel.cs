@@ -32,9 +32,11 @@ namespace ShipEditor.UI
 		[SerializeField] private NameValueItem _weight;
 		[SerializeField] private NameValueItem _ramDamage;
 		[SerializeField] private NameValueItem _damageAbsorption;
-		[SerializeField] private NameValueItem _velocity;
-		[SerializeField] private NameValueItem _turnRate;
-		[SerializeField] private NameValueItem _weaponDamage;
+        [SerializeField] private NameValueItem _velocity;
+        [SerializeField] private NameValueItem _turnRate;
+        [SerializeField] private NameValueItem _forwardAccel;
+        [SerializeField] private NameValueItem _angularAccel;
+        [SerializeField] private NameValueItem _weaponDamage;
 		[SerializeField] private NameValueItem _weaponFireRate;
 		[SerializeField] private NameValueItem _weaponRange;
 		[SerializeField] private NameValueItem _weaponEnergyConsumption;
@@ -140,13 +142,15 @@ namespace ShipEditor.UI
 			_hitPointsSummaryText.color = stats.ArmorPoints > 0 ? NormalColor : ErrorColor;
 			_energySummaryText.text = stats.EnergyPoints.AsInteger() + " [" + stats.EnergyRechargeRate.AsSignedInteger() + "]";
 			_energySummaryText.color = stats.EnergyRechargeRate > 0 ? NormalColor : ErrorColor;
-			_velocitySummaryText.text = stats.EnginePower.ToString("N1");
+
+            var engine = new EngineStats(stats.EnginePower, stats.TurnRate, stats.Weight, stats.Layout.CellCount, _database.ShipSettings);
+			_velocitySummaryText.text = engine.Velocity.ToString("N1");
 			_velocitySummaryText.color = stats.EnginePower > 0 ? NormalColor : ErrorColor;
-			_turnRateSummaryText.text = stats.TurnRate.ToString("N1");
+			_turnRateSummaryText.text = engine.AngularVelocityInUnits.ToString("N1");
 			_turnRateSummaryText.color = stats.TurnRate > 0 ? NormalColor : ErrorColor;
 		}
 
-		private void UpdateStats(IShipStats stats)
+        private void UpdateStats(IShipStats stats)
 		{
 			_armorPoints.gameObject.SetActive(!Mathf.Approximately(stats.ArmorPoints, 0));
             _armorPoints.Value.text = stats.ArmorPoints.AsInteger();
@@ -171,12 +175,17 @@ namespace ShipEditor.UI
 			_rechargeCooldown.gameObject.SetActive(stats.EnergyRechargeRate > 0);
 			_rechargeCooldown.Value.text = stats.EnergyRechargeCooldown.AsDecimal();
 
-			_velocity.Color = stats.EnginePower > 0 ? NormalColor : ErrorColor;
-			_velocity.Value.text = stats.EnginePower.AsDecimal();
-			_turnRate.Color = stats.TurnRate > 0 ? NormalColor : ErrorColor;
-			_turnRate.Value.text = stats.TurnRate.AsDecimal();
+            var engine = new EngineStats(stats.EnginePower, stats.TurnRate, stats.Weight, stats.Layout.CellCount, _database.ShipSettings);
+            _velocity.Color = stats.EnginePower > 0 ? NormalColor : ErrorColor;
+            _forwardAccel.Color = stats.EnginePower > 0 ? NormalColor : ErrorColor;
+            _turnRate.Color = stats.TurnRate > 0 ? NormalColor : ErrorColor;
+            _angularAccel.Color = stats.TurnRate > 0 ? NormalColor : ErrorColor;
+            _velocity.Value.text = engine.Velocity.AsDecimal();
+            _turnRate.Value.text = engine.AngularVelocityInUnits.AsDecimal();
+            _forwardAccel.Value.text = engine.Propulsion.AsDecimal();
+            _angularAccel.Value.text = engine.TurnRateInUnits.AsDecimal();
 
-			_weaponDamage.gameObject.SetActive(stats.WeaponDamageMultiplier.HasValue);
+            _weaponDamage.gameObject.SetActive(stats.WeaponDamageMultiplier.HasValue);
 			_weaponDamage.Value.text = stats.WeaponDamageMultiplier.ToString();
 			_weaponFireRate.gameObject.SetActive(stats.WeaponFireRateMultiplier.HasValue);
 			_weaponFireRate.Value.text = stats.WeaponFireRateMultiplier.ToString();
