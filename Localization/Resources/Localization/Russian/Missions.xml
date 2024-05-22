@@ -13,4 +13,6 @@
     <string name="SurvivalQuest">Пройти миссию выживания в первый раз</string>
     <string name="ArenaQuest">Победить на арене</string>
     <string name="DisinfectionQuest">Уничтожить $1 ${1|зараженную станцию|зараженные станции|зараженных станций}</string>
+    <string name="ScientistQuest">Соберите $1 единиц каждого типа ресурсов</string>
+    <string name="ScientistQuestReward">К вашей станции прибудет ученый</string>
 </resources>

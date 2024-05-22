@@ -29,4 +29,7 @@
     <string name="Ship_Infected">На $1% меньше брони, регенерация $2% / сек</string>
     <string name="Ship_UnlimitedRespawn">Может возродиться до $1 ${1|раз|раза|раз} за бой</string>
     <string name="Ship_WeaponClassMod">Может использовать любой тип оружия, урон снижен на $1%</string>
+    <string name="Ship_SatelliteSizeMod">Может использовать спутники большего размера</string>
+    <string name="Ship_EnergyCooldownMod">На $1% меньше энергии. Перезарядка без задержки</string>
+    <string name="Ship_ShieldCooldownMod">Щит на $1% слабее. Перезарядка без задержки</string>
 </resources>

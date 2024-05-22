@@ -48,7 +48,7 @@
     <string name="ControlsAction4">Оружие 5</string>
     <string name="ControlsAction5">Оружие 6</string>
     <string name="ControlEnabled">Включено</string>
-    <string name="LoadPreset">Загрузить:</string>
+    <string name="DoubleTapToHold">Двойное нажатие</string>
     <string name="Test">Проверить</string>
     <string name="SlideToMove">Управлять кораблем, двигая пальцем по экрану</string>
     <string name="UseJoystickForThrust">Управлять двигателем при помощи джойстика</string>
@@ -82,4 +82,5 @@
     <string name="ControlsTooltipHeader">Используйте эти кнопки чтобы управлять кораблем:</string>
     <string name="KeySpace">Пробел</string>
     <string name="ControlsMouse">Использовать мышь</string>
+    <string name="MenuReloadDatabase">Перезагрузить базу</string>
 </resources>

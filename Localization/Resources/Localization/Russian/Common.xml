@@ -75,7 +75,6 @@
     <string name="MerchantEventAction2">Напасть</string>
     <string name="CivilianUnderAttackEventDescription">Получен сигнал бедствия: мирные корабли атакованы пиратами. Они обещают щедро заплатить за помощь.</string>
     <string name="CivilianUnderAttackEventAction1">Защитить</string>
-    <string name="WelcomeText">Добро пожаловать в\nEvent Horizon!</string>
     <string name="ChallengePanelHeader">Испытание</string>
     <string name="ChallengeDescription">Испытания сложнее обычных боев, но и награда выше</string>
     <string name="ChallengeCompleted">Вы прошли это испытание</string>
@@ -154,10 +153,13 @@
     <string name="ResearchPointsAvailable">доступно $1 ${1|очко|очка|очков}</string>
     <string name="AlreadyResearched">Уже исследовано</string>
     <string name="PrivacyPolicy">Политика конфиденциальности</string>
-    <string name="OutOfFuelDescription">У нас закончилось топливо, поэтому мы не можем использовать гипердвигатели. Наша скорость и дальность полета будут значительно снижены, пока мы не получим больше топлива.</string>
+    <string name="OutOfFuelDescription">У нас закончилось топливо, поэтому мы не можем использовать гипердвигатели. Наша скорость и дальность полета значительно снижены</string>
     <string name="SpeedUp">Ускорить</string>
     <string name="LoadDatabase">Загрузить дополнение</string>
+    <string name="DatabaseLoaded">База успешно загружена</string>
+    <string name="DatabaseLoadingError">Ошибка: $1</string>
     <string name="DailyReward">Ежедневная награда</string>
     <string name="TakeMission">Взять задание</string>
     <string name="Reputation">Ваша репутация:</string>
+    <string name="WelcomeText">Добро пожаловать в\nEvent Horizon!</string>
 </resources>

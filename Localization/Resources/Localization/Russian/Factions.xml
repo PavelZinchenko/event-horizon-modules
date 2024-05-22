@@ -14,4 +14,11 @@
     <string name="Faction9">Даазен</string>
     <string name="Faction10">Неизвестно</string>
     <string name="Faction11">Империя</string>
+    <string name="Faction12">Рой</string>
+    <string name="Faction13">Синдикат</string>
+    <string name="Faction15">Собиратели</string>
+    <string name="Faction16">Зараза</string>
+    <string name="Faction17">Ноктюрникс</string>
+    <string name="Faction18">Ренегаты</string>
+    <string name="Faction19">Красный Карлик</string>
 </resources>
