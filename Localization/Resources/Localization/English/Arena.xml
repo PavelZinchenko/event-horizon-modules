@@ -21,6 +21,7 @@
     <string name="ArenaWatchAd">Watch Video Ad</string>
     <string name="NoTicketsText">You have exhausted all of your arena battles</string>
     <string name="Leaderboard">Hall Of Fame</string>
+    <string name="CheaterLeaderboard">Hall Of Shame</string>
     <string name="Anonymous">Anonymous</string>
     <string name="ArenaPrice">The Celestial Trophy</string>
     <string name="SelectArenaShip">Choose Your Ship</string>
