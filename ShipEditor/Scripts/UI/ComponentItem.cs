@@ -246,6 +246,19 @@ namespace ShipEditor.UI
                 yield return new KeyValuePair<string, string>("$WeaponDamageShield", data.Damage.Shield.ToString(_floatFormat) + damageSuffix);
             else if (data.Dps.Shield > 0)
                 yield return new KeyValuePair<string, string>("$WeaponShieldPerSec", data.Dps.Shield.ToString(_floatFormat) + damageSuffix);
+            else if (data.Damage.Shield < 0)
+                yield return new KeyValuePair<string, string>("$WeaponShieldRecharge", (-data.Damage.Shield).ToString(_floatFormat) + damageSuffix);
+            else if (data.Dps.Shield < 0)
+                yield return new KeyValuePair<string, string>("$WeaponShieldRechargePerSec", (-data.Dps.Shield).ToString(_floatFormat) + damageSuffix);
+
+            if (data.Damage.EnergyDrain > 0)
+                yield return new KeyValuePair<string, string>("$WeaponEnergyDrain", data.Damage.EnergyDrain.ToString(_floatFormat) + damageSuffix);
+            else if (data.Dps.EnergyDrain > 0)
+                yield return new KeyValuePair<string, string>("$WeaponEnergyDrainPerSec", data.Dps.EnergyDrain.ToString(_floatFormat) + damageSuffix);
+            else if (data.Damage.EnergyDrain < 0)
+                yield return new KeyValuePair<string, string>("$WeaponEnergyRecharge", (-data.Damage.EnergyDrain).ToString(_floatFormat) + damageSuffix);
+            else if (data.Dps.EnergyDrain < 0)
+                yield return new KeyValuePair<string, string>("$WeaponEnergyRechargePerSec", (-data.Dps.EnergyDrain).ToString(_floatFormat) + damageSuffix);
         }
 
         private static IEnumerable<KeyValuePair<string, string>> GetWeaponDescription(WeaponDamageCalculator.WeaponInfo data, ILocalization localization)

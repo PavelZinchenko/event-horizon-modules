@@ -86,6 +86,12 @@
     <string name="WeaponDPS">Damage per second</string>
     <string name="WeaponRepair">Repair</string>
     <string name="WeaponRepairPerSec">Repair per sec</string>
+    <string name="WeaponShieldRecharge">Shield recharge</string>
+    <string name="WeaponShieldRechargePerSec">Shield recharge/sec</string>
+    <string name="WeaponEnergyDrain">Energy drain</string>
+    <string name="WeaponEnergyDrainPerSec">Energy drain/sec</string>
+    <string name="WeaponEnergyRecharge">Energy recharge</string>
+    <string name="WeaponEnergyRechargePerSec">Energy recharge/sec</string>
     <string name="WeaponDamageShield">Shield Damage</string>
     <string name="WeaponShieldPerSec">Shield Damage per sec</string>
     <string name="KineticDamage">Kinetic damage</string>
