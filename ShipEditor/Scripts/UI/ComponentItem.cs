@@ -259,6 +259,17 @@ namespace ShipEditor.UI
                 yield return new KeyValuePair<string, string>("$WeaponEnergyRecharge", (-data.Damage.EnergyDrain).ToString(_floatFormat) + damageSuffix);
             else if (data.Dps.EnergyDrain < 0)
                 yield return new KeyValuePair<string, string>("$WeaponEnergyRechargePerSec", (-data.Dps.EnergyDrain).ToString(_floatFormat) + damageSuffix);
+
+            if (data.Effects.Contains(WeaponSpecialEffect.ShieldPierce))
+                yield return new KeyValuePair<string, string>("$EffectShieldPierce", string.Empty);
+            if (data.Effects.Contains(WeaponSpecialEffect.TeleportTarget))
+                yield return new KeyValuePair<string, string>("$EffectTeleportTarget", string.Empty);
+            if (data.Effects.Contains(WeaponSpecialEffect.SlowTarget))
+                yield return new KeyValuePair<string, string>("$EffectSlowTarget", string.Empty);
+            if (data.Effects.Contains(WeaponSpecialEffect.DisruptDrones))
+                yield return new KeyValuePair<string, string>("$EffectDisruptDrones", string.Empty);
+            if (data.Effects.Contains(WeaponSpecialEffect.ProgressiveDamage))
+                yield return new KeyValuePair<string, string>("$EffectProgressiveDamage", string.Empty);
         }
 
         private static IEnumerable<KeyValuePair<string, string>> GetWeaponDescription(WeaponDamageCalculator.WeaponInfo data, ILocalization localization)

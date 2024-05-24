@@ -16,14 +16,12 @@
     <string name="Gender_Unknown">Ismeretlen</string>
     <string name="PerkName_Attack">Lövegkezelő</string>
     <string name="PerkName_Defense">Fegyvergyáros</string>
-    <string name="PerkName_CommandPoint">Ellenhadnagy</string>
     <string name="PerkName_FavoriteShip">Specialista</string>
     <string name="PerkName_QuickRecovery">Technikus</string>
     <string name="PerkName_Scavenger">Gyűjtögető</string>
     <string name="PerkName_Dev">Fejlesztő</string>
     <string name="PerkInfo_Attack">$1% támadásbónusz</string>
     <string name="PerkInfo_Defense">$1% védekezésbónusz</string>
-    <string name="PerkInfo_CommandPoint">Extra parancsnoki pontot ad</string>
     <string name="PerkInfo_FavoriteShip">$1 hajót kiválóan kezeli</string>
     <string name="PerkInfo_QuickRecovery">Gyorsabban javítja a hajót ha lelövik</string>
     <string name="PerkInfo_Scavenger">Elpusztításkor értékes zsákmányt hagy hátra</string>

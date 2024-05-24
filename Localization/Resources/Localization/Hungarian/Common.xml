@@ -74,7 +74,6 @@
     <string name="MerchantEventAction2">Támad</string>
     <string name="CivilianUnderAttackEventDescription">Segélyhívást fogsz egy civil hajóról. Kalózok üldözik.</string>
     <string name="CivilianUnderAttackEventAction1">Hajó segítése</string>
-    <string name="WelcomeText">Üdvözöl az \nEvent Horizon!</string>
     <string name="ChallengePanelHeader">Kihívás</string>
     <string name="ChallengeDescription">A kihívásoknál nem választhatod meg a hajód, így nehezebbek az átlagos csatáknál.</string>
     <string name="ChallengeCompleted">Kihívás teljesítve</string>
@@ -162,4 +161,5 @@
     <string name="DailyReward">Napi jutalom</string>
     <string name="TakeMission">Küldetés vállalása</string>
     <string name="Reputation">Becsületed:</string>
+    <string name="WelcomeText">Üdvözöl az \nEvent Horizon!</string>
 </resources>

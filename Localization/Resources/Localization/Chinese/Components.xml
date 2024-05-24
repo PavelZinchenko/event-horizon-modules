@@ -232,6 +232,7 @@
     <string name="DroneBay_M_S1">无人机坪S1</string>
     <string name="DroneBay_L_S1">大型无人机坪S1</string>
     <string name="DroneBay_Santa">圣诞无人机坪</string>
+    <string name="DroneBay_L_18">拦截机机坪_18</string>
     <string name="DroneControlUnit_S">小型无人机加速器</string>
     <string name="DroneControlUnit_M">无人机加速器</string>
     <string name="DroneControlUnit_L">大型无人机加速器</string>
@@ -348,7 +349,6 @@
     <string name="PirateCannon">海盗加农炮</string>
     <string name="EnergyWave">能量波</string>
     <string name="EnergyWaveL">大型能量波</string>
-    <string name="DroneBay_L_18">拦截机机坪_18</string>
     <string name="PixieTorpedo">精灵鱼雷</string>
     <string name="MissileCamouflage">对导弹隐匿装置</string>
     <string name="DroneCamouflage">对无人机隐匿装置</string>

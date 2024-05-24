@@ -94,6 +94,7 @@
     <string name="Starbase2">Base Estelar MK2</string>
     <string name="SmugglerShip">Smuggler Ship.</string>
     <string name="MerchantShip">Merchant Ship</string>
+    <string name="SpaceInvader">Invasor espacial</string>
     <string name="Companion_1s">Pot M1</string>
     <string name="Companion_1m">Pot M2</string>
     <string name="Companion_1l">Pot M3</string>
@@ -302,7 +303,8 @@
     <string name="AcidMissile_L_1">Misil Ácido Pesado.</string>
     <string name="HolyCannon">Cañón Sagrado.</string>
     <string name="Autopilot">Piloto Automático.</string>
-    <string name="WormTailDevice">Cola de gusano</string>
-    <string name="f15_Ship">Rattletrap</string>
-    <string name="Wormship">Wormship</string>
+    <string name="EcmDroneBay_S">Bahía de Drones ECM pequeña</string>
+    <string name="EcmDroneBay_M">Bahía de Drones ECM</string>
+    <string name="EcmDroneBay_L">Bahía de Drones ECM Grande</string>
+    <string name="PixelCannon">Cañon Pixel</string>
 </resources>

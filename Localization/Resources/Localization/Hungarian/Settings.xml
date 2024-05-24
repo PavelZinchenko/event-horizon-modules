@@ -47,14 +47,11 @@
     <string name="ControlsAction4">Fegyver 5</string>
     <string name="ControlsAction5">Fegyver 6</string>
     <string name="ControlEnabled">Engedélyezve</string>
-    <string name="LoadPreset">Sablon használata:</string>
     <string name="Test">Teszt</string>
     <string name="SlideToMove">Hajó irányítása az ujj képernyőn való végighúzásával</string>
     <string name="UseJoystickForThrust">Hajtómű irányítása botkormánnyal</string>
     <string name="StopWhenShooting">Hajtómű leállítása tüzeléskor</string>
     <string name="AutoLaunchDrones">Drónok automatikus indítása</string>
-    <string name="FloatingJoystick">Lebegő botkormány</string>
-    <string name="FixedZoom">Rögzített nagyítás</string>
     <string name="GraphicsQuality">Grafikus minőség</string>
     <string name="SignIn">Bejelentkezés</string>
     <string name="SignOut">Kijelentkezés</string>
@@ -67,8 +64,6 @@
     <string name="NoMods">Eredeti Játék</string>
     <string name="AvailableMods">Elérhető mod csomagok:</string>
     <string name="LoadModConfirmation">Biztos vagy benne? Minden mod csomagnak van saját mentése.</string>
-    <string name="ResolutionLabel">Felbontás:</string>
-    <string name="WindowedMode">ablak</string>
     <string name="KeyTurnLeft">Balra Fordul</string>
     <string name="KeyTurnRight">Jobbra Fordul</string>
     <string name="KeyForward">Előre Halad</string>

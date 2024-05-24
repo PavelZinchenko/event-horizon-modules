@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources>
     <string name="PlanetTypeGas">Gigante de Gas</string>
-    <string name="PlanetTypeBarren">Baldíos</string>
-    <string name="PlanetTypeTerran">Urbano</string>
+    <string name="PlanetTypeBarren">Árido</string>
+    <string name="PlanetTypeTerran">Habitable</string>
     <string name="PlanetTypeAsteroids">Cinturón de Asteroides</string>
+    <string name="PlanetTypeInfected">Colmena</string>
     <string name="StarInfo">$1\nDefensa: $2</string>
     <string name="CapturedStarInfo">$1\nNivel: $2</string>
     <string name="ExtractionLabel">Recolectando...</string>
@@ -11,11 +12,8 @@
     <string name="PlanetTemperature">Temperatura</string>
     <string name="PlanetToxicity">Toxicidad</string>
     <string name="PlanetHostility">Hostilidad</string>
-    <string name="ExplorationCounter">Explorado ${1|una vez|$1 veces}</string>
+    <string name="ExplorationProgress">$1% explorado</string>
     <string name="NotExplored">No explorado aun</string>
-    <string name="SuccessChance">Oportunidad de éxito:</string>
-    <string name="ScanInProgress">Buscando objetos preciosos\nPor favor espera...</string>
-    <string name="FoundNothing">No se ha encontrado nada útil</string>
     <string name="ObjectStarBase">Base estelar</string>
     <string name="ObjectSurvival">Supervivencia</string>
     <string name="ObjectBoss">Buque insignia</string>
@@ -28,4 +26,5 @@
     <string name="ObjectMilitary">Base militar</string>
     <string name="ObjectEvent">Baliza de rescate.</string>
     <string name="ObjectXmas">¡Feliz Navidad!</string>
+    <string name="ObjectHive">Colmena</string>
 </resources>

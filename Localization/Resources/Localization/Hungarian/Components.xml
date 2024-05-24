@@ -232,6 +232,7 @@
     <string name="DroneBay_M_S1">Drón Hangár S1</string>
     <string name="DroneBay_L_S1">Nagy Drón Hangár S1</string>
     <string name="DroneBay_Santa">Mikulás Drón Hangárja</string>
+    <string name="DroneBay_L_18">Elfogó Hangár 18</string>
     <string name="DroneControlUnit_S">Kis Drón Gyorsító</string>
     <string name="DroneControlUnit_M">Drón Gyorsító</string>
     <string name="DroneControlUnit_L">Nagy Drón Gyorsító</string>
@@ -348,7 +349,6 @@
     <string name="PirateCannon">Kalózágyú</string>
     <string name="EnergyWave">Energiahullám</string>
     <string name="EnergyWaveL">Nagy Energiahullám</string>
-    <string name="DroneBay_L_18">Elfogó Hangár 18</string>
     <string name="PixieTorpedo">Hajsza Torpedó</string>
     <string name="MissileCamouflage">Rakéta álca</string>
     <string name="DroneCamouflage">Drón álca</string>

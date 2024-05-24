@@ -16,14 +16,12 @@
     <string name="Gender_Unknown">未知</string>
     <string name="PerkName_Attack">炮手</string>
     <string name="PerkName_Defense">军械手</string>
-    <string name="PerkName_CommandPoint">少将</string>
     <string name="PerkName_FavoriteShip">专业者</string>
     <string name="PerkName_QuickRecovery">技师</string>
     <string name="PerkName_Scavenger">拾荒者</string>
     <string name="PerkName_Dev">开发者</string>
     <string name="PerkInfo_Attack">$1%攻击加成</string>
     <string name="PerkInfo_Defense">$1%防御加成</string>
-    <string name="PerkInfo_CommandPoint">命令点额外+1</string>
     <string name="PerkInfo_FavoriteShip">非常精通于驾驶$1</string>
     <string name="PerkInfo_QuickRecovery">被击坠后能更快地修理飞船重返战场</string>
     <string name="PerkInfo_Scavenger">被击毁后掉落珍稀物品</string>

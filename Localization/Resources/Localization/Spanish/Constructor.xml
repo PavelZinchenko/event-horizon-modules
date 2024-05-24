@@ -75,6 +75,8 @@
     <string name="RemoveAllConfirmation">¿Seguro que desea remover todos los módulos de la nave?</string>
     <string name="WeaponDamage">Daño</string>
     <string name="WeaponDPS">Daño por segundo</string>
+    <string name="HeatDamage">Calórica</string>
+    <string name="EnergyDamage">Energía</string>
     <string name="WeaponEnergy">Consumo de Energía</string>
     <string name="WeaponEPS">Energy per second</string>
     <string name="WeaponRange">Rango</string>

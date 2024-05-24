@@ -94,6 +94,11 @@
     <string name="WeaponEnergyRechargePerSec">Пополнение энергии/сек</string>
     <string name="WeaponDamageShield">Урон по щиту</string>
     <string name="WeaponShieldPerSec">Урон по щиту/сек</string>
+    <string name="EffectShieldPierce">Пробивает щит</string>
+    <string name="EffectTeleportTarget">Телепортирует цель</string>
+    <string name="EffectSlowTarget">Замедляет цели</string>
+    <string name="EffectDisruptDrones">Нарушает работу дронов</string>
+    <string name="EffectProgressiveDamage">Прогрессивный урон</string>
     <string name="KineticDamage">физический урон</string>
     <string name="KineticDPS">физический урон/сек</string>
     <string name="HeatDamage">Тепловой</string>

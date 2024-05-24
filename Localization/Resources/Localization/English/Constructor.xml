@@ -92,8 +92,13 @@
     <string name="WeaponEnergyDrainPerSec">Energy drain/sec</string>
     <string name="WeaponEnergyRecharge">Energy recharge</string>
     <string name="WeaponEnergyRechargePerSec">Energy recharge/sec</string>
-    <string name="WeaponDamageShield">Shield Damage</string>
-    <string name="WeaponShieldPerSec">Shield Damage per sec</string>
+    <string name="WeaponDamageShield">Shield damage</string>
+    <string name="WeaponShieldPerSec">Shield damage per sec</string>
+    <string name="EffectShieldPierce">Shield penetration</string>
+    <string name="EffectTeleportTarget">Teleports target</string>
+    <string name="EffectSlowTarget">Slow target</string>
+    <string name="EffectDisruptDrones">Disrupts drones</string>
+    <string name="EffectProgressiveDamage">Progressive damage</string>
     <string name="KineticDamage">Kinetic damage</string>
     <string name="KineticDPS">Kinetic DPS</string>
     <string name="HeatDamage">Heat damage</string>

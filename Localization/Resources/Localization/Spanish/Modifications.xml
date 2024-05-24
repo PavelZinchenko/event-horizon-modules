@@ -20,11 +20,11 @@
     <string name="DroneSpeedMod">Velocidad de los drones $1</string>
     <string name="RecoilMod">Peso del proyectil $1</string>
     <string name="Ship_EmptySlot">[espacio vacío]</string>
-    <string name="Ship_AutoTargeting">Sistema de auto-apuntado integrado.</string>
-    <string name="Ship_HeatDefense">Aumento de resistencia al calor</string>
+    <string name="Ship_AutoTargeting">Sistema de auto-apuntado integrado</string>
+    <string name="Ship_HeatDefense">Aumento de resistencia calórica</string>
     <string name="Ship_KineticDefense">Aumento de resistencia cinética</string>
     <string name="Ship_EnergyDefense">Aumento de resistencia a la energía</string>
-    <string name="Ship_ExtraBlueCells">Espacios de equipo adicionales.</string>
-    <string name="Ship_Lightweight">Reducción de peso base en $1%</string>
-    <string name="Ship_Infected">$1% menos armadura, regeneración de $2% / segundo.</string>
+    <string name="Ship_ExtraBlueCells">Espacios de equipo adicional</string>
+    <string name="Ship_Lightweight">Reducción de peso base de la nave en $1%</string>
+    <string name="Ship_Infected">$1% menos armadura, regeneración de $2% / segundo</string>
 </resources>

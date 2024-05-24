@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources>
-    <string name="StarCurrency">星币</string>
     <string name="TokenCurrency">代币</string>
     <string name="Snowflakes">雪花</string>
     <string name="NoItemsInCategory">这个类别中没有物品</string>
@@ -17,12 +16,8 @@
     <string name="Commodity_Alloys">金属合金</string>
     <string name="Commodity_Polymers">聚合物</string>
     <string name="Commodity_ToxicWaste">有毒废料</string>
-    <string name="SellTrash">卖掉全部垃圾</string>
-    <string name="SellAllTrashConfirmation">你真的想卖掉全部低品质物品吗？</string>
     <string name="BestDeal">超值</string>
     <string name="MostPopular">最热门</string>
-    <string name="FalconPack">特供</string>
-    <string name="FalconPackDescription">装备精良的限定飞船以及一个老船长</string>
     <string name="StarPack1">小星币包</string>
     <string name="StarPackDetails1">包含50星币</string>
     <string name="StarPack2">星币包</string>
