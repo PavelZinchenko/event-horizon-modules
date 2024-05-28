@@ -232,6 +232,11 @@ namespace ShipEditor.UI
             else if (data.Dps.Heat > 0)
                 yield return new KeyValuePair<string, string>("$HeatDPS", data.Dps.Heat.ToString(_floatFormat) + damageSuffix);
 
+            if (data.Damage.Direct > 0)
+                yield return new KeyValuePair<string, string>("$WeaponDamage", data.Damage.Direct.ToString(_floatFormat) + damageSuffix);
+            else if (data.Dps.Direct > 0)
+                yield return new KeyValuePair<string, string>("$WeaponDPS", data.Dps.Direct.ToString(_floatFormat) + damageSuffix);
+
             if (data.Damage.Corrosive > 0)
                 yield return new KeyValuePair<string, string>("$CorrosiveDamage", data.Damage.Corrosive.ToString(_floatFormat) + damageSuffix);
             else if (data.Dps.Corrosive > 0)
