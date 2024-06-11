@@ -285,7 +285,7 @@ namespace ShipEditor.UI
                 else
                     yield return new KeyValuePair<string, string>("$WeaponEnergy", data.EnergyCost.ToString(_floatFormat));
 
-                if (!data.Continuous)
+                if (data.FireRate > 0)
                     yield return new KeyValuePair<string, string>("$WeaponCooldown", (1.0f / data.FireRate).ToString(_floatFormat));
             }
 
