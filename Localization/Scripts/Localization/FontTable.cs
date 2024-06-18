@@ -30,23 +30,24 @@ namespace Services.Localization
 
 		public IEnumerable<FontData> GetFontList(string language)
         {
-            bool wasFound = false;
+    //        bool wasFound = false;
 
-            for (int i = 0; i < FontList.Length; i++)
-            {
-                var data = FontList[i];
-                if (!string.Equals(data.Language, language, StringComparison.OrdinalIgnoreCase)) continue;
+    //        for (int i = 0; i < FontList.Length; i++)
+    //        {
+    //            var data = FontList[i];
+    //            if (!string.Equals(data.Language, language, StringComparison.OrdinalIgnoreCase)) continue;
 
-				wasFound = true;
-				yield return data;
-            }
+				//wasFound = true;
+				//yield return data;
+    //        }
 
-            if (wasFound) yield break;
+    //        if (wasFound) yield break;
 
-            if (_noExtraFontLanguages.Contains(language, StringComparer.OrdinalIgnoreCase)) yield break;
+    //        if (_noExtraFontLanguages.Contains(language, StringComparer.OrdinalIgnoreCase)) yield break;
 
-            foreach (var data in FontList.Where(data => string.IsNullOrEmpty(data.Language)))
-                yield return data;
+    //        foreach (var data in FontList.Where(data => string.IsNullOrEmpty(data.Language)))
+    //            yield return data;
+            yield break;
         }
 
         [Serializable]
