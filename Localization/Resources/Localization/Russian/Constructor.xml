@@ -99,8 +99,8 @@
     <string name="EffectSlowTarget">Замедляет цели</string>
     <string name="EffectDisruptDrones">Нарушает работу дронов</string>
     <string name="EffectProgressiveDamage">Прогрессивный урон</string>
-    <string name="KineticDamage">физический урон</string>
-    <string name="KineticDPS">физический урон/сек</string>
+    <string name="KineticDamage">Кинетический урон</string>
+    <string name="KineticDPS">Кинетический урон/сек</string>
     <string name="HeatDamage">Тепловой</string>
     <string name="HeatDPS">Тепловой урон/сек</string>
     <string name="EnergyDamage">Энергетический</string>
