@@ -100,7 +100,10 @@ namespace ShipEditor
             const int coordinateBits = 12;
             const int coordinateMask = (1 << coordinateBits) - 1;
 
-			return (((((y-minValue) & coordinateMask) << coordinateBits) + ((x-minValue) & coordinateMask)) << coordinateBits) + (byte)cell;
+            x = (x - minValue) & coordinateMask;
+            y = (y - minValue) & coordinateMask;
+
+            return (((((int)cell) << coordinateBits) + y) << coordinateBits) + x;
 		}
 
 		private static bool IsValidCell(CellType cell)

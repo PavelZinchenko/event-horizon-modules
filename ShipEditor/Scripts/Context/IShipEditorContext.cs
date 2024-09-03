@@ -13,7 +13,7 @@ namespace ShipEditor.Context
         IShipDataProvider ShipDataProvider { get; }
         IShipPresetStorage ShipPresetStorage { get; }
         IComponentUpgradesProvider UpgradesProvider { get; }
-        public bool CanBeUnlocked(Component component);
+        bool CanBeUnlocked(Component component);
         bool IsShipNameEditable { get; }
     }
 
@@ -23,17 +23,17 @@ namespace ShipEditor.Context
 		IReadOnlyCollection<ISatellite> SatelliteBuilds { get; }
 
         IReadOnlyCollection<Satellite> Satellites { get; }
-        public int GetQuantity(Satellite satellite);
-        public void AddSatellite(Satellite satellite);
-        public bool TryRemoveSatellite(Satellite satellite);
+        int GetQuantity(Satellite satellite);
+        void AddSatellite(Satellite satellite);
+        bool TryRemoveSatellite(Satellite satellite);
 
         IReadOnlyCollection<ComponentInfo> Components { get; }
-        public int GetQuantity(ComponentInfo component);
-        public void AddComponent(ComponentInfo component);
-		public bool TryRemoveComponent(ComponentInfo component);
+        int GetQuantity(ComponentInfo component);
+        void AddComponent(ComponentInfo component);
+		bool TryRemoveComponent(ComponentInfo component);
 
 		public Economy.Price GetUnlockPrice(ComponentInfo component);
-		public bool TryPayForUnlock(ComponentInfo component);
+		bool TryPayForUnlock(ComponentInfo component);
 	}
 
     public interface IShipPresetStorage
