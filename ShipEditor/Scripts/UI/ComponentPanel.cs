@@ -118,7 +118,7 @@ namespace ShipEditor.UI
 			_controlsPanel.Initialize(component, -1, _shipEditor.CompatibilityChecker.GetDefaultKey(component), 0);
 
 			var canInstall = _shipEditor.CompatibilityChecker.IsCompatible(component);
-			var alreadyInstalled = !canInstall && _shipEditor.CompatibilityChecker.UniqueComponentInstalled(component);
+			var alreadyInstalled = !canInstall && _shipEditor.CompatibilityChecker.ComponentLimitReached(component);
 
 			_dragHandler.gameObject.SetActive(canInstall);
 
