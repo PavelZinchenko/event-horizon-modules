@@ -32,7 +32,7 @@
     <string name="IapOffers">Offers</string>
     <string name="IapCoins">Coins</string>
     <string name="IapChests">Chests</string>
-    <string name="IapAdsDescription">Watch 5 ads to get an extra reward</string>
+    <string name="IapAdsDescription">Watch an ad and earn $1 ${1|star|stars}! Tap to get your reward!</string>
     <string name="IapAdsNotAvailable">Not available yet</string>
     <string name="IapAdsError">Ad failed to load. Try again later</string>
 
