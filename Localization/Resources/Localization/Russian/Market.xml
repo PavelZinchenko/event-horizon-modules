@@ -32,7 +32,8 @@
     <string name="IapOffers">Наборы</string>
     <string name="IapCoins">Монеты</string>
     <string name="IapChests">Сундуки</string>
-    <string name="IapAdsDescription">Посмотрите рекламу и получите $1 ${1|звезду|звезды|звезд}!</string>
+    <string name="RandomShipParts">$1 ${1|модуль|модуля|модулей} для корабля</string>
+    <string name="IapAdsDescription">Вы получите:</string>
     <string name="IapAdsNotAvailable">Пока недоступно</string>
     <string name="IapAdsError">Не удалось загрузить. Попробуйте позже</string>
 </resources>

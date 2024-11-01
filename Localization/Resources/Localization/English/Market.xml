@@ -32,8 +32,9 @@
     <string name="IapOffers">Offers</string>
     <string name="IapCoins">Coins</string>
     <string name="IapChests">Chests</string>
-    <string name="IapAdsDescription">Watch an ad and earn $1 ${1|star|stars}! Tap to get your reward!</string>
+    <string name="IapAdsDescription">Watch an ad to get the following rewards:</string>
     <string name="IapAdsNotAvailable">Not available yet</string>
+    <string name="RandomShipParts">$1 random ship ${1|part|parts}</string>
     <string name="IapAdsError">Ad failed to load. Try again later</string>
 
 </resources>
