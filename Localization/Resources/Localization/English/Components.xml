@@ -129,6 +129,14 @@
   <string name="redship4">Pepelats</string>
   <string name="redship5">Strela</string>
   <string name="redship6">Leshy</string>
+  <string name="necroship1">Specter</string>
+  <string name="necroship2">Cadaver</string>
+  <string name="necroship3">Scarecrow</string>
+  <string name="necroship4">Ghoul</string>
+  <string name="necroship5">Death Knight</string>
+  <string name="necroship6">Lich</string>
+  <string name="necroship7">Nosferatu</string>
+  <string name="necroboss">Undertaker</string>
   <string name="Companion_1s">Pot M1</string>
   <string name="Companion_1m">Pot M2</string>
   <string name="Companion_1l">Pot M3</string>
@@ -249,6 +257,7 @@
   <string name="DroneBay_L_1">Interceptor Hangar 1</string>
   <string name="DroneBay_L_17">Interceptor Hangar 17</string>
   <string name="DroneBay_L_18">Interceptor Hangar 18</string>
+  <string name="DroneBay_L_20">Interceptor Hangar 20</string>
   <string name="DroneControlUnit_S">Small Drone Speed Booster</string>
   <string name="DroneControlUnit_M">Drone Speed Booster</string>
   <string name="DroneControlUnit_L">Large Drone Speed Booster</string>
@@ -386,4 +395,6 @@
   <string name="DotHarpoon">Decay Harpoon</string>
   <string name="Gravitsappa">Gravitsappa</string>
   <string name="CircularSaw">Neutronium Cutter</string>
+  <string name="WraithMissile">Wraith Missile</string>
+  <string name="WraithMissile_L">Heavy Wraith Missile</string>
 </resources>
