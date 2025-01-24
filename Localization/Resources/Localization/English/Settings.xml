@@ -85,4 +85,7 @@
     <string name="MenuReloadDatabase">Reload Database</string>
     <string name="BrowseMod">Add modification file...</string>
     <string name="InvalidModFile">Invalid modification file</string>
+    <string name="InvalidSavegame">Unable to load the saved game file</string>
+    <string name="ExportProgress">Export progress...</string>
+    <string name="ImportProgress">Import progress...</string>
 </resources>
