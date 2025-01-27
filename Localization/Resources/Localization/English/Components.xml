@@ -398,4 +398,5 @@
   <string name="WraithMissile">Wraith Missile</string>
   <string name="WraithMissile_L">Heavy Wraith Missile</string>
   <string name="StickyBomb">Sticky Bomb</string>
+  <string name="GravityShield">Repulsion Field Generator</string>
 </resources>
