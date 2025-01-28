@@ -66,12 +66,12 @@ namespace ShipEditor.UI
 			}
 		}
 
-		private static string SlotTypeToString(WeaponSlotType type)
+		private static string SlotTypeToString(char type)
 		{
-			if (type == WeaponSlotType.Default)
+			if (type == default)
 				return string.Empty;
 
-			return ((char)type).ToString();
+			return type.ToString();
 		}
 
 		public void Clear()

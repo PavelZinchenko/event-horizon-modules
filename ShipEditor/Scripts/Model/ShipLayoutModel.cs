@@ -163,12 +163,12 @@ namespace ShipEditor.Model
 			if (cellType == CellType.Weapon && component.CellType == CellType.Weapon)
 			{
 				var requiredSlot = component.WeaponSlotType;
-				if (requiredSlot == WeaponSlotType.Default) return true;
+				if (requiredSlot == default) return true;
 
 				var barrelId = _barrelMap[x, y];
                 if (barrelId < 0) return false;
                 var barrel = _barrels[barrelId];
-				return string.IsNullOrEmpty(barrel.WeaponClass) || barrel.WeaponClass.Contains((char)requiredSlot);
+				return string.IsNullOrEmpty(barrel.WeaponClass) || barrel.WeaponClass.Contains(requiredSlot);
 			}
 
 			return component.CellType.CompatibleWith(cellType);

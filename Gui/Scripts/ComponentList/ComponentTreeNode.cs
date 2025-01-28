@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using Constructor;
+using GameDatabase;
 using GameDatabase.DataModel;
 using GameDatabase.Enums;
 using GameDatabase.Model;
@@ -9,11 +10,12 @@ namespace Gui.ComponentList
 {
     public class RootNode : IComponentTreeNode
     {
-        public RootNode(IComponentQuantityProvider quantityProvider)
+        public RootNode(IComponentQuantityProvider quantityProvider, IDatabase database = null)
         {
-            _quantityProvider = quantityProvider;
-            _weaponNode = new WeaponNode(this);
+            if (database != null)
+                _weaponNode = new WeaponNode(this, database.WeaponSlots);
 
+            _quantityProvider = quantityProvider;
             _armorNode = CreateNode("$GroupArmor", new SpriteId("icons/icon_shield", SpriteId.Type.Default));
             _energyNode = CreateNode("$GroupEnergy", new SpriteId("icons/icon_battery", SpriteId.Type.Default));
             _droneNode = CreateNode("$GroupDrones", new SpriteId("icons/icon_drone", SpriteId.Type.Default));
@@ -138,15 +140,18 @@ namespace Gui.ComponentList
 
     public class WeaponNode : IComponentTreeNode
     {
-        public WeaponNode(IComponentTreeNode parent)
+        public WeaponNode(IComponentTreeNode parent, WeaponSlots weaponSlots)
         {
             _parent = parent;
-            _projectileNode = CreateNode("$GroupWeaponC", new SpriteId("icons/weapongroup/icon_weapon_c", SpriteId.Type.Default));
-            _beamNode = CreateNode("$GroupWeaponL", new SpriteId("icons/weapongroup/icon_weapon_l", SpriteId.Type.Default));
-            _missileNode = CreateNode("$GroupWeaponM", new SpriteId("icons/weapongroup/icon_weapon_m", SpriteId.Type.Default));
-            _torpedoNode = CreateNode("$GroupWeaponT", new SpriteId("icons/weapongroup/icon_weapon_t", SpriteId.Type.Default));
-            _specialNode = CreateNode("$GroupWeaponS", new SpriteId("icons/weapongroup/icon_weapon_s", SpriteId.Type.Default));
-            _universalNode = CreateNode("$GroupWeaponAny", new SpriteId("icons/weapongroup/icon_weapon_x", SpriteId.Type.Default));
+
+            foreach (var slot in weaponSlots.Slots)
+                if (_groupMap.TryAdd(slot.Letter, _groups.Count))
+                    _groups.Add(CreateNode(slot.Name, slot.Icon));
+                else
+                    GameDiagnostics.Trace.LogError($"Duplicate weapon slot - {slot.Letter}");
+
+            _groupMap.Add(default, _groups.Count);
+            _groups.Add(CreateNode(weaponSlots?.DefaultSlotName, weaponSlots.DefaultSlotIcon));
         }
 
         public IComponentTreeNode Parent { get { return _parent; } }
@@ -161,31 +166,17 @@ namespace Gui.ComponentList
             var weapon = componentInfo.Data.Weapon;
             if (weapon == null)
             {
-                UnityEngine.Debug.LogError("WeaponNode: component is not weapon - " + componentInfo.Data.Id);
+                GameDiagnostics.Trace.LogError("WeaponNode: component is not weapon - " + componentInfo.Data.Id);
                 return;
             }
 
-            switch (componentInfo.Data.WeaponSlotType)
+            if (!_groupMap.TryGetValue((char)componentInfo.Data.WeaponSlotType, out var groupId))
             {
-                case WeaponSlotType.Cannon:
-                    _projectileNode.Add(componentInfo);
-                    break;
-                case WeaponSlotType.Laser:
-                    _beamNode.Add(componentInfo);
-                    break;
-                case WeaponSlotType.Missile:
-                    _missileNode.Add(componentInfo);
-                    break;
-                case WeaponSlotType.Torpedo:
-                    _torpedoNode.Add(componentInfo);
-                    break;
-                case WeaponSlotType.Special:
-                    _specialNode.Add(componentInfo);
-                    break;
-                default:
-                    _universalNode.Add(componentInfo);
-                    break;
+                GameDiagnostics.Trace.LogError($"Undefined weapon slot: {(char)componentInfo.Data.WeaponSlotType}");
+                groupId = _groups.Count - 1;
             }
+
+            _groups[groupId].Add(componentInfo);
         }
 
         public int ItemCount
@@ -204,18 +195,7 @@ namespace Gui.ComponentList
         public void Clear() { Children.Clear(); }
         public bool IsVisible => true;
 
-        private IEnumerable<IComponentTreeNode> Children
-        {
-            get
-            {
-                yield return _projectileNode;
-                yield return _beamNode;
-                yield return _missileNode;
-                yield return _torpedoNode;
-                yield return _specialNode;
-                yield return _universalNode;
-            }
-        }
+        private IEnumerable<IComponentTreeNode> Children => _groups;
 
         private IComponentTreeNode CreateNode(string name, SpriteId icon)
         {
@@ -224,12 +204,8 @@ namespace Gui.ComponentList
 
         private int _count = -1;
         private readonly IComponentTreeNode _parent;
-        private readonly IComponentTreeNode _projectileNode;
-        private readonly IComponentTreeNode _beamNode;
-        private readonly IComponentTreeNode _missileNode;
-        private readonly IComponentTreeNode _torpedoNode;
-        private readonly IComponentTreeNode _specialNode;
-        private readonly IComponentTreeNode _universalNode;
+        private readonly Dictionary<char,int> _groupMap = new();
+        private readonly List<IComponentTreeNode> _groups = new();
     }
 
     public class ComponentNode : IComponentTreeNode
@@ -252,7 +228,7 @@ namespace Gui.ComponentList
         {
             if (componentInfo.Data.Id != _component.Id)
             {
-                UnityEngine.Debug.LogError("ComponentNode: wrong component id - " + componentInfo.Data.Id);
+                GameDiagnostics.Trace.LogError("ComponentNode: wrong component id - " + componentInfo.Data.Id);
                 return;
             }
 
