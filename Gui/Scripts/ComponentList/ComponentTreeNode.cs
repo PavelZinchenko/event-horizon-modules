@@ -233,9 +233,11 @@ namespace Gui.ComponentList
             }
 
             _components.Add(componentInfo);
+            _count = -1;
         }
 
-        public int ItemCount { get { return _components.Count; } }
+        public int ItemCount => _count >= 0 ? _count : _count = CalculateItems();
+
         public IEnumerable<IComponentTreeNode> Nodes { get { return Enumerable.Empty<IComponentTreeNode>(); } }
         public IEnumerable<ComponentInfo> Components { get { return _components; } }
 
@@ -244,6 +246,16 @@ namespace Gui.ComponentList
             _components.Clear();
         }
 
+        private int CalculateItems()
+        {
+            int count = 0;
+            foreach (var item in _components)
+                count += QuantityProvider.GetQuantity(item) > 0 ? 1 : 0;
+
+            return count;
+        }
+
+        private int _count;
         private readonly Component _component;
         private readonly IComponentTreeNode _parent;
         private readonly HashSet<ComponentInfo> _components = new HashSet<ComponentInfo>();
@@ -285,10 +297,19 @@ namespace Gui.ComponentList
             get
             {
                 if (_count < 0)
-                    _count = _components.Values.GetItemCount();
+                    _count = CalculateItems();
 
                 return _count;
             }
+        }
+
+        private int CalculateItems()
+        {
+            int count = 0;
+            foreach (var item in _components.Values)
+                count += item.ItemCount;
+
+            return count;
         }
 
         public IEnumerable<IComponentTreeNode> Nodes { get { return _components.Values.Where(ComponentTreeNodeExtensions.ShouldNotExpand); } }
