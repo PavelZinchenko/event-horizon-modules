@@ -4,8 +4,8 @@ using GameDatabase.DataModel;
 using GameDatabase.Extensions;
 using GameDatabase.Enums;
 using Constructor.Ships;
-using Constructor;
 using Constructor.Extensions;
+using UnityEngine.Rendering;
 
 namespace ShipEditor.Model
 {
@@ -20,7 +20,7 @@ namespace ShipEditor.Model
 	{
 		bool IsCompatible(Satellite satellite);
 		bool IsCompatible(Component component);
-		bool UniqueComponentInstalled(Component component);
+		bool ComponentLimitReached(Component component);
 		int GetDefaultKey(Component component);
 	}
 
@@ -29,8 +29,8 @@ namespace ShipEditor.Model
 		private const int _actionKeyCount = 6;
 
 		private readonly IShip _ship;
-        private readonly Inventory<Component> _limitedComponents = new();
-		private readonly Inventory<string> _uniqueComponents = new();
+        private readonly Inventory<Component> _components = new();
+		private readonly Inventory<ComponentGroupTag> _tags = new();
 		private readonly Dictionary<Component, int> _keyBindings = new();
 
 		public ComponentTracker(IShip ship)
@@ -38,18 +38,15 @@ namespace ShipEditor.Model
 			_ship = ship;
 		}
 
-		public bool UniqueComponentInstalled(Component component)
+		public bool ComponentLimitReached(Component component)
 		{
             var maxAmount = component.Restrictions.MaxComponentAmount;
-            var key = component.GetUniqueKey();
+            if (maxAmount > 0 && _components.Quantity(component) >= maxAmount) return true;
 
-            if (maxAmount == 0)
-                return !string.IsNullOrEmpty(key) && _uniqueComponents.Quantity(key) > 0;
+            var tag = component.Restrictions.ComponentGroupTag;
+            if (tag != null && _tags.Quantity(tag) >= tag.MaxInstallableComponents) return true;
 
-            if (string.IsNullOrEmpty(key))
-                return _limitedComponents.Quantity(component) >= maxAmount;
-            else
-                return _uniqueComponents.Quantity(key) >= maxAmount;
+            return false;
         }
 
 		public bool IsCompatible(Satellite satellite)
@@ -62,7 +59,7 @@ namespace ShipEditor.Model
 			if (!Constructor.Component.CompatibilityChecker.IsCompatibleComponent(component, _ship.Model))
 				return false;
 
-			if (UniqueComponentInstalled(component)) 
+			if (ComponentLimitReached(component)) 
 				return false;
 
 			return true;
@@ -86,36 +83,31 @@ namespace ShipEditor.Model
 		public void OnComponentAdded(Component component)
 		{
             var maxAmount = component.Restrictions.MaxComponentAmount;
-            var key = component.GetUniqueKey();
-
-            if (maxAmount == 0)
+            if (maxAmount > 0)
             {
-                if (!string.IsNullOrEmpty(key) && _uniqueComponents.Add(key) > 1)
-                    GameDiagnostics.Trace.LogError($"A unique component with key '{key}' is already installed");
-            }
-            else if (!string.IsNullOrEmpty(key))
-            {
-                var quantity = _uniqueComponents.Add(key);
-                if (quantity > maxAmount)
-                    GameDiagnostics.Trace.LogError($"Too many components with key '{key}' were installed: ({quantity}/{maxAmount})");
-            }
-            else
-            {
-                var quantity = _limitedComponents.Add(component);
+                var quantity = _components.Add(component);
                 if (quantity > maxAmount)
                     GameDiagnostics.Trace.LogError($"Too many {component.Name} were installed: ({quantity}/{maxAmount})");
+            }
+
+            var tag = component.Restrictions.ComponentGroupTag;
+            if (tag != null)
+            {
+                var quantity = _tags.Add(tag);
+                if (quantity > tag.MaxInstallableComponents)
+                    GameDiagnostics.Trace.LogError($"Too many components with the tag '{tag.Id}' were installed: ({quantity}/{tag.MaxInstallableComponents})");
             }
         }
 
 		public void OnComponentRemoved(Component component)
 		{
             var maxAmount = component.Restrictions.MaxComponentAmount;
-            var key = component.GetUniqueKey();
+            var tag = component.Restrictions.ComponentGroupTag;
 
-            if (!string.IsNullOrEmpty(key))
-                _uniqueComponents.Remove(key);
-            else if (maxAmount > 0)
-                _limitedComponents.Remove(component);
+            if (tag != null)
+                _tags.Remove(tag);
+            if (maxAmount > 0)
+                _components.Remove(component);
 
             _keyBindings.Remove(component);
 		}

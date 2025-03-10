@@ -5,14 +5,16 @@ using UnityEngine.Events;
 using Constructor.Ships;
 using ShipEditor.Model;
 using Zenject;
+using GameDatabase;
 
 namespace ShipEditor.UI
 {
     public class ComponentsPanel : MonoBehaviour
     {
-		[Inject] private readonly IShipEditorModel _shipEditor;
+        [Inject] private readonly IShipEditorModel _shipEditor;
+        [Inject] private readonly IDatabase _database;
 
-		[SerializeField] private ComponentContentFiller _contentFiller;
+        [SerializeField] private ComponentContentFiller _contentFiller;
         [SerializeField] private ListScrollRect _componentList;
         [SerializeField] private GameObject _noItemsText;
         [SerializeField] private UnityEngine.UI.Button _backButton;
@@ -29,7 +31,7 @@ namespace ShipEditor.UI
 		private void Start()
 		{
 			var components = _shipEditor.Inventory.Components;
-			_rootNode = new RootNode(new ComponentQuantityProvider(_shipEditor.Inventory));
+			_rootNode = new RootNode(new ComponentQuantityProvider(_shipEditor.Inventory), _database);
 			_rootNode.Assign(components);
 			_rootNode.IsVisible = true;
 			_leftSatelliteNode = new SatellitesNode(_rootNode, SatellitesNode.Location.Left);

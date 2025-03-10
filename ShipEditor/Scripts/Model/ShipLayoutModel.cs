@@ -45,15 +45,16 @@ namespace ShipEditor.Model
 
 		public Barrel Barrel(int x, int y)
 		{
-			var id = _barrelMap[x, y];
-			return id >= 0 ? _barrels[id] : null;
-		}
+            var id = _barrelMap[x, y];
+            return id >= 0 ? _barrels[id] : null;
+        }
 
-		public ShipLayoutModel(ShipElementType elementType, IShipLayout layout, ImmutableCollection<Barrel> barrels, IComponentTracker tracker)
+        public ShipLayoutModel(ShipElementType elementType, IShipLayout layout, ImmutableCollection<Barrel> barrels, IComponentTracker tracker)
 		{
 			_layout = layout;
 			_barrels = barrels;
-			_barrelMap.Build(layout);
+			_barrelMap.Build(layout, barrels.Count);
+
 			_tracker = tracker;
 			_elementType = elementType;
 		}
@@ -162,12 +163,12 @@ namespace ShipEditor.Model
 			if (cellType == CellType.Weapon && component.CellType == CellType.Weapon)
 			{
 				var requiredSlot = component.WeaponSlotType;
-				if (requiredSlot == WeaponSlotType.Default) return true;
+				if (requiredSlot == default) return true;
 
 				var barrelId = _barrelMap[x, y];
-				var barrel = _barrels[barrelId];
-
-				return string.IsNullOrEmpty(barrel.WeaponClass) || barrel.WeaponClass.Contains((char)requiredSlot);
+                if (barrelId < 0) return false;
+                var barrel = _barrels[barrelId];
+				return string.IsNullOrEmpty(barrel.WeaponClass) || barrel.WeaponClass.Contains(requiredSlot);
 			}
 
 			return component.CellType.CompatibleWith(cellType);
@@ -207,10 +208,10 @@ namespace ShipEditor.Model
 
 		private int GetBarrelId(int x, int y, Layout layout)
 		{
-			for (int i = 0; i < layout.Size; ++i)
-				for (int j = 0; j < layout.Size; ++j)
-					if ((CellType)layout[j, i] != CellType.Empty)
-						return _barrelMap[x + j, y + i];
+            for (int i = 0; i < layout.Size; ++i)
+                for (int j = 0; j < layout.Size; ++j)
+                    if ((CellType)layout[j, i] != CellType.Empty)
+                        return _barrelMap[x + j, y + i];
 
 			return -1;
 		}

@@ -4,7 +4,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using Zenject;
 using Constructor;
-using Constructor.Model;
 using Constructor.Modification;
 using GameDatabase.DataModel;
 using GameDatabase.Enums;
@@ -14,13 +13,15 @@ using Constructor.Component;
 using GameDatabase.Extensions;
 using ShipEditor.Model;
 using Gui.Theme;
+using GameDatabase;
 
 namespace ShipEditor.UI
 {
 	public class ComponentItem : MonoBehaviour
 	{
-	    [Inject] private readonly ILocalization _localization;
-		[Inject] private readonly IResourceLocator _resourceLocator;
+        [Inject] private readonly ILocalization _localization;
+        [Inject] private readonly IDatabase _database;
+        [Inject] private readonly IResourceLocator _resourceLocator;
 		[Inject] private readonly IShipEditorModel _shipEditor;
 
 		[SerializeField] private Image _icon;
@@ -65,12 +66,12 @@ namespace ShipEditor.UI
 			}
 		}
 
-		private static string SlotTypeToString(WeaponSlotType type)
+		private static string SlotTypeToString(char type)
 		{
-			if (type == WeaponSlotType.Default)
+			if (type == default)
 				return string.Empty;
 
-			return ((char)type).ToString();
+			return type.ToString();
 		}
 
 		public void Clear()
@@ -109,7 +110,7 @@ namespace ShipEditor.UI
 			if (_stats)
 			{
 				_stats.transform.InitializeElements<NameValueItem, KeyValuePair<string, string>>(
-					GetDescription(component, _localization), UpdateTextField);
+					GetDescription(component, _localization, _database.LocalizationSettings), UpdateTextField);
 			}
 		}
 
@@ -119,7 +120,7 @@ namespace ShipEditor.UI
 			item.Value.text = data.Value;
 		}
 
-		public static IEnumerable<KeyValuePair<string, string>> GetDescription(IComponent component, ILocalization localization)
+		public static IEnumerable<KeyValuePair<string, string>> GetDescription(IComponent component, ILocalization localization, LocalizationSettings settings)
 		{
 			var stats = component.GetStats();
 
@@ -193,7 +194,7 @@ namespace ShipEditor.UI
 			{
 				var data = component.Weapons.First();
                 var info = new WeaponDamageCalculator().CalculateWeaponDamage(data.Weapon.Stats, data.Ammunition, data.StatModifier);
-                foreach (var item in GetWeaponDescription(info, localization))
+                foreach (var item in GetWeaponDescription(info, settings))
 					yield return item;
 			}
 
@@ -201,7 +202,7 @@ namespace ShipEditor.UI
 			{
                 var data = component.WeaponsObsolete.First();
                 var info = new WeaponDamageCalculator().CalculateWeaponDamage(data.Key, data.Value);
-                foreach (var item in GetWeaponDescription(info, localization))
+                foreach (var item in GetWeaponDescription(info, settings))
 					yield return item;
 			}
 
@@ -213,7 +214,7 @@ namespace ShipEditor.UI
 				yield return new KeyValuePair<string, string>("$Weight", Mathf.RoundToInt(stats.Weight + stats.WeightReduction).ToString());
 		}
 
-        private static IEnumerable<KeyValuePair<string, string>> GetWeaponDamageText(WeaponDamageCalculator.WeaponInfo data)
+        private static IEnumerable<KeyValuePair<string, string>> GetWeaponDamageText(WeaponDamageCalculator.WeaponInfo data, LocalizationSettings settings)
 		{
 			var damageSuffix = data.Magazine <= 1 ? string.Empty : "х" + data.Magazine;
 
@@ -233,9 +234,9 @@ namespace ShipEditor.UI
                 yield return new KeyValuePair<string, string>("$HeatDPS", data.Dps.Heat.ToString(_floatFormat) + damageSuffix);
 
             if (data.Damage.Corrosive > 0)
-                yield return new KeyValuePair<string, string>("$CorrosiveDamage", data.Damage.Corrosive.ToString(_floatFormat) + damageSuffix);
+                yield return new KeyValuePair<string, string>(settings.CorrosiveDamageText, data.Damage.Corrosive.ToString(_floatFormat) + damageSuffix);
             else if (data.Dps.Corrosive > 0)
-                yield return new KeyValuePair<string, string>("$CorrosiveDPS", data.Dps.Corrosive.ToString(_floatFormat) + damageSuffix);
+                yield return new KeyValuePair<string, string>(settings.CorrosiveDpsText, data.Dps.Corrosive.ToString(_floatFormat) + damageSuffix);
 
             if (data.Damage.Repair > 0)
                 yield return new KeyValuePair<string, string>("$WeaponRepair", data.Damage.Repair.ToString(_floatFormat) + damageSuffix);
@@ -272,9 +273,9 @@ namespace ShipEditor.UI
                 yield return new KeyValuePair<string, string>("$EffectProgressiveDamage", string.Empty);
         }
 
-        private static IEnumerable<KeyValuePair<string, string>> GetWeaponDescription(WeaponDamageCalculator.WeaponInfo data, ILocalization localization)
+        private static IEnumerable<KeyValuePair<string, string>> GetWeaponDescription(WeaponDamageCalculator.WeaponInfo data, LocalizationSettings settings)
 	    {
-            foreach (var item in GetWeaponDamageText(data))
+            foreach (var item in GetWeaponDamageText(data, settings))
                 yield return item;
 
             if (data.EnergyCost > 0)
@@ -284,7 +285,7 @@ namespace ShipEditor.UI
                 else
                     yield return new KeyValuePair<string, string>("$WeaponEnergy", data.EnergyCost.ToString(_floatFormat));
 
-                if (!data.Continuous)
+                if (data.FireRate > 0)
                     yield return new KeyValuePair<string, string>("$WeaponCooldown", (1.0f / data.FireRate).ToString(_floatFormat));
             }
 

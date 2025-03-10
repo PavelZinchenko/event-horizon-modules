@@ -9,9 +9,10 @@ namespace ShipEditor.Model
 	{
 		private IShipLayout _layout;
 		private byte[] _map;
+        private byte _barrelCount;
 		private readonly Queue<int> _mapCells = new Queue<int>();
 
-		public byte BarrelCount { get; private set; }
+        public byte BarrelCount => _barrelCount;
 
 		public int this[int x, int y]
 		{
@@ -22,21 +23,16 @@ namespace ShipEditor.Model
 			}
 		}
 
-		public void Build(IShipLayout layout)
+		public void Build(IShipLayout layout, int maxCount)
 		{
-			BarrelCount = 0;
 			_layout = layout;
 			_map = new byte[_layout.Rect.Square];
 
 			for (int i = _layout.Rect.yMin; i <= _layout.Rect.yMax; ++i)
-			{
 				for (int j = _layout.Rect.yMin; j <= _layout.Rect.yMax; ++j)
-				{
-					if (TryAssignNewBarrel(j, i))
+					if (TryAssignNewBarrel(j, i, maxCount))
 						ProcessCells();
-				}
-			}
-        }
+	    }
 
         private void ProcessCells()
 		{
@@ -53,10 +49,12 @@ namespace ShipEditor.Model
 			}
 		}
 
-        private bool TryAssignNewBarrel(int x, int y)
+        private bool TryAssignNewBarrel(int x, int y, int maxCount)
         {
             if (!TryGetUnassignedWeaponCell(x, y, out int index, out bool isStock) || !isStock) return false;
-            _map[index] = ++BarrelCount;
+            if (_barrelCount >= maxCount) return false;
+
+            _map[index] = ++_barrelCount;
             _mapCells.Enqueue(index);
             return true;
         }
