@@ -2,29 +2,16 @@
 using System.Collections.Generic;
 using System.Linq;
 using Constructor;
-using Constructor.Ships;
 using GameDatabase.Model;
-using Utils;
 
 namespace Gui.ComponentList
 {
 	public class SatellitesNode : IComponentTreeNode
 	{
-		public enum Location
-		{
-			Left,
-			Right,
-		}
-
-		public SatellitesNode(IComponentTreeNode parent, Location location)
+		public SatellitesNode(IComponentTreeNode parent, int locationIndex)
 		{
 			Parent = parent;
-
-			switch (location)
-			{
-				case Location.Left: Name = "$GroupLeftSatellite"; break;
-				case Location.Right: Name = "$GroupRightSatellite"; break;
-			}
+            Name = $"$GroupSatelliteN|{locationIndex+1}";
 		}
 
 		public IComponentTreeNode Parent { get; }
@@ -43,44 +30,4 @@ namespace Gui.ComponentList
 
         public void Clear() { }
 	}
-
-	//public class ShipQuantityProvider : IComponentQuantityProvider
-	//{
-	//    public ShipQuantityProvider(IShip ship)
-	//    {
-	//        _ship = ship;
-	//        Reset();
-	//    }
-
-	//    public int GetQuantity(ComponentInfo component)
-	//    {
-	//        return Components.GetQuantity(component);
-	//    }
-
-	//    public void Reset()
-	//    {
-	//        _components.Clear();
-	//        _notInitialized = true;
-	//    }
-
-	//    public IGameItemCollection<ComponentInfo> Components
-	//    {
-	//        get
-	//        {
-	//            if (_notInitialized)
-	//            {
-	//                foreach (var item in _ship.Components)
-	//                    _components.Add(item.Info);
-
-	//                _notInitialized = false;
-	//            }
-
-	//            return _components;
-	//        }
-	//    }
-
-	//    private bool _notInitialized;
-	//    private readonly IShip _ship;
-	//    private readonly IGameItemCollection<ComponentInfo> _components = new GameItemCollection<ComponentInfo>();
-	//}
 }

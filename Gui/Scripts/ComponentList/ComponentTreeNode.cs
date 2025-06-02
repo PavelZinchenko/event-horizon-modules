@@ -10,12 +10,10 @@ namespace Gui.ComponentList
 {
     public class RootNode : IComponentTreeNode
     {
-        public RootNode(IComponentQuantityProvider quantityProvider, IDatabase database = null)
+        public RootNode(IComponentQuantityProvider quantityProvider, IDatabase database)
         {
-            if (database != null)
-                _weaponNode = new WeaponNode(this, database.WeaponSlots);
-
             _quantityProvider = quantityProvider;
+            _weaponNode = new WeaponNode(this, database?.WeaponSlots);
             _armorNode = CreateNode("$GroupArmor", new SpriteId("icons/icon_shield", SpriteId.Type.Default));
             _energyNode = CreateNode("$GroupEnergy", new SpriteId("icons/icon_battery", SpriteId.Type.Default));
             _droneNode = CreateNode("$GroupDrones", new SpriteId("icons/icon_drone", SpriteId.Type.Default));
@@ -108,7 +106,9 @@ namespace Gui.ComponentList
                 foreach (var node in _extraNodes1)
                     yield return node;
 
-                yield return _weaponNode;
+                if (_weaponNode != null)
+                    yield return _weaponNode;
+
                 yield return _armorNode;
                 yield return _energyNode;
                 yield return _droneNode;
@@ -144,6 +144,12 @@ namespace Gui.ComponentList
         {
             _parent = parent;
 
+            if (weaponSlots == null)
+            {
+                _groups.Add(CreateNode(string.Empty, SpriteId.Empty));
+                return;
+            }
+
             foreach (var slot in weaponSlots.Slots)
                 if (_groupMap.TryAdd(slot.Letter, _groups.Count))
                     _groups.Add(CreateNode(slot.Name, slot.Icon));
@@ -151,7 +157,7 @@ namespace Gui.ComponentList
                     GameDiagnostics.Trace.LogError($"Duplicate weapon slot - {slot.Letter}");
 
             _groupMap.Add(default, _groups.Count);
-            _groups.Add(CreateNode(weaponSlots?.DefaultSlotName, weaponSlots.DefaultSlotIcon));
+            _groups.Add(CreateNode(weaponSlots.DefaultSlotName, weaponSlots.DefaultSlotIcon));
         }
 
         public IComponentTreeNode Parent { get { return _parent; } }

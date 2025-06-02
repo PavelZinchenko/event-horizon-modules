@@ -61,7 +61,7 @@ namespace ShipEditor.UI
         {
             if (_selectedItem == null)
             {
-                var preset = _shipEditor.Presets.Create(_shipEditor.Ship.Model.OriginalShip);
+                var preset = _shipEditor.Presets.Create(_shipEditor.Ship.Model.BaseModel);
                 _shipEditor.SaveShipToPreset(preset);
                 preset.Name = _newPresetName.text;
                 UpdateContent();
@@ -110,7 +110,7 @@ namespace ShipEditor.UI
 
         private void UpdateContent()
         {
-            var presets = _shipEditor.Presets.GetPresets(_shipEditor.Ship.Model.OriginalShip);
+            var presets = _shipEditor.Presets.GetPresets(_shipEditor.Ship.Model.BaseModel);
             _itemsLayoutGroup.transform.InitializeElements<ShipPresetItem, IShipPreset>(presets, UpdatePresets);
         }
 

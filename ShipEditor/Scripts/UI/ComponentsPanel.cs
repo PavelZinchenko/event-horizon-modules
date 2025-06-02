@@ -6,6 +6,8 @@ using Constructor.Ships;
 using ShipEditor.Model;
 using Zenject;
 using GameDatabase;
+using System.Collections.Generic;
+using UnityEngine.Rendering;
 
 namespace ShipEditor.UI
 {
@@ -19,13 +21,11 @@ namespace ShipEditor.UI
         [SerializeField] private GameObject _noItemsText;
         [SerializeField] private UnityEngine.UI.Button _backButton;
 
-        [SerializeField] private UnityEvent _leftSatelliteGroupSelected;
-		[SerializeField] private UnityEvent _rightSatelliteGroupSelected;
-		[SerializeField] private UnityEvent<ComponentInfo> _componentSelected;
+        [SerializeField] private UnityEvent<int> _satelliteGroupSelected;
+        [SerializeField] private UnityEvent<ComponentInfo> _componentSelected;
 
 		private RootNode _rootNode;
-		private SatellitesNode _leftSatelliteNode;
-		private SatellitesNode _rightSatelliteNode;
+		private List<SatellitesNode> _satelliteNodes = new();
 		private IComponentTreeNode _selectedNode;
 
 		private void Start()
@@ -34,14 +34,13 @@ namespace ShipEditor.UI
 			_rootNode = new RootNode(new ComponentQuantityProvider(_shipEditor.Inventory), _database);
 			_rootNode.Assign(components);
 			_rootNode.IsVisible = true;
-			_leftSatelliteNode = new SatellitesNode(_rootNode, SatellitesNode.Location.Left);
-			_rightSatelliteNode = new SatellitesNode(_rootNode, SatellitesNode.Location.Right);
-			_rootNode.AddNode(_leftSatelliteNode, true);
-			_rootNode.AddNode(_rightSatelliteNode, true);
-			_selectedNode = _rootNode;
-			_noItemsText.SetActive(components.Count == 0);
-			UpdateSatelliteGroups();
-			_contentFiller.InitializeItems(_selectedNode);
+
+            _satelliteNodes.Clear();
+            UpdateSatelliteGroups();
+
+            _selectedNode = _rootNode;
+            _noItemsText.SetActive(components.Count == 0);
+            _contentFiller.InitializeItems(_selectedNode);
 			_componentList.RefreshContent();
 		}
 
@@ -95,17 +94,12 @@ namespace ShipEditor.UI
 
 		public void OnGroupSelected(GroupListItem item)
         {
-            if (item.Node == _leftSatelliteNode)
-            {
-                _leftSatelliteGroupSelected?.Invoke();
-                return;
-            }
-
-			if (item.Node == _rightSatelliteNode)
-			{
-				_rightSatelliteGroupSelected?.Invoke();
-				return;
-			}
+            for (int i = 0; i < _satelliteNodes.Count; ++i)
+                if (item.Node == _satelliteNodes[i])
+                {
+                    _satelliteGroupSelected?.Invoke(i);
+                    return;
+                }
 
             if (_selectedNode == item.Node)
                 _selectedNode = _selectedNode.GetVisibleParent() ?? _rootNode;
@@ -131,15 +125,31 @@ namespace ShipEditor.UI
 
         private void OnShipSelected(IShip ship) => UpdateSatelliteGroups();
 
-		private void OnSatelliteChanged(SatelliteLocation location) => UpdateSatelliteGroups();
+		private void OnSatelliteChanged(int mountPoint) => UpdateSatelliteGroups();
 
-		private void UpdateSatelliteGroups()
+        private void CreateSatelliteNodes()
+        {
+            int mountPointCount = _shipEditor.Ship.Model.Satellites.Count;
+            for (int i = _satelliteNodes.Count; i < mountPointCount; ++i)
+            {
+                var node = new SatellitesNode(_rootNode, i);
+                _satelliteNodes.Add(node);
+                _rootNode.AddNode(node, true);
+            }
+        }
+
+        private void UpdateSatelliteGroups()
 		{
-			var isStarbase = _shipEditor.Ship.Model.ShipType == GameDatabase.Enums.ShipType.Starbase;
-			var haveSatellites = _shipEditor.Inventory.Satellites.Count > 0 || _shipEditor.Inventory.SatelliteBuilds.Count > 0;
+            int mountPointCount = _shipEditor.Ship.Model.Satellites.Count;
+            if (mountPointCount > _satelliteNodes.Count)
+                CreateSatelliteNodes();
 
-			_leftSatelliteNode.IsVisible = !isStarbase && (haveSatellites || _shipEditor.HasSatellite(SatelliteLocation.Left));
-			_rightSatelliteNode.IsVisible = !isStarbase && (haveSatellites || _shipEditor.HasSatellite(SatelliteLocation.Right));
+            var haveSatellites = _shipEditor.Inventory.Satellites.Count > 0 || _shipEditor.Inventory.SatelliteBuilds.Count > 0;
+            for (int i = 0; i < _satelliteNodes.Count; ++i)
+            {
+                var node = _satelliteNodes[i];
+                node.IsVisible = i < mountPointCount && (haveSatellites || _shipEditor.HasSatellite(i));
+            }
 		}
 
         private class ComponentQuantityProvider : IComponentQuantityProvider

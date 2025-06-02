@@ -20,7 +20,7 @@ namespace ShipEditor.UI
 		[SerializeField] private LayoutGroup _itemsLayoutGroup;
 		[SerializeField] private GameObject _removeSatelliteItem;
 
-		private SatelliteLocation _location;
+        private int _mountPoint;
 
 		private void OnEnable()
 		{
@@ -36,14 +36,10 @@ namespace ShipEditor.UI
 			_shipEditor.Events.ShipChanged -= OnShipChanged;
 		}
 
-		public SatelliteLocation Location
-		{
-			get => _location;
-			set
-			{
-				if (_location == value) return;
-				_location = value;
-			}
+		public int MountPoint
+        {
+			get => _mountPoint;
+			set => _mountPoint = value;
 		}
 
 		public bool Visible
@@ -54,21 +50,21 @@ namespace ShipEditor.UI
 
 		public void Start()
         {
-			var node = new RootNode(null);
+			var node = new RootNode(null, null);
 			_backButton.Initialize(node, node);
 		}
 
 		public void RemoveSatellite()
 		{
-			_shipEditor.RemoveSatellite(_location);
+			_shipEditor.RemoveSatellite(_mountPoint);
 		}
 
 		public void InstallSatellite(SatelliteItem item)
 		{
 			if (item.SatelliteBuild != null)
-				_shipEditor.InstallSatellite(_location, item.SatelliteBuild);
+				_shipEditor.InstallSatellite(_mountPoint, item.SatelliteBuild);
 			else
-				_shipEditor.TryInstallSatellite(_location, item.Satellite);
+				_shipEditor.TryInstallSatellite(_mountPoint, item.Satellite);
 		}
 
 		private void OnShipChanged(Constructor.Ships.IShip ship)
@@ -76,15 +72,15 @@ namespace ShipEditor.UI
 			UpdateContent();
 		}
 
-		private void OnSatelliteChanged(SatelliteLocation location)
+		private void OnSatelliteChanged(int mountPoint)
 		{
-			if (location == _location)
+			if (mountPoint == _mountPoint)
 				UpdateContent();
 		}
 
 		private void UpdateContent()
 		{
-			var isInstalled = _shipEditor.HasSatellite(_location);
+			var isInstalled = _shipEditor.HasSatellite(_mountPoint);
 			_removeSatelliteItem.SetActive(isInstalled);
 
 			if (_shipEditor.Inventory.SatelliteBuilds.Count > 0)
@@ -97,14 +93,14 @@ namespace ShipEditor.UI
 
 		private void UpdateSatellite(SatelliteItem item, ISatellite satellite)
 		{
-			var canBeInstalled = _shipEditor.CompatibilityChecker.IsCompatible(satellite.Information);
+			var canBeInstalled = _shipEditor.CompatibilityChecker.IsCompatible(satellite.BaseModel, _mountPoint);
 			item.Initialize(satellite, canBeInstalled, _resourceLocator, _localization);
 		}
 
 		private void UpdateSatellite(SatelliteItem item, Satellite satellite)
 		{
             var quantity = _shipEditor.Inventory.GetQuantity(satellite);
-			var canBeInstalled = _shipEditor.CompatibilityChecker.IsCompatible(satellite);
+			var canBeInstalled = _shipEditor.CompatibilityChecker.IsCompatible(satellite, _mountPoint);
 			item.Initialize(satellite, quantity, canBeInstalled, _resourceLocator, _localization);
 		}
 	}

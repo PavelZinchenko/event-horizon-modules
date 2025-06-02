@@ -102,7 +102,7 @@ namespace ShipEditor.UI
 		private void UpdateStats()
 		{
 			var ship = _shipEditor.Ship.Model;
-			var stats = new ShipStatsCalculator(ship.OriginalShip, _database.ShipSettings);
+			var stats = new ShipStatsCalculator(ship.BaseModel, _database.ShipSettings);
 			stats.BaseStats = ship.Stats;
 
 			var isStarbase = ship.ShipType == GameDatabase.Enums.ShipType.Starbase;

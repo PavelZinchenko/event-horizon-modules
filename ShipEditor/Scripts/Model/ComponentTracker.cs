@@ -18,7 +18,7 @@ namespace ShipEditor.Model
 
 	public interface ICompatibilityChecker
 	{
-		bool IsCompatible(Satellite satellite);
+		bool IsCompatible(Satellite satellite, int mountPoint);
 		bool IsCompatible(Component component);
 		bool ComponentLimitReached(Component component);
 		int GetDefaultKey(Component component);
@@ -49,9 +49,9 @@ namespace ShipEditor.Model
             return false;
         }
 
-		public bool IsCompatible(Satellite satellite)
+		public bool IsCompatible(Satellite satellite, int mountPoint)
 		{
-			return _ship.IsSuitableSatelliteSize(satellite);
+			return _ship.IsSuitableSatelliteSize(satellite, mountPoint);
 		}
 
 		public bool IsCompatible(Component component)
