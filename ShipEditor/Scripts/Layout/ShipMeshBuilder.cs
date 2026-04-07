@@ -5,56 +5,72 @@ using Constructor.Model;
 
 namespace ShipEditor
 {
-	public class ShipMeshBuilder
-	{
-		public interface ILayout
-		{
+    public class ShipMeshBuilder
+    {
+        public interface ILayout
+        {
             ref readonly LayoutRect Rect { get; }
             CellType this[int x, int y] { get; }
-			string GetWeaponClasses(int x, int y);
-		}
+            string GetWeaponClasses(int x, int y);
+        }
 
-		private readonly Dictionary<int, int> _cache = new();
-		private readonly List<Vector3> _vertices = new();
-		private readonly List<Vector2> _uv = new();
-		private readonly List<Color32> _colors = new();
-		private readonly List<int> _triangles = new();
-		private readonly float _cellSize;
+        private readonly Dictionary<int, int> _cache = new();
+        private readonly List<Vector3> _vertices = new();
+        private readonly List<Vector2> _uv = new();
+        private readonly List<Color32> _colors = new();
+        private readonly List<int> _triangles = new();
+        private readonly float _cellSize;
 
-		public Color OuterCellColor { get; set; } = Color.white;
-		public Color InnerCellColor { get; set; } = Color.white;
-		public Color EngineCellColor { get; set; } = Color.white;
-		public Color WeaponCellColor { get; set; } = Color.white;
+        public Color OuterCellColor { get; set; } = Color.white;
+        public Color InnerCellColor { get; set; } = Color.white;
+        public Color EngineCellColor { get; set; } = Color.white;
+        public Color WeaponCellColor { get; set; } = Color.white;
 
-		public ShipMeshBuilder(float cellSize)
-		{
-			_cellSize = cellSize;
-		}
+        public ShipMeshBuilder(float cellSize)
+        {
+            _cellSize = cellSize;
+        }
 
-		public void Build(ILayout layout)
-		{
-			for (int i = layout.Rect.yMin; i <= layout.Rect.yMax; ++i)
-			{
-				for (int j = layout.Rect.xMin; j <= layout.Rect.xMax; ++j)
-				{
-					var cellType = layout[j, i];
+        public void Build(ILayout layout)
+        {
+            for (int i = layout.Rect.yMin; i <= layout.Rect.yMax; ++i)
+            {
+                for (int j = layout.Rect.xMin; j <= layout.Rect.xMax; ++j)
+                {
+                    var cellType = layout[j, i];
 
-					if (!IsValidCell(cellType)) continue;
+                    if (!IsValidCell(cellType)) continue;
 
-                    if (cellType == CellType.InnerOuter)
+                    if (cellType == CellType.OuterEngine)
+                        AddMixedCell(j - layout.Rect.xMin, i - layout.Rect.yMin, CellType.Outer, CellType.Engine);
+
+                    else if (cellType == CellType.InnerOuter)
                         AddMixedCell(j - layout.Rect.xMin, i - layout.Rect.yMin, CellType.Outer, CellType.Inner);
+
+                    else if (cellType == CellType.InnerEngine)
+                        AddMixedCell(j - layout.Rect.xMin, i - layout.Rect.yMin, CellType.Inner, CellType.Engine);
+
+                    else if (cellType == CellType.WeaponEngine)
+                        AddMixedCell(j - layout.Rect.xMin, i - layout.Rect.yMin, CellType.Weapon, CellType.Engine);
+
+                    else if (cellType == CellType.WeaponOuter)
+                        AddMixedCell(j - layout.Rect.xMin, i - layout.Rect.yMin, CellType.Weapon, CellType.Outer);
+
+                    else if (cellType == CellType.WeaponInner)
+                        AddMixedCell(j - layout.Rect.xMin, i - layout.Rect.yMin, CellType.Weapon, CellType.Inner);
+
                     else
                         AddSolidCell(j - layout.Rect.xMin, i - layout.Rect.yMin, cellType);
-				}
-			}
-		}
+                }
+            }
+        }
 
         private void AddSolidCell(int x, int y, CellType cellType)
         {
             var v1 = GetVertex(x, y, cellType);
-            var v2 = GetVertex(x+1, y, cellType);
-            var v3 = GetVertex(x+1, y+1, cellType);
-            var v4 = GetVertex(x, y+1, cellType);
+            var v2 = GetVertex(x + 1, y, cellType);
+            var v3 = GetVertex(x + 1, y + 1, cellType);
+            var v4 = GetVertex(x, y + 1, cellType);
 
             _triangles.Add(v1);
             _triangles.Add(v2);
@@ -70,7 +86,7 @@ namespace ShipEditor
             var v1 = GetVertex(x, y, cellType1);
             var v2 = GetVertex(x + 1, y, cellType1);
             var v3 = GetVertex(x + 1, y, cellType2);
-            var v4 = GetVertex(x+1, y+1, cellType2);
+            var v4 = GetVertex(x + 1, y + 1, cellType2);
             var v5 = GetVertex(x, y + 1, cellType2);
 
             _triangles.Add(v0);
@@ -82,20 +98,20 @@ namespace ShipEditor
         }
 
         public Mesh CreateMesh()
-		{
-			var mesh = new Mesh();
-			mesh.vertices = _vertices.ToArray();
-			mesh.triangles = _triangles.ToArray();
-			mesh.uv = _uv.ToArray();
-			mesh.colors32 = _colors.ToArray();
-			mesh.Optimize();
+        {
+            var mesh = new Mesh();
+            mesh.vertices = _vertices.ToArray();
+            mesh.triangles = _triangles.ToArray();
+            mesh.uv = _uv.ToArray();
+            mesh.colors32 = _colors.ToArray();
+            mesh.Optimize();
 
-			//Debug.LogError($"{mesh.vertices.Length} vertices, {mesh.triangles.Length / 3} triangles");
-			return mesh;
-		}
+            //Debug.LogError($"{mesh.vertices.Length} vertices, {mesh.triangles.Length / 3} triangles");
+            return mesh;
+        }
 
-		private static int Key(int x, int y, CellType cell)
-		{
+        private static int Key(int x, int y, CellType cell)
+        {
             const int minValue = -15;
             const int coordinateBits = 12;
             const int coordinateMask = (1 << coordinateBits) - 1;
@@ -104,49 +120,69 @@ namespace ShipEditor
             y = (y - minValue) & coordinateMask;
 
             return (((((int)cell) << coordinateBits) + y) << coordinateBits) + x;
-		}
+        }
 
-		private static bool IsValidCell(CellType cell)
-		{
-			switch (cell)
-			{
-				case CellType.Outer:
-				case CellType.Inner:
-				case CellType.InnerOuter:
-				case CellType.Engine:
-				case CellType.Weapon:
-					return true;
-				default:
-					return false;
-			}
-		}
+        private static bool IsValidCell(CellType cell)
+        {
+            switch (cell)
+            {
+                case CellType.Outer:
+                case CellType.Inner:
+                case CellType.Engine:
+                case CellType.Weapon:
 
-		private Color32 CellToColor(CellType cell)
-		{
-			switch (cell)
-			{
-				case CellType.Outer: return OuterCellColor;
-				case CellType.Inner: return InnerCellColor;
-				case CellType.InnerOuter: return InnerCellColor;
-				case CellType.Engine: return EngineCellColor;
-				case CellType.Weapon: return WeaponCellColor;
-				default: return new Color32();
-			}
-		}
 
-		private int GetVertex(int x, int y, CellType cell)
-		{
-			var key = Key(x, y, cell);
-			if (!_cache.TryGetValue(key, out var id))
-			{
-				id = _vertices.Count;
-				_vertices.Add(new Vector3(x * _cellSize, -y*_cellSize, 0));
-				_uv.Add(new Vector2(x % 2 == 0 ? 0f : 1f, y % 2 == 0 ? 0f : 1f));
-				_colors.Add(CellToColor(cell));
-				_cache.Add(key, id);
-			}
+                case CellType.InnerOuter:
 
-			return id;
-		}
-	}
+                case CellType.OuterEngine:
+                case CellType.InnerEngine:
+                case CellType.WeaponInner:
+                case CellType.WeaponOuter:
+                case CellType.WeaponEngine:
+                case CellType.All:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private Color32 CellToColor(CellType cell)
+        {
+            switch (cell)
+            {
+                case CellType.Outer: return OuterCellColor;
+                case CellType.Inner: return InnerCellColor;
+                case CellType.Engine: return EngineCellColor;
+                case CellType.Weapon: return WeaponCellColor;
+
+
+                case CellType.InnerOuter: return InnerCellColor;
+
+                case CellType.OuterEngine: return OuterCellColor;
+                case CellType.InnerEngine: return InnerCellColor;
+                case CellType.WeaponEngine: return WeaponCellColor;
+                case CellType.WeaponInner: return WeaponCellColor;
+                case CellType.WeaponOuter: return WeaponCellColor;
+
+                case CellType.All: return new Color32(133, 133, 133, 255);
+
+                default: return new Color32();
+            }
+        }
+
+        private int GetVertex(int x, int y, CellType cell)
+        {
+            var key = Key(x, y, cell);
+            if (!_cache.TryGetValue(key, out var id))
+            {
+                id = _vertices.Count;
+                _vertices.Add(new Vector3(x * _cellSize, -y * _cellSize, 0));
+                _uv.Add(new Vector2(x % 2 == 0 ? 0f : 1f, y % 2 == 0 ? 0f : 1f));
+                _colors.Add(CellToColor(cell));
+                _cache.Add(key, id);
+            }
+
+            return id;
+        }
+    }
 }

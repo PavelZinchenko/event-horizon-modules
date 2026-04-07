@@ -58,7 +58,17 @@ namespace ShipEditor.UI
 				case CellType.Weapon: return _weaponCellColor;
 				case CellType.Outer: return _outerCellColor;
 				case CellType.Inner: return _innerCellColor;
-				case CellType.InnerOuter: return Color.Lerp(_innerCellColor, _outerCellColor, 0.5f);
+
+
+
+                case CellType.OuterEngine: return Color.Lerp(_outerCellColor, _engineCellColor, 0.5f);
+
+                case CellType.InnerOuter: return Color.Lerp(_innerCellColor, _outerCellColor, 0.5f);
+
+                case CellType.InnerEngine: return Color.Lerp(_innerCellColor, _engineCellColor, 0.5f);
+
+				case CellType.All: return new Color32(133, 133, 133, 255);
+
 				case CellType.Engine: return _engineCellColor;
 				case CellType.Empty:
 				default:

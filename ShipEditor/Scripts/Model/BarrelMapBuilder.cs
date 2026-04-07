@@ -79,6 +79,18 @@ namespace ShipEditor.Model
                 case CellType.Weapon:
                     isStock = true;
                     return true;
+                case CellType.WeaponInner:
+                    isStock = true;
+                    return true;
+                case CellType.WeaponOuter:
+                    isStock = true;
+                    return true;
+                case CellType.WeaponEngine:
+                    isStock = true;
+                    return true;
+                case CellType.All:
+                    isStock = true;
+                    return true;
                 case Layout.CustomWeaponCell:
                     isStock = false;
                     return true;
