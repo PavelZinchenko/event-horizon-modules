@@ -28,7 +28,7 @@ namespace Gui.ComponentList
         public string Name { get { return "$GroupShip|" + _ship.Name; } }
 
         public SpriteId Icon { get { return _ship.Model.ModelImage; } }
-        public UnityEngine.Color Color { get { return _ship.ColorScheme.Color; } }
+        public UnityEngine.Color Color { get { return _ship.ColorScheme.Color.ToUnity(); } }
         public void Add(ComponentInfo componentInfo) { throw new InvalidOperationException(); }
         public int ItemCount { get { return _quantityProvider.Components.Count; } }
         public IEnumerable<IComponentTreeNode> Nodes { get { return Enumerable.Empty<IComponentTreeNode>(); } }

@@ -221,7 +221,7 @@ namespace Gui.ComponentList
 
         public string Name { get { return _component.Name; } }
         public SpriteId Icon { get { return _component.Icon; } }
-        public UnityEngine.Color Color { get { return _component.Color; } }
+        public UnityEngine.Color Color { get { return _component.Color.ToUnity(); } }
         public bool IsVisible => true;
 
         public void Add(ComponentInfo componentInfo)

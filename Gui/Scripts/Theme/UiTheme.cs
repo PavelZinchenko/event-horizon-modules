@@ -297,54 +297,54 @@ namespace Gui.Theme
         {
             var settings = database.UiSettings;
 
-            _windowColor = settings.WindowColor;
-            _scrollBarColor = settings.ScrollBarColor;
-            _iconColor = settings.IconColor;
-            _selectionColor = settings.SelectionColor;
+            _windowColor = settings.WindowColor.ToUnity();
+            _scrollBarColor = settings.ScrollBarColor.ToUnity();
+            _iconColor = settings.IconColor.ToUnity();
+            _selectionColor = settings.SelectionColor.ToUnity();
 
-            _backgroundDark = settings.BackgroundDark;
+            _backgroundDark = settings.BackgroundDark.ToUnity();
 
-            _buttonColor = settings.ButtonColor;
-            _buttonFocusColor = settings.ButtonFocusColor;
-            _buttonTextColor = settings.ButtonTextColor;
-            _buttonIconColor = settings.ButtonIconColor;
+            _buttonColor = settings.ButtonColor.ToUnity();
+            _buttonFocusColor = settings.ButtonFocusColor.ToUnity();
+            _buttonTextColor = settings.ButtonTextColor.ToUnity();
+            _buttonIconColor = settings.ButtonIconColor.ToUnity();
 
-            _warningButtonColor = settings.WarningButtonColor;
-            _warningButtonFocusColor = settings.WarningButtonFocusColor;
-            _warningButtonTextColor = settings.WarningButtonTextColor;
-            _warningButtonIconColor = settings.WarningButtonIconColor;
+            _warningButtonColor = settings.WarningButtonColor.ToUnity();
+            _warningButtonFocusColor = settings.WarningButtonFocusColor.ToUnity();
+            _warningButtonTextColor = settings.WarningButtonTextColor.ToUnity();
+            _warningButtonIconColor = settings.WarningButtonIconColor.ToUnity();
 
-            _premiumButtonColor = settings.PremiumButtonColor;
-            _premiumButtonFocusColor = settings.PremiumButtonFocusColor;
-            _premiumButtonTextColor = settings.PremiumButtonTextColor;
-            _premiumButtonIconColor = settings.PremiumButtonIconColor;
+            _premiumButtonColor = settings.PremiumButtonColor.ToUnity();
+            _premiumButtonFocusColor = settings.PremiumButtonFocusColor.ToUnity();
+            _premiumButtonTextColor = settings.PremiumButtonTextColor.ToUnity();
+            _premiumButtonIconColor = settings.PremiumButtonIconColor.ToUnity();
 
-            _availableTechColor = settings.AvailableTechColor;
-            _unavailableTechColor = settings.UnavailableTechColor;
-            _obtainedTechColor = settings.ObtainedTechColor;
-            _hiddenTechColor = settings.HiddenTechColor;
+            _availableTechColor = settings.AvailableTechColor.ToUnity();
+            _unavailableTechColor = settings.UnavailableTechColor.ToUnity();
+            _obtainedTechColor = settings.ObtainedTechColor.ToUnity();
+            _hiddenTechColor = settings.HiddenTechColor.ToUnity();
 
-            _creditsColor = settings.CreditsColor;
-            _starsColor = settings.StarsColor;
-            _moneyColor = settings.MoneyColor;
-            _fuelColor = settings.FuelColor;
-            _tokensColor = settings.TokensColor;
+            _creditsColor = settings.CreditsColor.ToUnity();
+            _starsColor = settings.StarsColor.ToUnity();
+            _moneyColor = settings.MoneyColor.ToUnity();
+            _fuelColor = settings.FuelColor.ToUnity();
+            _tokensColor = settings.TokensColor.ToUnity();
 
-            _errorTextColor = settings.ErrorTextColor;
+            _errorTextColor = settings.ErrorTextColor.ToUnity();
 
-            _textColor = settings.TextColor;
-            _headerTextColor = settings.HeaderTextColor;
-            _paleTextColor = settings.PaleTextColor;
-            _brightTextColor = settings.BrightTextColor;
+            _textColor = settings.TextColor.ToUnity();
+            _headerTextColor = settings.HeaderTextColor.ToUnity();
+            _paleTextColor = settings.PaleTextColor.ToUnity();
+            _brightTextColor = settings.BrightTextColor.ToUnity();
 
-            _itemLowQualityColor = settings.LowQualityItemColor;
-            _itemCommonQualityColor = settings.CommonQualityItemColor;
-            _itemMediumQualityColor = settings.MediumQualityItemColor;
-            _itemHighQualityColor = settings.HighQualityItemColor;
-            _itemPerfectQualityColor = settings.PerfectQualityItemColor;
+            _itemLowQualityColor = settings.LowQualityItemColor.ToUnity();
+            _itemCommonQualityColor = settings.CommonQualityItemColor.ToUnity();
+            _itemMediumQualityColor = settings.MediumQualityItemColor.ToUnity();
+            _itemHighQualityColor = settings.HighQualityItemColor.ToUnity();
+            _itemPerfectQualityColor = settings.PerfectQualityItemColor.ToUnity();
 
             var snowflakes = database.GetQuestItem(GameDatabase.Model.ItemId<GameDatabase.DataModel.QuestItem>.Create(25)); // TODO: add ID to settings
-            if (snowflakes != null) _snowflakesColor = snowflakes.Color;
+            if (snowflakes != null) _snowflakesColor = snowflakes.Color.ToUnity();
         }
 
         [System.Serializable]
