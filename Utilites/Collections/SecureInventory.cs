@@ -12,6 +12,19 @@ namespace Utilites.Collections
         public bool IsDirty { get; set; }
         public IReadOnlyCollection<T> Items => _indices.Keys;
 
+        public IEnumerable<InventoryItem<T>> AvailableItems
+        {
+            get
+            {
+                foreach (var item in _indices)
+                {
+                    var quantity = _quantities[item.Value] ^ _mask;
+                    if (quantity > 0)
+                        yield return new InventoryItem<T>(item.Key, quantity);
+                }
+            }
+        }
+
         public int GetQuantity(T item) => _indices.TryGetValue(item, out var index) ? _quantities[index] ^ _mask : 0;
 
         public void Add(T item, int quantity = 1)

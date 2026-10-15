@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace Utilites.Collections
 {
@@ -8,6 +9,7 @@ namespace Utilites.Collections
 
         public bool IsDirty { get; set; }
         public IReadOnlyCollection<T> Items => _items.Keys;
+        public IEnumerable<InventoryItem<T>> AvailableItems => _items.Where(IsAvailable).Select(InventoryItem<T>.Create);
 
         public int GetQuantity(T item) => _items.TryGetValue(item, out var quantity) ? quantity : 0;
 
@@ -52,5 +54,7 @@ namespace Utilites.Collections
         {
             IsDirty = true;
         }
+
+        private static bool IsAvailable(KeyValuePair<T, int> item) => item.Value > 0;
     }
 }
