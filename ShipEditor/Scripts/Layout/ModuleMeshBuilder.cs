@@ -24,7 +24,7 @@ namespace ShipEditor
 		public void AddComponent(int x, int y, GameDatabase.DataModel.Component component)
 		{
 			var layout = component.Layout;
-			var color = (Color)component.Color;
+			var color = component.Color.ToUnity();
 
 			var sprite = _resourceLocator.GetSprite(component.Icon);
 			var spriteRect = SpriteRect.Create(sprite);

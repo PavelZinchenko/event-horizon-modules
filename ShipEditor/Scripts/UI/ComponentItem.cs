@@ -90,7 +90,7 @@ namespace ShipEditor.UI
 		    _name.color = UiTheme.Current.GetQualityColor(info.ItemQuality);
 
 			_icon.sprite = _resourceLocator.GetSprite(info.Data.Icon);
-			_icon.color = info.Data.Color;
+			_icon.color = info.Data.Color.ToUnity();
 
 		    var modification = component.Modification ?? EmptyModification.Instance;
 		    _modification.gameObject.SetActive(!string.IsNullOrEmpty(_modification.text = modification.GetDescription(_localization)));

@@ -4,6 +4,7 @@
     "references": [
         "AppConfiguration",
         "CommonComponents",
+        "CommonComponents.Unity",
         "ServicesFacade",
         "Unity.InputSystem",
         "Zenject",

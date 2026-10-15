@@ -3,6 +3,7 @@
     "rootNamespace": "ShipEditor",
     "references": [
         "CommonComponents",
+        "CommonComponents.Unity",
         "Database",
         "Zenject",
         "ServicesFacade",
