@@ -28,7 +28,7 @@ namespace ShipEditor.UI
                 _icon.rectTransform.localScale = Vector3.one;
             }
 
-            _icon.color = ship.ColorScheme.HsvColor;
+            _icon.color = ship.ColorScheme.HsvColor.ToUnity();
 
 			_name.text = localization.GetString(ship.Name);
 			_classText.text = ship.Model.SizeClass.ToString(localization);

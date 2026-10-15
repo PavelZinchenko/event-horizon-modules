@@ -2,6 +2,7 @@
     "name": "Gui",
     "rootNamespace": "Gui",
     "references": [
+        "Localization.Abstractions",
         "AppConfiguration",
         "CommonComponents",
         "CommonComponents.Unity",

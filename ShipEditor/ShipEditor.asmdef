@@ -2,6 +2,7 @@
     "name": "ShipEditor",
     "rootNamespace": "ShipEditor",
     "references": [
+        "Localization.Abstractions",
         "CommonComponents",
         "CommonComponents.Unity",
         "Database",
