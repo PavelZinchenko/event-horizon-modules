@@ -12,16 +12,20 @@ namespace CombatSimulation.Physics
         // Broad-phase grid cell. About the diameter of a normal ship.
         public float CellSize = 2f;
 
+        // Substeps, contact hertz and push speed are tuned for drone crowds at the database thrust caps
+        // (owner decision 2026-10-17, crowd sweep of 40 start positions). Box2D v3 defaults: 4, 30, 3.
+
         // Solver substeps per step.
-        public int Substeps = 4;
+        public int Substeps = 8;
 
         // Contact stiffness (Box2D v3: contactHertz, contactDampingRatio).
-        // The solver caps the hertz at a quarter of the substep rate.
-        public float ContactHertz = 30f;
+        // The solver caps the hertz at a quarter of the substep rate: 100 Hz is the cap for 8 substeps at 50 steps per second.
+        // Fewer substeps therefore also make the contacts softer.
+        public float ContactHertz = 100f;
         public float DampingRatio = 10f;
 
         // Largest speed at which the solver pushes overlapping shapes apart (Box2D v3: contactSpeed).
-        public float PushMaxVelocity = 3f;
+        public float PushMaxVelocity = 5f;
 
         // Allowed overlap. Contacts closer than this count as touching.
         public float LinearSlop = 0.005f;
