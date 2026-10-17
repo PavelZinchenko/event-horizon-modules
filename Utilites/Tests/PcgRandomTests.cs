@@ -53,7 +53,7 @@ namespace Utilites.Tests
                     maxError = diff;
             }
 
-            UnityEngine.Debug.Log($"maxError = {maxError}/{tolerance}");
+            TestContext.WriteLine($"maxError = {maxError}/{tolerance}");
             Assert.LessOrEqual(maxError, tolerance);
         }
 
