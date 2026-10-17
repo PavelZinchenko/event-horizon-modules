@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Collections.Generic;
 using ShipEditor.Context;
@@ -248,6 +248,7 @@ namespace ShipEditor.Model
 			RemoveAllComopnents(_layout[ShipElementType.Ship]);
 			RemoveAllComopnents(_layout[ShipElementType.SatelliteL]);
 			RemoveAllComopnents(_layout[ShipElementType.SatelliteR]);
+			SaveShip(_ship);
 			_events.OnMultipleComponentsChanged();
 		}
 
