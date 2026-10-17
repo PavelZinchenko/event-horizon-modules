@@ -1,0 +1,16 @@
+{
+    "name": "CombatSimulation.Physics",
+    "rootNamespace": "CombatSimulation.Physics",
+    "references": [
+        "Utilites"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}
