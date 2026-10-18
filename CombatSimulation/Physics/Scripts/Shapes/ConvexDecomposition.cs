@@ -16,6 +16,7 @@ namespace CombatSimulation.Physics
     //    in half.
     // 3. Hertel–Mehlhorn merge: remove a cut between two pieces while the union stays convex and within
     //    Polygon.MaxVertices, largest union first.
+    // 4. Outline data on each part (AttachOutline): the cut edges and the outline normals at its vertices.
     //
     // Plain arithmetic in a fixed order, no hashing and no trigonometry, so the same outline gives the same
     // parts on every run of the same build. Allocates; for loading, not for the step.
@@ -45,8 +46,99 @@ namespace CombatSimulation.Physics
             Split(points, pieces, 0);
             Merge(pieces);
 
+            var first = parts.Count;
             foreach (var piece in pieces)
                 parts.Add(Polygon.FromPoints(piece));
+            Attach(parts, first, points);
+        }
+
+        // Replaces each part with a copy that knows its cut edges and the outline normals at its vertices
+        // (Polygon.CutEdges). The parts must cover the outline exactly, with every vertex on the outline or on a cut.
+        // Decompose does this itself; call it for parts made by hand. A part with no cut edge stays as it is.
+        public static void AttachOutline(List<Polygon> parts, IReadOnlyList<Vec2> outline)
+        {
+            if (parts == null) throw new ArgumentNullException(nameof(parts));
+            if (outline == null) throw new ArgumentNullException(nameof(outline));
+
+            var points = Clean(outline);
+            if (points.Count < 3) throw new ArgumentException("Outline needs at least 3 points that are not collinear");
+            if (Area(points) < 0f) points.Reverse();
+            Attach(parts, 0, points);
+        }
+
+        // Matches the parts from index 'first' against a clean counter-clockwise outline, with the weld distance as
+        // tolerance. A part edge is outer when it runs along an outline edge for more than the tolerance; this keeps
+        // an edge outer when it continues a cut in a straight line (the hull drops the vertex between them).
+        private static void Attach(List<Polygon> parts, int first, List<Vec2> outline)
+        {
+            var tolerance = WeldDistance(outline);
+            var n = outline.Count;
+            var normals = new Vec2[n];
+            for (var i = 0; i < n; ++i)
+                normals[i] = Vec2.RightPerp(At(outline, i + 1) - outline[i]).Normalized;
+
+            for (var p = first; p < parts.Count; ++p)
+            {
+                var part = parts[p];
+                var cuts = 0;
+                var normalIn = new Vec2[part.Count];
+                var normalOut = new Vec2[part.Count];
+                for (var i = 0; i < part.Count; ++i)
+                {
+                    var a = part.Vertex(i);
+                    var b = part.Vertex(i + 1 < part.Count ? i + 1 : 0);
+                    if (!RunsAlongOutline(a, b, outline, normals, tolerance)) cuts |= 1 << i;
+                    OutlineNormals(a, outline, normals, tolerance, out normalIn[i], out normalOut[i]);
+                }
+
+                if (cuts != 0) parts[p] = part.WithOutline(cuts, normalIn, normalOut);
+            }
+        }
+
+        private static bool RunsAlongOutline(Vec2 a, Vec2 b, List<Vec2> outline, Vec2[] normals, float tolerance)
+        {
+            for (var j = 0; j < outline.Count; ++j)
+            {
+                var o = outline[j];
+                if (Math.Abs(Vec2.Dot(a - o, normals[j])) > tolerance || Math.Abs(Vec2.Dot(b - o, normals[j])) > tolerance) continue;
+
+                // Both run counter-clockwise, so an outer edge has the direction of its outline edge.
+                var tangent = Vec2.LeftPerp(normals[j]);
+                var ta = Vec2.Dot(a - o, tangent);
+                var tb = Vec2.Dot(b - o, tangent);
+                var length = Vec2.Dot(At(outline, j + 1) - o, tangent);
+                if (tb > ta && Math.Min(tb, length) - Math.Max(ta, 0f) > tolerance) return true;
+            }
+
+            return false;
+        }
+
+        // Normals of the outline edges at a point: before and after an outline vertex, or both the normal of the
+        // outline edge that holds the point. Zero for a point off the outline.
+        private static void OutlineNormals(Vec2 point, List<Vec2> outline, Vec2[] normals, float tolerance, out Vec2 normalIn, out Vec2 normalOut)
+        {
+            var n = outline.Count;
+            for (var j = 0; j < n; ++j)
+            {
+                if (Vec2.DistanceSquared(point, outline[j]) > tolerance * tolerance) continue;
+                normalIn = normals[(j + n - 1) % n];
+                normalOut = normals[j];
+                return;
+            }
+
+            for (var j = 0; j < n; ++j)
+            {
+                var o = outline[j];
+                var tangent = Vec2.LeftPerp(normals[j]);
+                var t = Vec2.Dot(point - o, tangent);
+                if (Math.Abs(Vec2.Dot(point - o, normals[j])) > tolerance || t < 0f || t > Vec2.Dot(At(outline, j + 1) - o, tangent)) continue;
+                normalIn = normals[j];
+                normalOut = normals[j];
+                return;
+            }
+
+            normalIn = default;
+            normalOut = default;
         }
 
         // Area of a simple outline by the shoelace formula; positive for counter-clockwise.
@@ -67,16 +159,7 @@ namespace CombatSimulation.Physics
         {
             if (outline.Count == 0) return new List<Vec2>();
 
-            var lower = outline[0];
-            var upper = outline[0];
-            foreach (var point in outline)
-            {
-                lower = Vec2.Min(lower, point);
-                upper = Vec2.Max(upper, point);
-            }
-
-            var size = Math.Max(upper.X - lower.X, upper.Y - lower.Y);
-            var weld = Math.Max(WeldFraction * size, 2f * Polygon.MinEdgeLength);
+            var weld = WeldDistance(outline);
             var weldSquared = weld * weld;
 
             var points = new List<Vec2>(outline.Count);
@@ -107,6 +190,21 @@ namespace CombatSimulation.Physics
             }
 
             return points;
+        }
+
+        // Points closer than this are welded: a fraction of the outline size, at least twice the shortest polygon edge.
+        private static float WeldDistance(IReadOnlyList<Vec2> outline)
+        {
+            var lower = outline[0];
+            var upper = outline[0];
+            foreach (var point in outline)
+            {
+                lower = Vec2.Min(lower, point);
+                upper = Vec2.Max(upper, point);
+            }
+
+            var size = Math.Max(upper.X - lower.X, upper.Y - lower.Y);
+            return Math.Max(WeldFraction * size, 2f * Polygon.MinEdgeLength);
         }
 
         private static void CheckSimple(List<Vec2> points)

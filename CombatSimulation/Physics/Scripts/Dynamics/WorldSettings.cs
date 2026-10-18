@@ -35,6 +35,12 @@ namespace CombatSimulation.Physics
 
         public bool WarmStarting = true;
 
+        // Whole-body depenetration starts when a contact stays deeper than this fraction of the smaller shape's
+        // bound radius for more than SeparationSteps steps. The values are the fast-hit limit (25%, gone within
+        // 10 steps), so a hit that passes that limit never starts it.
+        public float SeparationDepth = 0.25f;
+        public int SeparationSteps = 10;
+
         // Fixed part of the speculative distance. The motion of the two bodies in the step is added to it.
         public float SpeculativeDistance => 4f * LinearSlop;
 
@@ -48,10 +54,12 @@ namespace CombatSimulation.Physics
             if (!(ContactHertz > 0f) || !(DampingRatio >= 0f)) throw new ArgumentException("Invalid contact softness");
             if (!(PushMaxVelocity > 0f)) throw new ArgumentException("Push velocity must be positive");
             if (!(LinearSlop > 0f)) throw new ArgumentException("Linear slop must be positive");
+            if (!(SeparationDepth > 0f) || SeparationSteps < 1) throw new ArgumentException("Invalid separation trigger");
         }
 
         public override string ToString() =>
             $"Torus {Width}x{Height}, cell {CellSize}, substeps {Substeps}, contact {ContactHertz} Hz / damping {DampingRatio}, " +
-            $"push {PushMaxVelocity}, slop {LinearSlop}, restitution threshold {RestitutionThreshold}, warm starting {WarmStarting}";
+            $"push {PushMaxVelocity}, slop {LinearSlop}, restitution threshold {RestitutionThreshold}, warm starting {WarmStarting}, " +
+            $"separation {SeparationDepth} for {SeparationSteps} steps";
     }
 }

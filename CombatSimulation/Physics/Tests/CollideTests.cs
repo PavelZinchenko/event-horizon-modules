@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using static CombatSimulation.Physics.Tests.GeometryTests;
 
@@ -229,6 +230,163 @@ namespace CombatSimulation.Physics.Tests
             Assert.IsTrue(m.Normal.IsFinite);
             Assert.AreEqual(1f, m.Normal.Length, 1e-5f);
             Assert.Less(m.MinSeparation, -3f);
+        }
+
+        [Test]
+        public void BoxApproachingAStraightCutDoesNotCatch()
+        {
+            var plain = StraightBar();
+            var parts = Attached(plain);
+            var probe = Polygon.Box(0.25f, 0.25f);
+
+            // The probe is on the right part, 0.01 past the cut, and sinks 0.004 into the top face.
+            Collide.Polygons(plain[0], Pose(0f, 0f), probe, Pose(0.26f, 0.746f), 0.1f, out var caught);
+            AssertVec(new Vec2(1f, 0f), caught.Normal);
+
+            Collide.Polygons(parts[0], Pose(0f, 0f), probe, Pose(0.26f, 0.746f), 0.1f, out var m);
+            Assert.AreEqual(0, m.PointCount);
+        }
+
+        [Test]
+        public void BoxApartAcrossACutGetsItsPointFromTheNeighbour()
+        {
+            var parts = Attached(StraightBar());
+            var probe = Polygon.Box(0.25f, 0.25f);
+
+            // The probe is 0.1 past the cut and 0.05 above the top face: the cut gives the larger gap, and the true
+            // direction from the left part leaves its top corner sideways. The right part holds the contact.
+            Collide.Polygons(parts[0], Pose(0f, 0f), probe, Pose(0.35f, 0.8f), 0.2f, out var left);
+            Assert.AreEqual(0, left.PointCount);
+
+            Collide.Polygons(parts[1], Pose(0f, 0f), probe, Pose(0.35f, 0.8f), 0.2f, out var right);
+            Assert.Greater(right.PointCount, 0);
+            AssertVec(new Vec2(0f, 1f), right.Normal);
+            Assert.AreEqual(0.05f, right.MinSeparation, 1e-5f);
+        }
+
+        [Test]
+        public void BoxOverAStraightCutGetsTheTopFace()
+        {
+            var plain = StraightBar();
+            var parts = Attached(plain);
+            var probe = Polygon.Box(0.25f, 0.25f);
+
+            // The probe reaches 0.002 over the cut into the left part, less than it sinks into the top face.
+            Collide.Polygons(plain[0], Pose(0f, 0f), probe, Pose(0.248f, 0.746f), 0.1f, out var caught);
+            AssertVec(new Vec2(1f, 0f), caught.Normal);
+
+            Collide.Polygons(parts[0], Pose(0f, 0f), probe, Pose(0.248f, 0.746f), 0.1f, out var m);
+            Assert.Greater(m.PointCount, 0);
+            AssertVec(new Vec2(0f, 1f), m.Normal);
+            Assert.AreEqual(-0.004f, m.MinSeparation, 1e-5f);
+        }
+
+        [Test]
+        public void BoxApproachingASlantedCutDoesNotCatch()
+        {
+            // Bar [-2, 2] × [-0.5, 0.5], cut from (0, -0.5) to (1, 0.5).
+            var plain = new[]
+            {
+                Polygon.FromPoints(new[] { new Vec2(-2f, -0.5f), new Vec2(0f, -0.5f), new Vec2(1f, 0.5f), new Vec2(-2f, 0.5f) }),
+                Polygon.FromPoints(new[] { new Vec2(0f, -0.5f), new Vec2(2f, -0.5f), new Vec2(2f, 0.5f), new Vec2(1f, 0.5f) }),
+            };
+            var parts = Attached(plain);
+            var probe = Polygon.Box(0.25f, 0.25f);
+
+            // The probe slides right on the left part; its corner is 0.01 before the seam at (1, 0.5).
+            Collide.Polygons(plain[1], Pose(0f, 0f), probe, Pose(0.74f, 0.746f), 0.1f, out var caught);
+            AssertVec(new Vec2(-0.70710678f, 0.70710678f), caught.Normal, 1e-5f);
+
+            Collide.Polygons(parts[1], Pose(0f, 0f), probe, Pose(0.74f, 0.746f), 0.1f, out var m);
+            Assert.AreEqual(0, m.PointCount);
+
+            Collide.Polygons(parts[0], Pose(0f, 0f), probe, Pose(0.74f, 0.746f), 0.1f, out var top);
+            AssertVec(new Vec2(0f, 1f), top.Normal);
+        }
+
+        [Test]
+        public void CircleAtAStraightSeamGetsTheFaceNormal()
+        {
+            var plain = StraightBar();
+            var parts = Attached(plain);
+            var circle = new Circle(Vec2.Zero, 0.25f);
+
+            // The centre is 0.05 before the right part, so the corner of that part is its nearest feature.
+            Collide.PolygonAndCircle(plain[1], Pose(0f, 0f), circle, Pose(-0.05f, 0.746f), 0.1f, out var caught);
+            Assert.Less(caught.Normal.X, -0.1f);
+
+            Collide.PolygonAndCircle(parts[1], Pose(0f, 0f), circle, Pose(-0.05f, 0.746f), 0.1f, out var m);
+            Assert.AreEqual(1, m.PointCount);
+            AssertVec(new Vec2(0f, 1f), m.Normal);
+            Assert.AreEqual(-0.004f, m.Point0.Separation, 1e-5f);
+        }
+
+        [Test]
+        public void CircleBelowANotchIsPushedOutThroughTheWalls()
+        {
+            // A notch at (0, 0) between two walls; the cut runs straight down from it.
+            var outline = new[] { new Vec2(-2f, -1f), new Vec2(2f, -1f), new Vec2(2f, 1f), new Vec2(0f, 0f), new Vec2(-2f, 1f) };
+            var plain = new[]
+            {
+                Polygon.FromPoints(new[] { new Vec2(-2f, -1f), new Vec2(0f, -1f), new Vec2(0f, 0f), new Vec2(-2f, 1f) }),
+                Polygon.FromPoints(new[] { new Vec2(0f, -1f), new Vec2(2f, -1f), new Vec2(2f, 1f), new Vec2(0f, 0f) }),
+            };
+            var parts = new List<Polygon>(plain);
+            ConvexDecomposition.AttachOutline(parts, outline);
+            var circle = new Circle(Vec2.Zero, 0.1f);
+            var root5 = (float)Math.Sqrt(5.0);
+
+            Collide.PolygonAndCircle(plain[0], Pose(0f, 0f), circle, Pose(0f, -0.2f), 0f, out var caught);
+            AssertVec(new Vec2(1f, 0f), caught.Normal);
+
+            Collide.PolygonAndCircle(parts[0], Pose(0f, 0f), circle, Pose(0f, -0.2f), 0f, out var left);
+            Collide.PolygonAndCircle(parts[1], Pose(0f, 0f), circle, Pose(0f, -0.2f), 0f, out var right);
+            AssertVec(new Vec2(1f / root5, 2f / root5), left.Normal, 1e-5f);
+            AssertVec(new Vec2(-1f / root5, 2f / root5), right.Normal, 1e-5f);
+            Assert.AreEqual(-0.4f / root5 - 0.1f, left.Point0.Separation, 1e-5f);
+            Assert.AreEqual(-0.4f / root5 - 0.1f, right.Point0.Separation, 1e-5f);
+        }
+
+        [Test]
+        public void PartWithOnlyCutsPushesOutAlongAnOutlineNormal()
+        {
+            // Six-pointed star: the inner hexagon touches the outline only at its corners.
+            var outline = new Vec2[12];
+            for (var i = 0; i < 12; ++i)
+            {
+                var angle = Math.PI * i / 6.0;
+                var radius = i % 2 == 0 ? 2.0 : 2.0 / Math.Sqrt(3.0);
+                outline[i] = new Vec2((float)(radius * Math.Cos(angle)), (float)(radius * Math.Sin(angle)));
+            }
+
+            var parts = new List<Polygon> { Polygon.FromPoints(new[] { outline[1], outline[3], outline[5], outline[7], outline[9], outline[11] }) };
+            for (var i = 0; i < 12; i += 2)
+                parts.Add(Polygon.FromPoints(new[] { outline[(i + 11) % 12], outline[i], outline[i + 1] }));
+            ConvexDecomposition.AttachOutline(parts, outline);
+
+            var hexagon = parts[0];
+            Assert.AreEqual(0b111111, hexagon.CutEdges);
+
+            Collide.PolygonAndCircle(hexagon, Pose(0f, 0f), new Circle(Vec2.Zero, 0.2f), Pose(0.1f, 0.05f), 0f, out var m);
+            Assert.AreEqual(1, m.PointCount);
+            var outlineNormal = false;
+            for (var i = 0; i < hexagon.Count; ++i)
+                outlineNormal |= Vec2.Dot(m.Normal, hexagon.OutlineNormalIn(i)) > 0.9999f || Vec2.Dot(m.Normal, hexagon.OutlineNormalOut(i)) > 0.9999f;
+            Assert.IsTrue(outlineNormal);
+        }
+
+        // Bar [-2, 2] × [-0.5, 0.5] made of two boxes with a cut at x = 0.
+        private static Polygon[] StraightBar() => new[]
+        {
+            Polygon.Box(1f, 0.5f, new Vec2(-1f, 0f), 0f),
+            Polygon.Box(1f, 0.5f, new Vec2(1f, 0f), 0f),
+        };
+
+        private static List<Polygon> Attached(Polygon[] bar)
+        {
+            var parts = new List<Polygon>(bar);
+            ConvexDecomposition.AttachOutline(parts, new[] { new Vec2(-2f, -0.5f), new Vec2(2f, -0.5f), new Vec2(2f, 0.5f), new Vec2(-2f, 0.5f) });
+            return parts;
         }
 
         private static Pose Pose(float x, float y) => new Pose(new Vec2(x, y), Rot.Identity);

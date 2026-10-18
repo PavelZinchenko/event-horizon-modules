@@ -21,6 +21,15 @@ namespace CombatSimulation.Physics
         internal long Key;
         internal int IndexA;
         internal int IndexB;
+
+        // Consecutive steps deeper than the separation trigger (WorldSettings.SeparationDepth).
+        internal int DeepSteps;
+
+        // The body pair is in whole-body depenetration: the solver skips this contact.
+        internal bool Suppressed;
+
+        // Time-of-impact check of a speculative contact in this step (PhysicsWorld.CheckSpeculativeContacts).
+        internal SpeculativeState SpeculativeState;
     }
 
     // Start or end of touching between two shapes.

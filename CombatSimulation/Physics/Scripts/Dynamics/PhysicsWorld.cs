@@ -67,6 +67,7 @@ namespace CombatSimulation.Physics
             }
 
             _contactCount = write;
+            RemoveSeparations(index);
 
             for (var s = _bodies[index].FirstShape; s >= 0; s = _shapes[s].NextInBody)
             {
@@ -232,7 +233,9 @@ namespace CombatSimulation.Physics
             UpdateMargins(dt);
             var pairCount = FindPairs();
             UpdateContacts(pairCount);
-            _solver.Solve(_bodies, _bodyCount, _contacts, _contactCount, dt, Settings);
+            UpdateSeparations();
+            CheckSpeculativeContacts(dt);
+            _solver.Solve(_bodies, _bodyCount, _contacts, _contactCount, _separations, _separationCount, dt, Settings);
             UpdateTouching();
             FinalizeBodies();
         }
@@ -347,6 +350,9 @@ namespace CombatSimulation.Physics
 
             var old = contact.Manifold;
             Shape.Collide(shapeA, xfA, shapeB, xfB, maxDistance, out contact.Manifold);
+
+            var deep = Settings.SeparationDepth * Math.Min(shapeA.BoundRadius, shapeB.BoundRadius);
+            contact.DeepSteps = contact.Manifold.MinSeparation < -deep ? contact.DeepSteps + 1 : 0;
 
             var centerA = bodyA.Center;
             var centerB = xfB.TransformPoint(bodyB.LocalCenter);

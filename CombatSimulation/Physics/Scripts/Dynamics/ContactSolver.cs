@@ -7,9 +7,14 @@ namespace CombatSimulation.Physics
     //
     // Per step: prepare once, then for each substep integrate velocities, warm start, solve with bias,
     // integrate positions and relax without bias. Restitution runs once after the substeps.
+    //
+    // A body pair in whole-body depenetration (Separation) has its contacts suppressed. It gets one constraint
+    // instead: the normal is the separation direction, the anchors are the centres of mass, friction and
+    // restitution are 0, and the separation is minus the remaining clearance.
     internal sealed class ContactSolver
     {
-        public void Solve(Body[] bodies, int bodyCount, Contact[] contacts, int contactCount, float dt, WorldSettings settings)
+        public void Solve(Body[] bodies, int bodyCount, Contact[] contacts, int contactCount, Separation[] separations, int separationCount,
+            float dt, WorldSettings settings)
         {
             var substeps = settings.Substeps;
             var h = dt / substeps;
@@ -26,6 +31,7 @@ namespace CombatSimulation.Physics
             }
 
             Prepare(bodies, contacts, contactCount, contactSoftness, staticSoftness, settings.WarmStarting);
+            PrepareSeparations(bodies, separations, separationCount, contactSoftness, staticSoftness, settings.WarmStarting);
 
             for (var i = 0; i < substeps; ++i)
             {
@@ -37,7 +43,7 @@ namespace CombatSimulation.Physics
             }
 
             ApplyRestitution(bodies, settings.RestitutionThreshold);
-            StoreImpulses(contacts);
+            StoreImpulses(contacts, separations);
         }
 
         private void Prepare(Body[] bodies, Contact[] contacts, int contactCount, Softness contactSoftness, Softness staticSoftness, bool warmStarting)
@@ -48,7 +54,7 @@ namespace CombatSimulation.Physics
             for (var i = 0; i < contactCount; ++i)
             {
                 ref var contact = ref contacts[i];
-                if (contact.Manifold.PointCount == 0) continue;
+                if (contact.Manifold.PointCount == 0 || contact.Suppressed) continue;
 
                 ref var bodyA = ref bodies[contact.IndexA];
                 ref var bodyB = ref bodies[contact.IndexB];
@@ -98,6 +104,43 @@ namespace CombatSimulation.Physics
                     var dv = bodyB.V + Vec2.Cross(bodyB.W, cp.AnchorB) - bodyA.V - Vec2.Cross(bodyA.W, cp.AnchorA);
                     cp.RelativeVelocity = Vec2.Dot(normal, dv);
                 }
+            }
+        }
+
+        // One constraint per separating body pair. ContactIndex is -(separation index + 1).
+        private void PrepareSeparations(Body[] bodies, Separation[] separations, int separationCount, Softness contactSoftness, Softness staticSoftness, bool warmStarting)
+        {
+            if (_constraints.Length < _constraintCount + separationCount)
+                Array.Resize(ref _constraints, Math.Max(_constraintCount + separationCount, _constraints.Length * 2));
+
+            for (var i = 0; i < separationCount; ++i)
+            {
+                ref var separation = ref separations[i];
+                ref var bodyA = ref bodies[separation.Reference];
+                ref var bodyB = ref bodies[separation.Moving];
+                ref var constraint = ref _constraints[_constraintCount++];
+
+                constraint.ContactIndex = -(i + 1);
+                constraint.BodyA = separation.Reference;
+                constraint.BodyB = separation.Moving;
+                constraint.Normal = separation.Normal;
+                constraint.Friction = 0f;
+                constraint.Restitution = 0f;
+                constraint.PointCount = 1;
+                constraint.Softness = bodyA.InvMass == 0f || bodyB.InvMass == 0f ? staticSoftness : contactSoftness;
+
+                ref var cp = ref constraint.Point0;
+                cp.AnchorA = Vec2.Zero;
+                cp.AnchorB = Vec2.Zero;
+                cp.NormalImpulse = warmStarting ? separation.NormalImpulse : 0f;
+                cp.TangentImpulse = 0f;
+                cp.MaxNormalImpulse = 0f;
+                cp.BaseSeparation = -separation.Clearance;
+
+                var k = bodyA.InvMass + bodyB.InvMass;
+                cp.NormalMass = k > 0f ? 1f / k : 0f;
+                cp.TangentMass = cp.NormalMass;
+                cp.RelativeVelocity = Vec2.Dot(separation.Normal, bodyB.V - bodyA.V);
             }
         }
 
@@ -280,11 +323,17 @@ namespace CombatSimulation.Physics
             }
         }
 
-        private void StoreImpulses(Contact[] contacts)
+        private void StoreImpulses(Contact[] contacts, Separation[] separations)
         {
             for (var i = 0; i < _constraintCount; ++i)
             {
                 ref var constraint = ref _constraints[i];
+                if (constraint.ContactIndex < 0)
+                {
+                    separations[-constraint.ContactIndex - 1].NormalImpulse = constraint.Point0.NormalImpulse;
+                    continue;
+                }
+
                 ref var manifold = ref contacts[constraint.ContactIndex].Manifold;
                 for (var j = 0; j < constraint.PointCount; ++j)
                 {

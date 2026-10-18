@@ -24,6 +24,18 @@ namespace CombatSimulation.Physics
         public Vec2 Vertex(int index) => _vertices[index];
         public Vec2 Normal(int index) => _normals[index];
 
+        // Outline data of a part of a concave outline (ConvexDecomposition.AttachOutline). Zero for other polygons.
+        // Bit i is set when edge i (vertex i to vertex i + 1) is a cut: it lies inside the outline, between two parts.
+        // A contact never takes its normal from a cut (Collide, "Outline parts").
+        public int CutEdges { get; }
+
+        public bool IsCut(int edge) => (CutEdges & (1 << edge)) != 0;
+
+        // Normals of the outline edges before and after vertex i. At a vertex inside an outline edge both are that
+        // edge's normal. Zero for a vertex that is not on the outline, and for a polygon without cut edges.
+        public Vec2 OutlineNormalIn(int index) => _outlineIn != null ? _outlineIn[index] : default;
+        public Vec2 OutlineNormalOut(int index) => _outlineOut != null ? _outlineOut[index] : default;
+
         // Builds the convex hull of the points. Throws for fewer than 3 hull points,
         // more than MaxVertices hull points, or a degenerate hull.
         public static Polygon FromPoints(IReadOnlyList<Vec2> points)
@@ -137,6 +149,50 @@ namespace CombatSimulation.Physics
             BoundRadius = bound + radius;
         }
 
+        // Copy with outline data. Load time only.
+        internal Polygon WithOutline(int cutEdges, Vec2[] normalIn, Vec2[] normalOut) => new Polygon(this, cutEdges, normalIn, normalOut);
+
+        internal bool HasOutline(int vertex) => _arcCosine[vertex] <= 1f;
+
+        // True when a unit direction in the local frame lies in the short arc between the outline normals of the vertex.
+        internal bool InOutlineArc(int vertex, Vec2 direction) => Vec2.Dot(direction, _arcMiddle[vertex]) >= _arcCosine[vertex] - ArcTolerance;
+
+        // The direction when it lies in the outline arc of the vertex, else the nearer end of the arc.
+        internal Vec2 ClampToOutlineArc(int vertex, Vec2 direction)
+        {
+            if (InOutlineArc(vertex, direction)) return direction;
+            return Vec2.Dot(direction, _outlineIn[vertex]) >= Vec2.Dot(direction, _outlineOut[vertex]) ? _outlineIn[vertex] : _outlineOut[vertex];
+        }
+
+        private Polygon(Polygon source, int cutEdges, Vec2[] normalIn, Vec2[] normalOut)
+        {
+            Count = source.Count;
+            Centroid = source.Centroid;
+            Radius = source.Radius;
+            BoundRadius = source.BoundRadius;
+            _vertices = source._vertices;
+            _normals = source._normals;
+
+            CutEdges = cutEdges;
+            _outlineIn = normalIn;
+            _outlineOut = normalOut;
+            _arcMiddle = new Vec2[Count];
+            _arcCosine = new float[Count];
+            for (var i = 0; i < Count; ++i)
+            {
+                // A vertex off the outline, or a fold back that has no arc, never matches.
+                var middle = normalIn[i] + normalOut[i];
+                if (middle.LengthSquared < ArcTolerance)
+                {
+                    _arcCosine[i] = 2f;
+                    continue;
+                }
+
+                _arcMiddle[i] = middle.Normalized;
+                _arcCosine[i] = Vec2.Dot(normalIn[i], _arcMiddle[i]);
+            }
+        }
+
         // Andrew's monotone chain. Removes collinear points. Counter-clockwise result.
         private static List<Vec2> ConvexHull(IReadOnlyList<Vec2> input)
         {
@@ -167,7 +223,14 @@ namespace CombatSimulation.Physics
 
         internal const float MinEdgeLength = 0.001f;
 
+        // Cosine margin of the outline arc test, about 0.8° at a straight seam.
+        internal const float ArcTolerance = 1e-4f;
+
         private readonly Vec2[] _vertices;
         private readonly Vec2[] _normals;
+        private readonly Vec2[] _outlineIn;
+        private readonly Vec2[] _outlineOut;
+        private readonly Vec2[] _arcMiddle;
+        private readonly float[] _arcCosine;
     }
 }

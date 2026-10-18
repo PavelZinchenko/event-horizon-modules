@@ -23,6 +23,45 @@ namespace CombatSimulation.Physics.Tests
         }
 
         [Test]
+        public void PartsKnowTheirCutAndOutlineNormals()
+        {
+            var parts = ConvexDecomposition.Decompose(LShape);
+
+            // One cut, shared by both parts.
+            Assert.AreEqual(1, CountBits(parts[0].CutEdges));
+            Assert.AreEqual(1, CountBits(parts[1].CutEdges));
+
+            // The reflex vertex (1, 1) lies between the outline edges with normals (0, 1) and (1, 0).
+            var found = false;
+            foreach (var part in parts)
+            for (var i = 0; i < part.Count; ++i)
+            {
+                if (!part.Vertex(i).Equals(new Vec2(1f, 1f))) continue;
+                AssertVec(new Vec2(0f, 1f), part.OutlineNormalIn(i));
+                AssertVec(new Vec2(1f, 0f), part.OutlineNormalOut(i));
+                found = true;
+            }
+
+            Assert.IsTrue(found);
+        }
+
+        [Test]
+        public void ConvexOutlineGivesAPartWithoutCuts()
+        {
+            var parts = ConvexDecomposition.Decompose(new[] { new Vec2(0f, 0f), new Vec2(2f, 0f), new Vec2(2f, 1f), new Vec2(0f, 1f) });
+
+            Assert.AreEqual(1, parts.Count);
+            Assert.AreEqual(0, parts[0].CutEdges);
+        }
+
+        private static int CountBits(int value)
+        {
+            var count = 0;
+            for (; value != 0; value &= value - 1) ++count;
+            return count;
+        }
+
+        [Test]
         public void ClockwiseOutlineGivesTheSameArea()
         {
             var parts = ConvexDecomposition.Decompose(LShape.Reverse().ToArray());

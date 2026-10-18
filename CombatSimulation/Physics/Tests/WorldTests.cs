@@ -203,6 +203,49 @@ namespace CombatSimulation.Physics.Tests
         }
 
         [Test]
+        public void FastPassCloseByKeepsItsSpeed()
+        {
+            var world = new PhysicsWorld(new WorldSettings());
+            var target = CreateCircle(world, new Vec2(100f, 100f), 2f, 12.6f);
+            var mover = CreateCircle(world, new Vec2(94f, 102.55f), 0.5f, 0.8f);
+            var velocity = new Vec2(140f, 0f);
+            world.SetLinearVelocity(mover, velocity);
+
+            var dropped = 0;
+            for (var step = 0; step < 6; ++step)
+            {
+                world.Step(Dt);
+                dropped += world.DroppedSpeculativeCount;
+                Assert.AreEqual(0, world.BeginEvents.Length, "The pass must not touch");
+            }
+
+            Assert.Greater(dropped, 0, "The speculative contact would stop the pass");
+            AssertVec(velocity, world.GetLinearVelocity(mover));
+            AssertVec(Vec2.Zero, world.GetLinearVelocity(target));
+        }
+
+        [Test]
+        public void FastHeadOnHitDoesNotTunnel()
+        {
+            var world = new PhysicsWorld(new WorldSettings());
+            var target = CreateCircle(world, new Vec2(100f, 100f), 2f, 12.6f);
+            var mover = CreateCircle(world, new Vec2(94f, 100.3f), 0.5f, 0.8f);
+            world.SetLinearVelocity(mover, new Vec2(140f, 0f));
+
+            var began = false;
+            for (var step = 0; step < 6; ++step)
+            {
+                world.Step(Dt);
+                began |= world.BeginEvents.Length > 0;
+                var gap = (world.GetPosition(mover) - world.GetPosition(target)).Length - 2.5f;
+                Assert.Greater(gap, -0.25f * 0.5f, "Penetration above the fast-hit limit");
+            }
+
+            Assert.IsTrue(began);
+            Assert.Less(world.GetPosition(mover).X, 100f, "The mover must not pass through");
+        }
+
+        [Test]
         public void SameInputGivesBitIdenticalResults()
         {
             Assert.AreEqual(RunCrowd(), RunCrowd());
