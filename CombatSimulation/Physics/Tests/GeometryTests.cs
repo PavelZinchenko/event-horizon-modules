@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 
 namespace CombatSimulation.Physics.Tests
@@ -54,6 +55,46 @@ namespace CombatSimulation.Physics.Tests
             Assert.AreEqual(4f, data.Area, 1e-5f);
             AssertVec(new Vec2(3f, -2f), data.Centroid, 1e-5f);
             Assert.AreEqual(4f * 8f / 12f + 4f * 13f, data.InertiaAboutOrigin, 1e-3f);
+        }
+
+        [Test]
+        public void CapsuleMassMatchesNumericIntegration()
+        {
+            var capsule = new Capsule(new Vec2(-0.5f, 1f), new Vec2(1.5f, 1f), 0.4f);
+            var data = capsule.ComputeMass();
+
+            // Midpoint rule on a fine grid over the bounding box.
+            const int steps = 1200;
+            double minX = -0.9, maxX = 1.9, minY = 0.6, maxY = 1.4;
+            double dx = (maxX - minX) / steps, dy = (maxY - minY) / steps;
+            double area = 0, inertia = 0;
+            for (var i = 0; i < steps; ++i)
+            for (var j = 0; j < steps; ++j)
+            {
+                var x = minX + (i + 0.5) * dx;
+                var y = minY + (j + 0.5) * dy;
+                var cx = Math.Max(-0.5, Math.Min(1.5, x));
+                if ((x - cx) * (x - cx) + (y - 1) * (y - 1) > 0.16) continue;
+                area += dx * dy;
+                inertia += (x * x + y * y) * dx * dy;
+            }
+
+            Assert.AreEqual(area, data.Area, 1e-3 * area);
+            AssertVec(new Vec2(0.5f, 1f), data.Centroid);
+            Assert.AreEqual(inertia, data.InertiaAboutOrigin, 1e-3 * inertia);
+        }
+
+        [Test]
+        public void CapsuleFromUnitySize()
+        {
+            var vertical = Capsule.FromSize(new Vec2(1f, 0f), 0.4f, 2f, true);
+            AssertVec(new Vec2(1f, -0.8f), vertical.Center1);
+            AssertVec(new Vec2(1f, 0.8f), vertical.Center2);
+            Assert.AreEqual(0.2f, vertical.Radius, 1e-6f);
+
+            var horizontal = Capsule.FromSize(Vec2.Zero, 2f, 0.4f, false);
+            AssertVec(new Vec2(-0.8f, 0f), horizontal.Center1);
+            Assert.AreEqual(0.2f, horizontal.Radius, 1e-6f);
         }
 
         [Test]

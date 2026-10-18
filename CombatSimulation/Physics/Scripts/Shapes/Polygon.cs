@@ -4,7 +4,10 @@ using System.Collections.Generic;
 namespace CombatSimulation.Physics
 {
     // Convex polygon in body-local coordinates, counter-clockwise, at most MaxVertices vertices.
-    // Immutable. Concave outlines are split into convex parts at load (stage P2).
+    // Immutable. Concave outlines are split into convex parts at load (ConvexDecomposition).
+    //
+    // A rounded polygon has a Radius: its surface lies Radius outside the vertex outline. The only rounded
+    // polygon is the core of a Capsule (2 vertices); every other polygon has Radius 0.
     public sealed class Polygon
     {
         public const int MaxVertices = 8;
@@ -12,8 +15,11 @@ namespace CombatSimulation.Physics
         public int Count { get; }
         public Vec2 Centroid { get; }
 
-        // Distance from the centroid to the farthest vertex.
+        // Rounding radius. Zero except for a capsule core.
         public float Radius { get; }
+
+        // Distance from the centroid to the farthest surface point.
+        public float BoundRadius { get; }
 
         public Vec2 Vertex(int index) => _vertices[index];
         public Vec2 Normal(int index) => _normals[index];
@@ -63,8 +69,14 @@ namespace CombatSimulation.Physics
             return new Polygon(vertices);
         }
 
+        // Core of a capsule: the segment c1-c2, rounded by the radius. The two edges run both ways along it.
+        internal static Polygon Capsule(Vec2 center1, Vec2 center2, float radius) => new Polygon(new[] { center1, center2 }, radius);
+
+        // Mass of the vertex outline. Not valid for a capsule core (Capsule.ComputeMass).
         public MassData ComputeMass()
         {
+            if (Count < 3) throw new InvalidOperationException("Capsule core has no polygon mass");
+
             // Triangle fan from the first vertex. Adapted from Box2D v3 (MIT, Erin Catto), b2ComputePolygonMass.
             var origin = _vertices[0];
             var center = Vec2.Zero;
@@ -93,9 +105,10 @@ namespace CombatSimulation.Physics
             return new MassData(area, centroid, inertiaAboutOrigin);
         }
 
-        private Polygon(Vec2[] vertices)
+        private Polygon(Vec2[] vertices, float radius = 0f)
         {
             Count = vertices.Length;
+            Radius = radius;
             _vertices = vertices;
             _normals = new Vec2[Count];
 
@@ -108,7 +121,8 @@ namespace CombatSimulation.Physics
                 _normals[i] = Vec2.RightPerp(edge).Normalized;
             }
 
-            for (var i = 0; i < Count; ++i)
+            // A 2-vertex capsule core has no area, so it has no convexity to check.
+            for (var i = 0; Count > 2 && i < Count; ++i)
             {
                 var next = vertices[i + 1 < Count ? i + 1 : 0] - vertices[i];
                 var after = vertices[(i + 2) % Count] - vertices[i];
@@ -116,11 +130,11 @@ namespace CombatSimulation.Physics
                     throw new ArgumentException("Polygon must be convex and counter-clockwise");
             }
 
-            Centroid = ComputeMass().Centroid;
-            var radius = 0f;
+            Centroid = Count > 2 ? ComputeMass().Centroid : Vec2.Lerp(vertices[0], vertices[1], 0.5f);
+            var bound = 0f;
             for (var i = 0; i < Count; ++i)
-                radius = Math.Max(radius, (vertices[i] - Centroid).Length);
-            Radius = radius;
+                bound = Math.Max(bound, (vertices[i] - Centroid).Length);
+            BoundRadius = bound + radius;
         }
 
         // Andrew's monotone chain. Removes collinear points. Counter-clockwise result.
@@ -151,7 +165,7 @@ namespace CombatSimulation.Physics
             return hull;
         }
 
-        private const float MinEdgeLength = 0.001f;
+        internal const float MinEdgeLength = 0.001f;
 
         private readonly Vec2[] _vertices;
         private readonly Vec2[] _normals;

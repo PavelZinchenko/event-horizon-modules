@@ -26,6 +26,9 @@ namespace CombatSimulation.Physics
         // q * r: apply r, then q.
         public static Rot Mul(Rot q, Rot r) => new Rot(q.C * r.C - q.S * r.S, q.S * r.C + q.C * r.S);
 
+        // inverse(q) * r: rotation r seen from frame q.
+        public static Rot InvMul(Rot q, Rot r) => new Rot(q.C * r.C + q.S * r.S, q.C * r.S - q.S * r.C);
+
         // Adds a small angle and normalizes. Adapted from Box2D v3 (MIT, Erin Catto), b2IntegrateRotation.
         public static Rot Integrate(Rot q, float deltaAngle)
         {

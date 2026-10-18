@@ -72,6 +72,7 @@ namespace CombatSimulation.Physics
             {
                 _shapes[s].Alive = false;
                 _shapes[s].Polygon = null;
+                _shapes[s].Capsule = default;
                 PushFree(ref _freeShapes, ref _freeShapeCount, s);
             }
 
@@ -112,7 +113,22 @@ namespace CombatSimulation.Physics
             shape.Polygon = polygon;
             shape.MassData = polygon.ComputeMass();
             shape.LocalBoundCenter = polygon.Centroid;
-            shape.BoundRadius = polygon.Radius;
+            shape.BoundRadius = polygon.BoundRadius;
+            UpdateMass(shape.Body);
+            return new ShapeId(index, shape.Generation);
+        }
+
+        public ShapeId AddCapsule(BodyId body, in Capsule capsule) => AddCapsule(body, capsule, ShapeDef.Default);
+
+        public ShapeId AddCapsule(BodyId body, in Capsule capsule, in ShapeDef def)
+        {
+            var index = AddShape(body, ShapeKind.Capsule, def);
+            ref var shape = ref _shapes[index];
+            shape.Capsule = capsule;
+            shape.Polygon = capsule.Core;
+            shape.MassData = capsule.ComputeMass();
+            shape.LocalBoundCenter = capsule.Core.Centroid;
+            shape.BoundRadius = capsule.Core.BoundRadius;
             UpdateMass(shape.Body);
             return new ShapeId(index, shape.Generation);
         }
@@ -435,7 +451,7 @@ namespace CombatSimulation.Physics
                 ref var shape = ref _shapes[s];
                 var shapeExtent = shape.Kind == ShapeKind.Circle
                     ? (shape.Circle.Center - localCenter).Length + shape.Circle.Radius
-                    : PolygonExtent(shape.Polygon, localCenter);
+                    : PolygonExtent(shape.Polygon, localCenter) + shape.Polygon.Radius;
                 extent = Math.Max(extent, shapeExtent);
             }
 

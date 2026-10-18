@@ -3,8 +3,9 @@
 Parts of `CombatSimulation.Physics` adapt algorithms from Box2D. The files that do so say it in a comment:
 
 - `Scripts/Dynamics/ContactSolver.cs`: soft-step solver order, soft contacts, relax and restitution passes (Box2D v3).
-- `Scripts/Collision/Collide.cs`: reference-face selection and clipping (Box2D).
+- `Scripts/Collision/Collide.cs`: polygon manifold for rounded polygons, clipping and segment distance (Box2D v3, `b2CollidePolygons`, `b2ClipPolygons`, `b2SegmentDistance`).
 - `Scripts/Shapes/Polygon.cs`: polygon mass (Box2D v3, `b2ComputePolygonMass`).
+- `Scripts/Shapes/Capsule.cs`: capsule mass (Box2D v3, `b2ComputeCapsuleMass`).
 - `Scripts/Math/Rot.cs`: rotation integration (Box2D v3, `b2IntegrateRotation`).
 
 ## Box2D

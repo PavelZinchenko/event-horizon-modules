@@ -45,6 +45,9 @@ namespace CombatSimulation.Physics
     {
         Circle,
         Polygon,
+
+        // Polygon holds the capsule core (a rounded 2-vertex polygon) for the polygon manifold.
+        Capsule,
     }
 
     internal struct Shape
@@ -56,6 +59,7 @@ namespace CombatSimulation.Physics
         public ShapeKind Kind;
         public Circle Circle;
         public Polygon Polygon;
+        public Capsule Capsule;
         public float Friction;
         public float Restitution;
         public MassData MassData;
@@ -82,7 +86,7 @@ namespace CombatSimulation.Physics
                 upper = Vec2.Max(upper, v);
             }
 
-            return new Aabb(lower, upper);
+            return new Aabb(lower, upper).Inflate(Polygon.Radius);
         }
 
         // Manifold for two shapes. The normal points from a to b.
@@ -96,15 +100,24 @@ namespace CombatSimulation.Physics
                     return;
                 }
 
-                Physics.Collide.PolygonAndCircle(b.Polygon, xfB, a.Circle, xfA, maxDistance, out manifold);
+                CollideWithCircle(b, xfB, a.Circle, xfA, maxDistance, out manifold);
                 manifold.Normal = -manifold.Normal;
                 return;
             }
 
             if (b.Kind == ShapeKind.Circle)
-                Physics.Collide.PolygonAndCircle(a.Polygon, xfA, b.Circle, xfB, maxDistance, out manifold);
+                CollideWithCircle(a, xfA, b.Circle, xfB, maxDistance, out manifold);
             else
                 Physics.Collide.Polygons(a.Polygon, xfA, b.Polygon, xfB, maxDistance, out manifold);
+        }
+
+        // Polygon or capsule against a circle. The normal points from the shape to the circle.
+        private static void CollideWithCircle(in Shape a, in Pose xfA, in Circle b, in Pose xfB, float maxDistance, out Manifold manifold)
+        {
+            if (a.Kind == ShapeKind.Capsule)
+                Physics.Collide.CapsuleAndCircle(a.Capsule, xfA, b, xfB, maxDistance, out manifold);
+            else
+                Physics.Collide.PolygonAndCircle(a.Polygon, xfA, b, xfB, maxDistance, out manifold);
         }
     }
 }
