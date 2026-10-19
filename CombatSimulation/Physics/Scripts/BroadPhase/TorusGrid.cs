@@ -36,7 +36,8 @@ namespace CombatSimulation.Physics
 
         // Group: proxies of one group never pair (shapes of one body).
         // Fixed: two fixed proxies never pair (two bodies that cannot move).
-        public void Add(int id, in Aabb aabb, int group, bool isFixed)
+        // Filter: two proxies pair only when Filter.ShouldPair allows it.
+        public void Add(int id, in Aabb aabb, int group, bool isFixed, in Filter filter)
         {
             EnsureProxyCapacity(_proxyCount + 1);
 
@@ -46,6 +47,7 @@ namespace CombatSimulation.Physics
             proxy.Aabb = aabb;
             proxy.Group = group;
             proxy.Fixed = isFixed;
+            proxy.Filter = filter;
             proxy.X0 = (int)Math.Floor(aabb.Lower.X / _cellWidth);
             proxy.Y0 = (int)Math.Floor(aabb.Lower.Y / _cellHeight);
             proxy.X1 = Math.Min((int)Math.Floor(aabb.Upper.X / _cellWidth), proxy.X0 + _columns - 1);
@@ -83,7 +85,7 @@ namespace CombatSimulation.Physics
                 {
                     ref var a = ref _proxies[_entryProxy[e1]];
                     ref var b = ref _proxies[_entryProxy[e2]];
-                    if (a.Group == b.Group || (a.Fixed && b.Fixed)) continue;
+                    if (a.Group == b.Group || (a.Fixed && b.Fixed) || !Filter.ShouldPair(a.Filter, b.Filter)) continue;
 
                     if (!Overlap(a.Aabb.Lower.X, a.Aabb.Upper.X, b.Aabb.Lower.X, b.Aabb.Upper.X, _torus.Width, a.X0, a.X1, b.X0, b.X1, _columns, out var lowX)) continue;
                     if (!Overlap(a.Aabb.Lower.Y, a.Aabb.Upper.Y, b.Aabb.Lower.Y, b.Aabb.Upper.Y, _torus.Height, a.Y0, a.Y1, b.Y0, b.Y1, _rows, out var lowY)) continue;
@@ -96,6 +98,16 @@ namespace CombatSimulation.Physics
 
             return count;
         }
+
+        // Cell access for queries. Cell coordinates may be unwrapped; CellIndex wraps them.
+        public int Columns => _columns;
+        public int Rows => _rows;
+        public float CellWidth => _cellWidth;
+        public float CellHeight => _cellHeight;
+        public int CellIndex(int x, int y) => Wrap(y, _rows) * _columns + Wrap(x, _columns);
+        public int FirstEntry(int cell) => _cellHead[cell];
+        public int NextEntry(int entry) => _entryNext[entry];
+        public int EntryId(int entry) => _proxies[_entryProxy[entry]].Id;
 
         // 1D overlap on a circle of length 'size'. B is shifted to the image nearest to A.
         // lowCell is the first cell (in A's unwrapped numbering) that both ranges cover.
@@ -142,6 +154,7 @@ namespace CombatSimulation.Physics
             public Aabb Aabb;
             public int Group;
             public bool Fixed;
+            public Filter Filter;
             public int X0, Y0, X1, Y1;
         }
 

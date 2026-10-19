@@ -8,7 +8,7 @@ namespace CombatSimulation.Physics
     {
         public static readonly string[] PhaseNames =
         {
-            "Margins", "Pairs", "Manifolds", "Separations", "Speculative check", "Solve", "Touching", "Finalize",
+            "Margins", "Pairs", "Manifolds", "Separations", "Speculative check", "Solve", "Touching", "Finalize", "Bullets",
         };
 
         // Stopwatch ticks per phase of the last step, in the order of PhaseNames. Zero without COMBATSIM_PROFILE.

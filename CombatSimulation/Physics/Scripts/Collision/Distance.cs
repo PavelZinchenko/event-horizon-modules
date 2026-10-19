@@ -19,10 +19,16 @@ namespace CombatSimulation.Physics
         public static DistanceProxy FromCircle(in Circle circle) => new DistanceProxy(null, circle.Center, circle.Radius);
         public static DistanceProxy FromPolygon(Polygon polygon) => new DistanceProxy(polygon, Vec2.Zero, polygon.Radius);
 
+        // A point without radius: the moving end of a ray, or the centre of an overlap circle.
+        public static DistanceProxy FromPoint(Vec2 point, float radius = 0f) => new DistanceProxy(null, point, radius);
+
         public static DistanceProxy FromShape(in Shape shape) =>
             shape.Kind == ShapeKind.Circle ? FromCircle(shape.Circle) : FromPolygon(shape.Polygon);
 
         public int Count => _polygon == null ? 1 : _polygon.Count;
+
+        // The polygon (or capsule core) behind the proxy; null for a circle or a point.
+        public Polygon Polygon => _polygon;
         public Vec2 Vertex(int index) => _polygon == null ? _point : _polygon.Vertex(index);
 
         // Index of the point farthest along the local direction; a tie goes to the lower index.

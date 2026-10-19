@@ -62,6 +62,7 @@ namespace CombatSimulation.Physics
         public Capsule Capsule;
         public float Friction;
         public float Restitution;
+        public Filter Filter;
         public MassData MassData;
 
         // Bounding circle in body-local coordinates.

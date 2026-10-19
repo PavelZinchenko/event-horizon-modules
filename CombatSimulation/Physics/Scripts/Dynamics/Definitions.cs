@@ -76,8 +76,32 @@ namespace CombatSimulation.Physics
     {
         public float Friction;
         public float Restitution;
+        public Filter Filter;
 
-        // The game's default material (step 5): friction 0.2, bounce 0.2.
+        // The game's default material (step 5): friction 0.2, bounce 0.2. Pairs with every shape.
         public static ShapeDef Default => new ShapeDef { Friction = 0.2f, Restitution = 0.2f };
+    }
+
+    // Collision filter of a shape, a bullet or a query (step 5, owner decision 7). The core puts side × class in the bits.
+    //
+    // Two filters pair unless one of them ignores a category of the other. All zero (the default) means no category
+    // and nothing ignored, so the default pairs with everything, and a ShapeDef built without a filter keeps the
+    // behaviour from before filters. This is the inverse of the Box2D mask: there a zero mask pairs with nothing.
+    public struct Filter : IEquatable<Filter>
+    {
+        public ulong Categories;
+        public ulong Ignore;
+
+        public Filter(ulong categories, ulong ignore)
+        {
+            Categories = categories;
+            Ignore = ignore;
+        }
+
+        public static bool ShouldPair(in Filter a, in Filter b) => (a.Categories & b.Ignore) == 0 && (b.Categories & a.Ignore) == 0;
+
+        public bool Equals(Filter other) => Categories == other.Categories && Ignore == other.Ignore;
+        public override bool Equals(object obj) => obj is Filter other && Equals(other);
+        public override int GetHashCode() => (Categories.GetHashCode() * 397) ^ Ignore.GetHashCode();
     }
 }

@@ -79,6 +79,7 @@ namespace CombatSimulation.Physics
 
             _bodies[index].Alive = false;
             _bodies[index].FirstShape = -1;
+            _queryDirty = true;
             PushFree(ref _freeBodies, ref _freeBodyCount, index);
         }
 
@@ -163,6 +164,7 @@ namespace CombatSimulation.Physics
             body.Origin = Torus.Wrap(position);
             body.Q = Rot.FromAngle(angle);
             body.Center = body.Origin + body.Q.Rotate(body.LocalCenter);
+            _queryDirty = true;
         }
 
         public Vec2 GetLinearVelocity(BodyId id) => _bodies[Resolve(id)].V;
@@ -231,6 +233,7 @@ namespace CombatSimulation.Physics
             _pendingEndEventCount = 0;
 
             ProfileMark(-1);
+            SaveStartPoses();
             UpdateMargins(dt);
             ProfileMark(0);
             var pairCount = FindPairs();
@@ -247,6 +250,9 @@ namespace CombatSimulation.Physics
             ProfileMark(6);
             FinalizeBodies();
             ProfileMark(7);
+            SweepBullets(dt);
+            ProfileMark(8);
+            _queryDirty = true;
         }
 
         private void UpdateMargins(float dt)
@@ -271,7 +277,7 @@ namespace CombatSimulation.Physics
 
                 ref var body = ref _bodies[shape.Body];
                 var aabb = shape.ComputeAabb(body.Pose).Inflate(speculative + body.Margin);
-                _grid.Add(i, aabb, shape.Body, body.IsFixedPosition);
+                _grid.Add(i, aabb, shape.Body, body.IsFixedPosition, shape.Filter);
             }
 
             var count = _grid.FindPairs(ref _pairs);
@@ -504,6 +510,8 @@ namespace CombatSimulation.Physics
             shape.Kind = kind;
             shape.Friction = def.Friction;
             shape.Restitution = def.Restitution;
+            shape.Filter = def.Filter;
+            _queryDirty = true;
 
             // Append, so shapes of a body keep their creation order.
             shape.NextInBody = -1;
