@@ -230,14 +230,23 @@ namespace CombatSimulation.Physics
                 AddEvent(ref _endEvents, ref _endEventCount, _pendingEndEvents[i]);
             _pendingEndEventCount = 0;
 
+            ProfileMark(-1);
             UpdateMargins(dt);
+            ProfileMark(0);
             var pairCount = FindPairs();
+            ProfileMark(1);
             UpdateContacts(pairCount);
+            ProfileMark(2);
             UpdateSeparations();
+            ProfileMark(3);
             CheckSpeculativeContacts(dt);
+            ProfileMark(4);
             _solver.Solve(_bodies, _bodyCount, _contacts, _contactCount, _separations, _separationCount, dt, Settings);
+            ProfileMark(5);
             UpdateTouching();
+            ProfileMark(6);
             FinalizeBodies();
+            ProfileMark(7);
         }
 
         private void UpdateMargins(float dt)
