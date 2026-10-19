@@ -18,6 +18,11 @@ namespace CombatSimulation.Physics
         // Largest normal impulse in the last step. Zero when the point did not push.
         public float MaxNormalImpulse;
 
+        // Impulse that the point applied in the whole last step, along the normal and the tangent (right
+        // perpendicular of the normal). Body B received it; body A received its negative.
+        public float TotalNormalImpulse;
+        public float TotalTangentImpulse;
+
         // Feature id: matches the point across steps for warm starting.
         public ushort Id;
     }

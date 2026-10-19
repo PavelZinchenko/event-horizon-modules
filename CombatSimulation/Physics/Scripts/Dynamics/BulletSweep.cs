@@ -10,6 +10,9 @@ namespace CombatSimulation.Physics
     //   then inside the hull at the next step and hits it at fraction 0 there;
     // - against a bullet: both move on their lines.
     //
+    // An attached bullet moves on the line from its pose on the parent's start pose to its pose on the parent's end pose,
+    // with the parent's start rotation, and never hits its parent.
+    //
     // Targets are de-duplicated per unit: the shapes of one body with the same filter categories (the parts of one
     // hull) are one target, a shield shape on the same body is another (contact ordering rule 4, investigation 1.5).
     public sealed partial class PhysicsWorld
@@ -63,6 +66,8 @@ namespace CombatSimulation.Physics
                 if (_bodies[i].Alive)
                     _bodyTranslations[i] = Torus.Delta(_startCenters[i], _bodies[i].Center);
 
+            if (_attachedBulletCount > 0) PrepareAttachedSweep(dt);
+
             // Body shapes are 'fixed' in this grid, so two shapes never pair: only pairs with a bullet are reported.
             for (var s = 0; s < _shapeCount; ++s)
             {
@@ -101,7 +106,34 @@ namespace CombatSimulation.Physics
             for (var b = 0; b < _bulletCount; ++b)
             {
                 ref var bullet = ref _bullets[b];
-                if (bullet.Alive) bullet.Position = Torus.Wrap(bullet.Position + dt * bullet.V);
+                if (!bullet.Alive) continue;
+                if (bullet.Parent.IsNull) bullet.Position = Torus.Wrap(bullet.Position + dt * bullet.V);
+                else PlaceAttached(ref bullet);
+            }
+        }
+
+        // Attached bullets start the sweep at their pose on the parent's start pose, with the velocity of that pose's
+        // motion in the step. A bullet whose parent is gone comes free with its last pose and velocity.
+        private void PrepareAttachedSweep(float dt)
+        {
+            for (var b = 0; b < _bulletCount; ++b)
+            {
+                ref var bullet = ref _bullets[b];
+                if (!bullet.Alive || bullet.Parent.IsNull) continue;
+
+                if (!IsAlive(bullet.Parent))
+                {
+                    bullet.Parent = default;
+                    --_attachedBulletCount;
+                    continue;
+                }
+
+                var start = _startPoses[bullet.Parent.Index];
+                var startPoint = start.TransformPoint(bullet.Local.P);
+                var endPoint = _bodies[bullet.Parent.Index].Pose.TransformPoint(bullet.Local.P);
+                bullet.Position = Torus.Wrap(startPoint);
+                bullet.Q = Rot.Mul(start.Q, bullet.Local.Q);
+                bullet.V = Torus.Delta(startPoint, endPoint) * (1f / dt);
             }
         }
 
@@ -110,6 +142,7 @@ namespace CombatSimulation.Physics
             ref var bullet = ref _bullets[b];
             ref var shape = ref _shapes[s];
             var bodyIndex = shape.Body;
+            if (!bullet.Parent.IsNull && bullet.Parent.Index == bodyIndex) return;
             var start = _startPoses[bodyIndex];
             var bodyMove = _bodyTranslations[bodyIndex];
             var bulletMove = dt * bullet.V;

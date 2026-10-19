@@ -41,6 +41,7 @@ namespace CombatSimulation.Physics
             body.LinearDamping = def.LinearDamping;
             body.AngularDamping = def.AngularDamping;
             body.FirstShape = -1;
+            body.FirstJoint = -1;
             body.V = (def.Flags & BodyFlags.FixedPosition) != 0 ? Vec2.Zero : def.LinearVelocity;
             body.W = (def.Flags & BodyFlags.FixedRotation) != 0 ? 0f : def.AngularVelocity;
             UpdateMass(index);
@@ -51,6 +52,7 @@ namespace CombatSimulation.Physics
         public void DestroyBody(BodyId id)
         {
             var index = Resolve(id);
+            DestroyJoints(index);
 
             // Remove contacts now, so a new shape in a reused slot never inherits their impulses.
             var write = 0;
@@ -165,6 +167,7 @@ namespace CombatSimulation.Physics
             body.Q = Rot.FromAngle(angle);
             body.Center = body.Origin + body.Q.Rotate(body.LocalCenter);
             _queryDirty = true;
+            PlaceAttachedBullets();
         }
 
         public Vec2 GetLinearVelocity(BodyId id) => _bodies[Resolve(id)].V;
@@ -243,8 +246,9 @@ namespace CombatSimulation.Physics
             UpdateSeparations();
             ProfileMark(3);
             CheckSpeculativeContacts(dt);
+            PrepareJoints();
             ProfileMark(4);
-            _solver.Solve(_bodies, _bodyCount, _contacts, _contactCount, _separations, _separationCount, dt, Settings);
+            _solver.Solve(_bodies, _bodyCount, _contacts, _contactCount, _separations, _separationCount, _joints, _jointCount, dt, Settings);
             ProfileMark(5);
             UpdateTouching();
             ProfileMark(6);
@@ -286,7 +290,8 @@ namespace CombatSimulation.Physics
         }
 
         // Merges the sorted pair list with the sorted contact list: keeps old contacts (and their impulses),
-        // creates new ones and drops the rest. Then updates every manifold.
+        // creates new ones (except for body pairs whose joint switches contacts off) and drops the rest. Then updates
+        // every manifold.
         private void UpdateContacts(int pairCount)
         {
             if (_nextContacts.Length < pairCount) _nextContacts = new Contact[Math.Max(pairCount, _nextContacts.Length * 2)];
@@ -301,15 +306,10 @@ namespace CombatSimulation.Physics
                 while (oldIndex < _contactCount && _contacts[oldIndex].Key < key)
                     DropContact(oldIndex++);
 
-                ref var next = ref _nextContacts[count++];
                 if (oldIndex < _contactCount && _contacts[oldIndex].Key == key)
-                {
-                    next = _contacts[oldIndex++];
-                }
-                else
-                {
-                    next = CreateContact(key);
-                }
+                    _nextContacts[count++] = _contacts[oldIndex++];
+                else if (JointsAllowContact(_shapes[(int)(key >> 32)].Body, _shapes[(int)(key & 0xffffffff)].Body))
+                    _nextContacts[count++] = CreateContact(key);
             }
 
             while (oldIndex < _contactCount)

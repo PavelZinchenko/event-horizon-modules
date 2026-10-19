@@ -7,6 +7,11 @@ namespace CombatSimulation.Physics
     //
     // Per step: prepare once, then for each substep integrate velocities, warm start, solve with bias,
     // integrate positions and relax without bias. Restitution runs once after the substeps.
+    // Joints (JointSolver) come before the contacts in each stage, as in the Box2D v3 overflow solver.
+    //
+    // Each constraint point also sums the impulse that it applies in the step (Box2D v3.1 totalNormalImpulse): the
+    // accumulated impulse after each relax pass is what the substep applied, because the next substep warm starts
+    // with it. Restitution adds its own change.
     //
     // A body pair in whole-body depenetration (Separation) has its contacts suppressed. It gets one constraint
     // instead: the normal is the separation direction, the anchors are the centres of mass, friction and
@@ -14,7 +19,7 @@ namespace CombatSimulation.Physics
     internal sealed class ContactSolver
     {
         public void Solve(Body[] bodies, int bodyCount, Contact[] contacts, int contactCount, Separation[] separations, int separationCount,
-            float dt, WorldSettings settings)
+            Joint[] joints, int jointCount, float dt, WorldSettings settings)
         {
             var substeps = settings.Substeps;
             var h = dt / substeps;
@@ -23,6 +28,7 @@ namespace CombatSimulation.Physics
             var contactHertz = Math.Min(settings.ContactHertz, 0.25f * substeps / dt);
             var contactSoftness = Softness.Make(contactHertz, settings.DampingRatio, h);
             var staticSoftness = Softness.Make(2f * contactHertz, settings.DampingRatio, h);
+            var jointSoftness = Softness.Make(Math.Min(settings.JointHertz, 0.5f * substeps / dt), settings.JointDampingRatio, h);
 
             for (var i = 0; i < bodyCount; ++i)
             {
@@ -36,10 +42,14 @@ namespace CombatSimulation.Physics
             for (var i = 0; i < substeps; ++i)
             {
                 IntegrateVelocities(bodies, bodyCount, h);
+                JointSolver.WarmStart(bodies, joints, jointCount);
                 WarmStart(bodies);
+                JointSolver.Solve(bodies, joints, jointCount, jointSoftness, invH, true);
                 SolveContacts(bodies, invH, settings.PushMaxVelocity, true);
                 IntegratePositions(bodies, bodyCount, h);
+                JointSolver.Solve(bodies, joints, jointCount, jointSoftness, invH, false);
                 SolveContacts(bodies, invH, settings.PushMaxVelocity, false);
+                SumImpulses();
             }
 
             ApplyRestitution(bodies, settings.RestitutionThreshold);
@@ -86,6 +96,8 @@ namespace CombatSimulation.Physics
                     cp.NormalImpulse = warmStarting ? mp.NormalImpulse : 0f;
                     cp.TangentImpulse = warmStarting ? mp.TangentImpulse : 0f;
                     cp.MaxNormalImpulse = 0f;
+                    cp.TotalNormalImpulse = 0f;
+                    cp.TotalTangentImpulse = 0f;
 
                     // Separation at the start of the step, without the anchor offset.
                     // The current separation is BaseSeparation + dot(d + rB' - rA', normal).
@@ -135,6 +147,8 @@ namespace CombatSimulation.Physics
                 cp.NormalImpulse = warmStarting ? separation.NormalImpulse : 0f;
                 cp.TangentImpulse = 0f;
                 cp.MaxNormalImpulse = 0f;
+                cp.TotalNormalImpulse = 0f;
+                cp.TotalTangentImpulse = 0f;
                 cp.BaseSeparation = -separation.Clearance;
 
                 var k = bodyA.InvMass + bodyB.InvMass;
@@ -285,6 +299,21 @@ namespace CombatSimulation.Physics
             }
         }
 
+        // After the relax pass of a substep.
+        private void SumImpulses()
+        {
+            for (var i = 0; i < _constraintCount; ++i)
+            {
+                ref var constraint = ref _constraints[i];
+                for (var j = 0; j < constraint.PointCount; ++j)
+                {
+                    ref var cp = ref ConstraintPoint.Get(ref constraint, j);
+                    cp.TotalNormalImpulse += cp.NormalImpulse;
+                    cp.TotalTangentImpulse += cp.TangentImpulse;
+                }
+            }
+        }
+
         private void ApplyRestitution(Body[] bodies, float threshold)
         {
             for (var i = 0; i < _constraintCount; ++i)
@@ -312,6 +341,7 @@ namespace CombatSimulation.Physics
                     var newImpulse = Math.Max(cp.NormalImpulse + impulse, 0f);
                     impulse = newImpulse - cp.NormalImpulse;
                     cp.NormalImpulse = newImpulse;
+                    cp.TotalNormalImpulse += impulse;
                     if (newImpulse > cp.MaxNormalImpulse) cp.MaxNormalImpulse = newImpulse;
 
                     var p = impulse * normal;
@@ -342,11 +372,13 @@ namespace CombatSimulation.Physics
                     mp.NormalImpulse = cp.NormalImpulse;
                     mp.TangentImpulse = cp.TangentImpulse;
                     mp.MaxNormalImpulse = cp.MaxNormalImpulse;
+                    mp.TotalNormalImpulse = cp.TotalNormalImpulse;
+                    mp.TotalTangentImpulse = cp.TotalTangentImpulse;
                 }
             }
         }
 
-        private struct Softness
+        internal struct Softness
         {
             public float BiasRate;
             public float MassScale;
@@ -374,6 +406,8 @@ namespace CombatSimulation.Physics
             public float NormalImpulse;
             public float TangentImpulse;
             public float MaxNormalImpulse;
+            public float TotalNormalImpulse;
+            public float TotalTangentImpulse;
             public float NormalMass;
             public float TangentMass;
 

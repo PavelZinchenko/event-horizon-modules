@@ -18,10 +18,10 @@ namespace CombatSimulation.Physics
         // The time of impact uses the free motion of both bodies. Two kinds of contacts keep their manifold anyway:
         // 1. The solver cannot act on them: the gap is larger than any closing in the step. The result is the same.
         // 2. The bodies are in an island with a contact that the solver acts on (touching, deep, a time-of-impact
-        //    hit, or a whole-body depenetration). An island is a group of movable bodies linked by contacts with
-        //    manifold points. Velocity changes spread through the island within the step, so the free motion is
-        //    no longer a safe prediction: a crowd pushes a drone into its neighbour, or a hull that hits with one part
-        //    turns another part into the target.
+        //    hit, a whole-body depenetration or a joint). An island is a group of movable bodies linked by contacts
+        //    with manifold points and by joints. Velocity changes spread through the island within the step, so the
+        //    free motion is no longer a safe prediction: a crowd pushes a drone into its neighbour, a hull that hits
+        //    with one part turns another part into the target, or a hinge swings a tail segment.
         private void CheckSpeculativeContacts(float dt)
         {
             TimeOfImpactCount = 0;
@@ -57,6 +57,9 @@ namespace CombatSimulation.Physics
 
             if (candidates == 0) return;
 
+            for (var i = 0; i < _jointCount; ++i)
+                if (_joints[i].Alive) Link(_joints[i].BodyA, _joints[i].BodyB);
+
             // Islands with a contact that the solver acts on with any motion.
             for (var i = 0; i < _contactCount; ++i)
             {
@@ -64,6 +67,10 @@ namespace CombatSimulation.Physics
                 if (contact.Manifold.PointCount > 0 && (contact.Suppressed || contact.Manifold.MinSeparation <= speculative))
                     MarkIsland(contact);
             }
+
+            // A joint always acts, so no joined body moves freely.
+            for (var i = 0; i < _jointCount; ++i)
+                if (_joints[i].Alive) MarkIsland(_joints[i].BodyA, _joints[i].BodyB);
 
             // Time of impact in the other islands. A hit marks the island after all checks, so the order of the
             // contacts does not matter.
@@ -119,10 +126,12 @@ namespace CombatSimulation.Physics
             return root;
         }
 
-        private void MarkIsland(in Contact contact)
+        private void MarkIsland(in Contact contact) => MarkIsland(contact.IndexA, contact.IndexB);
+
+        private void MarkIsland(int a, int b)
         {
-            if (CanMove(contact.IndexA)) _islandFlags[FindIsland(contact.IndexA)] = true;
-            if (CanMove(contact.IndexB)) _islandFlags[FindIsland(contact.IndexB)] = true;
+            if (CanMove(a)) _islandFlags[FindIsland(a)] = true;
+            if (CanMove(b)) _islandFlags[FindIsland(b)] = true;
         }
 
         private bool IsMarked(in Contact contact) =>

@@ -30,6 +30,9 @@ namespace CombatSimulation.Physics
         // First shape of the body; shapes link through Shape.NextInBody.
         public int FirstShape;
 
+        // First joint of the body; joints link through Joint.Next.
+        public int FirstJoint;
+
         // Solver state: motion within the current step.
         public Vec2 DeltaPosition;
         public Rot DeltaRotation;

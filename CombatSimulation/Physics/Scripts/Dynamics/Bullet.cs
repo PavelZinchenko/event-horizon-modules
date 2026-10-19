@@ -109,6 +109,10 @@ namespace CombatSimulation.Physics
         public BodyId Owner;
         public bool PassThrough;
 
+        // Attachment: the parent body (null when free) and the pose in the parent's frame, relative to its origin.
+        public BodyId Parent;
+        public Pose Local;
+
         public Pose Pose => new Pose(Position, Q);
     }
 
@@ -154,6 +158,7 @@ namespace CombatSimulation.Physics
         {
             var index = ResolveBullet(id);
             ref var bullet = ref _bullets[index];
+            if (!bullet.Parent.IsNull) --_attachedBulletCount;
             bullet.Alive = false;
             bullet.Shape.Polygon = null;
             --_aliveBulletCount;
@@ -173,14 +178,77 @@ namespace CombatSimulation.Physics
         public Vec2 GetBulletPosition(BulletId id) => _bullets[ResolveBullet(id)].Position;
         public Rot GetBulletRotation(BulletId id) => _bullets[ResolveBullet(id)].Q;
         public Vec2 GetBulletVelocity(BulletId id) => _bullets[ResolveBullet(id)].V;
+
+        // An attached bullet takes the velocity of its parent's point at each step; this value lasts until then.
         public void SetBulletVelocity(BulletId id, Vec2 velocity) => _bullets[ResolveBullet(id)].V = velocity;
 
         public void SetBulletPose(BulletId id, Vec2 position, float angle)
         {
             ref var bullet = ref _bullets[ResolveBullet(id)];
+            if (!bullet.Parent.IsNull) throw new InvalidOperationException($"{id} is attached; detach it first");
             bullet.Position = Torus.Wrap(position);
             bullet.Q = Rot.FromAngle(angle);
             _queryDirty = true;
+        }
+
+        // Attachment (P4): the bullet follows a body (harpoon hook, sticky mine, AttachedToParent ammunition). Its world
+        // pose is the parent pose times the local pose; the local pose is never written back, so it stays exact. Each
+        // step sweeps it from its pose on the parent's start pose to its pose on the parent's end pose, and it never
+        // hits its parent. A teleport of the parent (SetPose, TeleportGroup) moves it at once. When the parent is
+        // destroyed, the bullet comes free at the next step with its last pose and velocity.
+        public void AttachBullet(BulletId id, BodyId parent, Pose local)
+        {
+            ref var bullet = ref _bullets[ResolveBullet(id)];
+            Resolve(parent);
+            if (bullet.Parent.IsNull) ++_attachedBulletCount;
+            bullet.Parent = parent;
+            bullet.Local = local;
+            PlaceAttached(ref bullet);
+        }
+
+        // Attaches at the current world pose.
+        public void AttachBullet(BulletId id, BodyId parent)
+        {
+            ref var bullet = ref _bullets[ResolveBullet(id)];
+            ref var body = ref _bodies[Resolve(parent)];
+            var local = new Pose(body.Q.InvRotate(Torus.Delta(body.Origin, bullet.Position)), Rot.InvMul(body.Q, bullet.Q));
+            AttachBullet(id, parent, local);
+        }
+
+        // Keeps the world pose and the velocity of the parent's point.
+        public void DetachBullet(BulletId id)
+        {
+            ref var bullet = ref _bullets[ResolveBullet(id)];
+            if (bullet.Parent.IsNull) return;
+            bullet.Parent = default;
+            --_attachedBulletCount;
+        }
+
+        // Null when the bullet is free.
+        public BodyId GetBulletParent(BulletId id) => _bullets[ResolveBullet(id)].Parent;
+        public Pose GetBulletLocalPose(BulletId id) => _bullets[ResolveBullet(id)].Local;
+
+        // World pose and velocity of an attached bullet from its parent's current state.
+        private void PlaceAttached(ref Bullet bullet)
+        {
+            ref var body = ref _bodies[bullet.Parent.Index];
+            var point = body.Pose.TransformPoint(bullet.Local.P);
+            bullet.Position = Torus.Wrap(point);
+            bullet.Q = Rot.Mul(body.Q, bullet.Local.Q);
+            bullet.V = body.V + Vec2.Cross(body.W, point - body.Center);
+            _queryDirty = true;
+        }
+
+        // After a teleport of a body.
+        private void PlaceAttachedBullets()
+        {
+            if (_attachedBulletCount == 0) return;
+
+            for (var b = 0; b < _bulletCount; ++b)
+            {
+                ref var bullet = ref _bullets[b];
+                if (bullet.Alive && !bullet.Parent.IsNull && IsAlive(bullet.Parent)) PlaceAttached(ref bullet);
+            }
         }
 
         // Hits of the last step, in contact order: fraction, then bullet index, then target (body or bullet index,
@@ -232,5 +300,6 @@ namespace CombatSimulation.Physics
         private int _aliveBulletCount;
         private int[] _freeBullets = new int[16];
         private int _freeBulletCount;
+        private int _attachedBulletCount;
     }
 }

@@ -41,6 +41,25 @@ namespace CombatSimulation.Physics
         public override string ToString() => $"Shape {Index}:{Generation}";
     }
 
+    public readonly struct JointId : IEquatable<JointId>
+    {
+        public readonly int Index;
+        public readonly int Generation;
+
+        public JointId(int index, int generation)
+        {
+            Index = index;
+            Generation = generation;
+        }
+
+        public bool IsNull => Generation == 0;
+
+        public bool Equals(JointId other) => Index == other.Index && Generation == other.Generation;
+        public override bool Equals(object obj) => obj is JointId other && Equals(other);
+        public override int GetHashCode() => (Index * 397) ^ Generation;
+        public override string ToString() => $"Joint {Index}:{Generation}";
+    }
+
     [Flags]
     public enum BodyFlags
     {
@@ -80,6 +99,53 @@ namespace CombatSimulation.Physics
 
         // The game's default material (step 5): friction 0.2, bounce 0.2. Pairs with every shape.
         public static ShapeDef Default => new ShapeDef { Friction = 0.2f, Restitution = 0.2f };
+    }
+
+    // Hinge (revolute joint): a shared point of two bodies, with an optional limit of their relative angle.
+    public struct HingeDef
+    {
+        public BodyId BodyA;
+        public BodyId BodyB;
+
+        // The shared point in each body's frame, relative to the body origin (pivot), as Unity anchors.
+        public Vec2 LocalAnchorA;
+        public Vec2 LocalAnchorB;
+
+        // Angle of B minus angle of A at which the joint angle is zero. Always given by the caller, never taken from
+        // the current poses (P4 owner decision 3).
+        public float ReferenceAngle;
+
+        // Limits of the joint angle in radians, within [-π, π], lower ≤ upper.
+        public bool EnableLimit;
+        public float LowerAngle;
+        public float UpperAngle;
+
+        // Contacts between the two bodies. Off by default, as in Unity.
+        public bool CollideConnected;
+    }
+
+    // Rope: the distance between two anchor points never exceeds the length. It only pulls; while slack it acts only
+    // to stop the ends at the rope length within the step. Ropes never join a teleport group (P4 owner decision 4).
+    public struct RopeDef
+    {
+        public BodyId BodyA;
+        public BodyId BodyB;
+
+        // The rope ends in each body's frame, relative to the body origin (pivot).
+        public Vec2 LocalAnchorA;
+        public Vec2 LocalAnchorB;
+
+        // Maximum distance between the anchors; zero or more.
+        public float Length;
+
+        // Contacts between the two bodies. Off by default; the harpoon rope turns them on.
+        public bool CollideConnected;
+    }
+
+    public enum JointKind : byte
+    {
+        Hinge,
+        Rope,
     }
 
     // Collision filter of a shape, a bullet or a query (step 5, owner decision 7). The core puts side × class in the bits.

@@ -24,6 +24,11 @@ namespace CombatSimulation.Physics
         public float ContactHertz = 100f;
         public float DampingRatio = 10f;
 
+        // Joint stiffness. Box2D v3 solves joints with twice the contact hertz and a damping ratio of 2. The solver caps
+        // the hertz at half the substep rate (twice the contact cap).
+        public float JointHertz = 200f;
+        public float JointDampingRatio = 2f;
+
         // Largest speed at which the solver pushes overlapping shapes apart (Box2D v3: contactSpeed).
         public float PushMaxVelocity = 5f;
 
@@ -52,6 +57,7 @@ namespace CombatSimulation.Physics
             if (!(CellSize > 0f)) throw new ArgumentException("Cell size must be positive");
             if (Substeps < 1) throw new ArgumentException("At least one substep is required");
             if (!(ContactHertz > 0f) || !(DampingRatio >= 0f)) throw new ArgumentException("Invalid contact softness");
+            if (!(JointHertz > 0f) || !(JointDampingRatio >= 0f)) throw new ArgumentException("Invalid joint softness");
             if (!(PushMaxVelocity > 0f)) throw new ArgumentException("Push velocity must be positive");
             if (!(LinearSlop > 0f)) throw new ArgumentException("Linear slop must be positive");
             if (!(SeparationDepth > 0f) || SeparationSteps < 1) throw new ArgumentException("Invalid separation trigger");
@@ -59,6 +65,7 @@ namespace CombatSimulation.Physics
 
         public override string ToString() =>
             $"Torus {Width}x{Height}, cell {CellSize}, substeps {Substeps}, contact {ContactHertz} Hz / damping {DampingRatio}, " +
+            $"joint {JointHertz} Hz / damping {JointDampingRatio}, " +
             $"push {PushMaxVelocity}, slop {LinearSlop}, restitution threshold {RestitutionThreshold}, warm starting {WarmStarting}, " +
             $"separation {SeparationDepth} for {SeparationSteps} steps";
     }
