@@ -3,6 +3,7 @@
     "references": [
         "CombatSimulation.Core",
         "CombatSimulation.Physics",
+        "CombatSimulation.Runtime",
         "Utilites"
     ],
     "optionalUnityReferences": [

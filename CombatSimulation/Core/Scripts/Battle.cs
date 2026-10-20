@@ -31,6 +31,10 @@ namespace CombatSimulation.Core
                 Substeps = PhysicsSubsteps,
             });
             Roster = new Roster(setup);
+
+            _published = new BattleSnapshot(BattleId, Roster.Slots.Count);
+            _writing = new BattleSnapshot(BattleId, Roster.Slots.Count);
+            _published.Write(this, -1, World, Roster, _events);
         }
 
         public BattleSetup Setup { get; }
@@ -40,6 +44,10 @@ namespace CombatSimulation.Core
         public long Tick { get; private set; }
 
         public bool IsCompleted => Result.IsCompleted;
+
+        // The state and events of the last completed tick (tick -1 before the first step).
+        // A reader finishes with it before the next Step returns.
+        public BattleSnapshot Snapshot => _published;
 
         // Physics handles and mutable state never leave Core's trusted assembly boundary.
         internal PhysicsWorld World { get; }
@@ -230,17 +238,21 @@ namespace CombatSimulation.Core
                 var ship = slot.ActiveShip;
                 if (ship == null) continue;
 
+                // RemoveShip releases the entity, so its ID is read first.
+                var id = ship.Id;
                 if (ship.PendingDeath)
                 {
-                    RemoveShip(ship);
+                    RemoveShip(ship, RemovalReason.Death);
                     slot.Destroy();
+                    AddTransition(slot, RosterStatus.Active, RosterTransitionReason.Killed, id);
                 }
                 else if (ship.RetreatCompletionTick == Tick)
                 {
                     var armorDeficit = ship.Armor.Deficit;
                     var shieldDeficit = ship.Shield.Deficit;
-                    RemoveShip(ship);
+                    RemoveShip(ship, RemovalReason.Retreat);
                     slot.CompleteRetreat(armorDeficit, shieldDeficit);
+                    AddTransition(slot, RosterStatus.Active, RosterTransitionReason.Retreated, id);
                 }
             }
 
@@ -253,14 +265,29 @@ namespace CombatSimulation.Core
                 {
                     var slot = slots[i];
                     if (slot.Side != side || slot.Status == RosterStatus.Destroyed) continue;
-                    if (slot.ActiveShip != null) RemoveShip(slot.ActiveShip);
+
+                    var previousStatus = slot.Status;
+                    var id = default(EntityId);
+                    if (slot.ActiveShip != null)
+                    {
+                        id = slot.ActiveShip.Id;
+                        RemoveShip(slot.ActiveShip, RemovalReason.Death);
+                    }
                     slot.Destroy();
+                    AddTransition(slot, previousStatus, RosterTransitionReason.ForcedDestruction, id);
                 }
             }
         }
 
         // Stage 13. Elimination first, then the timer.
         private void UpdateBattleFlow()
+        {
+            EvaluateResult();
+            if (Result.IsCompleted)
+                _events.Add(BattleEvent.ResultEvent(BattleId, Tick, _events.Count, Result));
+        }
+
+        private void EvaluateResult()
         {
             var alive0 = Roster.HasAlive(0);
             var alive1 = Roster.HasAlive(1);
@@ -283,9 +310,15 @@ namespace CombatSimulation.Core
                 Result = new BattleResult(BattleOutcome.Draw, 0, BattleEndReason.Timeout, Tick);
         }
 
+        // Stage 14. Writes the snapshot and the event batch of this tick, then swaps the buffers.
         private void Publish()
         {
-            // Later, publish the snapshot and events for Tick before advancing it.
+            _writing.Write(this, Tick, World, Roster, _events);
+            _events.Clear();
+
+            var published = _writing;
+            _writing = _published;
+            _published = published;
             ++Tick;
         }
 
@@ -332,6 +365,9 @@ namespace CombatSimulation.Core
             ship.Initialize(id, slot, body);
             slot.Activate(ship, ++_deploymentOrder);
             ResetTimer();
+
+            _events.Add(BattleEvent.Spawn(BattleId, Tick, _events.Count, ship));
+            AddTransition(slot, RosterStatus.Ready, RosterTransitionReason.Deployed, id);
         }
 
         private void StartRetreat(in RosterCommand command)
@@ -383,13 +419,17 @@ namespace CombatSimulation.Core
             return nearest;
         }
 
-        private void RemoveShip(ShipEntity ship)
+        private void RemoveShip(ShipEntity ship, RemovalReason reason)
         {
+            _events.Add(BattleEvent.Removal(BattleId, Tick, _events.Count, ship, reason));
             World.DestroyBody(ship.Body);
             _entities.Remove(ship.Id);
             _ships.Release(ship);
             ResetTimer();
         }
+
+        private void AddTransition(RosterSlot slot, RosterStatus previousStatus, RosterTransitionReason reason, EntityId id) =>
+            _events.Add(BattleEvent.Transition(BattleId, Tick, _events.Count, slot, previousStatus, reason, id));
 
         // Owner (2026-10-20): any ship deployment or removal, on either side, resets the timer.
         private void ResetTimer() => TimerElapsedTicks = 0;
@@ -452,6 +492,9 @@ namespace CombatSimulation.Core
         private readonly HashSet<ulong> _pendingCommandIds = new HashSet<ulong>();
         private readonly List<EntityId> _deathRequests = new List<EntityId>();
         private readonly bool[] _destroySide = new bool[BattleSetup.SideCount];
+        private readonly BattleEventBuffer _events = new BattleEventBuffer();
+        private BattleSnapshot _published;
+        private BattleSnapshot _writing;
         private long _deploymentOrder;
 
         // One control frame per entity and tick (commands, rule 2).

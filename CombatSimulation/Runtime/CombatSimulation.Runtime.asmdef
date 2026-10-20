@@ -2,7 +2,8 @@
     "name": "CombatSimulation.Runtime",
     "rootNamespace": "CombatSimulation.Runtime",
     "references": [
-        "CombatSimulation.Core"
+        "CombatSimulation.Core",
+        "CombatSimulation.Physics"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
