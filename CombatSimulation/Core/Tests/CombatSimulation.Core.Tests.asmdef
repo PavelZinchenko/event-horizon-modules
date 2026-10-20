@@ -2,7 +2,8 @@
     "name": "CombatSimulation.Core.Tests",
     "references": [
         "CombatSimulation.Core",
-        "CombatSimulation.Physics"
+        "CombatSimulation.Physics",
+        "Utilites"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"

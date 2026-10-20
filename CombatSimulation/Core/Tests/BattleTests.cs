@@ -9,7 +9,7 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void FirstStepProcessesTickZero()
         {
-            var battle = new Battle(new BattleSetup(new BattleId(42), 123));
+            var battle = new Battle(Fixtures.Setup(battleId: 42, matchSeed: 123));
 
             Assert.AreEqual(new BattleId(42), battle.BattleId);
             Assert.AreEqual(123UL, battle.Setup.MatchSeed);
@@ -23,7 +23,7 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void StepAdvancesOwnedPhysicsByOneFixedTick()
         {
-            var battle = new Battle(new BattleSetup(new BattleId(1), 0, 300f, 400f));
+            var battle = new Battle(new BattleSetup(new BattleId(1), 0, Fixtures.Roster(1, 1), 300f, 400f));
             var body = battle.World.CreateBody(new BodyDef
             {
                 Position = new Vec2(10f, 20f),
@@ -46,7 +46,7 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void BattlesSharingSetupHaveIndependentClocksAndPhysics()
         {
-            var setup = new BattleSetup(new BattleId(1), 0);
+            var setup = Fixtures.Setup();
             var first = new Battle(setup);
             var second = new Battle(setup);
             var firstBody = first.World.CreateBody(new BodyDef { Mass = 1f, LinearVelocity = new Vec2(50f, 0f) });
@@ -71,8 +71,44 @@ namespace CombatSimulation.Core.Tests
         [TestCase(float.NegativeInfinity)]
         public void SetupRejectsInvalidArenaDimensions(float size)
         {
-            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, size, 200f));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, 200f, size));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Roster(1, 1), size, 200f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Roster(1, 1), 200f, size));
+        }
+
+        [Test]
+        public void SetupRejectsInvalidRosterAndLimits()
+        {
+            Assert.Throws<ArgumentNullException>(() => new BattleSetup(default, 0, null));
+            Assert.Throws<ArgumentException>(() => new BattleSetup(default, 0, Fixtures.Roster(1, 0)));
+            Assert.Throws<ArgumentException>(() => new BattleSetup(default, 0, Fixtures.Roster(0, 1)));
+
+            var duplicate = Fixtures.Roster(1, 1);
+            duplicate.Add(new RosterSlotSetup(new RosterId(1), 1, Fixtures.Ship));
+            Assert.Throws<ArgumentException>(() => new BattleSetup(default, 0, duplicate));
+
+            var withNull = Fixtures.Roster(1, 1);
+            withNull.Add(null);
+            Assert.Throws<ArgumentException>(() => new BattleSetup(default, 0, withNull));
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Roster(1, 1), timeLimitTicks: -1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Roster(1, 1), maxActiveShipsPerSide: 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new RosterSlotSetup(new RosterId(1), 2, Fixtures.Ship));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new RosterSlotSetup(new RosterId(1), -1, Fixtures.Ship));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new RosterSlotSetup(new RosterId(1), 0, Fixtures.Ship, -1));
+            Assert.Throws<ArgumentNullException>(() => new RosterSlotSetup(new RosterId(1), 0, null));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new ShipDefinition(0f, 1f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new ShipDefinition(1f, float.NaN));
+        }
+
+        [Test]
+        public void SetupCopiesTheRoster()
+        {
+            var roster = Fixtures.Roster(1, 1);
+            var setup = new BattleSetup(default, 0, roster);
+            roster.Clear();
+
+            Assert.AreEqual(2, setup.Roster.Count);
+            Assert.AreEqual(new RosterId(101), setup.Roster[1].RosterId);
         }
 
         [Test]

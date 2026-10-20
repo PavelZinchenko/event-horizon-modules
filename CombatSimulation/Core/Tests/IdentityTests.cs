@@ -111,6 +111,71 @@ namespace CombatSimulation.Core.Tests
             Assert.IsFalse(new BattleId(42).Equals((object)new EntityId(42)));
         }
 
+        [Test]
+        public void SameDeploymentInBattlesWithDifferentAllocationHistoriesGivesTheSameId()
+        {
+            // Battle A allocates and frees a ship first, so slot 1 gets a different storage index.
+            var a = new Driver(Fixtures.Setup(2, 1));
+            a.Deploy(2);
+            a.Deploy(101);
+            a.Step();
+            a.Kill(2);
+            a.Step();
+
+            var b = new Driver(Fixtures.Setup(2, 1));
+            b.Deploy(101);
+            b.Step(2);
+
+            a.Deploy(1, 10);
+            b.Deploy(1, 10);
+            a.StepUntil(11);
+            b.StepUntil(11);
+
+            var shipA = a.Slot(1).ActiveShip;
+            var shipB = b.Slot(1).ActiveShip;
+            Assert.AreEqual(shipA.Id, shipB.Id);
+            Assert.AreEqual(SpawnIdentity.CreateRoot(new BattleId(1), new RosterId(1), 1, 10), shipA.Id);
+            Assert.AreNotEqual(shipA.Index, shipB.Index, "The storage handles differ; the public IDs do not.");
+        }
+
+        [Test]
+        public void RegisteringALiveIdIsADefect()
+        {
+            var driver = new Driver(Fixtures.Setup());
+            driver.Deploy(1);
+            driver.Step();
+            var ship = driver.Slot(1).ActiveShip;
+
+            Assert.Throws<InvalidOperationException>(() => driver.Battle.TryRegister(ship.Id, ship.Handle));
+
+            driver.Battle.ThrowOnDefect = false;
+            Assert.IsFalse(driver.Battle.TryRegister(ship.Id, ship.Handle));
+            Assert.AreSame(ship, driver.Battle.FindShip(ship.Id), "The live entity keeps its ID.");
+        }
+
+        [Test]
+        public void CounterRandomDependsOnEveryInputOnly()
+        {
+            uint Draw(ulong seed, ulong entity, long tick, RandomPurpose purpose)
+            {
+                var state = CounterRandom.Create(seed, new EntityId(entity), tick, purpose);
+                return Utilites.RandomStateExtensions.NextUint(ref state);
+            }
+
+            var reference = Draw(1, 2, 3, RandomPurpose.SpawnPlacement);
+            Assert.AreEqual(reference, Draw(1, 2, 3, RandomPurpose.SpawnPlacement));
+            var values = new HashSet<uint>
+            {
+                reference,
+                Draw(9, 2, 3, RandomPurpose.SpawnPlacement),
+                Draw(1, 9, 3, RandomPurpose.SpawnPlacement),
+                Draw(1, 2, 9, RandomPurpose.SpawnPlacement),
+                Draw(1, 2, 3, (RandomPurpose)9),
+            };
+            Assert.AreEqual(5, values.Count);
+            Assert.Throws<ArgumentOutOfRangeException>(() => CounterRandom.Create(0, default, -1, RandomPurpose.SpawnPlacement));
+        }
+
         private static void AssertValueType<T>(T high, T same, T low) where T : struct, IEquatable<T>, IComparable<T>
         {
             Assert.IsTrue(high.Equals(same));
