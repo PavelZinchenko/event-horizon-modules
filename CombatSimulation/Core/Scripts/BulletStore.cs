@@ -20,6 +20,14 @@ namespace CombatSimulation.Core
         // The last tick the bullet flies in; stage 11 of that tick marks its expiry.
         public long ExpiryTick;
 
+        // A missile: its hit points, and the damage accepted at stage 9 that stage 10 applies.
+        public float HitPoints;
+        public float PendingDamage;
+
+        // Homing: the ship it steers toward (null without one) and the tick of its next scheduled search.
+        public EntityId TargetId;
+        public long NextSearchTick;
+
         // Set at stage 9 (stopped at a hit) or stage 11 (expired); stage 12 applies it.
         public RemovalReason PendingRemoval;
     }
@@ -47,7 +55,12 @@ namespace CombatSimulation.Core
             }
             else
             {
-                if (_count == _items.Length) Array.Resize(ref _items, _items.Length * 2);
+                // The free list grows with the store, so a tick that frees many bullets late allocates nothing.
+                if (_count == _items.Length)
+                {
+                    Array.Resize(ref _items, _items.Length * 2);
+                    Array.Resize(ref _free, _items.Length);
+                }
                 index = _count++;
             }
 
@@ -67,7 +80,6 @@ namespace CombatSimulation.Core
             bullet = default;
             bullet.Generation = generation;
 
-            if (_freeCount == _free.Length) Array.Resize(ref _free, _free.Length * 2);
             _free[_freeCount++] = index;
             --AliveCount;
         }
@@ -101,8 +113,9 @@ namespace CombatSimulation.Core
                 _items[index].PendingRemoval = reason;
         }
 
-        // Stage 8. Each physics hit on a live ship becomes a candidate. Every physics bullet is pass-through, so
-        // physics reports the first hit on each target unit; the resolver keeps the first valid one (contact ordering).
+        // Stage 8. Each physics hit on a live ship or missile becomes a candidate. Every physics bullet is
+        // pass-through, so physics reports the first hit on each target unit; the resolver keeps the first valid one
+        // (contact ordering).
         public void CollectHits(PhysicsWorld world, ShapeTable shapes, ShipStore ships, ContactResolver resolver)
         {
             var hits = world.BulletHits;
@@ -110,39 +123,79 @@ namespace CombatSimulation.Core
             {
                 ref readonly var hit = ref hits[i];
                 if (!TryGetByBody(hit.Bullet, out var index)) continue;
-
-                // Energy bolts never pair with bullets (CollisionFilters). Bullet targets come with missiles in step 7.
-                if (hit.Target.IsBullet) continue;
-                if (!shapes.TryGet(hit.Target.Shape, out var target) || ships.Get(target.Owner) == null) continue;
-
                 ref readonly var bullet = ref _items[index];
-                resolver.Add(new ContactCandidate
+
+                var candidate = new ContactCandidate
                 {
                     Time = hit.Fraction,
                     Kind = ContactKind.Hit,
                     Attacker = bullet.Id,
-                    TargetPriority = target.Priority,
-                    Target = target.OwnerId,
-                    TargetShapeOrder = target.Order,
                     Source = ContactSource.BulletSweep,
                     AttackerHandle = GetHandle(index),
-                    TargetHandle = target.Owner,
 
-                    // Q1: a cannon bullet stops at its first valid contact.
+                    // Q1 and Q2b: a bolt and a missile both stop at their first valid contact.
                     AttackerPassThrough = false,
                     Damage = bullet.Definition.Damage,
                     Point = hit.Point,
-                });
+                };
+
+                if (hit.Target.IsBullet)
+                {
+                    // Legacy: only a missile takes damage from a bullet (MissileDamageHandler), and a missile does not
+                    // detonate on an energy bolt (DetonateAtTargetAction). A missile flies through bolts unharmed.
+                    if (!TryGetByBody(hit.Target.Bullet, out var targetIndex)) continue;
+                    ref readonly var targetBullet = ref _items[targetIndex];
+                    if (!targetBullet.Definition.IsMissile) continue;
+
+                    candidate.TargetPriority = ShapeHitPriority.Hull;
+                    candidate.Target = targetBullet.Id;
+                    candidate.TargetHandle = GetHandle(targetIndex);
+                    candidate.TargetHitPoints = targetBullet.HitPoints;
+                }
+                else
+                {
+                    if (!shapes.TryGet(hit.Target.Shape, out var target) || ships.Get(target.Owner) == null) continue;
+
+                    candidate.TargetPriority = target.Priority;
+                    candidate.Target = target.OwnerId;
+                    candidate.TargetShapeOrder = target.Order;
+                    candidate.TargetHandle = target.Owner;
+                }
+
+                resolver.Add(candidate);
             }
         }
 
-        // Stage 11. A bullet expires after the physics of its last tick.
-        public void MarkExpired(long tick)
+        // Stage 9. Damage of an accepted hit on a missile; a stale or non-bullet handle is ignored.
+        public void AddDamage(EntityHandle handle, float damage)
+        {
+            if (TryGet(handle, out var index)) _items[index].PendingDamage += damage;
+        }
+
+        // Stage 10. One pass, in the order stage 9 accepted the hits, as the resolver summed them.
+        public void ApplyDamage()
         {
             for (var i = 0; i < _count; ++i)
             {
                 ref var bullet = ref _items[i];
-                if (bullet.IsAlive && bullet.ExpiryTick == tick && bullet.PendingRemoval == RemovalReason.None)
+                if (!bullet.IsAlive || !(bullet.PendingDamage > 0f)) continue;
+                bullet.HitPoints -= bullet.PendingDamage;
+                bullet.PendingDamage = 0f;
+            }
+        }
+
+        // Stage 11. A missile without hit points dies; a bullet expires after the physics of its last tick.
+        // A death in the same tick wins over the expiry.
+        public void MarkDeaths(long tick)
+        {
+            for (var i = 0; i < _count; ++i)
+            {
+                ref var bullet = ref _items[i];
+                if (!bullet.IsAlive || bullet.PendingRemoval != RemovalReason.None) continue;
+
+                if (bullet.Definition.IsMissile && bullet.HitPoints <= 0f)
+                    bullet.PendingRemoval = RemovalReason.Death;
+                else if (bullet.ExpiryTick == tick)
                     bullet.PendingRemoval = RemovalReason.Expiry;
             }
         }
@@ -170,7 +223,7 @@ namespace CombatSimulation.Core
 
         private BulletEntity[] _items = new BulletEntity[64];
         private int _count;
-        private int[] _free = new int[16];
+        private int[] _free = new int[64];
         private int _freeCount;
 
         // Store index per physics bullet index. Valid only when the entry's Body matches.

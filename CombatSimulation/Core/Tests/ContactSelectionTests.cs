@@ -41,7 +41,7 @@ namespace CombatSimulation.Core.Tests
         {
             const ulong first = 1, stopped = 2, late = 3;
             var accepted = Resolve(
-                BulletHit(0.2f, first, stopped, stopsTarget: true),
+                BulletHit(0.2f, first, stopped, targetHitPoints: 1f),
                 BulletHit(0.4f, stopped, Ship),
                 BulletHit(0.5f, late, stopped),
                 BulletHit(0.7f, late, OtherShip));
@@ -51,12 +51,37 @@ namespace CombatSimulation.Core.Tests
         }
 
         [Test]
+        public void HitsOnAMissileAddUpAndStopItAtTheLethalOne()
+        {
+            const ulong first = 1, second = 2, missile = 3, late = 4;
+            var accepted = Resolve(
+                BulletHit(0.2f, first, missile, targetHitPoints: 1.5f),
+                BulletHit(0.4f, second, missile, targetHitPoints: 1.5f),
+                BulletHit(0.6f, missile, Ship),
+                BulletHit(0.7f, late, missile, targetHitPoints: 1.5f));
+
+            Assert.AreEqual(new[] { "hit 1->3", "hit 2->3" }, accepted,
+                "The second hit brings the damage to the hit points; the missile neither hits nor takes a later hit.");
+        }
+
+        [Test]
+        public void ASubLethalHitDoesNotStopAMissile()
+        {
+            const ulong bolt = 1, missile = 2;
+            var accepted = Resolve(
+                BulletHit(0.2f, bolt, missile, targetHitPoints: 2f),
+                BulletHit(0.6f, missile, Ship));
+
+            Assert.AreEqual(new[] { "hit 1->2", "hit 2->100" }, accepted);
+        }
+
+        [Test]
         public void TwoBulletsThatHitEachOtherAtTheSameTimeBothTakeTheHit()
         {
             const ulong a = 1, b = 2;
             var accepted = Resolve(
-                BulletHit(0.5f, a, b, stopsTarget: true),
-                BulletHit(0.5f, b, a, stopsTarget: true));
+                BulletHit(0.5f, a, b, targetHitPoints: 1f),
+                BulletHit(0.5f, b, a, targetHitPoints: 1f));
 
             Assert.AreEqual(new[] { "hit 1->2", "hit 2->1" }, accepted);
         }
@@ -180,7 +205,7 @@ namespace CombatSimulation.Core.Tests
         };
 
         private static ContactCandidate BulletHit(float time, ulong bullet, ulong target, bool passThrough = false,
-            bool stopsTarget = false, bool oncePerTarget = false, ShapeHitPriority priority = ShapeHitPriority.Hull) =>
+            float targetHitPoints = 0f, bool oncePerTarget = false, ShapeHitPriority priority = ShapeHitPriority.Hull) =>
             new ContactCandidate
             {
                 Time = time,
@@ -192,7 +217,7 @@ namespace CombatSimulation.Core.Tests
                 AttackerHandle = BulletHandle(bullet),
                 TargetHandle = target < Ship ? BulletHandle(target) : ShipHandle(target),
                 AttackerPassThrough = passThrough,
-                StopsTarget = stopsTarget,
+                TargetHitPoints = targetHitPoints,
                 OncePerTargetEntity = oncePerTarget,
                 Damage = 1f,
             };

@@ -25,7 +25,7 @@ namespace CombatSimulation.Core
 
     // One possible contact of a step. The core collects all of them, sorts them, then selects the valid ones
     // (contact ordering). The first six fields are the sort key; the rest is payload.
-    internal struct ContactCandidate
+    internal struct ContactCandidate : IComparable<ContactCandidate>
     {
         // Fraction of the step, in [0, 1].
         public float Time;
@@ -45,8 +45,9 @@ namespace CombatSimulation.Core
         // Damage over time counts once per attacker and target entity per step (D16).
         public bool OncePerTargetEntity;
 
-        // A hit that consumes its target bullet: the target stops at this time.
-        public bool StopsTarget;
+        // The hit points of a target bullet at the start of the step; zero when hits do not consume the target.
+        // The target stops at the hit that brings the accepted damage of the step to this value.
+        public float TargetHitPoints;
 
         public float Damage;
 
@@ -65,6 +66,10 @@ namespace CombatSimulation.Core
             if (a.TargetShapeOrder != b.TargetShapeOrder) return a.TargetShapeOrder < b.TargetShapeOrder ? -1 : 1;
             return 0;
         }
+
+        // Array.Sort uses it without a comparer object. A custom IComparer makes .NET wrap it in a new delegate on
+        // every sort, which breaks the zero-allocation rule of Step.
+        public int CompareTo(ContactCandidate other) => Compare(this, other);
 
         public override string ToString() =>
             $"{Kind} t={Time} {Attacker} -> {Target} ({TargetPriority} {TargetShapeOrder}, {Source})";

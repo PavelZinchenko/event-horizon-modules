@@ -38,7 +38,7 @@ namespace CombatSimulation.Core
         // per step makes every key unique, so a nonzero result is a defect.
         public int Sort()
         {
-            Array.Sort(_candidates, 0, _count, Comparer);
+            Array.Sort(_candidates, 0, _count);
 
             var duplicates = 0;
             for (var i = 1; i < _count; ++i)
@@ -100,10 +100,13 @@ namespace CombatSimulation.Core
                 if (candidate.Time < _stopTimes[index]) _stopTimes[index] = candidate.Time;
             }
 
-            if (candidate.StopsTarget && IsBullet(candidate.TargetHandle))
+            // Accepted hits add up in sort order, so several weak hits stop a missile at the one that kills it.
+            if (candidate.TargetHitPoints > 0f && IsBullet(candidate.TargetHandle))
             {
                 var index = Touch(candidate.TargetHandle);
-                if (candidate.Time < _stopTimes[index]) _stopTimes[index] = candidate.Time;
+                _damageTaken[index] += candidate.Damage;
+                if (_damageTaken[index] >= candidate.TargetHitPoints && candidate.Time < _stopTimes[index])
+                    _stopTimes[index] = candidate.Time;
             }
         }
 
@@ -128,6 +131,7 @@ namespace CombatSimulation.Core
                 Array.Resize(ref _stopTimes, size);
                 Array.Resize(ref _disarmed, size);
                 Array.Resize(ref _consumedOwnHit, size);
+                Array.Resize(ref _damageTaken, size);
             }
 
             if (_stamps[index] != _stamp || _generations[index] != handle.Generation)
@@ -137,12 +141,11 @@ namespace CombatSimulation.Core
                 _stopTimes[index] = float.PositiveInfinity;
                 _disarmed[index] = false;
                 _consumedOwnHit[index] = false;
+                _damageTaken[index] = 0f;
             }
 
             return index;
         }
-
-        private static readonly CandidateComparer Comparer = new CandidateComparer();
 
         private ContactCandidate[] _candidates = new ContactCandidate[32];
         private int _count;
@@ -157,10 +160,6 @@ namespace CombatSimulation.Core
         private float[] _stopTimes = new float[64];
         private bool[] _disarmed = new bool[64];
         private bool[] _consumedOwnHit = new bool[64];
-
-        private sealed class CandidateComparer : IComparer<ContactCandidate>
-        {
-            public int Compare(ContactCandidate a, ContactCandidate b) => ContactCandidate.Compare(a, b);
-        }
+        private float[] _damageTaken = new float[64];
     }
 }

@@ -497,7 +497,7 @@ namespace CombatSimulation.Physics
             }
             else
             {
-                if (_shapeCount == _shapes.Length) Array.Resize(ref _shapes, _shapes.Length * 2);
+                if (_shapeCount == _shapes.Length) GrowPool(ref _shapes, ref _freeShapes);
                 index = _shapeCount++;
             }
 
@@ -533,7 +533,7 @@ namespace CombatSimulation.Physics
         private int AllocateBody()
         {
             if (_freeBodyCount > 0) return _freeBodies[--_freeBodyCount];
-            if (_bodyCount == _bodies.Length) Array.Resize(ref _bodies, _bodies.Length * 2);
+            if (_bodyCount == _bodies.Length) GrowPool(ref _bodies, ref _freeBodies);
             return _bodyCount++;
         }
 
@@ -541,6 +541,14 @@ namespace CombatSimulation.Physics
         {
             if (!IsAlive(id)) throw new ArgumentException($"{id} is not alive");
             return id.Index;
+        }
+
+        // A free list is as long as its pool, so it grows only when the pool does: a step that frees many items at
+        // once late in a battle allocates nothing.
+        private static void GrowPool<T>(ref T[] items, ref int[] free)
+        {
+            Array.Resize(ref items, items.Length * 2);
+            Array.Resize(ref free, items.Length);
         }
 
         private static void PushFree(ref int[] list, ref int count, int index)
@@ -563,12 +571,12 @@ namespace CombatSimulation.Physics
 
         private Body[] _bodies = new Body[64];
         private int _bodyCount;
-        private int[] _freeBodies = new int[16];
+        private int[] _freeBodies = new int[64];
         private int _freeBodyCount;
 
         private Shape[] _shapes = new Shape[64];
         private int _shapeCount;
-        private int[] _freeShapes = new int[16];
+        private int[] _freeShapes = new int[64];
         private int _freeShapeCount;
 
         private long[] _pairs = new long[256];

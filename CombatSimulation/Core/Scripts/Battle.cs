@@ -31,6 +31,7 @@ namespace CombatSimulation.Core
                 Substeps = PhysicsSubsteps,
             });
             Roster = new Roster(setup);
+            _targets = new TargetGrid(World.Torus);
 
             _published = new BattleSnapshot(BattleId, Roster.Slots.Count);
             _writing = new BattleSnapshot(BattleId, Roster.Slots.Count);
@@ -148,6 +149,7 @@ namespace CombatSimulation.Core
         internal void RequestSpawn(in SpawnRequest request) => _spawnRequests.Add(request);
 
         internal BulletStore Bullets => _bullets;
+        internal TargetGrid Targets => _targets;
         internal ShapeTable Shapes => _shapes;
         internal ContactResolver Contacts => _contacts;
         internal RammingTracker Ramming => _ramming;
@@ -208,10 +210,19 @@ namespace CombatSimulation.Core
 
         private void EvaluateModifiers() { }
 
-        // Stage 4. A retreating ship has its engine off and drifts (legacy ShipRetreatEffect).
+        // Stage 4. The target grid takes the ship poses at the start of the step. A retreating ship has its engine
+        // off and drifts (legacy ShipRetreatEffect); it stays a missile target. Then homing bullets steer.
         private void UpdateMotion()
         {
             var slots = Roster.Slots;
+            _targets.Clear();
+            for (var i = 0; i < slots.Count; ++i)
+            {
+                var ship = slots[i].ActiveShip;
+                if (ship != null)
+                    _targets.Add(ship.Id, ship.Side, World.GetPosition(ship.Body), ship.Definition.HullRadius);
+            }
+
             for (var i = 0; i < slots.Count; ++i)
             {
                 var ship = slots[i].ActiveShip;
@@ -220,6 +231,14 @@ namespace CombatSimulation.Core
 
                 // Physics reports a touch after the solve, so ramming uses the velocity from before the step.
                 ship.PreStepVelocity = World.GetLinearVelocity(ship.Body);
+            }
+
+            // Each missile reads only its own state and the grid, so the storage order has no effect.
+            for (var i = 0; i < _bullets.Capacity; ++i)
+            {
+                if (!_bullets.IsAlive(i)) continue;
+                ref var bullet = ref _bullets[i];
+                if (bullet.Definition.IsHoming) HomingSteering.Update(this, ref bullet);
             }
         }
 
@@ -256,7 +275,7 @@ namespace CombatSimulation.Core
             var random = CounterRandom.Create(Setup.MatchSeed, id, Tick, RandomPurpose.WeaponSpread);
             var angle = World.GetAngle(ship.Body) + barrel.Angle + (random.NextFloat() - 0.5f) * request.Spread;
             var direction = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
-            var velocity = definition.Speed * direction +
+            var velocity = definition.Speed * definition.StartingVelocityMultiplier * direction +
                            definition.ParentVelocityEffect * World.GetLinearVelocity(ship.Body);
 
             var body = World.CreateBullet(new BulletDef
@@ -268,7 +287,7 @@ namespace CombatSimulation.Core
 
                 // The core selects the first valid hit, so physics reports every target (contact ordering, rule 1).
                 PassThrough = true,
-                Filter = CollisionFilters.Energy(ship.Side),
+                Filter = CollisionFilters.Bullet(definition, ship.Side),
             }, new Circle(Vec2.Zero, definition.Radius));
 
             ref var bullet = ref _bullets[index];
@@ -278,6 +297,10 @@ namespace CombatSimulation.Core
             bullet.Owner = ship.Owner;
             bullet.Definition = definition;
             bullet.ExpiryTick = Tick + definition.LifetimeTicks - 1;
+            bullet.HitPoints = definition.HitPoints;
+
+            // Legacy runs no search at creation (its timer check is strict); the first one is in the next tick.
+            bullet.NextSearchTick = Tick + 1;
             _bullets.SetBody(index, body);
 
             if (definition.Recoil > 0f) World.ApplyImpulse(ship.Body, -definition.Recoil * direction, muzzle);
@@ -300,7 +323,7 @@ namespace CombatSimulation.Core
                 ReportDefect($"Battle {BattleId}, tick {Tick}: {duplicates} contact candidates share a key.");
         }
 
-        // Stage 9. Selects the valid candidates and turns hits on ships into pending damage.
+        // Stage 9. Selects the valid candidates and turns hits on ships and missiles into pending damage.
         private void ResolveContacts()
         {
             _contacts.Resolve();
@@ -314,10 +337,17 @@ namespace CombatSimulation.Core
                 // A bullet that stops at its hit leaves at stage 12. A ship attacker is ignored.
                 if (!hit.AttackerPassThrough) _bullets.MarkRemoval(hit.AttackerHandle, RemovalReason.Death);
 
-                var target = _ships.Get(hit.TargetHandle);
-                if (target == null) continue;
+                if (hit.TargetHandle.Kind == EntityKind.Bullet)
+                {
+                    _bullets.AddDamage(hit.TargetHandle, hit.Damage);
+                }
+                else
+                {
+                    var target = _ships.Get(hit.TargetHandle);
+                    if (target == null) continue;
+                    target.PendingDamage += hit.Damage;
+                }
 
-                target.PendingDamage += hit.Damage;
                 _events.Add(BattleEvent.HitEvent(BattleId, Tick, _events.Count, hit));
             }
         }
@@ -339,12 +369,14 @@ namespace CombatSimulation.Core
                 if (absorbed > 0f) ship.Shield.Consume(absorbed);
                 ship.Armor.Consume(damage - absorbed);
             }
+
+            _bullets.ApplyDamage();
         }
 
-        // Stage 11. Marks deaths and bullet expiry; stage 12 applies them. Armor 0 is a death.
+        // Stage 11. Marks deaths and bullet expiry; stage 12 applies them. Armor 0 is a death; so are missile hit points 0.
         private void MarkDeaths()
         {
-            _bullets.MarkExpired(Tick);
+            _bullets.MarkDeaths(Tick);
 
             for (var i = 0; i < _deathRequests.Count; ++i)
             {
@@ -661,6 +693,7 @@ namespace CombatSimulation.Core
         private readonly ShapeTable _shapes = new ShapeTable();
         private readonly ContactResolver _contacts = new ContactResolver();
         private readonly RammingTracker _ramming = new RammingTracker();
+        private readonly TargetGrid _targets;
         private readonly List<RosterCommand> _commands = new List<RosterCommand>();
         private readonly List<ControlFrame> _frames = new List<ControlFrame>();
         private readonly HashSet<FrameKey> _pendingFrameKeys = new HashSet<FrameKey>();

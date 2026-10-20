@@ -264,7 +264,7 @@ namespace CombatSimulation.Physics
             }
             else
             {
-                if (_bulletCount == _bullets.Length) Array.Resize(ref _bullets, _bullets.Length * 2);
+                if (_bulletCount == _bullets.Length) GrowPool(ref _bullets, ref _freeBullets);
                 index = _bulletCount++;
             }
 
@@ -298,7 +298,7 @@ namespace CombatSimulation.Physics
         private Bullet[] _bullets = new Bullet[64];
         private int _bulletCount;
         private int _aliveBulletCount;
-        private int[] _freeBullets = new int[16];
+        private int[] _freeBullets = new int[64];
         private int _freeBulletCount;
         private int _attachedBulletCount;
     }
