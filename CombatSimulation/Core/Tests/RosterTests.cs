@@ -79,6 +79,41 @@ namespace CombatSimulation.Core.Tests
         }
 
         [Test]
+        public void RetreatKeepsArmorAndShieldDeficitsButNotEnergy()
+        {
+            // B4: 1000/1000 armor, 500/500 shield and 300/300 energy; retreats at 600, 0 and 50.
+            var driver = new Driver(Fixtures.Setup(1, 1));
+            driver.Deploy(1);
+            driver.Deploy(101);
+            driver.Step();
+            driver.Retreat(driver.Entity(1));
+            driver.Step();
+            var completionTick = driver.Slot(1).ActiveShip.RetreatCompletionTick;
+
+            // Spend just before the completion tick, so no recharge runs in between (both delays exceed a tick).
+            driver.StepUntil(completionTick);
+            var ship = driver.Ship(1);
+            ship.Armor.Consume(400f);
+            ship.Shield.Consume(500f);
+            ship.Energy.Consume(250f);
+            driver.Step();
+
+            var slot = driver.Slot(1);
+            Assert.AreEqual(RosterStatus.Ready, slot.Status);
+            Assert.AreEqual(400f, slot.ArmorDeficit);
+            Assert.AreEqual(500f, slot.ShieldDeficit);
+
+            driver.Deploy(1);
+            driver.Step();
+            ship = driver.Ship(1);
+            Assert.AreEqual(600f, ship.Armor.Value);
+            Assert.AreEqual(0f, ship.Shield.Value, "The shield delay started at deployment (legacy ShipInfo.Create).");
+            Assert.AreEqual(Fixtures.Shield.RechargeDelay - Battle.TickDuration, ship.Shield.DelayRemaining, 1e-5f);
+            Assert.AreEqual(300f, ship.Energy.Value);
+            Assert.AreEqual(0f, ship.Energy.DelayRemaining, "Energy and its delay start fresh.");
+        }
+
+        [Test]
         public void RedeploymentGivesANewEntityId()
         {
             var driver = new Driver(Fixtures.Setup(1, 1));

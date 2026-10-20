@@ -96,8 +96,15 @@ namespace CombatSimulation.Core.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => new RosterSlotSetup(new RosterId(1), -1, Fixtures.Ship));
             Assert.Throws<ArgumentOutOfRangeException>(() => new RosterSlotSetup(new RosterId(1), 0, Fixtures.Ship, -1));
             Assert.Throws<ArgumentNullException>(() => new RosterSlotSetup(new RosterId(1), 0, null));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new ShipDefinition(0f, 1f));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new ShipDefinition(1f, float.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => Fixtures.ShipWith(hullRadius: 0f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => Fixtures.ShipWith(mass: float.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => Fixtures.ShipWith(armor: 0f));
+            Assert.Throws<ArgumentNullException>(() => new ShipDefinition(1f, 1f, null, 1f, Fixtures.Shield, Fixtures.Energy));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new EngineDefinition(-1f, 1f, 1f, 1f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new EngineDefinition(1f, float.PositiveInfinity, 1f, 1f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new ResourceDefinition(-1f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new ResourceDefinition(1f, float.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new ResourceDefinition(1f, 1f, -1f));
         }
 
         [Test]

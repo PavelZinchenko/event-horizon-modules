@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace CombatSimulation.Core.Tests
@@ -5,7 +6,22 @@ namespace CombatSimulation.Core.Tests
     // Code fixtures for core tests. Side 0 slots get roster IDs 1, 2, ...; side 1 slots get 101, 102, ...
     internal static class Fixtures
     {
-        public static readonly ShipDefinition Ship = new ShipDefinition(1f, 1f);
+        public const float Degrees = (float)(Math.PI / 180.0);
+
+        // 20 u/s² propulsion, 10 u/s, 300°/s² turn rate, 120°/s.
+        public static readonly EngineDefinition Engine = new EngineDefinition(20f, 10f, 300f * Degrees, 120f * Degrees);
+
+        // The B4 acceptance ship: 1000 armor, 500 shield, 300 energy.
+        public static readonly ResourceDefinition Shield = new ResourceDefinition(500f, 10f, 1f);
+        public static readonly ResourceDefinition Energy = new ResourceDefinition(300f, 20f, 0.5f);
+
+        public static readonly ShipDefinition Ship = ShipWith();
+
+        public static ShipDefinition ShipWith(float hullRadius = 1f, float mass = 1f, EngineDefinition engine = null,
+            float armor = 1000f, ResourceDefinition? shield = null, ResourceDefinition? energy = null,
+            EngineDefinition engineWithoutEnergy = null) =>
+            new ShipDefinition(hullRadius, mass, engine ?? Engine, armor, shield ?? Shield, energy ?? Energy,
+                engineWithoutEnergy);
 
         public static List<RosterSlotSetup> Roster(int side0Slots, int side1Slots)
         {
@@ -19,6 +35,14 @@ namespace CombatSimulation.Core.Tests
             int maxActiveShipsPerSide = 1, ulong battleId = 1, ulong matchSeed = 7) =>
             new BattleSetup(new BattleId(battleId), matchSeed, Roster(side0Slots, side1Slots),
                 timeLimitTicks: timeLimitTicks, maxActiveShipsPerSide: maxActiveShipsPerSide);
+
+        // One slot per side; slot 1 flies the given ship, slot 101 the default one.
+        public static BattleSetup Setup(ShipDefinition ship) =>
+            new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+            {
+                new RosterSlotSetup(new RosterId(1), 0, ship),
+                new RosterSlotSetup(new RosterId(101), 1, Ship),
+            });
     }
 
     // Submits roster commands with increasing command IDs, targeted at the next tick by default.
@@ -44,6 +68,13 @@ namespace CombatSimulation.Core.Tests
         public bool KillAll(int requestingSide, long? tick = null) =>
             Battle.Submit(RosterCommand.KillAll(BattleId, _nextCommandId++, tick ?? Tick, requestingSide));
 
+        // Controls for the active ship of a slot.
+        public bool Control(uint rosterId, float? course = null, float throttle = 0f, ulong systems = 0, long? tick = null) =>
+            Control(Entity(rosterId), course, throttle, systems, tick);
+
+        public bool Control(EntityId id, float? course = null, float throttle = 0f, ulong systems = 0, long? tick = null) =>
+            Battle.Submit(ControlFrame.Create(BattleId, _nextCommandId++, tick ?? Tick, id, course, throttle, systems));
+
         public void Kill(uint rosterId) => Battle.QueueDeath(Entity(rosterId));
 
         public void Step(long count = 1)
@@ -59,5 +90,6 @@ namespace CombatSimulation.Core.Tests
         public RosterSlot Slot(uint rosterId) => Battle.Roster.Find(new RosterId(rosterId));
         public RosterStatus Status(uint rosterId) => Slot(rosterId).Status;
         public EntityId Entity(uint rosterId) => Slot(rosterId).ActiveShip?.Id ?? default;
+        public ShipEntity Ship(uint rosterId) => Slot(rosterId).ActiveShip;
     }
 }

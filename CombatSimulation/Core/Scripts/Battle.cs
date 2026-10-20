@@ -75,6 +75,31 @@ namespace CombatSimulation.Core
             return true;
         }
 
+        // The entity is checked at stage 1 of the target tick: a frame may name a ship that deploys in that tick.
+        public bool Submit(in ControlFrame frame)
+        {
+            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
+
+            if (frame.BattleId != BattleId)
+                return Reject(frame, "wrong battle");
+            if (frame.TargetTick < Tick)
+                return Reject(frame, "past tick");
+            if (frame.EntityId.IsNull)
+                return Reject(frame, "no entity");
+            if (!(frame.Throttle >= 0f && frame.Throttle <= 1f))
+                return Reject(frame, "throttle out of range");
+            if (frame.HasCourse && (float.IsNaN(frame.Course) || float.IsInfinity(frame.Course)))
+                return Reject(frame, "invalid course");
+            if (_pendingCommandIds.Contains(frame.CommandId))
+                return Reject(frame, "duplicate command ID");
+            if (!_pendingFrameKeys.Add(new FrameKey(frame.EntityId, frame.TargetTick)))
+                return Reject(frame, "second frame for the entity and tick");
+
+            _pendingCommandIds.Add(frame.CommandId);
+            _frames.Insert(FindInsertIndex(frame), frame);
+            return true;
+        }
+
         public void Step()
         {
             if (IsCompleted) throw new InvalidOperationException("The battle has a result; it cannot step.");
@@ -113,7 +138,7 @@ namespace CombatSimulation.Core
             return false;
         }
 
-        // Stage 1. Roster commands for this tick, in command ID order. Control frames come in step 3.
+        // Stage 1. Roster commands for this tick, then control frames, each in command ID order.
         private void ApplyCommands()
         {
             var count = 0;
@@ -125,11 +150,57 @@ namespace CombatSimulation.Core
             }
 
             if (count > 0) _commands.RemoveRange(0, count);
+
+            var slots = Roster.Slots;
+            for (var i = 0; i < slots.Count; ++i)
+                slots[i].ActiveShip?.BeginControlTick();
+
+            count = 0;
+            while (count < _frames.Count && _frames[count].TargetTick == Tick)
+            {
+                var frame = _frames[count++];
+                _pendingCommandIds.Remove(frame.CommandId);
+                _pendingFrameKeys.Remove(new FrameKey(frame.EntityId, frame.TargetTick));
+
+                // A frame for a removed or unknown entity is dropped (commands, rule 4).
+                var ship = FindShip(frame.EntityId);
+                if (ship == null) Reject(frame, "unknown entity");
+                else ship.ApplyControls(frame);
+            }
+
+            if (count > 0) _frames.RemoveRange(0, count);
         }
 
-        private void UpdateSystems() { }
+        // Stage 2. Resources recharge first, before devices spend (legacy: stats update before systems).
+        private void UpdateSystems()
+        {
+            var slots = Roster.Slots;
+            for (var i = 0; i < slots.Count; ++i)
+            {
+                var ship = slots[i].ActiveShip;
+                if (ship == null) continue;
+
+                ship.EngineHasEnergy = ship.Energy.Value > 0f;
+                ship.Energy.Update(TickDuration);
+                ship.Armor.Update(TickDuration);
+                ship.Shield.Update(TickDuration);
+            }
+        }
+
         private void EvaluateModifiers() { }
-        private void UpdateMotion() { }
+
+        // Stage 4. A retreating ship has its engine off and drifts (legacy ShipRetreatEffect).
+        private void UpdateMotion()
+        {
+            var slots = Roster.Slots;
+            for (var i = 0; i < slots.Count; ++i)
+            {
+                var ship = slots[i].ActiveShip;
+                if (ship == null || ship.RetreatCompletionTick != ShipEntity.NoRetreat) continue;
+                ShipEngine.Update(World, ship, TickDuration);
+            }
+        }
+
         private void ApplySpawnRequests() { }
         private void RunQueries() { }
         private void StepPhysics() => World.Step(TickDuration);
@@ -166,8 +237,10 @@ namespace CombatSimulation.Core
                 }
                 else if (ship.RetreatCompletionTick == Tick)
                 {
+                    var armorDeficit = ship.Armor.Deficit;
+                    var shieldDeficit = ship.Shield.Deficit;
                     RemoveShip(ship);
-                    slot.CompleteRetreat();
+                    slot.CompleteRetreat(armorDeficit, shieldDeficit);
                 }
             }
 
@@ -337,10 +410,33 @@ namespace CombatSimulation.Core
             return low;
         }
 
+        private int FindInsertIndex(in ControlFrame frame)
+        {
+            var low = 0;
+            var high = _frames.Count;
+            while (low < high)
+            {
+                var middle = (low + high) >> 1;
+                var other = _frames[middle];
+                var before = other.TargetTick < frame.TargetTick ||
+                             (other.TargetTick == frame.TargetTick && other.CommandId < frame.CommandId);
+                if (before) low = middle + 1;
+                else high = middle;
+            }
+            return low;
+        }
+
         private bool Reject(in RosterCommand command, string reason)
         {
             ++RejectedCommandCount;
             Trace.LogWarning($"Battle {BattleId}, tick {Tick}: rejected {command}: {reason}.");
+            return false;
+        }
+
+        private bool Reject(in ControlFrame frame, string reason)
+        {
+            ++RejectedCommandCount;
+            Trace.LogWarning($"Battle {BattleId}, tick {Tick}: rejected {frame}: {reason}.");
             return false;
         }
 
@@ -351,9 +447,28 @@ namespace CombatSimulation.Core
         private readonly ShipStore _ships = new ShipStore();
         private readonly EntityRegistry _entities = new EntityRegistry();
         private readonly List<RosterCommand> _commands = new List<RosterCommand>();
+        private readonly List<ControlFrame> _frames = new List<ControlFrame>();
+        private readonly HashSet<FrameKey> _pendingFrameKeys = new HashSet<FrameKey>();
         private readonly HashSet<ulong> _pendingCommandIds = new HashSet<ulong>();
         private readonly List<EntityId> _deathRequests = new List<EntityId>();
         private readonly bool[] _destroySide = new bool[BattleSetup.SideCount];
         private long _deploymentOrder;
+
+        // One control frame per entity and tick (commands, rule 2).
+        private readonly struct FrameKey : IEquatable<FrameKey>
+        {
+            private readonly EntityId _entityId;
+            private readonly long _tick;
+
+            public FrameKey(EntityId entityId, long tick)
+            {
+                _entityId = entityId;
+                _tick = tick;
+            }
+
+            public bool Equals(FrameKey other) => _entityId == other._entityId && _tick == other._tick;
+            public override bool Equals(object obj) => obj is FrameKey other && Equals(other);
+            public override int GetHashCode() => (_entityId.GetHashCode() * 397) ^ _tick.GetHashCode();
+        }
     }
 }

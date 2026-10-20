@@ -28,6 +28,10 @@ namespace CombatSimulation.Core
 
         public ShipEntity ActiveShip { get; private set; }
 
+        // Absolute armor and shield deficits kept from the last retreat (B4). Energy and cooldowns start fresh.
+        public float ArmorDeficit { get; private set; }
+        public float ShieldDeficit { get; private set; }
+
         // Increments on every transition.
         public int Revision { get; private set; }
 
@@ -40,8 +44,10 @@ namespace CombatSimulation.Core
             ++Revision;
         }
 
-        internal void CompleteRetreat()
+        internal void CompleteRetreat(float armorDeficit, float shieldDeficit)
         {
+            ArmorDeficit = armorDeficit;
+            ShieldDeficit = shieldDeficit;
             Status = RosterStatus.Ready;
             ActiveShip = null;
             ++Revision;
