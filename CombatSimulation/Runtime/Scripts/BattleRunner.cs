@@ -63,6 +63,10 @@ namespace CombatSimulation.Runtime
             for (var i = 0; i < events.Length; ++i)
             {
                 var item = events[i];
+
+                // Bullets have no pilots.
+                if (item.IsBullet) continue;
+
                 if (item.Kind == BattleEventKind.Removal)
                 {
                     for (var j = 0; j < _pilots.Count; ++j)

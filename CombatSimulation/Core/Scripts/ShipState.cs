@@ -70,6 +70,37 @@ namespace CombatSimulation.Core
         public bool IsRetreating => RetreatCompletionTick != ShipEntity.NoRetreat;
     }
 
+    // One bullet at the end of a completed tick. A value copy.
+    public readonly struct BulletState
+    {
+        public readonly EntityId Id;
+        public readonly EntityId ParentId;
+        public readonly int Side;
+        public readonly int Owner;
+        public readonly BulletDefinition Definition;
+
+        // Canonical torus coordinates and radians.
+        public readonly Vec2 Position;
+        public readonly float Angle;
+        public readonly Vec2 LinearVelocity;
+
+        // The last tick the bullet flies in.
+        public readonly long ExpiryTick;
+
+        internal BulletState(in BulletEntity bullet, PhysicsWorld world)
+        {
+            Id = bullet.Id;
+            ParentId = bullet.ParentId;
+            Side = bullet.Side;
+            Owner = bullet.Owner;
+            Definition = bullet.Definition;
+            Position = world.GetBulletPosition(bullet.Body);
+            Angle = world.GetBulletRotation(bullet.Body).Angle;
+            LinearVelocity = world.GetBulletVelocity(bullet.Body);
+            ExpiryTick = bullet.ExpiryTick;
+        }
+    }
+
     // One roster slot at the end of a completed tick.
     public readonly struct RosterSlotState
     {

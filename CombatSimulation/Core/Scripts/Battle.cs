@@ -144,6 +144,10 @@ namespace CombatSimulation.Core
             return false;
         }
 
+        // Stage 2: a device asks for a bullet; stage 5 creates it.
+        internal void RequestSpawn(in SpawnRequest request) => _spawnRequests.Add(request);
+
+        internal BulletStore Bullets => _bullets;
         internal ShapeTable Shapes => _shapes;
         internal ContactResolver Contacts => _contacts;
         internal RammingTracker Ramming => _ramming;
@@ -194,6 +198,11 @@ namespace CombatSimulation.Core
                 ship.Energy.Update(TickDuration);
                 ship.Armor.Update(TickDuration);
                 ship.Shield.Update(TickDuration);
+
+                // Legacy ShipRetreatEffect.CanActivateSystem: a retreating ship activates no system.
+                if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) continue;
+                for (var d = 0; d < ship.DeviceCount; ++d)
+                    ship.GetDevice(d).Update(this, ship);
             }
         }
 
@@ -214,7 +223,68 @@ namespace CombatSimulation.Core
             }
         }
 
-        private void ApplySpawnRequests() { }
+        // Stage 5. Requests come in roster order, then device order, so requests of one spawn slot are adjacent.
+        private void ApplySpawnRequests()
+        {
+            for (var i = 0; i < _spawnRequests.Count; ++i)
+            {
+                var request = _spawnRequests[i];
+                var sequence = 0u;
+                for (var j = i - 1; j >= 0 && _spawnRequests[j].HasSameSlot(request); --j) ++sequence;
+                SpawnBullet(request, sequence);
+            }
+
+            _spawnRequests.Clear();
+        }
+
+        // Legacy BulletFactory.ConfigureBody at the muzzle pose, plus the Q1 recoil (owner, 2026-10-20).
+        private void SpawnBullet(in SpawnRequest request, uint sequence)
+        {
+            var ship = request.Ship;
+            var id = SpawnIdentity.CreateChild(ship.Id, Tick, (uint)request.DeviceIndex, (uint)request.BarrelIndex, sequence);
+            var index = _bullets.Allocate();
+            if (!TryRegister(id, _bullets.GetHandle(index)))
+            {
+                _bullets.Release(index);
+                return;
+            }
+
+            var definition = request.Bullet;
+            var barrel = ship.Definition.Barrels[request.BarrelIndex];
+            var muzzle = World.GetPosition(ship.Body) + World.GetRotation(ship.Body).Rotate(barrel.Position);
+
+            var random = CounterRandom.Create(Setup.MatchSeed, id, Tick, RandomPurpose.WeaponSpread);
+            var angle = World.GetAngle(ship.Body) + barrel.Angle + (random.NextFloat() - 0.5f) * request.Spread;
+            var direction = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
+            var velocity = definition.Speed * direction +
+                           definition.ParentVelocityEffect * World.GetLinearVelocity(ship.Body);
+
+            var body = World.CreateBullet(new BulletDef
+            {
+                Position = muzzle,
+                Angle = angle,
+                LinearVelocity = velocity,
+                Owner = ship.Body,
+
+                // The core selects the first valid hit, so physics reports every target (contact ordering, rule 1).
+                PassThrough = true,
+                Filter = CollisionFilters.Energy(ship.Side),
+            }, new Circle(Vec2.Zero, definition.Radius));
+
+            ref var bullet = ref _bullets[index];
+            bullet.Id = id;
+            bullet.ParentId = ship.Id;
+            bullet.Side = ship.Side;
+            bullet.Owner = ship.Owner;
+            bullet.Definition = definition;
+            bullet.ExpiryTick = Tick + definition.LifetimeTicks - 1;
+            _bullets.SetBody(index, body);
+
+            if (definition.Recoil > 0f) World.ApplyImpulse(ship.Body, -definition.Recoil * direction, muzzle);
+
+            _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, bullet));
+        }
+
         private void RunQueries() { }
         private void StepPhysics() => World.Step(TickDuration);
 
@@ -222,6 +292,7 @@ namespace CombatSimulation.Core
         private void CollectContacts()
         {
             _contacts.BeginStep();
+            _bullets.CollectHits(World, _shapes, _ships, _contacts);
             _ramming.Collect(World, _shapes, _ships, _contacts);
 
             var duplicates = _contacts.Sort();
@@ -239,6 +310,9 @@ namespace CombatSimulation.Core
             {
                 ref readonly var hit = ref accepted[i];
                 if (hit.Kind != ContactKind.Hit) continue;
+
+                // A bullet that stops at its hit leaves at stage 12. A ship attacker is ignored.
+                if (!hit.AttackerPassThrough) _bullets.MarkRemoval(hit.AttackerHandle, RemovalReason.Death);
 
                 var target = _ships.Get(hit.TargetHandle);
                 if (target == null) continue;
@@ -267,9 +341,11 @@ namespace CombatSimulation.Core
             }
         }
 
-        // Stage 11. Marks deaths; stage 12 applies them. Armor 0 is a death.
+        // Stage 11. Marks deaths and bullet expiry; stage 12 applies them. Armor 0 is a death.
         private void MarkDeaths()
         {
+            _bullets.MarkExpired(Tick);
+
             for (var i = 0; i < _deathRequests.Count; ++i)
             {
                 var ship = FindShip(_deathRequests[i]);
@@ -287,6 +363,7 @@ namespace CombatSimulation.Core
         }
 
         // Stage 12. One batch, in roster order: deaths, then retreat completions, then surrender and kill-all.
+        // Bullets leave last, in entity ID order. A bullet outlives the ship that fired it.
         private void ApplyStructureChanges()
         {
             var slots = Roster.Slots;
@@ -334,6 +411,22 @@ namespace CombatSimulation.Core
                     slot.Destroy();
                     AddTransition(slot, previousStatus, RosterTransitionReason.ForcedDestruction, id);
                 }
+            }
+
+            RemoveBullets();
+        }
+
+        private void RemoveBullets()
+        {
+            _bullets.CollectRemovals(_bulletRemovals);
+            for (var i = 0; i < _bulletRemovals.Count; ++i)
+            {
+                var index = _bulletRemovals[i];
+                ref readonly var bullet = ref _bullets[index];
+                _events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _events.Count, bullet));
+                World.DestroyBullet(bullet.Body);
+                _entities.Remove(bullet.Id);
+                _bullets.Release(index);
             }
         }
 
@@ -417,12 +510,14 @@ namespace CombatSimulation.Core
 
             var definition = slot.Setup.Ship;
             var body = World.CreateBody(new BodyDef { Mass = definition.Mass });
-            ship.Initialize(id, slot, body);
+            ship.Initialize(id, slot, body, Tick);
 
+            var shapeDef = ShapeDef.Default;
+            shapeDef.Filter = CollisionFilters.Ship(slot.Side);
             var parts = definition.HullParts;
             for (var i = 0; i < parts.Count; ++i)
             {
-                var shape = World.AddCircle(body, parts[i]);
+                var shape = World.AddCircle(body, parts[i], shapeDef);
                 ship.AddShape(shape);
                 _shapes.Register(shape, new ShapeEntry(ship.Handle, id, ShapeHitPriority.Hull, i));
             }
@@ -559,6 +654,9 @@ namespace CombatSimulation.Core
             kind == RosterCommandKind.Surrender || kind == RosterCommandKind.KillAll;
 
         private readonly ShipStore _ships = new ShipStore();
+        private readonly BulletStore _bullets = new BulletStore();
+        private readonly List<SpawnRequest> _spawnRequests = new List<SpawnRequest>();
+        private readonly List<int> _bulletRemovals = new List<int>();
         private readonly EntityRegistry _entities = new EntityRegistry();
         private readonly ShapeTable _shapes = new ShapeTable();
         private readonly ContactResolver _contacts = new ContactResolver();

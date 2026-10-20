@@ -21,9 +21,21 @@ namespace CombatSimulation.Core.Tests
         public static ShipDefinition ShipWith(float hullRadius = 1f, float mass = 1f, EngineDefinition engine = null,
             float armor = 1000f, ResourceDefinition? shield = null, ResourceDefinition? energy = null,
             EngineDefinition engineWithoutEnergy = null, IReadOnlyList<Circle> extraHullParts = null,
-            float rammingDamageMultiplier = 1f) =>
+            float rammingDamageMultiplier = 1f, IReadOnlyList<BarrelDefinition> barrels = null,
+            IReadOnlyList<DeviceDefinition> devices = null) =>
             new ShipDefinition(hullRadius, mass, engine ?? Engine, armor, shield ?? Shield, energy ?? Energy,
-                engineWithoutEnergy, extraHullParts, rammingDamageMultiplier);
+                engineWithoutEnergy, extraHullParts, rammingDamageMultiplier, barrels, devices);
+
+        // Legacy PlasmaBolt (ammunition 103): size 0.5, velocity 20, range 10, damage 5, weight 0.
+        public static readonly BulletDefinition Bolt = new BulletDefinition(0.25f, 20f, 10f, 5f);
+
+        // One cannon (device 0) on one barrel at the given muzzle point; by default 1 u ahead of the hull centre.
+        public static ShipDefinition CannonShip(BulletDefinition bullet = null, float cooldown = 0.1f,
+            float energyCost = 2f, float spread = 0f, Vec2? muzzle = null, float mass = 1f,
+            ResourceDefinition? energy = null) =>
+            ShipWith(mass: mass, energy: energy,
+                barrels: new[] { new BarrelDefinition(muzzle ?? new Vec2(1f, 0f)) },
+                devices: new[] { new CannonDefinition(0, cooldown, energyCost, spread, bullet ?? Bolt) });
 
         public static List<RosterSlotSetup> Roster(int side0Slots, int side1Slots)
         {
@@ -47,8 +59,8 @@ namespace CombatSimulation.Core.Tests
             });
 
         // One slot per side with the given ships: slot 1 on side 0, slot 101 on side 1.
-        public static BattleSetup Setup(ShipDefinition side0, ShipDefinition side1) =>
-            new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+        public static BattleSetup Setup(ShipDefinition side0, ShipDefinition side1, ulong matchSeed = 7) =>
+            new BattleSetup(new BattleId(1), matchSeed, new List<RosterSlotSetup>
             {
                 new RosterSlotSetup(new RosterId(1), 0, side0),
                 new RosterSlotSetup(new RosterId(101), 1, side1),
@@ -102,11 +114,11 @@ namespace CombatSimulation.Core.Tests
         public EntityId Entity(uint rosterId) => Slot(rosterId).ActiveShip?.Id ?? default;
         public ShipEntity Ship(uint rosterId) => Slot(rosterId).ActiveShip;
 
-        // Teleports the active ship of a slot, at angle 0 and without spin.
-        public void Place(uint rosterId, Vec2 position, Vec2 velocity)
+        // Teleports the active ship of a slot, without spin.
+        public void Place(uint rosterId, Vec2 position, Vec2 velocity, float angle = 0f)
         {
             var body = Ship(rosterId).Body;
-            Battle.World.SetPose(body, position, 0f);
+            Battle.World.SetPose(body, position, angle);
             Battle.World.SetLinearVelocity(body, velocity);
             Battle.World.SetAngularVelocity(body, 0f);
         }

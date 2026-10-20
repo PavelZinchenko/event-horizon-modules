@@ -49,12 +49,12 @@ namespace CombatSimulation.Core
         // Spawn, removal, and a roster transition that involves an entity. Hit: the target.
         public readonly EntityId EntityId;
 
-        // Spawn and removal of a roster ship, and roster transitions.
+        // Spawn and removal of a roster ship, and roster transitions. Side and owner also for a bullet.
         public readonly RosterId RosterId;
         public readonly int Side;
         public readonly int Owner;
 
-        // Spawn: the view factory builds the view from it.
+        // Spawn and removal of a ship: the view factory builds the view from it. Null for a bullet.
         public readonly ShipDefinition Definition;
 
         public readonly RemovalReason RemovalReason;
@@ -75,11 +75,17 @@ namespace CombatSimulation.Core
         public readonly float Damage;
         public readonly Vec2 Point;
 
+        // Spawn and removal of a bullet: the definition and the entity that fired it. Null for a ship.
+        public readonly BulletDefinition BulletDefinition;
+        public readonly EntityId ParentId;
+
+        public bool IsBullet => BulletDefinition != null;
+
         private BattleEvent(BattleId battleId, long tick, int sequence, BattleEventKind kind, EntityId entityId,
             RosterId rosterId, int side, int owner, ShipDefinition definition, RemovalReason removalReason,
             RosterStatus previousStatus, RosterStatus status, RosterTransitionReason transitionReason, int revision,
             float armorDeficit, float shieldDeficit, BattleResult result, EntityId attackerId = default,
-            float damage = 0f, Vec2 point = default)
+            float damage = 0f, Vec2 point = default, BulletDefinition bulletDefinition = null, EntityId parentId = default)
         {
             BattleId = battleId;
             Tick = tick;
@@ -101,6 +107,8 @@ namespace CombatSimulation.Core
             AttackerId = attackerId;
             Damage = damage;
             Point = point;
+            BulletDefinition = bulletDefinition;
+            ParentId = parentId;
         }
 
         internal static BattleEvent Spawn(BattleId battleId, long tick, int sequence, ShipEntity ship) =>
@@ -111,6 +119,16 @@ namespace CombatSimulation.Core
         internal static BattleEvent Removal(BattleId battleId, long tick, int sequence, ShipEntity ship, RemovalReason reason) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, ship.Id, ship.Slot.RosterId, ship.Side,
                 ship.Owner, ship.Definition, reason, default, default, RosterTransitionReason.None, 0, 0f, 0f, default);
+
+        internal static BattleEvent BulletSpawn(BattleId battleId, long tick, int sequence, in BulletEntity bullet) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Spawn, bullet.Id, default, bullet.Side, bullet.Owner,
+                null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                bulletDefinition: bullet.Definition, parentId: bullet.ParentId);
+
+        internal static BattleEvent BulletRemoval(BattleId battleId, long tick, int sequence, in BulletEntity bullet) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, bullet.Id, default, bullet.Side, bullet.Owner,
+                null, bullet.PendingRemoval, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                bulletDefinition: bullet.Definition, parentId: bullet.ParentId);
 
         internal static BattleEvent Transition(BattleId battleId, long tick, int sequence, RosterSlot slot,
             RosterStatus previousStatus, RosterTransitionReason reason, EntityId entityId) =>
@@ -132,9 +150,11 @@ namespace CombatSimulation.Core
             switch (Kind)
             {
                 case BattleEventKind.Spawn:
-                    return $"{Tick}.{Sequence} Spawn {EntityId} (roster {RosterId}, side {Side})";
+                    return IsBullet
+                        ? $"{Tick}.{Sequence} Spawn bullet {EntityId} (parent {ParentId}, side {Side})"
+                        : $"{Tick}.{Sequence} Spawn {EntityId} (roster {RosterId}, side {Side})";
                 case BattleEventKind.Removal:
-                    return $"{Tick}.{Sequence} Removal {EntityId} ({RemovalReason})";
+                    return $"{Tick}.{Sequence} Removal {(IsBullet ? "bullet " : "")}{EntityId} ({RemovalReason})";
                 case BattleEventKind.RosterTransition:
                     return $"{Tick}.{Sequence} Roster {RosterId}: {PreviousStatus} -> {Status} ({TransitionReason}, revision {Revision}, entity {EntityId})";
                 case BattleEventKind.Result:

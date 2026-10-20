@@ -7,9 +7,13 @@ namespace CombatSimulation.Core
     // Immutable ship parameters built at setup. Phase 2 builds them from code fixtures; phase 4 from the database.
     public sealed class ShipDefinition
     {
+        // ControlFrame.Systems has one bit per device.
+        public const int MaxDevices = 64;
+
         public ShipDefinition(float hullRadius, float mass, EngineDefinition engine, float armor,
             ResourceDefinition shield, ResourceDefinition energy, EngineDefinition engineWithoutEnergy = null,
-            IReadOnlyList<Circle> extraHullParts = null, float rammingDamageMultiplier = 1f)
+            IReadOnlyList<Circle> extraHullParts = null, float rammingDamageMultiplier = 1f,
+            IReadOnlyList<BarrelDefinition> barrels = null, IReadOnlyList<DeviceDefinition> devices = null)
         {
             if (!(hullRadius > 0f) || float.IsInfinity(hullRadius))
                 throw new ArgumentOutOfRangeException(nameof(hullRadius), "Hull radius must be finite and positive.");
@@ -30,6 +34,19 @@ namespace CombatSimulation.Core
                 parts[i] = part;
             }
 
+            var barrelArray = new BarrelDefinition[barrels?.Count ?? 0];
+            for (var i = 0; i < barrelArray.Length; ++i)
+                barrelArray[i] = barrels[i] ?? throw new ArgumentNullException(nameof(barrels), "Barrels must not be null.");
+
+            var deviceArray = new DeviceDefinition[devices?.Count ?? 0];
+            if (deviceArray.Length > MaxDevices)
+                throw new ArgumentOutOfRangeException(nameof(devices), $"A ship has at most {MaxDevices} devices, one per control bit.");
+            for (var i = 0; i < deviceArray.Length; ++i)
+            {
+                deviceArray[i] = devices[i] ?? throw new ArgumentNullException(nameof(devices), "Devices must not be null.");
+                deviceArray[i].Validate(barrelArray.Length);
+            }
+
             HullRadius = hullRadius;
             HullParts = parts;
             Mass = mass;
@@ -39,6 +56,8 @@ namespace CombatSimulation.Core
             Shield = shield;
             Energy = energy;
             RammingDamageMultiplier = rammingDamageMultiplier;
+            Barrels = barrelArray;
+            Devices = deviceArray;
         }
 
         // The main hull circle at the body origin. Phase 4 replaces circles with collider outlines.
@@ -63,5 +82,10 @@ namespace CombatSimulation.Core
 
         // Multiplies the ramming damage this ship deals (Q8).
         public float RammingDamageMultiplier { get; }
+
+        public IReadOnlyList<BarrelDefinition> Barrels { get; }
+
+        // In control-bit order: device i reads bit i of the control frame.
+        public IReadOnlyList<DeviceDefinition> Devices { get; }
     }
 }

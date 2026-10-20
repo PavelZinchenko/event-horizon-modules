@@ -29,6 +29,9 @@ namespace CombatSimulation.Core
         // Active ships in roster order.
         public ReadOnlySpan<ShipState> Ships => new ReadOnlySpan<ShipState>(_ships, 0, _shipCount);
 
+        // Live bullets in storage order; the order has no meaning.
+        public ReadOnlySpan<BulletState> Bullets => new ReadOnlySpan<BulletState>(_bullets, 0, _bulletCount);
+
         // Every slot in setup order.
         public ReadOnlySpan<RosterSlotState> Roster => new ReadOnlySpan<RosterSlotState>(_roster, 0, _roster.Length);
 
@@ -63,6 +66,13 @@ namespace CombatSimulation.Core
                 if (slot.ActiveShip != null) _ships[_shipCount++] = new ShipState(slot.ActiveShip, world);
             }
 
+            var bullets = battle.Bullets;
+            if (_bullets.Length < bullets.AliveCount)
+                _bullets = new BulletState[Math.Max(bullets.AliveCount, _bullets.Length * 2)];
+            _bulletCount = 0;
+            for (var i = 0; i < bullets.Capacity; ++i)
+                if (bullets.IsAlive(i)) _bullets[_bulletCount++] = new BulletState(bullets[i], world);
+
             if (_events.Length < events.Count)
                 _events = new BattleEvent[Math.Max(events.Count, _events.Length * 2)];
             events.CopyTo(_events);
@@ -72,6 +82,8 @@ namespace CombatSimulation.Core
         private readonly RosterSlotState[] _roster;
         private readonly ShipState[] _ships;
         private int _shipCount;
+        private BulletState[] _bullets = new BulletState[16];
+        private int _bulletCount;
         private BattleEvent[] _events = new BattleEvent[16];
         private int _eventCount;
     }

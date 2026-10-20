@@ -7,6 +7,7 @@ namespace CombatSimulation.Core
     internal enum RandomPurpose : uint
     {
         SpawnPlacement = 1,
+        WeaponSpread = 2,
     }
 
     // Counter-based random (investigation 6.7): a draw is a function of match seed, entity, tick and purpose.

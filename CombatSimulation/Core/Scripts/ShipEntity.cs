@@ -6,7 +6,7 @@ namespace CombatSimulation.Core
     {
         Ship = 1,
 
-        // Bullets and beams (struct store, step 6). The contact resolver already keys its walk state by them.
+        // Bullets and beams (BulletStore).
         Bullet = 2,
     }
 
@@ -29,6 +29,10 @@ namespace CombatSimulation.Core
     internal sealed class ShipEntity
     {
         public const long NoRetreat = -1;
+
+        // Legacy ShipFactory weapon platform cooldown, shared by the weapons on one barrel.
+        public const float BarrelCooldown = 0.04f;
+        public static readonly int BarrelCooldownTicks = TickTime.After(BarrelCooldown);
 
         public ShipEntity(int index) => Index = index;
 
@@ -92,7 +96,7 @@ namespace CombatSimulation.Core
         }
 
         // A deployment starts with empty controls and full resources, minus the deficits the slot retained (B4).
-        internal void Initialize(EntityId id, RosterSlot slot, BodyId body)
+        internal void Initialize(EntityId id, RosterSlot slot, BodyId body, long tick)
         {
             Id = id;
             Slot = slot;
@@ -115,7 +119,25 @@ namespace CombatSimulation.Core
 
             EngineHasEnergy = false;
             ClearControls();
+
+            // Legacy FixedPlatform starts its shot timer at zero: a barrel is ready BarrelCooldownTicks after
+            // the tick before deployment, as if it fired then.
+            var barrels = Definition.Barrels.Count;
+            if (_barrelShotTicks.Length < barrels) _barrelShotTicks = new long[barrels];
+            for (var i = 0; i < barrels; ++i) _barrelShotTicks[i] = tick - 1;
+
+            var devices = Definition.Devices;
+            _devices = devices.Count == 0 ? System.Array.Empty<ShipDevice>() : new ShipDevice[devices.Count];
+            for (var i = 0; i < _devices.Length; ++i) _devices[i] = devices[i].CreateDevice(i);
         }
+
+        // In control-bit order. Deployment builds them from the definition.
+        public int DeviceCount => _devices.Length;
+        public ShipDevice GetDevice(int index) => _devices[index];
+
+        // Legacy FixedPlatform.IsReady: more than 0.04 s since the barrel's last shot, a strict check.
+        public bool IsBarrelReady(int barrel, long tick) => tick - _barrelShotTicks[barrel] >= BarrelCooldownTicks;
+        internal void RecordBarrelShot(int barrel, long tick) => _barrelShotTicks[barrel] = tick;
 
         internal void ApplyControls(in ControlFrame frame)
         {
@@ -144,10 +166,13 @@ namespace CombatSimulation.Core
             Shield = default;
             Energy = default;
             EngineHasEnergy = false;
+            _devices = System.Array.Empty<ShipDevice>();
             ClearControls();
         }
 
         private ShapeId[] _shapes = new ShapeId[1];
+        private long[] _barrelShotTicks = System.Array.Empty<long>();
+        private ShipDevice[] _devices = System.Array.Empty<ShipDevice>();
 
         private void ClearControls()
         {
