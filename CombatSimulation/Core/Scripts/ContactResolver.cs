@@ -54,6 +54,7 @@ namespace CombatSimulation.Core
             {
                 ref readonly var candidate = ref _candidates[i];
                 if (!IsAttackerValid(candidate) || !IsTargetValid(candidate)) continue;
+                if (candidate.PointDefense != null && !candidate.PointDefense.TryPayForZap()) continue;
 
                 if (candidate.OncePerTargetEntity &&
                     !_oncePerTarget.Add(new EntityPair(candidate.Attacker, candidate.Target)))
@@ -89,7 +90,12 @@ namespace CombatSimulation.Core
 
             if (candidate.Kind == ContactKind.Disarm)
             {
-                if (IsBullet(candidate.TargetHandle)) _disarmed[Touch(candidate.TargetHandle)] = true;
+                if (IsBullet(candidate.TargetHandle))
+                {
+                    // Touch can resize the arrays. Fetch the array only after it returns.
+                    var index = Touch(candidate.TargetHandle);
+                    _disarmed[index] = true;
+                }
                 return;
             }
 

@@ -26,6 +26,10 @@ namespace CombatSimulation.Core
         public static Filter Bullet(BulletDefinition definition, int side) =>
             definition.IsMissile ? Missile(side) : Energy(side);
 
+        // Query-only category: targets cannot exclude it through their own collision masks.
+        public static Filter PointDefense(int side) =>
+            new Filter(0, ~(EnergyCategory(1 - side) | MissileCategory(1 - side)));
+
         private static ulong Category(int unitClass, int side) => 1UL << (unitClass * BattleSetup.SideCount + side);
     }
 }

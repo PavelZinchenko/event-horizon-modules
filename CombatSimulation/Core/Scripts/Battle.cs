@@ -335,7 +335,11 @@ namespace CombatSimulation.Core
             _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, beam));
         }
 
-        private void RunQueries() => _beams.Run(this);
+        private void RunQueries()
+        {
+            _beams.Run(this);
+            _pointDefense.Run(this);
+        }
         private void StepPhysics() => World.Step(TickDuration);
 
         // Stage 8. Every source adds its candidates; the resolver sorts them by the contact key.
@@ -343,6 +347,7 @@ namespace CombatSimulation.Core
         {
             _contacts.BeginStep();
             _beams.Collect(_contacts);
+            _pointDefense.Collect(_contacts);
             _bullets.CollectHits(World, _shapes, _ships, _contacts);
             _ramming.Collect(World, _shapes, _ships, _contacts);
 
@@ -361,6 +366,12 @@ namespace CombatSimulation.Core
             for (var i = 0; i < accepted.Length; ++i)
             {
                 ref readonly var hit = ref accepted[i];
+                if (hit.Kind == ContactKind.Disarm)
+                {
+                    _bullets.MarkRemoval(hit.TargetHandle, RemovalReason.Disposal);
+                    _events.Add(BattleEvent.DisarmEvent(BattleId, Tick, _events.Count, hit));
+                    continue;
+                }
                 if (hit.Kind != ContactKind.Hit) continue;
 
                 // A projectile stops permanently; a ray only consumes its first hit for this tick.
@@ -719,6 +730,7 @@ namespace CombatSimulation.Core
         private readonly ShipStore _ships = new ShipStore();
         private readonly BulletStore _bullets = new BulletStore();
         private readonly BeamQueries _beams = new BeamQueries();
+        private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();
         private readonly List<SpawnRequest> _spawnRequests = new List<SpawnRequest>();
         private readonly List<int> _bulletRemovals = new List<int>();
         private readonly EntityRegistry _entities = new EntityRegistry();

@@ -11,6 +11,7 @@ namespace CombatSimulation.Core
 
         // For presentation: one accepted hit. The damage is applied at stage 10, shield first.
         Hit = 5,
+        Disarm = 6,
     }
 
     public enum RemovalReason : byte
@@ -74,6 +75,8 @@ namespace CombatSimulation.Core
         public readonly EntityId AttackerId;
         public readonly float Damage;
         public readonly Vec2 Point;
+        // Disarm: index on the attacking ship. Other events use -1.
+        public readonly int DeviceIndex;
 
         // Spawn and removal of a bullet: the definition and the entity that fired it. Null for a ship.
         public readonly BulletDefinition BulletDefinition;
@@ -88,7 +91,7 @@ namespace CombatSimulation.Core
             RosterStatus previousStatus, RosterStatus status, RosterTransitionReason transitionReason, int revision,
             float armorDeficit, float shieldDeficit, BattleResult result, EntityId attackerId = default,
             float damage = 0f, Vec2 point = default, BulletDefinition bulletDefinition = null, EntityId parentId = default,
-            BeamDefinition beamDefinition = null)
+            BeamDefinition beamDefinition = null, int deviceIndex = -1)
         {
             BattleId = battleId;
             Tick = tick;
@@ -110,6 +113,7 @@ namespace CombatSimulation.Core
             AttackerId = attackerId;
             Damage = damage;
             Point = point;
+            DeviceIndex = deviceIndex;
             BulletDefinition = bulletDefinition;
             BeamDefinition = beamDefinition;
             ParentId = parentId;
@@ -149,6 +153,11 @@ namespace CombatSimulation.Core
                 RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default, hit.Attacker,
                 hit.Damage, hit.Point);
 
+        internal static BattleEvent DisarmEvent(BattleId battleId, long tick, int sequence, in ContactCandidate hit) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Disarm, hit.Target, default, 0, 0, null,
+                RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                attackerId: hit.Attacker, point: hit.Point, deviceIndex: hit.AttackerDeviceIndex);
+
         public override string ToString()
         {
             switch (Kind)
@@ -165,6 +174,8 @@ namespace CombatSimulation.Core
                     return $"{Tick}.{Sequence} {Result}";
                 case BattleEventKind.Hit:
                     return $"{Tick}.{Sequence} Hit {AttackerId} -> {EntityId} ({Damage})";
+                case BattleEventKind.Disarm:
+                    return $"{Tick}.{Sequence} Disarm {AttackerId} device {DeviceIndex} -> {EntityId}";
                 default:
                     return $"{Tick}.{Sequence} {Kind}";
             }

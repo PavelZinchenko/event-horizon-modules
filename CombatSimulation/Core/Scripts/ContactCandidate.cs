@@ -31,6 +31,9 @@ namespace CombatSimulation.Core
         public float Time;
         public ContactKind Kind;
         public EntityId Attacker;
+        // Devices share a ship attacker. Other contact sources keep the neutral index.
+        public PointDefenseDevice PointDefense;
+        public int AttackerDeviceIndex => PointDefense?.Index ?? -1;
         // Distance fraction within a ray. Zero for other sources; never used as ordering time.
         public float RayFraction;
         public ShapeHitPriority TargetPriority;
@@ -63,6 +66,8 @@ namespace CombatSimulation.Core
             if (a.Time > b.Time) return 1;
             if (a.Kind != b.Kind) return a.Kind < b.Kind ? -1 : 1;
             if (a.Attacker.Value != b.Attacker.Value) return a.Attacker.Value < b.Attacker.Value ? -1 : 1;
+            if (a.AttackerDeviceIndex != b.AttackerDeviceIndex)
+                return a.AttackerDeviceIndex < b.AttackerDeviceIndex ? -1 : 1;
             if (a.RayFraction < b.RayFraction) return -1;
             if (a.RayFraction > b.RayFraction) return 1;
             if (a.TargetPriority != b.TargetPriority) return a.TargetPriority < b.TargetPriority ? -1 : 1;
