@@ -140,11 +140,13 @@ namespace CombatSimulation.Core
         {
             if (_entities.TryAdd(id, handle)) return true;
 
-            var message = $"Battle {BattleId}: entity ID {id} is already alive.";
-            if (ThrowOnDefect) throw new InvalidOperationException(message);
-            Trace.LogError(message);
+            ReportDefect($"Battle {BattleId}: entity ID {id} is already alive.");
             return false;
         }
+
+        internal ShapeTable Shapes => _shapes;
+        internal ContactResolver Contacts => _contacts;
+        internal RammingTracker Ramming => _ramming;
 
         // Stage 1. Roster commands for this tick, then control frames, each in command ID order.
         private void ApplyCommands()
@@ -204,19 +206,68 @@ namespace CombatSimulation.Core
             for (var i = 0; i < slots.Count; ++i)
             {
                 var ship = slots[i].ActiveShip;
-                if (ship == null || ship.RetreatCompletionTick != ShipEntity.NoRetreat) continue;
-                ShipEngine.Update(World, ship, TickDuration);
+                if (ship == null) continue;
+                if (ship.RetreatCompletionTick == ShipEntity.NoRetreat) ShipEngine.Update(World, ship, TickDuration);
+
+                // Physics reports a touch after the solve, so ramming uses the velocity from before the step.
+                ship.PreStepVelocity = World.GetLinearVelocity(ship.Body);
             }
         }
 
         private void ApplySpawnRequests() { }
         private void RunQueries() { }
         private void StepPhysics() => World.Step(TickDuration);
-        private void CollectContacts() { }
-        private void ResolveContacts() { }
-        private void ApplyDamage() { }
 
-        // Stage 11. Marks deaths; stage 12 applies them.
+        // Stage 8. Every source adds its candidates; the resolver sorts them by the contact key.
+        private void CollectContacts()
+        {
+            _contacts.BeginStep();
+            _ramming.Collect(World, _shapes, _ships, _contacts);
+
+            var duplicates = _contacts.Sort();
+            if (duplicates > 0)
+                ReportDefect($"Battle {BattleId}, tick {Tick}: {duplicates} contact candidates share a key.");
+        }
+
+        // Stage 9. Selects the valid candidates and turns hits on ships into pending damage.
+        private void ResolveContacts()
+        {
+            _contacts.Resolve();
+
+            var accepted = _contacts.Accepted;
+            for (var i = 0; i < accepted.Length; ++i)
+            {
+                ref readonly var hit = ref accepted[i];
+                if (hit.Kind != ContactKind.Hit) continue;
+
+                var target = _ships.Get(hit.TargetHandle);
+                if (target == null) continue;
+
+                target.PendingDamage += hit.Damage;
+                _events.Add(BattleEvent.HitEvent(BattleId, Tick, _events.Count, hit));
+            }
+        }
+
+        // Stage 10. One pass, shield first, then armor (legacy Impact.ApplyShield and ShipStats.ApplyDamage).
+        // In phase 2 the local runtime owns every entity, so it applies all damage.
+        private void ApplyDamage()
+        {
+            var slots = Roster.Slots;
+            for (var i = 0; i < slots.Count; ++i)
+            {
+                var ship = slots[i].ActiveShip;
+                if (ship == null || !(ship.PendingDamage > 0f)) continue;
+
+                var damage = ship.PendingDamage;
+                ship.PendingDamage = 0f;
+
+                var absorbed = ship.Shield.Max > 0f && ship.Shield.Value > 0f ? Math.Min(damage, ship.Shield.Value) : 0f;
+                if (absorbed > 0f) ship.Shield.Consume(absorbed);
+                ship.Armor.Consume(damage - absorbed);
+            }
+        }
+
+        // Stage 11. Marks deaths; stage 12 applies them. Armor 0 is a death.
         private void MarkDeaths()
         {
             for (var i = 0; i < _deathRequests.Count; ++i)
@@ -226,6 +277,13 @@ namespace CombatSimulation.Core
             }
 
             _deathRequests.Clear();
+
+            var slots = Roster.Slots;
+            for (var i = 0; i < slots.Count; ++i)
+            {
+                var ship = slots[i].ActiveShip;
+                if (ship != null && ship.Armor.Value <= 0f) ship.PendingDeath = true;
+            }
         }
 
         // Stage 12. One batch, in roster order: deaths, then retreat completions, then surrender and kill-all.
@@ -359,10 +417,17 @@ namespace CombatSimulation.Core
 
             var definition = slot.Setup.Ship;
             var body = World.CreateBody(new BodyDef { Mass = definition.Mass });
-            World.AddCircle(body, new Circle(Vec2.Zero, definition.HullRadius));
-            PlaceSpawn(body, id, slot.Side);
-
             ship.Initialize(id, slot, body);
+
+            var parts = definition.HullParts;
+            for (var i = 0; i < parts.Count; ++i)
+            {
+                var shape = World.AddCircle(body, parts[i]);
+                ship.AddShape(shape);
+                _shapes.Register(shape, new ShapeEntry(ship.Handle, id, ShapeHitPriority.Hull, i));
+            }
+
+            PlaceSpawn(body, id, slot.Side);
             slot.Activate(ship, ++_deploymentOrder);
             ResetTimer();
 
@@ -422,6 +487,9 @@ namespace CombatSimulation.Core
         private void RemoveShip(ShipEntity ship, RemovalReason reason)
         {
             _events.Add(BattleEvent.Removal(BattleId, Tick, _events.Count, ship, reason));
+            for (var i = 0; i < ship.ShapeCount; ++i)
+                _shapes.Release(ship.GetShape(i));
+            _ramming.Forget(ship.Id);
             World.DestroyBody(ship.Body);
             _entities.Remove(ship.Id);
             _ships.Release(ship);
@@ -430,6 +498,12 @@ namespace CombatSimulation.Core
 
         private void AddTransition(RosterSlot slot, RosterStatus previousStatus, RosterTransitionReason reason, EntityId id) =>
             _events.Add(BattleEvent.Transition(BattleId, Tick, _events.Count, slot, previousStatus, reason, id));
+
+        private void ReportDefect(string message)
+        {
+            if (ThrowOnDefect) throw new InvalidOperationException(message);
+            Trace.LogError(message);
+        }
 
         // Owner (2026-10-20): any ship deployment or removal, on either side, resets the timer.
         private void ResetTimer() => TimerElapsedTicks = 0;
@@ -486,6 +560,9 @@ namespace CombatSimulation.Core
 
         private readonly ShipStore _ships = new ShipStore();
         private readonly EntityRegistry _entities = new EntityRegistry();
+        private readonly ShapeTable _shapes = new ShapeTable();
+        private readonly ContactResolver _contacts = new ContactResolver();
+        private readonly RammingTracker _ramming = new RammingTracker();
         private readonly List<RosterCommand> _commands = new List<RosterCommand>();
         private readonly List<ControlFrame> _frames = new List<ControlFrame>();
         private readonly HashSet<FrameKey> _pendingFrameKeys = new HashSet<FrameKey>();

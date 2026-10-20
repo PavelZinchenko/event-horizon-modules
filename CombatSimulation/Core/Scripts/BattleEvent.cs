@@ -1,3 +1,5 @@
+using CombatSimulation.Physics;
+
 namespace CombatSimulation.Core
 {
     public enum BattleEventKind : byte
@@ -6,6 +8,9 @@ namespace CombatSimulation.Core
         Removal = 2,
         RosterTransition = 3,
         Result = 4,
+
+        // For presentation: one accepted hit. The damage is applied at stage 10, shield first.
+        Hit = 5,
     }
 
     public enum RemovalReason : byte
@@ -41,7 +46,7 @@ namespace CombatSimulation.Core
 
         public readonly BattleEventKind Kind;
 
-        // Spawn, removal, and a roster transition that involves an entity.
+        // Spawn, removal, and a roster transition that involves an entity. Hit: the target.
         public readonly EntityId EntityId;
 
         // Spawn and removal of a roster ship, and roster transitions.
@@ -65,10 +70,16 @@ namespace CombatSimulation.Core
 
         public readonly BattleResult Result;
 
+        // Hit: the attacker, the damage before the shield, and the contact point (zero for a ship touch).
+        public readonly EntityId AttackerId;
+        public readonly float Damage;
+        public readonly Vec2 Point;
+
         private BattleEvent(BattleId battleId, long tick, int sequence, BattleEventKind kind, EntityId entityId,
             RosterId rosterId, int side, int owner, ShipDefinition definition, RemovalReason removalReason,
             RosterStatus previousStatus, RosterStatus status, RosterTransitionReason transitionReason, int revision,
-            float armorDeficit, float shieldDeficit, BattleResult result)
+            float armorDeficit, float shieldDeficit, BattleResult result, EntityId attackerId = default,
+            float damage = 0f, Vec2 point = default)
         {
             BattleId = battleId;
             Tick = tick;
@@ -87,6 +98,9 @@ namespace CombatSimulation.Core
             ArmorDeficit = armorDeficit;
             ShieldDeficit = shieldDeficit;
             Result = result;
+            AttackerId = attackerId;
+            Damage = damage;
+            Point = point;
         }
 
         internal static BattleEvent Spawn(BattleId battleId, long tick, int sequence, ShipEntity ship) =>
@@ -108,6 +122,11 @@ namespace CombatSimulation.Core
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Result, default, default, 0, 0,
                 null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, result);
 
+        internal static BattleEvent HitEvent(BattleId battleId, long tick, int sequence, in ContactCandidate hit) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Hit, hit.Target, default, 0, 0, null,
+                RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default, hit.Attacker,
+                hit.Damage, hit.Point);
+
         public override string ToString()
         {
             switch (Kind)
@@ -120,6 +139,8 @@ namespace CombatSimulation.Core
                     return $"{Tick}.{Sequence} Roster {RosterId}: {PreviousStatus} -> {Status} ({TransitionReason}, revision {Revision}, entity {EntityId})";
                 case BattleEventKind.Result:
                     return $"{Tick}.{Sequence} {Result}";
+                case BattleEventKind.Hit:
+                    return $"{Tick}.{Sequence} Hit {AttackerId} -> {EntityId} ({Damage})";
                 default:
                     return $"{Tick}.{Sequence} {Kind}";
             }

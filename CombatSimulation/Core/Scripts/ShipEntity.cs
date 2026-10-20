@@ -5,6 +5,9 @@ namespace CombatSimulation.Core
     internal enum EntityKind : byte
     {
         Ship = 1,
+
+        // Bullets and beams (struct store, step 6). The contact resolver already keys its walk state by them.
+        Bullet = 2,
     }
 
     // Internal storage handle: kind, index and generation. Never exposed as a public ID.
@@ -66,6 +69,22 @@ namespace CombatSimulation.Core
         // Set at stage 11; stage 12 applies it.
         public bool PendingDeath { get; set; }
 
+        // Linear velocity at the end of stage 4, before the physics step (ramming speed).
+        public Vec2 PreStepVelocity { get; set; }
+
+        // Damage accumulated at stage 9; stage 10 applies it in one pass.
+        public float PendingDamage { get; set; }
+
+        // Hull shapes in definition order. The array is reused across pool cycles.
+        public int ShapeCount { get; private set; }
+        public ShapeId GetShape(int index) => _shapes[index];
+
+        internal void AddShape(ShapeId shape)
+        {
+            if (ShapeCount == _shapes.Length) System.Array.Resize(ref _shapes, _shapes.Length * 2);
+            _shapes[ShapeCount++] = shape;
+        }
+
         internal void Allocate()
         {
             ++Generation;
@@ -83,6 +102,8 @@ namespace CombatSimulation.Core
             Definition = slot.Setup.Ship;
             RetreatCompletionTick = NoRetreat;
             PendingDeath = false;
+            PreStepVelocity = Vec2.Zero;
+            PendingDamage = 0f;
 
             Armor = ResourcePool.CreateArmor(Definition.Armor);
             Shield = ResourcePool.Create(Definition.Shield);
@@ -116,12 +137,17 @@ namespace CombatSimulation.Core
             Definition = null;
             RetreatCompletionTick = NoRetreat;
             PendingDeath = false;
+            PreStepVelocity = Vec2.Zero;
+            PendingDamage = 0f;
+            ShapeCount = 0;
             Armor = default;
             Shield = default;
             Energy = default;
             EngineHasEnergy = false;
             ClearControls();
         }
+
+        private ShapeId[] _shapes = new ShapeId[1];
 
         private void ClearControls()
         {

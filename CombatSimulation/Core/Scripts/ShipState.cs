@@ -91,6 +91,11 @@ namespace CombatSimulation.Core
         public readonly float ArmorDeficit;
         public readonly float ShieldDeficit;
 
+        // The share of the slot's armor that is lost (B2 participation facts): 1 when destroyed, the armor deficit
+        // over the maximum while active or after a retreat, 0 when never deployed. A consumer reads it from the
+        // snapshot of a Retreated or Killed transition and of the result; the tick's roster updates are applied.
+        public readonly float DamageFraction;
+
         internal RosterSlotState(RosterSlot slot)
         {
             RosterId = slot.RosterId;
@@ -103,6 +108,17 @@ namespace CombatSimulation.Core
             ActiveEntity = slot.ActiveShip?.Id ?? default;
             ArmorDeficit = slot.ArmorDeficit;
             ShieldDeficit = slot.ShieldDeficit;
+            DamageFraction = GetDamageFraction(slot);
+        }
+
+        private static float GetDamageFraction(RosterSlot slot)
+        {
+            if (slot.Status == RosterStatus.Destroyed) return 1f;
+
+            var ship = slot.ActiveShip;
+            if (ship != null) return ship.Armor.Deficit / ship.Armor.Max;
+
+            return slot.ArmorDeficit / slot.Setup.Ship.Armor;
         }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core.Tests
 {
@@ -19,9 +20,10 @@ namespace CombatSimulation.Core.Tests
 
         public static ShipDefinition ShipWith(float hullRadius = 1f, float mass = 1f, EngineDefinition engine = null,
             float armor = 1000f, ResourceDefinition? shield = null, ResourceDefinition? energy = null,
-            EngineDefinition engineWithoutEnergy = null) =>
+            EngineDefinition engineWithoutEnergy = null, IReadOnlyList<Circle> extraHullParts = null,
+            float rammingDamageMultiplier = 1f) =>
             new ShipDefinition(hullRadius, mass, engine ?? Engine, armor, shield ?? Shield, energy ?? Energy,
-                engineWithoutEnergy);
+                engineWithoutEnergy, extraHullParts, rammingDamageMultiplier);
 
         public static List<RosterSlotSetup> Roster(int side0Slots, int side1Slots)
         {
@@ -42,6 +44,14 @@ namespace CombatSimulation.Core.Tests
             {
                 new RosterSlotSetup(new RosterId(1), 0, ship),
                 new RosterSlotSetup(new RosterId(101), 1, Ship),
+            });
+
+        // One slot per side with the given ships: slot 1 on side 0, slot 101 on side 1.
+        public static BattleSetup Setup(ShipDefinition side0, ShipDefinition side1) =>
+            new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+            {
+                new RosterSlotSetup(new RosterId(1), 0, side0),
+                new RosterSlotSetup(new RosterId(101), 1, side1),
             });
     }
 
@@ -91,5 +101,26 @@ namespace CombatSimulation.Core.Tests
         public RosterStatus Status(uint rosterId) => Slot(rosterId).Status;
         public EntityId Entity(uint rosterId) => Slot(rosterId).ActiveShip?.Id ?? default;
         public ShipEntity Ship(uint rosterId) => Slot(rosterId).ActiveShip;
+
+        // Teleports the active ship of a slot, at angle 0 and without spin.
+        public void Place(uint rosterId, Vec2 position, Vec2 velocity)
+        {
+            var body = Ship(rosterId).Body;
+            Battle.World.SetPose(body, position, 0f);
+            Battle.World.SetLinearVelocity(body, velocity);
+            Battle.World.SetAngularVelocity(body, 0f);
+        }
+
+        // Steps and collects the events of every step.
+        public List<BattleEvent> StepCollecting(long count = 1)
+        {
+            var events = new List<BattleEvent>();
+            for (var i = 0; i < count; ++i)
+            {
+                Battle.Step();
+                foreach (var item in Battle.Snapshot.Events) events.Add(item);
+            }
+            return events;
+        }
     }
 }
