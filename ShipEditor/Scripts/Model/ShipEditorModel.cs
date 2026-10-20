@@ -124,7 +124,7 @@ namespace ShipEditor.Model
 			SaveShip(_ship);
 
 			_ship = ship;
-			_compatibilityChecker = new ComponentTracker(ship);
+			_compatibilityChecker = new ComponentTracker(ship, _context.ShipSettings);
 			_shipName = null;
 
 			var shipLayout = _layout[ShipElementType.Ship] = new ShipLayoutModel(
