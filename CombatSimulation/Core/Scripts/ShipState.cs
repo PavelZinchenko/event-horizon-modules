@@ -70,21 +70,28 @@ namespace CombatSimulation.Core
         public bool IsRetreating => RetreatCompletionTick != ShipEntity.NoRetreat;
     }
 
-    // One bullet at the end of a completed tick. A value copy.
+    // One projectile or beam at the end of a completed tick. A value copy.
     public readonly struct BulletState
     {
         public readonly EntityId Id;
         public readonly EntityId ParentId;
         public readonly int Side;
         public readonly int Owner;
+        // Exactly one definition is set: Definition for a projectile, BeamDefinition for a beam.
         public readonly BulletDefinition Definition;
+        public readonly BeamDefinition BeamDefinition;
+        public bool IsBeam => BeamDefinition != null;
+
+        // Beams: the sampled ray endpoint and selected entity, or no entity at full range.
+        public readonly Vec2 BeamEndPoint;
+        public readonly EntityId BeamTargetId;
 
         // Canonical torus coordinates and radians.
         public readonly Vec2 Position;
         public readonly float Angle;
         public readonly Vec2 LinearVelocity;
 
-        // The last tick the bullet flies in.
+        // The last tick a projectile flies in. Beams have device-owned lifetime and use long.MaxValue.
         public readonly long ExpiryTick;
 
         internal BulletState(in BulletEntity bullet, PhysicsWorld world)
@@ -94,9 +101,12 @@ namespace CombatSimulation.Core
             Side = bullet.Side;
             Owner = bullet.Owner;
             Definition = bullet.Definition;
-            Position = world.GetBulletPosition(bullet.Body);
-            Angle = world.GetBulletRotation(bullet.Body).Angle;
-            LinearVelocity = world.GetBulletVelocity(bullet.Body);
+            BeamDefinition = bullet.BeamDefinition;
+            BeamEndPoint = bullet.BeamEndPoint;
+            BeamTargetId = bullet.IsBeam ? bullet.TargetId : default;
+            Position = bullet.IsBeam ? bullet.BeamOrigin : world.GetBulletPosition(bullet.Body);
+            Angle = bullet.IsBeam ? bullet.BeamAngle : world.GetBulletRotation(bullet.Body).Angle;
+            LinearVelocity = bullet.IsBeam ? Vec2.Zero : world.GetBulletVelocity(bullet.Body);
             ExpiryTick = bullet.ExpiryTick;
         }
     }

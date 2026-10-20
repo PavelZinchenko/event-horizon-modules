@@ -77,15 +77,18 @@ namespace CombatSimulation.Core
 
         // Spawn and removal of a bullet: the definition and the entity that fired it. Null for a ship.
         public readonly BulletDefinition BulletDefinition;
+        public readonly BeamDefinition BeamDefinition;
         public readonly EntityId ParentId;
 
-        public bool IsBullet => BulletDefinition != null;
+        public bool IsBullet => BulletDefinition != null || IsBeam;
+        public bool IsBeam => BeamDefinition != null;
 
         private BattleEvent(BattleId battleId, long tick, int sequence, BattleEventKind kind, EntityId entityId,
             RosterId rosterId, int side, int owner, ShipDefinition definition, RemovalReason removalReason,
             RosterStatus previousStatus, RosterStatus status, RosterTransitionReason transitionReason, int revision,
             float armorDeficit, float shieldDeficit, BattleResult result, EntityId attackerId = default,
-            float damage = 0f, Vec2 point = default, BulletDefinition bulletDefinition = null, EntityId parentId = default)
+            float damage = 0f, Vec2 point = default, BulletDefinition bulletDefinition = null, EntityId parentId = default,
+            BeamDefinition beamDefinition = null)
         {
             BattleId = battleId;
             Tick = tick;
@@ -108,6 +111,7 @@ namespace CombatSimulation.Core
             Damage = damage;
             Point = point;
             BulletDefinition = bulletDefinition;
+            BeamDefinition = beamDefinition;
             ParentId = parentId;
         }
 
@@ -123,12 +127,12 @@ namespace CombatSimulation.Core
         internal static BattleEvent BulletSpawn(BattleId battleId, long tick, int sequence, in BulletEntity bullet) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Spawn, bullet.Id, default, bullet.Side, bullet.Owner,
                 null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
-                bulletDefinition: bullet.Definition, parentId: bullet.ParentId);
+                bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition);
 
         internal static BattleEvent BulletRemoval(BattleId battleId, long tick, int sequence, in BulletEntity bullet) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, bullet.Id, default, bullet.Side, bullet.Owner,
                 null, bullet.PendingRemoval, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
-                bulletDefinition: bullet.Definition, parentId: bullet.ParentId);
+                bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition);
 
         internal static BattleEvent Transition(BattleId battleId, long tick, int sequence, RosterSlot slot,
             RosterStatus previousStatus, RosterTransitionReason reason, EntityId entityId) =>

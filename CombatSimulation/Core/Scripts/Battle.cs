@@ -153,6 +153,7 @@ namespace CombatSimulation.Core
         internal ShapeTable Shapes => _shapes;
         internal ContactResolver Contacts => _contacts;
         internal RammingTracker Ramming => _ramming;
+        internal BeamQueries Beams => _beams;
 
         // Stage 1. Roster commands for this tick, then control frames, each in command ID order.
         private void ApplyCommands()
@@ -202,9 +203,11 @@ namespace CombatSimulation.Core
                 ship.Shield.Update(TickDuration);
 
                 // Legacy ShipRetreatEffect.CanActivateSystem: a retreating ship activates no system.
-                if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) continue;
                 for (var d = 0; d < ship.DeviceCount; ++d)
-                    ship.GetDevice(d).Update(this, ship);
+                {
+                    if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) ship.GetDevice(d).Deactivate(this);
+                    else ship.GetDevice(d).Update(this, ship);
+                }
             }
         }
 
@@ -238,7 +241,7 @@ namespace CombatSimulation.Core
             {
                 if (!_bullets.IsAlive(i)) continue;
                 ref var bullet = ref _bullets[i];
-                if (bullet.Definition.IsHoming) HomingSteering.Update(this, ref bullet);
+                if (!bullet.IsBeam && bullet.Definition.IsHoming) HomingSteering.Update(this, ref bullet);
             }
         }
 
@@ -250,7 +253,8 @@ namespace CombatSimulation.Core
                 var request = _spawnRequests[i];
                 var sequence = 0u;
                 for (var j = i - 1; j >= 0 && _spawnRequests[j].HasSameSlot(request); --j) ++sequence;
-                SpawnBullet(request, sequence);
+                if (request.Beam != null) SpawnBeam(request, sequence);
+                else SpawnBullet(request, sequence);
             }
 
             _spawnRequests.Clear();
@@ -308,13 +312,37 @@ namespace CombatSimulation.Core
             _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, bullet));
         }
 
-        private void RunQueries() { }
+        private void SpawnBeam(in SpawnRequest request, uint sequence)
+        {
+            var ship = request.Ship;
+            var id = SpawnIdentity.CreateChild(ship.Id, Tick, (uint)request.DeviceIndex, (uint)request.BarrelIndex, sequence);
+            var index = _bullets.Allocate();
+            var handle = _bullets.GetHandle(index);
+            if (!TryRegister(id, handle))
+            {
+                _bullets.Release(index);
+                return;
+            }
+
+            ref var beam = ref _bullets[index];
+            beam.Id = id;
+            beam.ParentId = ship.Id;
+            beam.Side = ship.Side;
+            beam.Owner = ship.Owner;
+            beam.BeamDefinition = request.Beam.Definition;
+            beam.ExpiryTick = long.MaxValue; // Device-owned lifetime, without projectile expiry.
+            request.Beam.Attach(handle);
+            _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, beam));
+        }
+
+        private void RunQueries() => _beams.Run(this);
         private void StepPhysics() => World.Step(TickDuration);
 
         // Stage 8. Every source adds its candidates; the resolver sorts them by the contact key.
         private void CollectContacts()
         {
             _contacts.BeginStep();
+            _beams.Collect(_contacts);
             _bullets.CollectHits(World, _shapes, _ships, _contacts);
             _ramming.Collect(World, _shapes, _ships, _contacts);
 
@@ -327,6 +355,7 @@ namespace CombatSimulation.Core
         private void ResolveContacts()
         {
             _contacts.Resolve();
+            _beams.Complete(this, _contacts);
 
             var accepted = _contacts.Accepted;
             for (var i = 0; i < accepted.Length; ++i)
@@ -334,8 +363,9 @@ namespace CombatSimulation.Core
                 ref readonly var hit = ref accepted[i];
                 if (hit.Kind != ContactKind.Hit) continue;
 
-                // A bullet that stops at its hit leaves at stage 12. A ship attacker is ignored.
-                if (!hit.AttackerPassThrough) _bullets.MarkRemoval(hit.AttackerHandle, RemovalReason.Death);
+                // A projectile stops permanently; a ray only consumes its first hit for this tick.
+                if (!hit.AttackerPassThrough && hit.Source != ContactSource.Ray)
+                    _bullets.MarkRemoval(hit.AttackerHandle, RemovalReason.Death);
 
                 if (hit.TargetHandle.Kind == EntityKind.Bullet)
                 {
@@ -395,7 +425,7 @@ namespace CombatSimulation.Core
         }
 
         // Stage 12. One batch, in roster order: deaths, then retreat completions, then surrender and kill-all.
-        // Bullets leave last, in entity ID order. A bullet outlives the ship that fired it.
+        // Bullets leave last, in entity ID order. Projectiles outlive their parent; attached beams do not.
         private void ApplyStructureChanges()
         {
             var slots = Roster.Slots;
@@ -456,7 +486,7 @@ namespace CombatSimulation.Core
                 var index = _bulletRemovals[i];
                 ref readonly var bullet = ref _bullets[index];
                 _events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _events.Count, bullet));
-                World.DestroyBullet(bullet.Body);
+                if (!bullet.IsBeam) World.DestroyBullet(bullet.Body);
                 _entities.Remove(bullet.Id);
                 _bullets.Release(index);
             }
@@ -613,6 +643,7 @@ namespace CombatSimulation.Core
 
         private void RemoveShip(ShipEntity ship, RemovalReason reason)
         {
+            for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Deactivate(this);
             _events.Add(BattleEvent.Removal(BattleId, Tick, _events.Count, ship, reason));
             for (var i = 0; i < ship.ShapeCount; ++i)
                 _shapes.Release(ship.GetShape(i));
@@ -687,6 +718,7 @@ namespace CombatSimulation.Core
 
         private readonly ShipStore _ships = new ShipStore();
         private readonly BulletStore _bullets = new BulletStore();
+        private readonly BeamQueries _beams = new BeamQueries();
         private readonly List<SpawnRequest> _spawnRequests = new List<SpawnRequest>();
         private readonly List<int> _bulletRemovals = new List<int>();
         private readonly EntityRegistry _entities = new EntityRegistry();

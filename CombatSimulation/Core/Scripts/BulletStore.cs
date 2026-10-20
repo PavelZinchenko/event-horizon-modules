@@ -4,7 +4,7 @@ using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
-    // One bullet in the struct store (Storage). Physics owns its pose and velocity.
+    // One projectile or beam in the struct store. Only projectiles have a physics bullet.
     internal struct BulletEntity
     {
         public int Generation;
@@ -17,6 +17,14 @@ namespace CombatSimulation.Core
         public BulletDefinition Definition;
         public BulletId Body;
 
+        // Exactly one definition is set. Beams keep the ray pose sampled at stage 6.
+        public BeamDefinition BeamDefinition;
+        public bool IsBeam => BeamDefinition != null;
+        public Vec2 BeamOrigin;
+        public float BeamAngle;
+        public Vec2 BeamEndPoint;
+        public bool RayOverflow;
+
         // The last tick the bullet flies in; stage 11 of that tick marks its expiry.
         public long ExpiryTick;
 
@@ -24,8 +32,9 @@ namespace CombatSimulation.Core
         public float HitPoints;
         public float PendingDamage;
 
-        // Homing: the ship it steers toward (null without one) and the tick of its next scheduled search.
+        // Homing target or the beam's selected ray target (null without one).
         public EntityId TargetId;
+        // Homing only: the tick of the next scheduled search.
         public long NextSearchTick;
 
         // Set at stage 9 (stopped at a hit) or stage 11 (expired); stage 12 applies it.
@@ -103,7 +112,7 @@ namespace CombatSimulation.Core
         public bool TryGetByBody(BulletId body, out int index)
         {
             index = body.Index >= 0 && body.Index < _byBody.Length ? _byBody[body.Index] : -1;
-            return index >= 0 && _items[index].IsAlive && _items[index].Body.Equals(body);
+            return index >= 0 && _items[index].IsAlive && !_items[index].IsBeam && _items[index].Body.Equals(body);
         }
 
         // Stage 9. A non-bullet handle is ignored. The first reason wins.
@@ -191,7 +200,7 @@ namespace CombatSimulation.Core
             for (var i = 0; i < _count; ++i)
             {
                 ref var bullet = ref _items[i];
-                if (!bullet.IsAlive || bullet.PendingRemoval != RemovalReason.None) continue;
+                if (!bullet.IsAlive || bullet.IsBeam || bullet.PendingRemoval != RemovalReason.None) continue;
 
                 if (bullet.Definition.IsMissile && bullet.HitPoints <= 0f)
                     bullet.PendingRemoval = RemovalReason.Death;

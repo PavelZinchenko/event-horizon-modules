@@ -12,6 +12,9 @@ namespace CombatSimulation.Core
 
         // Stage 2, after the resources recharge. Not called while the ship retreats.
         public abstract void Update(Battle battle, ShipEntity ship);
+
+        // Stops persistent devices before retreat queries or before the parent is released.
+        public virtual void Deactivate(Battle battle) { }
     }
 
     // Legacy CommonCannon on a FixedPlatform (Q1). A shot needs the held bit, the weapon cooldown, the barrel
@@ -49,6 +52,7 @@ namespace CombatSimulation.Core
         public readonly int BarrelIndex;
         public readonly float Spread;
         public readonly BulletDefinition Bullet;
+        public readonly BeamDevice Beam;
 
         public SpawnRequest(ShipEntity ship, int deviceIndex, int barrelIndex, float spread, BulletDefinition bullet)
         {
@@ -57,6 +61,17 @@ namespace CombatSimulation.Core
             BarrelIndex = barrelIndex;
             Spread = spread;
             Bullet = bullet;
+            Beam = null;
+        }
+
+        public SpawnRequest(ShipEntity ship, BeamDevice beam)
+        {
+            Ship = ship;
+            DeviceIndex = beam.Index;
+            BarrelIndex = beam.Definition.BarrelIndex;
+            Spread = 0f;
+            Bullet = null;
+            Beam = beam;
         }
 
         // Spawns from one spawn slot in one tick; the sequence counts them (Identity, item 3).

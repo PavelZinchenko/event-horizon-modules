@@ -24,13 +24,15 @@ namespace CombatSimulation.Core
     }
 
     // One possible contact of a step. The core collects all of them, sorts them, then selects the valid ones
-    // (contact ordering). The first six fields are the sort key; the rest is payload.
+    // (contact ordering). Ray distance orders targets within a ray; it is never a time of impact.
     internal struct ContactCandidate : IComparable<ContactCandidate>
     {
         // Fraction of the step, in [0, 1].
         public float Time;
         public ContactKind Kind;
         public EntityId Attacker;
+        // Distance fraction within a ray. Zero for other sources; never used as ordering time.
+        public float RayFraction;
         public ShapeHitPriority TargetPriority;
         public EntityId Target;
         public int TargetShapeOrder;
@@ -61,6 +63,8 @@ namespace CombatSimulation.Core
             if (a.Time > b.Time) return 1;
             if (a.Kind != b.Kind) return a.Kind < b.Kind ? -1 : 1;
             if (a.Attacker.Value != b.Attacker.Value) return a.Attacker.Value < b.Attacker.Value ? -1 : 1;
+            if (a.RayFraction < b.RayFraction) return -1;
+            if (a.RayFraction > b.RayFraction) return 1;
             if (a.TargetPriority != b.TargetPriority) return a.TargetPriority < b.TargetPriority ? -1 : 1;
             if (a.Target.Value != b.Target.Value) return a.Target.Value < b.Target.Value ? -1 : 1;
             if (a.TargetShapeOrder != b.TargetShapeOrder) return a.TargetShapeOrder < b.TargetShapeOrder ? -1 : 1;

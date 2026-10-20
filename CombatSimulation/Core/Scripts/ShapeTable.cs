@@ -3,7 +3,7 @@ using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
-    // Contact ordering, key 4: a shield shape sorts before a hull shape of the same target.
+    // After time, kind, attacker and ray distance: a shield shape sorts before a hull shape.
     internal enum ShapeHitPriority : byte
     {
         Shield = 0,
@@ -16,7 +16,7 @@ namespace CombatSimulation.Core
         public readonly EntityId OwnerId;
         public readonly ShapeHitPriority Priority;
 
-        // Order within the owner, from its definition; never a physics index (contact ordering, key 6).
+        // Final contact tie-breaker: order within the owner's definition, never a physics index.
         public readonly int Order;
 
         public ShapeEntry(EntityHandle owner, EntityId ownerId, ShapeHitPriority priority, int order)
