@@ -11,7 +11,17 @@ namespace CombatSimulation.Core
     // One fleet slot. Its status is stored, never inferred from whether an entity exists.
     internal sealed class RosterSlot
     {
-        public RosterSlot(RosterSlotSetup setup) => Setup = setup;
+        public RosterSlot(RosterSlotSetup setup)
+        {
+            Setup = setup;
+            _bays = new DroneBayInventory[setup.Ship.Devices.Count];
+            for (var i = 0; i < _bays.Length; ++i)
+                if (setup.Ship.Devices[i] is DroneBayDefinition definition)
+                    _bays[i] = new DroneBayInventory(this, i, definition);
+        }
+
+        internal DroneBayInventory GetBay(int index) => _bays[index];
+        private readonly DroneBayInventory[] _bays;
 
         public RosterSlotSetup Setup { get; }
         public RosterId RosterId => Setup.RosterId;

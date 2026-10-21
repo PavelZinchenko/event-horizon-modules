@@ -25,7 +25,7 @@ namespace CombatSimulation.Core
         }
     }
 
-    // A pooled ship. Drones will be ships without a roster slot (investigation 1.1).
+    // A pooled ship. Drones have a persistent bay instead of a roster slot.
     internal sealed class ShipEntity
     {
         public const long NoRetreat = -1;
@@ -43,6 +43,10 @@ namespace CombatSimulation.Core
 
         public EntityId Id { get; private set; }
         public RosterSlot Slot { get; private set; }
+        public DroneBayInventory Bay { get; private set; }
+        public bool IsDrone => Bay != null;
+        public EntityId MothershipId => Bay?.Slot.ActiveShip?.Id ?? default;
+        public long LastDroneLaunchTick { get; set; }
         public int Side { get; private set; }
         public int Owner { get; private set; }
         public BodyId Body { get; private set; }
@@ -97,13 +101,22 @@ namespace CombatSimulation.Core
 
         // A deployment starts with empty controls and full resources, minus the deficits the slot retained (B4).
         internal void Initialize(EntityId id, RosterSlot slot, BodyId body, long tick)
+            => Initialize(id, slot, null, slot.Setup.Ship, slot.Side, slot.Owner, body, tick);
+
+        internal void InitializeDrone(EntityId id, DroneBayInventory bay, BodyId body, long tick)
+            => Initialize(id, null, bay, bay.Definition.Drone, bay.Slot.Side, bay.Slot.Owner, body, tick);
+
+        private void Initialize(EntityId id, RosterSlot slot, DroneBayInventory bay, ShipDefinition definition,
+            int side, int owner, BodyId body, long tick)
         {
             Id = id;
             Slot = slot;
-            Side = slot.Side;
-            Owner = slot.Owner;
+            Bay = bay;
+            Side = side;
+            Owner = owner;
             Body = body;
-            Definition = slot.Setup.Ship;
+            Definition = definition;
+            LastDroneLaunchTick = tick - 1;
             RetreatCompletionTick = NoRetreat;
             PendingDeath = false;
             PreStepVelocity = Vec2.Zero;
@@ -114,8 +127,8 @@ namespace CombatSimulation.Core
             Energy = ResourcePool.Create(Definition.Energy);
 
             // As legacy ShipInfo.Create: the deficit is a spend, so it starts the recharge delay.
-            if (slot.ArmorDeficit > 0f) Armor.Consume(slot.ArmorDeficit);
-            if (slot.ShieldDeficit > 0f) Shield.Consume(slot.ShieldDeficit);
+            if (slot != null && slot.ArmorDeficit > 0f) Armor.Consume(slot.ArmorDeficit);
+            if (slot != null && slot.ShieldDeficit > 0f) Shield.Consume(slot.ShieldDeficit);
 
             EngineHasEnergy = false;
             ClearControls();
@@ -126,12 +139,17 @@ namespace CombatSimulation.Core
             if (_barrelShotTicks.Length < barrels) _barrelShotTicks = new long[barrels];
             for (var i = 0; i < barrels; ++i) _barrelShotTicks[i] = tick - 1;
 
-            var devices = Definition.Devices;
-            _devices = devices.Count == 0 ? System.Array.Empty<ShipDevice>() : new ShipDevice[devices.Count];
-            for (var i = 0; i < _devices.Length; ++i) _devices[i] = devices[i].CreateDevice(i);
+            if (!_deviceSets.TryGetValue(definition, out _devices))
+            {
+                var devices = definition.Devices;
+                _devices = devices.Count == 0 ? System.Array.Empty<ShipDevice>() : new ShipDevice[devices.Count];
+                for (var i = 0; i < _devices.Length; ++i) _devices[i] = devices[i].CreateDevice(i);
+                _deviceSets.Add(definition, _devices);
+            }
+            for (var i = 0; i < _devices.Length; ++i) _devices[i].Reset();
         }
 
-        // In control-bit order. Deployment builds them from the definition.
+        // In control-bit order. Deployment creates or resets the cached devices for its definition.
         public int DeviceCount => _devices.Length;
         public ShipDevice GetDevice(int index) => _devices[index];
 
@@ -155,6 +173,7 @@ namespace CombatSimulation.Core
             IsAlive = false;
             Id = default;
             Slot = null;
+            Bay = null;
             Body = default;
             Definition = null;
             RetreatCompletionTick = NoRetreat;
@@ -173,6 +192,8 @@ namespace CombatSimulation.Core
         private ShapeId[] _shapes = new ShapeId[1];
         private long[] _barrelShotTicks = System.Array.Empty<long>();
         private ShipDevice[] _devices = System.Array.Empty<ShipDevice>();
+        private readonly System.Collections.Generic.Dictionary<ShipDefinition, ShipDevice[]> _deviceSets =
+            new System.Collections.Generic.Dictionary<ShipDefinition, ShipDevice[]>();
 
         private void ClearControls()
         {

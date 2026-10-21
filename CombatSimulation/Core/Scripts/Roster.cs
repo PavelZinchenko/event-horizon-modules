@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace CombatSimulation.Core
 {
-    // The core-owned fleet roster. Slots keep setup order, which is the processing order of every stage.
+    // The core-owned fleet roster. Slots keep setup order; simulation stages visit drones after roster ships.
     internal sealed class Roster
     {
         private readonly RosterSlot[] _slots;

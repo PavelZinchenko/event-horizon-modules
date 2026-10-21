@@ -29,6 +29,9 @@ namespace CombatSimulation.Runtime
         public bool Retreat(EntityId entityId, long targetTick) =>
             _battle.Submit(RosterCommand.Retreat(BattleId, _nextCommandId++, targetTick, entityId));
 
+        public bool SelfDestruct(EntityId entityId, long targetTick) =>
+            _battle.Submit(new SelfDestructCommand(BattleId, _nextCommandId++, targetTick, entityId));
+
         public bool Surrender(int side, long targetTick) =>
             _battle.Submit(RosterCommand.Surrender(BattleId, _nextCommandId++, targetTick, side));
 
@@ -53,6 +56,8 @@ namespace CombatSimulation.Runtime
                 _battle.Submit(ControlFrame.Create(BattleId, _nextCommandId++, snapshot.Tick + registration.Schedule.Delay,
                     registration.EntityId, controls.HasCourse ? controls.Course : (float?)null, controls.Throttle,
                     controls.Systems));
+                if (controls.SelfDestruct)
+                    SelfDestruct(registration.EntityId, snapshot.Tick + registration.Schedule.Delay);
             }
         }
 

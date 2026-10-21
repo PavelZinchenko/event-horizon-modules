@@ -6,6 +6,13 @@ namespace CombatSimulation.Core
 
         public BeamDefinition Definition { get; }
 
+        public override void Reset()
+        {
+            _handle = default;
+            _active = false;
+            _stoppedTick = long.MinValue / 2;
+        }
+
         public override void Update(Battle battle, ShipEntity ship)
         {
             if (_active)

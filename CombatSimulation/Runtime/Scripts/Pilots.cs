@@ -10,18 +10,20 @@ namespace CombatSimulation.Runtime
         public readonly float Course;
         public readonly float Throttle;
         public readonly ulong Systems;
+        public readonly bool SelfDestruct;
 
-        private PilotControls(bool hasCourse, float course, float throttle, ulong systems)
+        private PilotControls(bool hasCourse, float course, float throttle, ulong systems, bool selfDestruct)
         {
             HasCourse = hasCourse;
             Course = course;
             Throttle = throttle;
             Systems = systems;
+            SelfDestruct = selfDestruct;
         }
 
         // A null course means none.
-        public static PilotControls Create(float? course, float throttle, ulong systems) =>
-            new PilotControls(course.HasValue, course ?? 0f, throttle, systems);
+        public static PilotControls Create(float? course, float throttle, ulong systems, bool selfDestruct = false) =>
+            new PilotControls(course.HasValue, course ?? 0f, throttle, systems, selfDestruct);
     }
 
     // Reads a snapshot and decides the controls of one ship. Scripted pilots, behavior trees and the

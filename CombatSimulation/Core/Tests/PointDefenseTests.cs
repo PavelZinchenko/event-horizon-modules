@@ -130,7 +130,7 @@ namespace CombatSimulation.Core.Tests
         }
 
         [Test]
-        public void RedeploymentClearsControlsAndStartsFreshDevice()
+        public void RedeploymentClearsControlsAndResetsPooledDevice()
         {
             var driver = Ready();
             var previous = Device(driver);
@@ -138,7 +138,8 @@ namespace CombatSimulation.Core.Tests
             driver.Step(351);
             driver.Deploy(1);
             driver.Step();
-            Assert.AreNotSame(previous, Device(driver));
+            Assert.AreSame(previous, Device(driver));
+            Assert.AreEqual(0, Device(driver).NextQueryTick);
             Assert.IsFalse(Device(driver).Enabled);
             Assert.AreEqual(0UL, driver.Ship(1).Systems);
             Assert.AreEqual(100f, driver.Ship(1).Energy.Value);
@@ -357,6 +358,143 @@ namespace CombatSimulation.Core.Tests
             if (step % 6 == 3)
                 for (var i = 0; i < 70; ++i) Add(driver, (ulong)(10000 + step * 100 + i), InRange);
             driver.Step();
+        }
+
+        [Test]
+        public void DroneZapDamagesShieldThenArmorAndNeverDrainsTargetEnergy()
+        {
+            var driver = DroneDefense(new PointDefenseDefinition(4f, 0f, 1f, 15f),
+                DroneBayTests.Drone(shield: new ResourceDefinition(10f)));
+            var drone = driver.Battle.FindShip(DroneBayTests.Drones(driver).Single().Id);
+            driver.Step();
+            Assert.AreEqual(0f, drone.Shield.Value);
+            Assert.AreEqual(95f, drone.Armor.Value);
+            Assert.AreEqual(100f, drone.Energy.Value);
+            Assert.AreEqual(98f, driver.Ship(101).Energy.Value, "One activation and one zap.");
+            var hit = driver.Battle.Snapshot.Events.ToArray().Single(e => e.Kind == BattleEventKind.Hit);
+            Assert.AreEqual(drone.Id, hit.EntityId);
+            Assert.AreEqual(driver.Entity(101), hit.AttackerId);
+            Assert.AreEqual(0, hit.DeviceIndex);
+            Assert.AreEqual(15f, hit.Damage);
+            Assert.IsEmpty(Zaps(driver));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void DroneZapOccursOncePerDeviceForCompoundHullAndTorusImages(bool wrap)
+        {
+            var droneDefinition = DroneBayTests.Drone(parts: new[] { new Circle(new Vec2(0.2f, 0f), 0.5f) });
+            var defense = Fixtures.ShipWith(energy: new ResourceDefinition(100f), devices: new[]
+            {
+                new PointDefenseDefinition(4f, 0f, 1f, 7f), new PointDefenseDefinition(4f, 0f, 1f, 11f),
+            });
+            var driver = DroneBayTests.Start(DroneBayTests.Carrier(drone: droneDefinition), defense);
+            var drone = DroneBayTests.Launch(driver);
+            driver.Place(101, wrap ? new Vec2(0.5f, 50f) : new Vec2(100f, 100f), Vec2.Zero);
+            DroneBayTests.Place(driver, drone, wrap ? new Vec2(driver.Battle.Setup.Width - 2f, 50f) : new Vec2(102f, 100f));
+            driver.Control(101, systems: 3);
+            driver.Step(2);
+            var hits = driver.Battle.Snapshot.Events.ToArray().Where(e => e.Kind == BattleEventKind.Hit).ToArray();
+            Assert.AreEqual(2, hits.Length);
+            CollectionAssert.AreEqual(new[] { 0, 1 }, hits.Select(e => e.DeviceIndex));
+            Assert.AreEqual(82f, drone.Armor.Value);
+            Assert.AreEqual(96f, driver.Ship(101).Energy.Value);
+        }
+
+        [Test]
+        public void FailedDroneZapPaymentLeavesDroneUndamagedAndDisablesDefense()
+        {
+            var driver = DroneDefense(new PointDefenseDefinition(4f, 0f, 1f, 15f));
+            var drone = driver.Battle.FindShip(DroneBayTests.Drones(driver).Single().Id);
+            driver.Ship(101).Energy.Value = 0.5f;
+            driver.Step();
+            Assert.AreEqual(100f, drone.Armor.Value);
+            Assert.AreEqual(0.5f, driver.Ship(101).Energy.Value);
+            Assert.IsFalse(((PointDefenseDevice)driver.Ship(101).GetDevice(0)).Enabled);
+            Assert.IsEmpty(driver.Battle.Snapshot.Events.ToArray());
+        }
+
+        [Test]
+        public void ProjectileDisarmGetsPaymentBeforeDroneHit()
+        {
+            var driver = DroneDefense(new PointDefenseDefinition(4f, 0f, 1f, 15f));
+            var drone = driver.Battle.FindShip(DroneBayTests.Drones(driver).Single().Id);
+            Add(driver, 10001, new Vec2(100f, 102f), side: 0);
+            driver.Ship(101).Energy.Value = 1f;
+            driver.Step();
+            Assert.AreEqual(1, Zaps(driver).Length);
+            Assert.AreEqual(100f, drone.Armor.Value);
+            Assert.AreEqual(0f, driver.Ship(101).Energy.Value);
+        }
+
+        [Test]
+        public void LethalDroneHitDoesNotInvalidateOtherSameTickHits()
+        {
+            var defense = Fixtures.ShipWith(energy: new ResourceDefinition(100f), devices: new[]
+            {
+                new PointDefenseDefinition(4f, 0f, 1f, 100f), new PointDefenseDefinition(4f, 0f, 1f, 100f),
+            });
+            var driver = DroneBayTests.Start(enemy: defense);
+            var drone = DroneBayTests.Launch(driver);
+            var id = drone.Id;
+            DroneBayTests.Place(driver, drone, new Vec2(102f, 100f));
+            driver.Control(101, systems: 3);
+            driver.Step(2);
+            Assert.IsNull(driver.Battle.FindShip(id));
+            Assert.AreEqual(2, driver.Battle.Snapshot.Events.ToArray().Count(e => e.Kind == BattleEventKind.Hit));
+            Assert.AreEqual(1, driver.Battle.Snapshot.Events.ToArray().Count(e => e.IsDrone && e.Kind == BattleEventKind.Removal));
+            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+        }
+
+        [Test]
+        public void DroneSpawnCanBeZappedInItsLaunchTick()
+        {
+            var driver = DroneBayTests.Start(enemy: DefenseShip(new PointDefenseDefinition(20f, 0f, 1f, 15f)));
+            driver.Place(101, new Vec2(55f, 50f), Vec2.Zero);
+            driver.Control(101, systems: 1);
+            var drone = DroneBayTests.Launch(driver);
+            Assert.AreEqual(85f, drone.Armor.Value);
+            Assert.IsTrue(driver.Battle.Snapshot.Events.ToArray().Any(e => e.IsDrone && e.Kind == BattleEventKind.Spawn));
+            Assert.AreEqual(1, driver.Battle.Snapshot.Events.ToArray().Count(e => e.Kind == BattleEventKind.Hit));
+        }
+
+        [Test]
+        public void AlliedDronesAndRosterShipsAreNotDefenseTargets()
+        {
+            var carrier = Fixtures.ShipWith(energy: new ResourceDefinition(100f), devices: new DeviceDefinition[]
+            {
+                new DroneBayDefinition(1, 2f, DroneBayTests.Drone()), new PointDefenseDefinition(20f, 0f, 1f, 15f),
+            });
+            var driver = DroneBayTests.Start(carrier);
+            var drone = DroneBayTests.Launch(driver);
+            driver.Place(101, new Vec2(55f, 50f), Vec2.Zero);
+            driver.Control(1, systems: 2);
+            driver.Step(3);
+            Assert.AreEqual(100f, drone.Armor.Value);
+            Assert.AreEqual(97f, driver.Ship(1).Energy.Value, "Only launch and activation cost.");
+            Assert.IsEmpty(driver.Battle.Snapshot.Events.ToArray());
+        }
+
+        [Test]
+        public void SustainedDroneDefenseAllocatesNothingAfterWarmup()
+        {
+            var driver = DroneDefense(new PointDefenseDefinition(4f, 0f, 0f, 0.01f));
+            driver.Step(30);
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            driver.Step(100);
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.AreEqual(0, allocated);
+            Assert.IsTrue(driver.Battle.Snapshot.Events.ToArray().Any(e => e.Kind == BattleEventKind.Hit));
+        }
+
+        private static Driver DroneDefense(PointDefenseDefinition defense, ShipDefinition drone = null)
+        {
+            var driver = DroneBayTests.Start(DroneBayTests.Carrier(drone: drone), DefenseShip(defense));
+            var target = DroneBayTests.Launch(driver);
+            DroneBayTests.Place(driver, target, new Vec2(102f, 100f));
+            driver.Control(101, systems: 1);
+            driver.Step();
+            return driver;
         }
 
         private static ShipDefinition DefenseShip(PointDefenseDefinition definition = null, ResourceDefinition? energy = null,

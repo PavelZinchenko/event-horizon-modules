@@ -155,7 +155,29 @@ namespace CombatSimulation.Core
         internal RammingTracker Ramming => _ramming;
         internal BeamQueries Beams => _beams;
 
-        // Stage 1. Roster commands for this tick, then control frames, each in command ID order.
+        // Roster entries can be empty; live drones follow them in stable entity ID order.
+        internal int ShipEntryCount => Roster.Slots.Count + _drones.Count;
+        internal ShipEntity GetShipEntry(int index) => index < Roster.Slots.Count
+            ? Roster.Slots[index].ActiveShip : _drones[index - Roster.Slots.Count];
+
+        public bool Submit(in SelfDestructCommand command)
+        {
+            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
+            if (command.BattleId != BattleId) return Reject(command, "wrong battle");
+            if (command.TargetTick < Tick) return Reject(command, "past tick");
+            if (command.EntityId.IsNull) return Reject(command, "no entity");
+            if (!_pendingCommandIds.Add(command.CommandId)) return Reject(command, "duplicate command ID");
+
+            var index = 0;
+            while (index < _selfDestructs.Count &&
+                (_selfDestructs[index].TargetTick < command.TargetTick ||
+                 (_selfDestructs[index].TargetTick == command.TargetTick && _selfDestructs[index].CommandId < command.CommandId)))
+                ++index;
+            _selfDestructs.Insert(index, command);
+            return true;
+        }
+
+        // Stage 1. Roster commands, self-destruct requests, then control frames; each group in command ID order.
         private void ApplyCommands()
         {
             var count = 0;
@@ -168,9 +190,19 @@ namespace CombatSimulation.Core
 
             if (count > 0) _commands.RemoveRange(0, count);
 
-            var slots = Roster.Slots;
-            for (var i = 0; i < slots.Count; ++i)
-                slots[i].ActiveShip?.BeginControlTick();
+            count = 0;
+            while (count < _selfDestructs.Count && _selfDestructs[count].TargetTick == Tick)
+            {
+                var command = _selfDestructs[count++];
+                _pendingCommandIds.Remove(command.CommandId);
+                var ship = FindShip(command.EntityId);
+                if (ship == null || !ship.IsDrone) Reject(command, "not a live drone");
+                else QueueDeath(ship.Id);
+            }
+            if (count > 0) _selfDestructs.RemoveRange(0, count);
+
+            for (var i = 0; i < ShipEntryCount; ++i)
+                GetShipEntry(i)?.BeginControlTick();
 
             count = 0;
             while (count < _frames.Count && _frames[count].TargetTick == Tick)
@@ -191,10 +223,9 @@ namespace CombatSimulation.Core
         // Stage 2. Resources recharge first, before devices spend (legacy: stats update before systems).
         private void UpdateSystems()
         {
-            var slots = Roster.Slots;
-            for (var i = 0; i < slots.Count; ++i)
+            for (var i = 0; i < ShipEntryCount; ++i)
             {
-                var ship = slots[i].ActiveShip;
+                var ship = GetShipEntry(i);
                 if (ship == null) continue;
 
                 ship.EngineHasEnergy = ship.Energy.Value > 0f;
@@ -217,18 +248,17 @@ namespace CombatSimulation.Core
         // off and drifts (legacy ShipRetreatEffect); it stays a missile target. Then homing bullets steer.
         private void UpdateMotion()
         {
-            var slots = Roster.Slots;
             _targets.Clear();
-            for (var i = 0; i < slots.Count; ++i)
+            for (var i = 0; i < ShipEntryCount; ++i)
             {
-                var ship = slots[i].ActiveShip;
+                var ship = GetShipEntry(i);
                 if (ship != null)
                     _targets.Add(ship.Id, ship.Side, World.GetPosition(ship.Body), ship.Definition.HullRadius);
             }
 
-            for (var i = 0; i < slots.Count; ++i)
+            for (var i = 0; i < ShipEntryCount; ++i)
             {
-                var ship = slots[i].ActiveShip;
+                var ship = GetShipEntry(i);
                 if (ship == null) continue;
                 if (ship.RetreatCompletionTick == ShipEntity.NoRetreat) ShipEngine.Update(World, ship, TickDuration);
 
@@ -245,7 +275,7 @@ namespace CombatSimulation.Core
             }
         }
 
-        // Stage 5. Requests come in roster order, then device order, so requests of one spawn slot are adjacent.
+        // Stage 5. Roster ships first, then drones by ID; devices in index order. One spawn slot stays adjacent.
         private void ApplySpawnRequests()
         {
             for (var i = 0; i < _spawnRequests.Count; ++i)
@@ -253,11 +283,41 @@ namespace CombatSimulation.Core
                 var request = _spawnRequests[i];
                 var sequence = 0u;
                 for (var j = i - 1; j >= 0 && _spawnRequests[j].HasSameSlot(request); --j) ++sequence;
-                if (request.Beam != null) SpawnBeam(request, sequence);
+                if (request.DroneBay != null) SpawnDrone(request, sequence);
+                else if (request.Beam != null) SpawnBeam(request, sequence);
                 else SpawnBullet(request, sequence);
             }
 
             _spawnRequests.Clear();
+        }
+
+        private void SpawnDrone(in SpawnRequest request, uint sequence)
+        {
+            var parent = request.Ship;
+            var bay = parent.Slot.GetBay(request.DeviceIndex);
+            var id = SpawnIdentity.CreateChild(parent.Id, Tick, (uint)request.DeviceIndex,
+                (uint)request.BarrelIndex, sequence);
+            var ship = _ships.Allocate();
+            if (!TryRegister(id, ship.Handle))
+            {
+                _ships.Release(ship);
+                return;
+            }
+
+            var body = World.CreateBody(new BodyDef { Mass = bay.Definition.Drone.Mass });
+            ship.InitializeDrone(id, bay, body, Tick);
+            AddShipShapes(ship, CollisionFilters.Drone(ship.Side));
+            var origin = World.GetPosition(parent.Body);
+            var angle = World.GetAngle(parent.Body);
+            World.SetPose(body, origin, angle);
+            World.TryFindFreePosition(body, origin, SpawnSearchDistance, out var position);
+            World.SetPose(body, position, angle);
+
+            var index = 0;
+            while (index < _drones.Count && _drones[index].Id.Value < id.Value) ++index;
+            _drones.Insert(index, ship);
+            bay.RecordLaunch();
+            _events.Add(BattleEvent.Spawn(BattleId, Tick, _events.Count, ship));
         }
 
         // Legacy BulletFactory.ConfigureBody at the muzzle pose, plus the Q1 recoil (owner, 2026-10-20).
@@ -397,10 +457,9 @@ namespace CombatSimulation.Core
         // In phase 2 the local runtime owns every entity, so it applies all damage.
         private void ApplyDamage()
         {
-            var slots = Roster.Slots;
-            for (var i = 0; i < slots.Count; ++i)
+            for (var i = 0; i < ShipEntryCount; ++i)
             {
-                var ship = slots[i].ActiveShip;
+                var ship = GetShipEntry(i);
                 if (ship == null || !(ship.PendingDamage > 0f)) continue;
 
                 var damage = ship.PendingDamage;
@@ -427,16 +486,15 @@ namespace CombatSimulation.Core
 
             _deathRequests.Clear();
 
-            var slots = Roster.Slots;
-            for (var i = 0; i < slots.Count; ++i)
+            for (var i = 0; i < ShipEntryCount; ++i)
             {
-                var ship = slots[i].ActiveShip;
+                var ship = GetShipEntry(i);
                 if (ship != null && ship.Armor.Value <= 0f) ship.PendingDeath = true;
             }
         }
 
         // Stage 12. One batch, in roster order: deaths, then retreat completions, then surrender and kill-all.
-        // Bullets leave last, in entity ID order. Projectiles outlive their parent; attached beams do not.
+        // Drone deaths follow the roster batch. Bullets leave last, by ID. Attached beams die with their ship.
         private void ApplyStructureChanges()
         {
             var slots = Roster.Slots;
@@ -484,6 +542,15 @@ namespace CombatSimulation.Core
                     slot.Destroy();
                     AddTransition(slot, previousStatus, RosterTransitionReason.ForcedDestruction, id);
                 }
+            }
+
+            // Mothership removal does not remove drones. Only their own damage or pilot command does.
+            for (var i = 0; i < _drones.Count;)
+            {
+                var drone = _drones[i];
+                if (!drone.PendingDeath) { ++i; continue; }
+                RemoveShip(drone, RemovalReason.Death);
+                _drones.RemoveAt(i);
             }
 
             RemoveBullets();
@@ -585,15 +652,7 @@ namespace CombatSimulation.Core
             var body = World.CreateBody(new BodyDef { Mass = definition.Mass });
             ship.Initialize(id, slot, body, Tick);
 
-            var shapeDef = ShapeDef.Default;
-            shapeDef.Filter = CollisionFilters.Ship(slot.Side);
-            var parts = definition.HullParts;
-            for (var i = 0; i < parts.Count; ++i)
-            {
-                var shape = World.AddCircle(body, parts[i], shapeDef);
-                ship.AddShape(shape);
-                _shapes.Register(shape, new ShapeEntry(ship.Handle, id, ShapeHitPriority.Hull, i));
-            }
+            AddShipShapes(ship, CollisionFilters.Ship(slot.Side));
 
             PlaceSpawn(body, id, slot.Side);
             slot.Activate(ship, ++_deploymentOrder);
@@ -601,6 +660,19 @@ namespace CombatSimulation.Core
 
             _events.Add(BattleEvent.Spawn(BattleId, Tick, _events.Count, ship));
             AddTransition(slot, RosterStatus.Ready, RosterTransitionReason.Deployed, id);
+        }
+
+        private void AddShipShapes(ShipEntity ship, Filter filter)
+        {
+            var shapeDef = ShapeDef.Default;
+            shapeDef.Filter = filter;
+            var parts = ship.Definition.HullParts;
+            for (var i = 0; i < parts.Count; ++i)
+            {
+                var shape = World.AddCircle(ship.Body, parts[i], shapeDef);
+                ship.AddShape(shape);
+                _shapes.Register(shape, new ShapeEntry(ship.Handle, ship.Id, ShapeHitPriority.Hull, i));
+            }
         }
 
         private void StartRetreat(in RosterCommand command)
@@ -661,8 +733,9 @@ namespace CombatSimulation.Core
             _ramming.Forget(ship.Id);
             World.DestroyBody(ship.Body);
             _entities.Remove(ship.Id);
+            if (ship.IsDrone) ship.Bay.RecordLoss();
+            else ResetTimer();
             _ships.Release(ship);
-            ResetTimer();
         }
 
         private void AddTransition(RosterSlot slot, RosterStatus previousStatus, RosterTransitionReason reason, EntityId id) =>
@@ -674,7 +747,7 @@ namespace CombatSimulation.Core
             Trace.LogError(message);
         }
 
-        // Owner (2026-10-20): any ship deployment or removal, on either side, resets the timer.
+        // Owner: roster ship deployment or removal on either side resets the timer; drones never reset it.
         private void ResetTimer() => TimerElapsedTicks = 0;
 
         private int FindInsertIndex(in RosterCommand command)
@@ -723,11 +796,20 @@ namespace CombatSimulation.Core
             return false;
         }
 
+        private bool Reject(in SelfDestructCommand command, string reason)
+        {
+            ++RejectedCommandCount;
+            Trace.LogWarning($"Battle {BattleId}, tick {Tick}: rejected self-destruct #{command.CommandId} for {command.EntityId}: {reason}.");
+            return false;
+        }
+
         private static bool IsValidKind(RosterCommandKind kind) =>
             kind == RosterCommandKind.Deploy || kind == RosterCommandKind.Retreat ||
             kind == RosterCommandKind.Surrender || kind == RosterCommandKind.KillAll;
 
         private readonly ShipStore _ships = new ShipStore();
+        private readonly List<ShipEntity> _drones = new List<ShipEntity>();
+        private readonly List<SelfDestructCommand> _selfDestructs = new List<SelfDestructCommand>();
         private readonly BulletStore _bullets = new BulletStore();
         private readonly BeamQueries _beams = new BeamQueries();
         private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();

@@ -23,6 +23,10 @@ namespace CombatSimulation.Core
     {
         public readonly EntityId Id;
         public readonly RosterId RosterId;
+        // Drones have no roster slot. BayKey identifies their persistent owner instead.
+        public readonly DroneBayKey? BayKey;
+        public readonly EntityId MothershipId;
+        public bool IsDrone => BayKey.HasValue;
         public readonly int Side;
         public readonly int Owner;
         public readonly ShipDefinition Definition;
@@ -49,7 +53,9 @@ namespace CombatSimulation.Core
         internal ShipState(ShipEntity ship, PhysicsWorld world)
         {
             Id = ship.Id;
-            RosterId = ship.Slot.RosterId;
+            RosterId = ship.Slot?.RosterId ?? default;
+            BayKey = ship.Bay?.Key;
+            MothershipId = ship.MothershipId;
             Side = ship.Side;
             Owner = ship.Owner;
             Definition = ship.Definition;

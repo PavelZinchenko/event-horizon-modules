@@ -23,6 +23,8 @@ namespace CombatSimulation.Core
             {
                 ship = new ShipEntity(_items.Count);
                 _items.Add(ship);
+                // Removal must not allocate when a warmed pool first becomes empty.
+                if (_free.Capacity < _items.Count) _free.Capacity = _items.Capacity;
             }
 
             ship.Allocate();

@@ -26,7 +26,7 @@ namespace CombatSimulation.Core
         public BattleResult Result { get; private set; }
         public bool IsCompleted => Result.IsCompleted;
 
-        // Active ships in roster order.
+        // Active roster ships in roster order, then drones in entity ID order.
         public ReadOnlySpan<ShipState> Ships => new ReadOnlySpan<ShipState>(_ships, 0, _shipCount);
 
         // Live bullets in storage order; the order has no meaning.
@@ -63,7 +63,14 @@ namespace CombatSimulation.Core
             {
                 var slot = slots[i];
                 _roster[i] = new RosterSlotState(slot);
-                if (slot.ActiveShip != null) _ships[_shipCount++] = new ShipState(slot.ActiveShip, world);
+            }
+
+            if (_ships.Length < battle.ShipEntryCount)
+                Array.Resize(ref _ships, Math.Max(battle.ShipEntryCount, _ships.Length * 2));
+            for (var i = 0; i < battle.ShipEntryCount; ++i)
+            {
+                var ship = battle.GetShipEntry(i);
+                if (ship != null) _ships[_shipCount++] = new ShipState(ship, world);
             }
 
             var bullets = battle.Bullets;
@@ -80,7 +87,7 @@ namespace CombatSimulation.Core
         }
 
         private readonly RosterSlotState[] _roster;
-        private readonly ShipState[] _ships;
+        private ShipState[] _ships;
         private int _shipCount;
         private BulletState[] _bullets = new BulletState[16];
         private int _bulletCount;

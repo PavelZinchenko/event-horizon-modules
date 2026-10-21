@@ -52,6 +52,8 @@ namespace CombatSimulation.Core
 
         // Spawn and removal of a roster ship, and roster transitions. Side and owner also for a bullet.
         public readonly RosterId RosterId;
+        public readonly DroneBayKey? BayKey;
+        public bool IsDrone => BayKey.HasValue;
         public readonly int Side;
         public readonly int Owner;
 
@@ -75,10 +77,10 @@ namespace CombatSimulation.Core
         public readonly EntityId AttackerId;
         public readonly float Damage;
         public readonly Vec2 Point;
-        // Disarm: index on the attacking ship. Other events use -1.
+        // Point-defense hit or disarm: index on the attacking ship. Other events use -1.
         public readonly int DeviceIndex;
 
-        // Spawn and removal of a bullet: the definition and the entity that fired it. Null for a ship.
+        // Bullet definitions are null for ships. ParentId is the firing entity or a drone's current mothership.
         public readonly BulletDefinition BulletDefinition;
         public readonly BeamDefinition BeamDefinition;
         public readonly EntityId ParentId;
@@ -91,7 +93,7 @@ namespace CombatSimulation.Core
             RosterStatus previousStatus, RosterStatus status, RosterTransitionReason transitionReason, int revision,
             float armorDeficit, float shieldDeficit, BattleResult result, EntityId attackerId = default,
             float damage = 0f, Vec2 point = default, BulletDefinition bulletDefinition = null, EntityId parentId = default,
-            BeamDefinition beamDefinition = null, int deviceIndex = -1)
+            BeamDefinition beamDefinition = null, int deviceIndex = -1, DroneBayKey? bayKey = null)
         {
             BattleId = battleId;
             Tick = tick;
@@ -99,6 +101,7 @@ namespace CombatSimulation.Core
             Kind = kind;
             EntityId = entityId;
             RosterId = rosterId;
+            BayKey = bayKey;
             Side = side;
             Owner = owner;
             Definition = definition;
@@ -120,13 +123,14 @@ namespace CombatSimulation.Core
         }
 
         internal static BattleEvent Spawn(BattleId battleId, long tick, int sequence, ShipEntity ship) =>
-            new BattleEvent(battleId, tick, sequence, BattleEventKind.Spawn, ship.Id, ship.Slot.RosterId, ship.Side,
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Spawn, ship.Id, ship.Slot?.RosterId ?? default, ship.Side,
                 ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f,
-                default);
+                default, parentId: ship.MothershipId, bayKey: ship.Bay?.Key);
 
         internal static BattleEvent Removal(BattleId battleId, long tick, int sequence, ShipEntity ship, RemovalReason reason) =>
-            new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, ship.Id, ship.Slot.RosterId, ship.Side,
-                ship.Owner, ship.Definition, reason, default, default, RosterTransitionReason.None, 0, 0f, 0f, default);
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, ship.Id, ship.Slot?.RosterId ?? default, ship.Side,
+                ship.Owner, ship.Definition, reason, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                parentId: ship.MothershipId, bayKey: ship.Bay?.Key);
 
         internal static BattleEvent BulletSpawn(BattleId battleId, long tick, int sequence, in BulletEntity bullet) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Spawn, bullet.Id, default, bullet.Side, bullet.Owner,
@@ -151,7 +155,7 @@ namespace CombatSimulation.Core
         internal static BattleEvent HitEvent(BattleId battleId, long tick, int sequence, in ContactCandidate hit) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Hit, hit.Target, default, 0, 0, null,
                 RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default, hit.Attacker,
-                hit.Damage, hit.Point);
+                hit.Damage, hit.Point, deviceIndex: hit.AttackerDeviceIndex);
 
         internal static BattleEvent DisarmEvent(BattleId battleId, long tick, int sequence, in ContactCandidate hit) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Disarm, hit.Target, default, 0, 0, null,

@@ -9,6 +9,16 @@ namespace CombatSimulation.Core
         public bool Enabled { get; private set; }
         public long NextQueryTick { get; private set; }
 
+        public override void Reset()
+        {
+            Enabled = false;
+            NextQueryTick = 0;
+            _started = false;
+            _stoppedTick = long.MinValue / 2;
+            _ship = null;
+            _queryTick = 0;
+        }
+
         public override void Update(Battle battle, ShipEntity ship)
         {
             if (!IsControlOn(ship))
