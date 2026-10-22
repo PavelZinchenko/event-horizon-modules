@@ -15,7 +15,8 @@ namespace CombatSimulation.Core
             float width = 200f,
             float height = 200f,
             long timeLimitTicks = 0,
-            int maxActiveShipsPerSide = 1)
+            int maxActiveShipsPerSide = 1,
+            IReadOnlyCollection<int> localOwners = null)
         {
             if (roster == null) throw new ArgumentNullException(nameof(roster));
             if (!(width > 0f) || float.IsInfinity(width))
@@ -50,6 +51,19 @@ namespace CombatSimulation.Core
             Height = height;
             TimeLimitTicks = timeLimitTicks;
             MaxActiveShipsPerSide = maxActiveShipsPerSide;
+            _localOwners = new HashSet<int>();
+            if (localOwners == null)
+            {
+                foreach (var slot in slots) _localOwners.Add(slot.Owner);
+            }
+            else
+            {
+                foreach (var owner in localOwners)
+                {
+                    if (owner < 0) throw new ArgumentOutOfRangeException(nameof(localOwners));
+                    _localOwners.Add(owner);
+                }
+            }
         }
 
         public BattleId BattleId { get; }
@@ -65,5 +79,9 @@ namespace CombatSimulation.Core
         public long TimeLimitTicks { get; }
 
         public int MaxActiveShipsPerSide { get; }
+
+        public bool IsLocalOwner(int owner) => _localOwners.Contains(owner);
+
+        private readonly HashSet<int> _localOwners;
     }
 }

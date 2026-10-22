@@ -7,6 +7,35 @@ namespace CombatSimulation.Core.Tests
     public class ScriptedBattleTests
     {
         [Test]
+        [SetCulture("en-US")]
+        public void AuthorityChangePreservesSinglePlayerLog()
+        {
+            var battle = ScriptedBattle.RunToResult(ScriptedBattle.Setup());
+            var text = string.Join("\n", battle.Log);
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            var digest = BitConverter.ToString(sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(text))).Replace("-", "");
+            TestContext.WriteLine($"Baseline: {battle.Log.Count} lines, SHA256 {digest}");
+            Assert.AreEqual("518251C30445EA37B539A066AE26D06AB4EBCAC868D8A5AF6B2B09E685231DC9", digest);
+        }
+
+        [Test]
+        public void ExplicitAllLocalOwnersMatchDefaultAndProduceOnlyCommittedEvents()
+        {
+            var setup = ScriptedBattle.Setup();
+            var explicitSetup = new BattleSetup(setup.BattleId, setup.MatchSeed, setup.Roster, setup.Width,
+                setup.Height, setup.TimeLimitTicks, setup.MaxActiveShipsPerSide, new[] { 0 });
+            var battle = new ScriptedBattle(explicitSetup, record: true, retreat: true);
+            while (!battle.IsCompleted && battle.Runner.Tick < ScriptedBattle.MaxTicks)
+            {
+                battle.Step();
+                foreach (var item in battle.Runner.Snapshot.Events)
+                    Assert.AreEqual(BattleEventAuthority.Committed, item.Authority);
+                Assert.AreEqual(0, battle.Runner.Snapshot.OutgoingHits.Length);
+            }
+            AssertSameLog(ScriptedBattle.RunToResult(setup), battle, "explicit all-local");
+        }
+
+        [Test]
         public void TwoFleetsWithReservesFightToAResult()
         {
             var battle = ScriptedBattle.RunToResult(ScriptedBattle.Setup());

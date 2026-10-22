@@ -35,8 +35,11 @@ namespace CombatSimulation.Core
         // Every slot in setup order.
         public ReadOnlySpan<RosterSlotState> Roster => new ReadOnlySpan<RosterSlotState>(_roster, 0, _roster.Length);
 
-        // The committed events of this tick, in order.
+        // Presentation events of this tick, in order. Authority distinguishes predictions from commits.
         public ReadOnlySpan<BattleEvent> Events => new ReadOnlySpan<BattleEvent>(_events, 0, _eventCount);
+
+        // Owner-decided hits for remote ships and drones; empty in single player.
+        public ReadOnlySpan<ResolvedHit> OutgoingHits => new ReadOnlySpan<ResolvedHit>(_outgoingHits, 0, _hitCount);
 
         public bool TryGetShip(EntityId id, out ShipState ship)
         {
@@ -84,6 +87,11 @@ namespace CombatSimulation.Core
                 _events = new BattleEvent[Math.Max(events.Count, _events.Length * 2)];
             events.CopyTo(_events);
             _eventCount = events.Count;
+            var hits = battle.OutgoingHits;
+            if (_outgoingHits.Length < hits.Count)
+                Array.Resize(ref _outgoingHits, Math.Max(hits.Count, _outgoingHits.Length * 2));
+            hits.CopyTo(_outgoingHits);
+            _hitCount = hits.Count;
         }
 
         private readonly RosterSlotState[] _roster;
@@ -93,6 +101,8 @@ namespace CombatSimulation.Core
         private int _bulletCount;
         private BattleEvent[] _events = new BattleEvent[16];
         private int _eventCount;
+        private ResolvedHit[] _outgoingHits = new ResolvedHit[16];
+        private int _hitCount;
     }
 
     // The events of the tick being processed. Stage 14 copies them into the snapshot.

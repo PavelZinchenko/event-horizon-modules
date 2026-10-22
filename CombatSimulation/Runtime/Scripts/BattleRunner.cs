@@ -83,6 +83,7 @@ namespace CombatSimulation.Runtime
                 }
                 else if (item.Kind == BattleEventKind.Spawn && snapshot.TryGetShip(item.EntityId, out var ship))
                 {
+                    if (!_battle.Setup.IsLocalOwner(ship.Owner)) continue;
                     var pilot = _provider.CreatePilot(snapshot, ship, out var schedule);
                     if (pilot == null) continue;
                     if (schedule.Period < 1)

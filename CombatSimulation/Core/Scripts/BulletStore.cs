@@ -14,6 +14,7 @@ namespace CombatSimulation.Core
         public EntityId ParentId;
         public int Side;
         public int Owner;
+        public int DeviceIndex;
         public BulletDefinition Definition;
         public BulletId Body;
 
@@ -182,27 +183,27 @@ namespace CombatSimulation.Core
         }
 
         // Stage 10. One pass, in the order stage 9 accepted the hits, as the resolver summed them.
-        public void ApplyDamage()
+        public void ApplyDamage(BattleSetup setup)
         {
             for (var i = 0; i < _count; ++i)
             {
                 ref var bullet = ref _items[i];
                 if (!bullet.IsAlive || !(bullet.PendingDamage > 0f)) continue;
-                bullet.HitPoints -= bullet.PendingDamage;
+                if (setup.IsLocalOwner(bullet.Owner)) bullet.HitPoints -= bullet.PendingDamage;
                 bullet.PendingDamage = 0f;
             }
         }
 
         // Stage 11. A missile without hit points dies; a bullet expires after the physics of its last tick.
         // A death in the same tick wins over the expiry.
-        public void MarkDeaths(long tick)
+        public void MarkDeaths(long tick, BattleSetup setup)
         {
             for (var i = 0; i < _count; ++i)
             {
                 ref var bullet = ref _items[i];
                 if (!bullet.IsAlive || bullet.IsBeam || bullet.PendingRemoval != RemovalReason.None) continue;
 
-                if (bullet.Definition.IsMissile && bullet.HitPoints <= 0f)
+                if (bullet.Definition.IsMissile && bullet.HitPoints <= 0f && setup.IsLocalOwner(bullet.Owner))
                     bullet.PendingRemoval = RemovalReason.Death;
                 else if (bullet.ExpiryTick == tick)
                     bullet.PendingRemoval = RemovalReason.Expiry;

@@ -2,6 +2,8 @@ using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
+    public enum BattleEventAuthority : byte { Committed = 0, Predicted = 1 }
+
     public enum BattleEventKind : byte
     {
         Spawn = 1,
@@ -35,7 +37,7 @@ namespace CombatSimulation.Core
         ForcedDestruction,
     }
 
-    // One committed event of a tick. A flat tagged form, so the batch never allocates.
+    // One presentation event of a tick, with explicit authority. A flat tagged form, so the batch never allocates.
     // Identity: battle ID, tick and sequence. An entity event comes before the roster transition of the same operation.
     public readonly struct BattleEvent
     {
@@ -46,6 +48,7 @@ namespace CombatSimulation.Core
         public readonly int Sequence;
 
         public readonly BattleEventKind Kind;
+        public readonly BattleEventAuthority Authority;
 
         // Spawn, removal, and a roster transition that involves an entity. Hit: the target.
         public readonly EntityId EntityId;
@@ -93,12 +96,14 @@ namespace CombatSimulation.Core
             RosterStatus previousStatus, RosterStatus status, RosterTransitionReason transitionReason, int revision,
             float armorDeficit, float shieldDeficit, BattleResult result, EntityId attackerId = default,
             float damage = 0f, Vec2 point = default, BulletDefinition bulletDefinition = null, EntityId parentId = default,
-            BeamDefinition beamDefinition = null, int deviceIndex = -1, DroneBayKey? bayKey = null)
+            BeamDefinition beamDefinition = null, int deviceIndex = -1, DroneBayKey? bayKey = null,
+            BattleEventAuthority authority = BattleEventAuthority.Committed)
         {
             BattleId = battleId;
             Tick = tick;
             Sequence = sequence;
             Kind = kind;
+            Authority = authority;
             EntityId = entityId;
             RosterId = rosterId;
             BayKey = bayKey;
@@ -122,45 +127,51 @@ namespace CombatSimulation.Core
             ParentId = parentId;
         }
 
-        internal static BattleEvent Spawn(BattleId battleId, long tick, int sequence, ShipEntity ship) =>
+        internal static BattleEvent Spawn(BattleId battleId, long tick, int sequence, ShipEntity ship,
+            BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Spawn, ship.Id, ship.Slot?.RosterId ?? default, ship.Side,
                 ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f,
-                default, parentId: ship.MothershipId, bayKey: ship.Bay?.Key);
+                default, parentId: ship.MothershipId, bayKey: ship.Bay?.Key, authority: authority);
 
         internal static BattleEvent Removal(BattleId battleId, long tick, int sequence, ShipEntity ship, RemovalReason reason) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, ship.Id, ship.Slot?.RosterId ?? default, ship.Side,
                 ship.Owner, ship.Definition, reason, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
                 parentId: ship.MothershipId, bayKey: ship.Bay?.Key);
 
-        internal static BattleEvent BulletSpawn(BattleId battleId, long tick, int sequence, in BulletEntity bullet) =>
+        internal static BattleEvent BulletSpawn(BattleId battleId, long tick, int sequence, in BulletEntity bullet,
+            BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Spawn, bullet.Id, default, bullet.Side, bullet.Owner,
                 null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
-                bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition);
+                bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition, authority: authority);
 
-        internal static BattleEvent BulletRemoval(BattleId battleId, long tick, int sequence, in BulletEntity bullet) =>
+        internal static BattleEvent BulletRemoval(BattleId battleId, long tick, int sequence, in BulletEntity bullet,
+            BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, bullet.Id, default, bullet.Side, bullet.Owner,
                 null, bullet.PendingRemoval, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
-                bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition);
+                bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition, authority: authority);
 
         internal static BattleEvent Transition(BattleId battleId, long tick, int sequence, RosterSlot slot,
-            RosterStatus previousStatus, RosterTransitionReason reason, EntityId entityId) =>
+            RosterStatus previousStatus, RosterTransitionReason reason, EntityId entityId,
+            BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.RosterTransition, entityId, slot.RosterId, slot.Side,
                 slot.Owner, null, RemovalReason.None, previousStatus, slot.Status, reason, slot.Revision,
-                slot.ArmorDeficit, slot.ShieldDeficit, default);
+                slot.ArmorDeficit, slot.ShieldDeficit, default, authority: authority);
 
         internal static BattleEvent ResultEvent(BattleId battleId, long tick, int sequence, BattleResult result) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Result, default, default, 0, 0,
                 null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, result);
 
-        internal static BattleEvent HitEvent(BattleId battleId, long tick, int sequence, in ContactCandidate hit) =>
+        internal static BattleEvent HitEvent(BattleId battleId, long tick, int sequence, in ContactCandidate hit,
+            BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Hit, hit.Target, default, 0, 0, null,
                 RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default, hit.Attacker,
-                hit.Damage, hit.Point, deviceIndex: hit.AttackerDeviceIndex);
+                hit.Damage, hit.Point, deviceIndex: hit.AttackerDeviceIndex, authority: authority);
 
-        internal static BattleEvent DisarmEvent(BattleId battleId, long tick, int sequence, in ContactCandidate hit) =>
+        internal static BattleEvent DisarmEvent(BattleId battleId, long tick, int sequence, in ContactCandidate hit,
+            BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Disarm, hit.Target, default, 0, 0, null,
                 RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
-                attackerId: hit.Attacker, point: hit.Point, deviceIndex: hit.AttackerDeviceIndex);
+                attackerId: hit.Attacker, point: hit.Point, deviceIndex: hit.AttackerDeviceIndex, authority: authority);
 
         public override string ToString()
         {

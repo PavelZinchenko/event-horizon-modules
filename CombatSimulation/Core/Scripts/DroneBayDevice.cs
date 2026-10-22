@@ -31,6 +31,7 @@ namespace CombatSimulation.Core
 
         public override void Update(Battle battle, ShipEntity ship)
         {
+            if (!battle.Setup.IsLocalOwner(ship.Owner)) return;
             var bay = ship.Slot.GetBay(Index);
             if (!IsControlOn(ship) || bay.InHangar == 0 ||
                 battle.Tick - ship.LastDroneLaunchTick < LaunchCooldownTicks ||
