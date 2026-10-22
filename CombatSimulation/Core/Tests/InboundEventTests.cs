@@ -33,8 +33,11 @@ namespace CombatSimulation.Core.Tests
             new ResolvedHit(target.BattleId, tick, attackerId ?? new EntityId(999), 20, 0,
                 targetId ?? target.Entity(1), 10, 0, contact, kind, amount);
 
+        private static InboundHit Inbound(int sender, ulong sequence, ResolvedHit hit) =>
+            new InboundHit(sender, hit.WithSequence(sequence));
+
         private static void Deliver(Driver target, ResolvedHit hit, ulong sequence = 1) =>
-            Assert.IsTrue(target.Battle.Submit(new InboundHit(20, sequence, hit)));
+            Assert.IsTrue(target.Battle.Submit(Inbound(20, sequence, hit)));
 
         private static OwnerOperation DeployRecord(Driver target, int revision = 1, ulong sequence = 1,
             long tick = 0, uint deployment = 1, long order = 1, SpawnPose pose = default,
@@ -82,7 +85,7 @@ namespace CombatSimulation.Core.Tests
         public void FutureHitWaitsForSourceTickAndDuplicateIsIgnored()
         {
             var d = Target();
-            var record = new InboundHit(20, 1, Hit(d, 3));
+            var record = Inbound(20, 1, Hit(d, 3));
             Assert.IsTrue(d.Battle.Submit(record));
             Assert.IsFalse(d.Battle.Submit(record));
             d.StepUntil(3);
@@ -112,8 +115,8 @@ namespace CombatSimulation.Core.Tests
         {
             var d = Target();
             var hit = Hit(d, 0);
-            Assert.IsFalse(d.Battle.Submit(new InboundHit(30, 1, hit)));
-            Assert.IsFalse(d.Battle.Submit(new InboundHit(10, 1, hit)));
+            Assert.IsFalse(d.Battle.Submit(Inbound(30, 1, hit)));
+            Assert.IsFalse(d.Battle.Submit(Inbound(10, 1, hit)));
             Deliver(d, hit);
             d.Step();
             Assert.AreEqual(490f, d.Ship(1).Shield.Value);
@@ -125,14 +128,14 @@ namespace CombatSimulation.Core.Tests
         public void InvalidAmountIsRejected(float amount)
         {
             var d = Target();
-            Assert.IsFalse(d.Battle.Submit(new InboundHit(20, 1, Hit(d, 0, amount))));
+            Assert.IsFalse(d.Battle.Submit(Inbound(20, 1, Hit(d, 0, amount))));
         }
 
         [Test]
         public void HitCannotClaimALiveLocalAttacker()
         {
             var d = Target();
-            Assert.IsFalse(d.Battle.Submit(new InboundHit(20, 1, Hit(d, 0, attackerId: d.Entity(1)))));
+            Assert.IsFalse(d.Battle.Submit(Inbound(20, 1, Hit(d, 0, attackerId: d.Entity(1)))));
         }
 
         [Test]
@@ -146,7 +149,7 @@ namespace CombatSimulation.Core.Tests
             bullet.Owner = 10;
             bullet.HitPoints = 5f;
             Assert.IsTrue(d.Battle.TryRegister(id, d.Battle.Bullets.GetHandle(index)));
-            Assert.IsFalse(d.Battle.Submit(new InboundHit(20, 1, Hit(d, 0, targetId: id))));
+            Assert.IsFalse(d.Battle.Submit(Inbound(20, 1, Hit(d, 0, targetId: id))));
             Assert.AreEqual(5f, bullet.HitPoints);
         }
 
@@ -409,10 +412,10 @@ namespace CombatSimulation.Core.Tests
             d.Step();
             var wrongTarget = new ResolvedHit(d.BattleId, 0, new EntityId(999), 20, 0, d.Entity(101), 20,
                 0, HitContactState.Start, HitImpactKind.Impact, 100f);
-            Assert.IsFalse(d.Battle.Submit(new InboundHit(20, 1, wrongTarget)));
+            Assert.IsFalse(d.Battle.Submit(Inbound(20, 1, wrongTarget)));
             var wrongBattle = new ResolvedHit(new BattleId(999), 0, new EntityId(999), 20, 0, d.Entity(1), 10,
                 0, HitContactState.Start, HitImpactKind.Impact, 100f);
-            Assert.IsFalse(d.Battle.Submit(new InboundHit(20, 1, wrongBattle)));
+            Assert.IsFalse(d.Battle.Submit(Inbound(20, 1, wrongBattle)));
             Deliver(d, Hit(d, 0));
             d.Step();
             Assert.AreEqual(490f, d.Ship(1).Shield.Value);
@@ -516,8 +519,8 @@ namespace CombatSimulation.Core.Tests
 
         private static void BeamCycle(Driver d, ref ulong sequence)
         {
-            d.Battle.Submit(new InboundHit(20, ++sequence, Hit(d, d.Tick, 0.1f, HitImpactKind.DamageOverTime)));
-            d.Battle.Submit(new InboundHit(20, ++sequence, Hit(d, d.Tick + 1, 0.1f, HitImpactKind.DamageOverTime, HitContactState.End)));
+            d.Battle.Submit(Inbound(20, ++sequence, Hit(d, d.Tick, 0.1f, HitImpactKind.DamageOverTime)));
+            d.Battle.Submit(Inbound(20, ++sequence, Hit(d, d.Tick + 1, 0.1f, HitImpactKind.DamageOverTime, HitContactState.End)));
             d.Step(4);
         }
 
@@ -528,13 +531,13 @@ namespace CombatSimulation.Core.Tests
             ulong sequence = 0;
             for (var i = 0; i < 50; ++i)
             {
-                d.Battle.Submit(new InboundHit(20, ++sequence, Hit(d, d.Tick, 0.001f)));
+                d.Battle.Submit(Inbound(20, ++sequence, Hit(d, d.Tick, 0.001f)));
                 d.Step();
             }
             var before = GC.GetAllocatedBytesForCurrentThread();
             for (var i = 0; i < 100; ++i)
             {
-                d.Battle.Submit(new InboundHit(20, ++sequence, Hit(d, d.Tick, 0.001f)));
+                d.Battle.Submit(Inbound(20, ++sequence, Hit(d, d.Tick, 0.001f)));
                 d.Step();
             }
             var allocated = GC.GetAllocatedBytesForCurrentThread() - before;

@@ -136,17 +136,18 @@ namespace CombatSimulation.Core
     }
 
     // SenderOwner comes from the peer binding, not from the decoded hit's AttackerOwner field.
+    // The hit's own Sequence orders the sender's records.
     public readonly struct InboundHit
     {
         public readonly int SenderOwner;
-        public readonly ulong Sequence;
         public readonly ResolvedHit Hit;
 
-        public InboundHit(int senderOwner, ulong sequence, ResolvedHit hit)
+        public InboundHit(int senderOwner, ResolvedHit hit)
         {
             SenderOwner = senderOwner;
-            Sequence = sequence;
             Hit = hit;
         }
+
+        public ulong Sequence => Hit.Sequence;
     }
 }

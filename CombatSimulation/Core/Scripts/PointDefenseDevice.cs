@@ -40,6 +40,16 @@ namespace CombatSimulation.Core
 
         public override void Deactivate(Battle battle) => Disable(battle.Tick);
 
+        public override DeviceState Export() => new DeviceState(_stoppedTick, NextQueryTick, Enabled, _started);
+
+        public override void Import(in DeviceState state)
+        {
+            _stoppedTick = state.LastTick;
+            NextQueryTick = state.NextTick;
+            Enabled = state.Enabled;
+            _started = state.Started;
+        }
+
         // Stage 6 captures the payment context. A successful zap delays the next query, not the other
         // candidates from this query. Empty queries and candidates skipped by the resolver spend nothing.
         public bool PrepareQuery(ShipEntity ship, long tick)

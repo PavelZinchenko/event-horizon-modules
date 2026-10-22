@@ -44,6 +44,30 @@ namespace CombatSimulation.Core
         }
     }
 
+    // A remote ship's received correction, held until its tick has run here. Arrays are reused across pool cycles.
+    internal sealed class PendingCorrection
+    {
+        public bool IsSet;
+        public long Tick;
+        public ulong AppliedHitSequence;
+        public BodyCorrection Body;
+        public DeviceState[] Devices = System.Array.Empty<DeviceState>();
+        public long[] BarrelShotTicks = System.Array.Empty<long>();
+
+        public void Store(long tick, ulong appliedHitSequence, in BodyCorrection body,
+            System.ReadOnlySpan<DeviceState> devices, System.ReadOnlySpan<long> barrelShotTicks)
+        {
+            IsSet = true;
+            Tick = tick;
+            AppliedHitSequence = appliedHitSequence;
+            Body = body;
+            if (Devices.Length < devices.Length) Devices = new DeviceState[devices.Length];
+            if (BarrelShotTicks.Length < barrelShotTicks.Length) BarrelShotTicks = new long[barrelShotTicks.Length];
+            devices.CopyTo(Devices);
+            barrelShotTicks.CopyTo(BarrelShotTicks);
+        }
+    }
+
     // A pooled ship. Drones have a persistent bay instead of a roster slot.
     internal sealed class ShipEntity
     {
@@ -55,6 +79,11 @@ namespace CombatSimulation.Core
 
         // Spawn samples kept for a remote ship (network plan, step 4; step 5 shares the 16-tick length).
         public const int SpawnHistoryLength = 16;
+
+        // End-of-tick body states kept for a remote ship (network plan, step 5).
+        public const int BodyHistoryLength = 16;
+
+        public const long NoCorrection = long.MinValue;
 
         public ShipEntity(int index) => Index = index;
 
@@ -105,6 +134,10 @@ namespace CombatSimulation.Core
         // Damage accumulated at stage 9; stage 10 applies it in one pass.
         public float PendingDamage { get; set; }
 
+        // The owner tick of the last applied correction, or NoCorrection.
+        public long LastCorrectionTick { get; set; }
+        public PendingCorrection Correction { get; } = new PendingCorrection();
+
         // Hull shapes in definition order. The array is reused across pool cycles.
         public int ShapeCount { get; private set; }
         public ShapeId GetShape(int index) => _shapes[index];
@@ -144,6 +177,9 @@ namespace CombatSimulation.Core
             PreStepVelocity = Vec2.Zero;
             PendingDamage = 0f;
             _spawnSampleCount = 0;
+            _bodySampleCount = 0;
+            LastCorrectionTick = NoCorrection;
+            Correction.IsSet = false;
 
             Armor = ResourcePool.CreateArmor(Definition.Armor);
             Shield = ResourcePool.Create(Definition.Shield);
@@ -179,6 +215,7 @@ namespace CombatSimulation.Core
         // Legacy FixedPlatform.IsReady: more than 0.04 s since the barrel's last shot, a strict check.
         public bool IsBarrelReady(int barrel, long tick) => tick - _barrelShotTicks[barrel] >= BarrelCooldownTicks;
         internal void RecordBarrelShot(int barrel, long tick) => _barrelShotTicks[barrel] = tick;
+        internal long GetBarrelShotTick(int barrel) => _barrelShotTicks[barrel];
 
         internal void ApplyControls(in ControlFrame frame)
         {
@@ -215,6 +252,48 @@ namespace CombatSimulation.Core
             return true;
         }
 
+        // Stage 14, once per tick in increasing tick order: the state an owner correction for this tick describes.
+        internal void RecordBodySample(long tick, in SpawnPose state)
+        {
+            _bodySamples[(int)(tick % BodyHistoryLength)] = state;
+            _newestBodySample = tick;
+            if (_bodySampleCount < BodyHistoryLength) ++_bodySampleCount;
+        }
+
+        // Only an exact tick inside the history; a correction older than it skips the movement part.
+        internal bool TryGetBodySample(long tick, out SpawnPose state)
+        {
+            if (_bodySampleCount == 0 || tick > _newestBodySample || tick <= _newestBodySample - _bodySampleCount)
+            {
+                state = default;
+                return false;
+            }
+
+            state = _bodySamples[(int)(tick % BodyHistoryLength)];
+            return true;
+        }
+
+        // The history follows an applied correction: body states from the corrected tick on, and spawn samples taken
+        // after it, move by the same error. A later correction then measures only the error that remains.
+        internal void ShiftHistory(long tick, in Torus torus, Vec2 position, float angle, Vec2 linearVelocity,
+            float angularVelocity)
+        {
+            for (var t = System.Math.Max(tick, _newestBodySample - _bodySampleCount + 1); t <= _newestBodySample; ++t)
+            {
+                ref var state = ref _bodySamples[(int)(t % BodyHistoryLength)];
+                state = new SpawnPose(torus.Wrap(state.Position + position), state.Angle + angle,
+                    state.LinearVelocity + linearVelocity, state.AngularVelocity + angularVelocity);
+            }
+
+            for (var t = System.Math.Max(tick + 1, _newestSpawnSample - _spawnSampleCount + 1); t <= _newestSpawnSample; ++t)
+            {
+                ref var sample = ref _spawnSamples[(int)(t % SpawnHistoryLength)];
+                var shifted = sample.Angle + angle;
+                sample = new SpawnSample(sample.Tick, torus.Wrap(sample.Position + position), Rot.FromAngle(shifted),
+                    shifted, sample.LinearVelocity + linearVelocity);
+            }
+        }
+
         internal void Release()
         {
             IsAlive = false;
@@ -228,6 +307,9 @@ namespace CombatSimulation.Core
             PreStepVelocity = Vec2.Zero;
             PendingDamage = 0f;
             _spawnSampleCount = 0;
+            _bodySampleCount = 0;
+            LastCorrectionTick = NoCorrection;
+            Correction.IsSet = false;
             ShapeCount = 0;
             Armor = default;
             Shield = default;
@@ -243,6 +325,9 @@ namespace CombatSimulation.Core
         private readonly SpawnSample[] _spawnSamples = new SpawnSample[SpawnHistoryLength];
         private int _spawnSampleCount;
         private long _newestSpawnSample;
+        private readonly SpawnPose[] _bodySamples = new SpawnPose[BodyHistoryLength];
+        private int _bodySampleCount;
+        private long _newestBodySample;
         private readonly System.Collections.Generic.Dictionary<ShipDefinition, ShipDevice[]> _deviceSets =
             new System.Collections.Generic.Dictionary<ShipDefinition, ShipDevice[]>();
 

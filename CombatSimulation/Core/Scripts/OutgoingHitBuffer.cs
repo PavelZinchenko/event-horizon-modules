@@ -3,6 +3,7 @@ using System.Collections.Generic;
 namespace CombatSimulation.Core
 {
     // Keeps beam intervals separate from per-tick presentation hits. Lists retain capacity after warm-up.
+    // Each published record takes the next sequence of its attacker owner.
     internal sealed class OutgoingHitBuffer
     {
         public readonly List<ResolvedHit> Records = new List<ResolvedHit>();
@@ -12,15 +13,15 @@ namespace CombatSimulation.Core
         public void Add(in ResolvedHit hit)
         {
             if (hit.ImpactKind == HitImpactKind.DamageOverTime) _current.Add(hit);
-            else Records.Add(hit);
+            else Append(hit);
         }
 
         public void CompleteContacts(long tick)
         {
             foreach (var old in _active)
-                if (!Contains(_current, old)) Records.Add(old.EndAt(tick));
+                if (!Contains(_current, old)) Append(old.EndAt(tick));
             foreach (var hit in _current)
-                if (!Contains(_active, hit)) Records.Add(hit);
+                if (!Contains(_active, hit)) Append(hit);
             var swap = _active;
             _active = _current;
             _current = swap;
@@ -32,9 +33,16 @@ namespace CombatSimulation.Core
             for (var i = 0; i < _active.Count;)
             {
                 if (_active[i].AttackerId != id) { ++i; continue; }
-                Records.Add(_active[i].EndAt(firstInactiveTick));
+                Append(_active[i].EndAt(firstInactiveTick));
                 _active.RemoveAt(i);
             }
+        }
+
+        private void Append(in ResolvedHit hit)
+        {
+            _sequences.TryGetValue(hit.AttackerOwner, out var sequence);
+            _sequences[hit.AttackerOwner] = checked(++sequence);
+            Records.Add(hit.WithSequence(sequence));
         }
 
         private static bool Contains(List<ResolvedHit> list, in ResolvedHit hit)
@@ -46,5 +54,6 @@ namespace CombatSimulation.Core
 
         private List<ResolvedHit> _active = new List<ResolvedHit>();
         private List<ResolvedHit> _current = new List<ResolvedHit>();
+        private readonly Dictionary<int, ulong> _sequences = new Dictionary<int, ulong>();
     }
 }

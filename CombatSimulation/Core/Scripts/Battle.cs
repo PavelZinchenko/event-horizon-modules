@@ -116,6 +116,7 @@ namespace CombatSimulation.Core
                 throw new InvalidOperationException("Battle tick counter exhausted.");
 
             ApplyRemoteOperations();
+            ApplyCorrections();
             ApplyCommands();
             UpdateSystems();
             EvaluateModifiers();
@@ -532,9 +533,11 @@ namespace CombatSimulation.Core
                     authority = Authority(owner);
                     if (authority == BattleEventAuthority.Committed)
                     {
-                        if (Setup.IsLocalOwner(target.Owner)) target.PendingDamage += hit.Damage;
-                        else _outgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
-                            hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind, amount));
+                        // A remote target's copy takes the same damage as a prediction (N3); it never dies of it.
+                        target.PendingDamage += hit.Damage;
+                        if (!Setup.IsLocalOwner(target.Owner))
+                            _outgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
+                                hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind, amount));
                     }
                 }
 
@@ -544,7 +547,8 @@ namespace CombatSimulation.Core
         }
 
         // Stage 10. One pass, shield first, then armor (legacy Impact.ApplyShield and ShipStats.ApplyDamage).
-        // Predictions never change remote health. Received hits add to the local target's pending damage.
+        // Received hits add to a local target's pending damage. A remote target's pending damage is only the damage
+        // this device sent it (N3): a prediction that corrections replace.
         private void ApplyDamage()
         {
             for (var i = 0; i < ShipEntryCount; ++i)
@@ -554,11 +558,7 @@ namespace CombatSimulation.Core
 
                 var damage = ship.PendingDamage;
                 ship.PendingDamage = 0f;
-                if (!Setup.IsLocalOwner(ship.Owner)) continue;
-
-                var absorbed = ship.Shield.Max > 0f && ship.Shield.Value > 0f ? Math.Min(damage, ship.Shield.Value) : 0f;
-                if (absorbed > 0f) ship.Shield.Consume(absorbed);
-                ship.Armor.Consume(damage - absorbed);
+                ApplyShieldFirst(ship, damage);
             }
 
             _bullets.ApplyDamage(Setup);
@@ -706,6 +706,8 @@ namespace CombatSimulation.Core
         // Stage 14. Writes the snapshot and the event batch of this tick, then swaps the buffers.
         private void Publish()
         {
+            RecordBodySamples();
+            RecordPredictedHits();
             _writing.Write(this, Tick, World, Roster, _events);
             _events.Clear();
             _outgoingHits.Records.Clear();
@@ -845,6 +847,7 @@ namespace CombatSimulation.Core
             for (var i = 0; i < ship.ShapeCount; ++i)
                 _shapes.Release(ship.GetShape(i));
             _ramming.Forget(ship.Id);
+            if (!Setup.IsLocalOwner(ship.Owner)) ForgetPredictedHits(ship.Id);
             World.DestroyBody(ship.Body);
             _entities.Remove(ship.Id);
             if (ship.IsDrone) ship.Bay.RecordLoss();

@@ -31,6 +31,9 @@ namespace CombatSimulation.Core
             battle.RequestSpawn(new SpawnRequest(ship, this));
         }
 
+        public override DeviceState Export() => new DeviceState(_stoppedTick);
+        public override void Import(in DeviceState state) => _stoppedTick = state.LastTick;
+
         public void Attach(EntityHandle handle)
         {
             _handle = handle;

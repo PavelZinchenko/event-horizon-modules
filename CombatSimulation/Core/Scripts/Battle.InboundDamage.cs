@@ -12,7 +12,9 @@ namespace CombatSimulation.Core
             var count = 0;
             while (count < _remoteHits.Count && _remoteHits[count].Hit.Tick <= Tick)
             {
-                var hit = _remoteHits[count++].Hit;
+                var record = _remoteHits[count++];
+                var hit = record.Hit;
+                RecordAppliedHit(record.SenderOwner, hit.Sequence);
                 if (hit.ImpactKind != HitImpactKind.DamageOverTime)
                 {
                     if (hit.ContactState != HitContactState.End) AddRemoteDamage(hit, hit.Amount);
@@ -75,6 +77,16 @@ namespace CombatSimulation.Core
             _events.Add(BattleEvent.RemoteHit(BattleId, Tick, _events.Count, hit, amount));
         }
 
+        // The last hit sequence of the sender that this stage has processed; corrections acknowledge it (step 5).
+        // Records refused at Submit leave gaps; the next processed record covers them.
+        internal ulong AppliedHitSequence(int sender) =>
+            _appliedHitSequences.TryGetValue(sender, out var sequence) ? sequence : 0;
+
+        private void RecordAppliedHit(int sender, ulong sequence)
+        {
+            if (sequence > AppliedHitSequence(sender)) _appliedHitSequences[sender] = sequence;
+        }
+
         private struct RemoteInterval
         {
             public readonly ResolvedHit Hit;
@@ -90,5 +102,6 @@ namespace CombatSimulation.Core
         }
 
         private readonly List<RemoteInterval> _remoteIntervals = new List<RemoteInterval>();
+        private readonly Dictionary<int, ulong> _appliedHitSequences = new Dictionary<int, ulong>();
     }
 }

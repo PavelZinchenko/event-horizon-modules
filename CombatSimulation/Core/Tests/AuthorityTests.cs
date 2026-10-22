@@ -37,8 +37,9 @@ namespace CombatSimulation.Core.Tests
             var armor = d.Ship(101).Armor.Value;
             d.Step();
 
-            Assert.AreEqual(localAttacker && localTarget ? 0f : 2f, d.Ship(101).Shield.Value);
-            Assert.AreEqual(localAttacker && localTarget ? armor - 6f : armor, d.Ship(101).Armor.Value);
+            // A local attacker damages a remote target's copy as a prediction (N3).
+            Assert.AreEqual(localAttacker ? 0f : 2f, d.Ship(101).Shield.Value);
+            Assert.AreEqual(localAttacker ? armor - 6f : armor, d.Ship(101).Armor.Value);
             var hit = d.Battle.Snapshot.Events.ToArray().Single(e => e.Kind == BattleEventKind.Hit);
             Assert.AreEqual(Flag(localAttacker), hit.Authority);
             var removal = d.Battle.Snapshot.Events.ToArray().Single(e => e.Kind == BattleEventKind.Removal);
@@ -144,7 +145,7 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(HitImpactKind.Impact, hit.ImpactKind);
             Assert.AreEqual(3f, hit.Amount, 1e-4f);
             Assert.AreEqual(Fixtures.Shield.Max, d.Ship(1).Shield.Value);
-            Assert.AreEqual(Fixtures.Shield.Max, d.Ship(101).Shield.Value);
+            Assert.AreEqual(Fixtures.Shield.Max - hit.Amount, d.Ship(101).Shield.Value, 1e-4f);
         }
 
         [Test]
@@ -172,7 +173,8 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(HitContactState.End, end.ContactState);
             Assert.AreEqual(endTick, end.Tick);
             Assert.AreEqual(start.AttackerId, end.AttackerId);
-            Assert.AreEqual(Fixtures.Shield.Max, d.Ship(101).Shield.Value);
+            Assert.AreEqual(Fixtures.Shield.Max - (end.Tick - start.Tick) * 8f * Battle.TickDuration,
+                d.Ship(101).Shield.Value, 1e-3f);
             d.Step();
             Assert.AreEqual(0, d.Battle.Snapshot.OutgoingHits.Length);
         }
@@ -346,7 +348,7 @@ namespace CombatSimulation.Core.Tests
                 d.Step();
                 records.AddRange(d.Battle.Snapshot.OutgoingHits.ToArray());
             }
-            if (localAttacker && localTarget) Assert.Less(drone.Armor.Value, drone.Armor.Max);
+            if (localAttacker) Assert.Less(drone.Armor.Value, drone.Armor.Max);
             else Assert.AreEqual(drone.Armor.Max, drone.Armor.Value);
             if (localAttacker && !localTarget)
             {
@@ -377,18 +379,31 @@ namespace CombatSimulation.Core.Tests
         public void BeamContactChurnAllocatesNothingAfterWarmup()
         {
             var d = Start(new[] { 10 }, BeamShip());
+            var batch = new CorrectionBatch();
             d.Control(1, systems: 1);
-            for (var i = 0; i < 50; ++i) Churn(d, i);
+            for (var i = 0; i < 50; ++i) Churn(d, i, batch);
             var before = GC.GetAllocatedBytesForCurrentThread();
-            for (var i = 0; i < 100; ++i) Churn(d, i);
+            for (var i = 0; i < 100; ++i) Churn(d, i, batch);
             var bytes = GC.GetAllocatedBytesForCurrentThread() - before;
             Assert.AreEqual(0, bytes);
+            Assert.Less(d.Battle.PredictedHitCount, 20);
         }
 
-        private static void Churn(Driver d, int tick)
+        // The target owner's corrections acknowledge every hit, so the predicted-damage ledger stays bounded.
+        private static void Churn(Driver d, int tick, CorrectionBatch batch)
         {
             d.Place(101, new Vec2(54f, tick % 2 == 0 ? 50f : 60f), Vec2.Zero);
             d.Step();
+            if (tick % 10 != 9) return;
+            var ship = d.Ship(101);
+            var world = d.Battle.World;
+            batch.Begin(d.BattleId, 20, d.Tick - 1, ulong.MaxValue);
+            batch.Add(ship.Id, new SpawnPose(world.GetPosition(ship.Body), world.GetAngle(ship.Body),
+                    world.GetLinearVelocity(ship.Body), world.GetAngularVelocity(ship.Body)), ship.Armor.Value,
+                new RechargeState(ship.Shield.Value, ship.Shield.DelayRemaining),
+                new RechargeState(ship.Energy.Value, ship.Energy.DelayRemaining), ShipEntity.NoRetreat,
+                ReadOnlySpan<DeviceState>.Empty, ReadOnlySpan<long>.Empty);
+            if (d.Battle.Submit(20, batch) != 1) throw new InvalidOperationException("Rejected correction.");
         }
 
         private static ShipDefinition BeamShip(float rate = 8f) => Fixtures.ShipWith(

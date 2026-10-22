@@ -18,6 +18,11 @@ namespace CombatSimulation.Core
 
         // Stops persistent devices before retreat queries or before the parent is released.
         public virtual void Deactivate(Battle battle) { }
+
+        // The timers an owner correction carries (network plan, step 5). Import sets them exactly; it never starts
+        // or stops a beam, because bullets follow fire confirmations and removals.
+        public virtual DeviceState Export() => default;
+        public virtual void Import(in DeviceState state) { }
     }
 
     // Legacy CommonCannon on a FixedPlatform (Q1). A shot needs the held bit, the weapon cooldown, the barrel
@@ -32,6 +37,8 @@ namespace CombatSimulation.Core
         public CannonDefinition Definition { get; }
         public long LastShotTick { get; private set; } = NeverFired;
         public override void Reset() => LastShotTick = NeverFired;
+        public override DeviceState Export() => new DeviceState(LastShotTick);
+        public override void Import(in DeviceState state) => LastShotTick = state.LastTick;
 
         public override void Update(Battle battle, ShipEntity ship)
         {
