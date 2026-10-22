@@ -49,7 +49,7 @@ namespace CombatSimulation.Core
         }
     }
 
-    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal }
+    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn }
 
     // One logical commit. A roster operation includes its entity spawn/removal, never a second message.
     // Sequence starts at 1 per owner and covers this batch only (hits have their own sequence).
@@ -68,10 +68,19 @@ namespace CombatSimulation.Core
         public readonly SpawnPose Pose;
         public readonly RemovalReason RemovalReason;
 
+        // Bullet spawns only: the identity inputs of SpawnIdentity.CreateChild besides parent and tick.
+        public readonly int DeviceIndex;
+        public readonly int BarrelIndex;
+        public readonly uint SpawnSequence;
+
         private OwnerOperation(BattleId battleId, int owner, ulong sequence, long tick, OwnerOperationKind kind,
             EntityId entityId, RosterRecord roster = default, DroneBayKey? bayKey = null, EntityId parentId = default,
-            SpawnPose pose = default, RemovalReason removalReason = RemovalReason.None)
+            SpawnPose pose = default, RemovalReason removalReason = RemovalReason.None,
+            int deviceIndex = 0, int barrelIndex = 0, uint spawnSequence = 0)
         {
+            DeviceIndex = deviceIndex;
+            BarrelIndex = barrelIndex;
+            SpawnSequence = spawnSequence;
             BattleId = battleId;
             Owner = owner;
             Sequence = sequence;
@@ -99,6 +108,31 @@ namespace CombatSimulation.Core
             EntityId entityId, RemovalReason reason, DroneBayKey? bayKey = null) =>
             new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.Removal, entityId,
                 bayKey: bayKey, removalReason: reason);
+
+        // A fire confirmation: one projectile or beam the owner created. It carries no pose; the receiver places a
+        // missing bullet from its own spawn history of the parent.
+        public static OwnerOperation BulletFired(BattleId battleId, int owner, ulong sequence, long tick,
+            EntityId entityId, EntityId parentId, int deviceIndex, int barrelIndex, uint spawnSequence) =>
+            new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.BulletSpawn, entityId,
+                parentId: parentId, deviceIndex: deviceIndex, barrelIndex: barrelIndex, spawnSequence: spawnSequence);
+    }
+
+    // "All my operations through tick Tick are sent; the last one has sequence OperationSequence" (0: none yet).
+    // Runtime sends it on the reliable ordered stream after the operations of that tick.
+    public readonly struct OwnerWatermark
+    {
+        public readonly BattleId BattleId;
+        public readonly int Owner;
+        public readonly long Tick;
+        public readonly ulong OperationSequence;
+
+        public OwnerWatermark(BattleId battleId, int owner, long tick, ulong operationSequence)
+        {
+            BattleId = battleId;
+            Owner = owner;
+            Tick = tick;
+            OperationSequence = operationSequence;
+        }
     }
 
     // SenderOwner comes from the peer binding, not from the decoded hit's AttackerOwner field.

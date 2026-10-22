@@ -285,8 +285,10 @@ namespace CombatSimulation.Core
         }
 
         // Stage 5. Roster ships first, then drones by ID; devices in index order. One spawn slot stays adjacent.
+        // Fire confirmations of this tick follow the local spawns (operation stage 6), then unconfirmed bullets leave.
         private void ApplySpawnRequests()
         {
+            RecordSpawnSamples();
             ApplyRemoteOperations(5);
             for (var i = 0; i < _spawnRequests.Count; ++i)
             {
@@ -299,6 +301,8 @@ namespace CombatSimulation.Core
             }
 
             _spawnRequests.Clear();
+            ApplyRemoteOperations(6);
+            RemoveUnconfirmedBullets();
         }
 
         private void SpawnDrone(in SpawnRequest request, uint sequence)
@@ -336,27 +340,52 @@ namespace CombatSimulation.Core
         private void SpawnBullet(in SpawnRequest request, uint sequence)
         {
             var ship = request.Ship;
-            var id = SpawnIdentity.CreateChild(ship.Id, Tick, (uint)request.DeviceIndex, (uint)request.BarrelIndex, sequence);
+            var index = CreateBullet(ship, request.DeviceIndex, request.BarrelIndex, sequence, request.Bullet,
+                request.Spread, Tick, ReadSpawnSample(ship), out var muzzle, out var direction);
+            if (index < 0) return;
+
+            var definition = request.Bullet;
+            if (definition.Recoil > 0f) World.ApplyImpulse(ship.Body, -definition.Recoil * direction, muzzle);
+
+            ref readonly var bullet = ref _bullets[index];
+            _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, bullet, Authority(bullet.Owner)));
+            CaptureBulletSpawn(bullet, request.BarrelIndex, sequence);
+        }
+
+        // Legacy BulletFactory.ConfigureBody at the muzzle of the sample. A spawn tick before the present advances the
+        // bullet on a line, step by step as physics moves it, without hit tests. Returns -1 on an ID collision.
+        private int CreateBullet(ShipEntity ship, int deviceIndex, int barrelIndex, uint sequence,
+            BulletDefinition definition, float spread, long spawnTick, in SpawnSample sample, out Vec2 muzzle, out Vec2 direction)
+        {
+            var id = SpawnIdentity.CreateChild(ship.Id, spawnTick, (uint)deviceIndex, (uint)barrelIndex, sequence);
             var index = _bullets.Allocate();
             if (!TryRegister(id, _bullets.GetHandle(index)))
             {
                 _bullets.Release(index);
-                return;
+                muzzle = direction = default;
+                return -1;
             }
 
-            var definition = request.Bullet;
-            var barrel = ship.Definition.Barrels[request.BarrelIndex];
-            var muzzle = World.GetPosition(ship.Body) + World.GetRotation(ship.Body).Rotate(barrel.Position);
+            var barrel = ship.Definition.Barrels[barrelIndex];
+            muzzle = sample.Position + sample.Rotation.Rotate(barrel.Position);
 
-            var random = CounterRandom.Create(Setup.MatchSeed, id, Tick, RandomPurpose.WeaponSpread);
-            var angle = World.GetAngle(ship.Body) + barrel.Angle + (random.NextFloat() - 0.5f) * request.Spread;
-            var direction = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
+            var random = CounterRandom.Create(Setup.MatchSeed, id, spawnTick, RandomPurpose.WeaponSpread);
+            var angle = sample.Angle + barrel.Angle + (random.NextFloat() - 0.5f) * spread;
+            direction = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
             var velocity = definition.Speed * definition.StartingVelocityMultiplier * direction +
-                           definition.ParentVelocityEffect * World.GetLinearVelocity(ship.Body);
+                           definition.ParentVelocityEffect * sample.LinearVelocity;
+
+            var position = muzzle;
+            if (spawnTick < Tick)
+            {
+                position = World.Torus.Wrap(position);
+                for (var tick = spawnTick; tick < Tick; ++tick)
+                    position = World.Torus.Wrap(position + TickDuration * velocity);
+            }
 
             var body = World.CreateBullet(new BulletDef
             {
-                Position = muzzle,
+                Position = position,
                 Angle = angle,
                 LinearVelocity = velocity,
                 Owner = ship.Body,
@@ -371,30 +400,39 @@ namespace CombatSimulation.Core
             bullet.ParentId = ship.Id;
             bullet.Side = ship.Side;
             bullet.Owner = ship.Owner;
-            bullet.DeviceIndex = request.DeviceIndex;
+            bullet.DeviceIndex = deviceIndex;
             bullet.Definition = definition;
-            bullet.ExpiryTick = Tick + definition.LifetimeTicks - 1;
+            bullet.ExpiryTick = spawnTick + definition.LifetimeTicks - 1;
             bullet.HitPoints = definition.HitPoints;
+            bullet.SpawnTick = spawnTick;
+            bullet.Confirmed = Setup.IsLocalOwner(ship.Owner);
 
             // Legacy runs no search at creation (its timer check is strict); the first one is in the next tick.
-            bullet.NextSearchTick = Tick + 1;
+            bullet.NextSearchTick = spawnTick + 1;
             _bullets.SetBody(index, body);
-
-            if (definition.Recoil > 0f) World.ApplyImpulse(ship.Body, -definition.Recoil * direction, muzzle);
-
-            _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, bullet, Authority(bullet.Owner)));
+            return index;
         }
 
         private void SpawnBeam(in SpawnRequest request, uint sequence)
         {
-            var ship = request.Ship;
-            var id = SpawnIdentity.CreateChild(ship.Id, Tick, (uint)request.DeviceIndex, (uint)request.BarrelIndex, sequence);
+            var index = CreateBeam(request.Ship, request.Beam, sequence, Tick);
+            if (index < 0) return;
+            ref readonly var beam = ref _bullets[index];
+            _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, beam, Authority(beam.Owner)));
+            CaptureBulletSpawn(beam, request.BarrelIndex, sequence);
+        }
+
+        // Returns -1 on an ID collision.
+        private int CreateBeam(ShipEntity ship, BeamDevice device, uint sequence, long spawnTick)
+        {
+            var id = SpawnIdentity.CreateChild(ship.Id, spawnTick, (uint)device.Index,
+                (uint)device.Definition.BarrelIndex, sequence);
             var index = _bullets.Allocate();
             var handle = _bullets.GetHandle(index);
             if (!TryRegister(id, handle))
             {
                 _bullets.Release(index);
-                return;
+                return -1;
             }
 
             ref var beam = ref _bullets[index];
@@ -402,11 +440,13 @@ namespace CombatSimulation.Core
             beam.ParentId = ship.Id;
             beam.Side = ship.Side;
             beam.Owner = ship.Owner;
-            beam.DeviceIndex = request.DeviceIndex;
-            beam.BeamDefinition = request.Beam.Definition;
+            beam.DeviceIndex = device.Index;
+            beam.BeamDefinition = device.Definition;
             beam.ExpiryTick = long.MaxValue; // Device-owned lifetime, without projectile expiry.
-            request.Beam.Attach(handle);
-            _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, beam, Authority(beam.Owner)));
+            beam.SpawnTick = spawnTick;
+            beam.Confirmed = Setup.IsLocalOwner(ship.Owner);
+            device.Attach(handle);
+            return index;
         }
 
         private void RunQueries()
@@ -618,10 +658,18 @@ namespace CombatSimulation.Core
                 _outgoingHits.RemoveAttacker(bullet.Id, Tick + 1);
                 _events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _events.Count, bullet, Authority(bullet.Owner)));
                 CaptureRemoval(bullet.Id, bullet.Owner, bullet.PendingRemoval);
-                if (!bullet.IsBeam) World.DestroyBullet(bullet.Body);
-                _entities.Remove(bullet.Id);
-                _bullets.Release(index);
+                if (!bullet.Confirmed && Setup.HasRemoteOwners && !Setup.IsLocalOwner(bullet.Owner))
+                    RecordPredictedRemoval(bullet);
+                ReleaseBullet(index);
             }
+        }
+
+        private void ReleaseBullet(int index)
+        {
+            ref readonly var bullet = ref _bullets[index];
+            if (!bullet.IsBeam) World.DestroyBullet(bullet.Body);
+            _entities.Remove(bullet.Id);
+            _bullets.Release(index);
         }
 
         // Stage 13. Elimination first, then the timer.

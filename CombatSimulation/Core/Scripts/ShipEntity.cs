@@ -25,6 +25,25 @@ namespace CombatSimulation.Core
         }
     }
 
+    // A remote ship's state at stage 5 of one tick, before any spawn: the muzzle state its owner fired from.
+    internal readonly struct SpawnSample
+    {
+        public readonly long Tick;
+        public readonly Vec2 Position;
+        public readonly Rot Rotation;
+        public readonly float Angle;
+        public readonly Vec2 LinearVelocity;
+
+        public SpawnSample(long tick, Vec2 position, Rot rotation, float angle, Vec2 linearVelocity)
+        {
+            Tick = tick;
+            Position = position;
+            Rotation = rotation;
+            Angle = angle;
+            LinearVelocity = linearVelocity;
+        }
+    }
+
     // A pooled ship. Drones have a persistent bay instead of a roster slot.
     internal sealed class ShipEntity
     {
@@ -33,6 +52,9 @@ namespace CombatSimulation.Core
         // Legacy ShipFactory weapon platform cooldown, shared by the weapons on one barrel.
         public const float BarrelCooldown = 0.04f;
         public static readonly int BarrelCooldownTicks = TickTime.After(BarrelCooldown);
+
+        // Spawn samples kept for a remote ship (network plan, step 4; step 5 shares the 16-tick length).
+        public const int SpawnHistoryLength = 16;
 
         public ShipEntity(int index) => Index = index;
 
@@ -121,6 +143,7 @@ namespace CombatSimulation.Core
             PendingDeath = false;
             PreStepVelocity = Vec2.Zero;
             PendingDamage = 0f;
+            _spawnSampleCount = 0;
 
             Armor = ResourcePool.CreateArmor(Definition.Armor);
             Shield = ResourcePool.Create(Definition.Shield);
@@ -168,6 +191,30 @@ namespace CombatSimulation.Core
         // Stage 1, before this tick's frames.
         internal void BeginControlTick() => PreviousSystems = Systems;
 
+        // Stage 5, once per tick in increasing tick order, so the kept samples cover consecutive ticks.
+        internal void RecordSpawnSample(in SpawnSample sample)
+        {
+            _spawnSamples[(int)(sample.Tick % SpawnHistoryLength)] = sample;
+            _newestSpawnSample = sample.Tick;
+            if (_spawnSampleCount < SpawnHistoryLength) ++_spawnSampleCount;
+        }
+
+        // The sample of the tick, or the nearest kept one when the tick is outside the history. False without samples.
+        internal bool TryGetSpawnSample(long tick, out SpawnSample sample)
+        {
+            if (_spawnSampleCount == 0)
+            {
+                sample = default;
+                return false;
+            }
+
+            var oldest = _newestSpawnSample - _spawnSampleCount + 1;
+            if (tick < oldest) tick = oldest;
+            else if (tick > _newestSpawnSample) tick = _newestSpawnSample;
+            sample = _spawnSamples[(int)(tick % SpawnHistoryLength)];
+            return true;
+        }
+
         internal void Release()
         {
             IsAlive = false;
@@ -180,6 +227,7 @@ namespace CombatSimulation.Core
             PendingDeath = false;
             PreStepVelocity = Vec2.Zero;
             PendingDamage = 0f;
+            _spawnSampleCount = 0;
             ShapeCount = 0;
             Armor = default;
             Shield = default;
@@ -192,6 +240,9 @@ namespace CombatSimulation.Core
         private ShapeId[] _shapes = new ShapeId[1];
         private long[] _barrelShotTicks = System.Array.Empty<long>();
         private ShipDevice[] _devices = System.Array.Empty<ShipDevice>();
+        private readonly SpawnSample[] _spawnSamples = new SpawnSample[SpawnHistoryLength];
+        private int _spawnSampleCount;
+        private long _newestSpawnSample;
         private readonly System.Collections.Generic.Dictionary<ShipDefinition, ShipDevice[]> _deviceSets =
             new System.Collections.Generic.Dictionary<ShipDefinition, ShipDevice[]>();
 

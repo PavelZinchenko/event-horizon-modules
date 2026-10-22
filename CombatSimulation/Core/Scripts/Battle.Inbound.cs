@@ -112,6 +112,11 @@ namespace CombatSimulation.Core
                         (EntityOwner(handle) == operation.Owner &&
                          (handle.Kind == EntityKind.Bullet ? !operation.BayKey.HasValue :
                           _ships.Get(handle)?.Bay?.Key == operation.BayKey && operation.BayKey.HasValue));
+                // The parent may not exist yet; it is checked when the record applies.
+                case OwnerOperationKind.BulletSpawn:
+                    return !operation.ParentId.IsNull && operation.DeviceIndex >= 0 && operation.BarrelIndex >= 0 &&
+                        operation.EntityId == SpawnIdentity.CreateChild(operation.ParentId, operation.Tick,
+                            (uint)operation.DeviceIndex, (uint)operation.BarrelIndex, operation.SpawnSequence);
                 default: return false;
             }
         }
@@ -143,6 +148,10 @@ namespace CombatSimulation.Core
                         else if (operation.Kind == OwnerOperationKind.DroneSpawn)
                         {
                             if (ApplyRemoteDrone(operation)) _appliedOperations.Add(operation);
+                        }
+                        else if (operation.Kind == OwnerOperationKind.BulletSpawn)
+                        {
+                            if (ApplyRemoteBulletSpawn(operation)) _appliedOperations.Add(operation);
                         }
                         else if (ApplyRemoteRemoval(operation)) _appliedOperations.Add(operation);
                         _remoteOperations.RemoveAt(i);
@@ -222,10 +231,9 @@ namespace CombatSimulation.Core
                 if (operation.BayKey.HasValue || !_bullets.TryGet(handle, out var index)) return false;
                 ref var bullet = ref _bullets[index];
                 bullet.PendingRemoval = operation.RemovalReason;
+                if (bullet.IsBeam) DetachBeam(bullet, handle);
                 _events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _events.Count, bullet));
-                if (!bullet.IsBeam) World.DestroyBullet(bullet.Body);
-                _entities.Remove(bullet.Id);
-                _bullets.Release(index);
+                ReleaseBullet(index);
             }
             else
             {
@@ -286,6 +294,10 @@ namespace CombatSimulation.Core
         {
             private ulong _through;
             private readonly HashSet<ulong> _later = new HashSet<ulong>();
+
+            // Every sequence up to this one has been accepted.
+            public ulong Through => _through;
+
             public bool Accept(ulong sequence)
             {
                 if (sequence <= _through || !_later.Add(sequence)) return false;
@@ -307,8 +319,11 @@ namespace CombatSimulation.Core
             return compare == 0 ? a.Sequence.CompareTo(b.Sequence) : compare;
         }
 
-        private static int OperationStage(in OwnerOperation operation) => operation.Kind == OwnerOperationKind.DroneSpawn
-            ? 5 : operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed ? 1 : 12;
+        // Stage 6 stands for the end of stage 5: fire confirmations follow the local spawns of their tick.
+        private static int OperationStage(in OwnerOperation operation) =>
+            operation.Kind == OwnerOperationKind.DroneSpawn ? 5 :
+            operation.Kind == OwnerOperationKind.BulletSpawn ? 6 :
+            operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed ? 1 : 12;
 
         private static int CompareHits(in InboundHit a, in InboundHit b)
         {

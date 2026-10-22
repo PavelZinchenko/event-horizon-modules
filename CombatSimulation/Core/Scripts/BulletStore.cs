@@ -40,6 +40,11 @@ namespace CombatSimulation.Core
 
         // Set at stage 9 (stopped at a hit) or stage 11 (expired); stage 12 applies it.
         public RemovalReason PendingRemoval;
+
+        // The owner's spawn tick. A remote bullet is Confirmed once its owner's fire record arrives; local bullets
+        // are confirmed at creation.
+        public long SpawnTick;
+        public bool Confirmed;
     }
 
     // Bullets in a struct array with a LIFO free list (about 2,000 at R2). Allocation order never affects public IDs.

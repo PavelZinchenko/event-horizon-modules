@@ -23,6 +23,9 @@ namespace CombatSimulation.Core
         Retreat,
         Expiry,
         Disposal,
+
+        // A remote bullet that its owner's fire confirmations do not list. Never sent by an owner.
+        Unconfirmed,
     }
 
     // The same set as the application's roster change reasons (phase 3a).

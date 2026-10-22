@@ -37,6 +37,23 @@ namespace CombatSimulation.Core
             _active = true;
         }
 
+        // The attached beam, when active.
+        public bool TryGetBeam(out EntityHandle handle)
+        {
+            handle = _handle;
+            return _active;
+        }
+
+        // The beam left without the device stopping it: an owner removal or an unconfirmed remote beam.
+        // The stop starts the cooldown, as Deactivate does.
+        public void Detach(EntityHandle handle, long tick)
+        {
+            if (!_active || _handle.Index != handle.Index || _handle.Generation != handle.Generation) return;
+            _active = false;
+            _handle = default;
+            _stoppedTick = tick;
+        }
+
         public override void Deactivate(Battle battle)
         {
             if (!_active) return;
