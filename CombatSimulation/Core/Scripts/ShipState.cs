@@ -155,7 +155,7 @@ namespace CombatSimulation.Core
             ActiveEntity = slot.ActiveShip?.Id ?? default;
             ArmorDeficit = slot.ArmorDeficit;
             ShieldDeficit = slot.ShieldDeficit;
-            DamageFraction = GetDamageFraction(slot);
+            DamageFraction = slot.OwnerDamageFraction ?? GetDamageFraction(slot);
         }
 
         private static float GetDamageFraction(RosterSlot slot)

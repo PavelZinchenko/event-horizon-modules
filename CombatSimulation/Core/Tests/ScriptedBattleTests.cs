@@ -31,6 +31,8 @@ namespace CombatSimulation.Core.Tests
                 foreach (var item in battle.Runner.Snapshot.Events)
                     Assert.AreEqual(BattleEventAuthority.Committed, item.Authority);
                 Assert.AreEqual(0, battle.Runner.Snapshot.OutgoingHits.Length);
+                Assert.AreEqual(0, battle.Runner.Snapshot.OutgoingOperations.Length);
+                Assert.AreEqual(0, battle.Runner.Snapshot.AppliedOperations.Length);
             }
             AssertSameLog(ScriptedBattle.RunToResult(setup), battle, "explicit all-local");
         }

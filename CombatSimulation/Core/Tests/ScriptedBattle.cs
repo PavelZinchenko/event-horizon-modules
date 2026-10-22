@@ -360,11 +360,13 @@ namespace CombatSimulation.Core.Tests
         public static readonly int RosterSlot = ElementSize<RosterSlotState>();
         public static readonly int Event = ElementSize<BattleEvent>();
         public static readonly int Hit = ElementSize<ResolvedHit>();
+        public static readonly int Operation = ElementSize<OwnerOperation>();
 
         public static long Of(BattleSnapshot snapshot) =>
             (long)snapshot.Ships.Length * Ship + (long)snapshot.Bullets.Length * Bullet +
             (long)snapshot.Roster.Length * RosterSlot + (long)snapshot.Events.Length * Event +
-            (long)snapshot.OutgoingHits.Length * Hit;
+            (long)snapshot.OutgoingHits.Length * Hit +
+            ((long)snapshot.OutgoingOperations.Length + snapshot.AppliedOperations.Length) * Operation;
 
         private static int ElementSize<T>()
         {

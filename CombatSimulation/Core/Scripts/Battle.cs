@@ -6,7 +6,7 @@ using Utilites;
 
 namespace CombatSimulation.Core
 {
-    public sealed class Battle
+    public sealed partial class Battle
     {
         public const float TickDuration = 0.02f;
         public const int PhysicsSubsteps = 8;
@@ -115,6 +115,7 @@ namespace CombatSimulation.Core
             if (Tick == long.MaxValue)
                 throw new InvalidOperationException("Battle tick counter exhausted.");
 
+            ApplyRemoteOperations();
             ApplyCommands();
             UpdateSystems();
             EvaluateModifiers();
@@ -124,6 +125,7 @@ namespace CombatSimulation.Core
             StepPhysics();
             CollectContacts();
             ResolveContacts();
+            AccumulateRemoteDamage();
             ApplyDamage();
             MarkDeaths();
             ApplyStructureChanges();
@@ -285,6 +287,7 @@ namespace CombatSimulation.Core
         // Stage 5. Roster ships first, then drones by ID; devices in index order. One spawn slot stays adjacent.
         private void ApplySpawnRequests()
         {
+            ApplyRemoteOperations(5);
             for (var i = 0; i < _spawnRequests.Count; ++i)
             {
                 var request = _spawnRequests[i];
@@ -326,6 +329,7 @@ namespace CombatSimulation.Core
             _drones.Insert(index, ship);
             bay.RecordLaunch();
             _events.Add(BattleEvent.Spawn(BattleId, Tick, _events.Count, ship, Authority(ship.Owner)));
+            CaptureDroneSpawn(ship, parent.Id);
         }
 
         // Legacy BulletFactory.ConfigureBody at the muzzle pose, plus the Q1 recoil (owner, 2026-10-20).
@@ -500,7 +504,7 @@ namespace CombatSimulation.Core
         }
 
         // Stage 10. One pass, shield first, then armor (legacy Impact.ApplyShield and ShipStats.ApplyDamage).
-        // Predictions never change remote health. Remote ship damage is applied from owner records in step 3.
+        // Predictions never change remote health. Received hits add to the local target's pending damage.
         private void ApplyDamage()
         {
             for (var i = 0; i < ShipEntryCount; ++i)
@@ -544,6 +548,7 @@ namespace CombatSimulation.Core
         // Drone deaths follow the roster batch. Bullets leave last, by ID. Attached beams die with their ship.
         private void ApplyStructureChanges()
         {
+            ApplyRemoteOperations(12);
             var slots = Roster.Slots;
             for (var i = 0; i < slots.Count; ++i)
             {
@@ -612,6 +617,7 @@ namespace CombatSimulation.Core
                 ref readonly var bullet = ref _bullets[index];
                 _outgoingHits.RemoveAttacker(bullet.Id, Tick + 1);
                 _events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _events.Count, bullet, Authority(bullet.Owner)));
+                CaptureRemoval(bullet.Id, bullet.Owner, bullet.PendingRemoval);
                 if (!bullet.IsBeam) World.DestroyBullet(bullet.Body);
                 _entities.Remove(bullet.Id);
                 _bullets.Release(index);
@@ -655,6 +661,8 @@ namespace CombatSimulation.Core
             _writing.Write(this, Tick, World, Roster, _events);
             _events.Clear();
             _outgoingHits.Records.Clear();
+            _outgoingOperations.Clear();
+            _appliedOperations.Clear();
 
             var published = _writing;
             _writing = _published;
@@ -692,7 +700,7 @@ namespace CombatSimulation.Core
             if (!DeploySlot(slot)) Reject(command, "entity ID collision");
         }
 
-        // Trusted creation seam. Command validation is above; inbound deployments will supply their pose in step 3.
+        // Local deployment uses spawn placement. Received deployments use the owner's recorded pose.
         internal bool DeploySlot(RosterSlot slot)
         {
             var id = SpawnIdentity.CreateRoot(BattleId, slot.RosterId, slot.DeploymentCount + 1, Tick);
@@ -785,6 +793,7 @@ namespace CombatSimulation.Core
         {
             for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Deactivate(this);
             _events.Add(BattleEvent.Removal(BattleId, Tick, _events.Count, ship, reason));
+            if (ship.IsDrone) CaptureRemoval(ship.Id, ship.Owner, reason, ship.Bay.Key);
             for (var i = 0; i < ship.ShapeCount; ++i)
                 _shapes.Release(ship.GetShape(i));
             _ramming.Forget(ship.Id);
@@ -795,8 +804,12 @@ namespace CombatSimulation.Core
             _ships.Release(ship);
         }
 
-        private void AddTransition(RosterSlot slot, RosterStatus previousStatus, RosterTransitionReason reason, EntityId id) =>
-            _events.Add(BattleEvent.Transition(BattleId, Tick, _events.Count, slot, previousStatus, reason, id, Authority(slot.Owner)));
+        private void AddTransition(RosterSlot slot, RosterStatus previousStatus, RosterTransitionReason reason, EntityId id)
+        {
+            _events.Add(BattleEvent.Transition(BattleId, Tick, _events.Count, slot, previousStatus, reason, id,
+                _applyingRemoteOperation ? BattleEventAuthority.Committed : Authority(slot.Owner)));
+            CaptureRoster(slot, previousStatus, reason, id);
+        }
 
         private void ReportDefect(string message)
         {

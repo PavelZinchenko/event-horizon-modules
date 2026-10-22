@@ -40,6 +40,10 @@ namespace CombatSimulation.Core
 
         // Owner-decided hits for remote ships and drones; empty in single player.
         public ReadOnlySpan<ResolvedHit> OutgoingHits => new ReadOnlySpan<ResolvedHit>(_outgoingHits, 0, _hitCount);
+        // Atomic owner commits, captured before removed entities leave the stores. Empty in single player.
+        public ReadOnlySpan<OwnerOperation> OutgoingOperations => new ReadOnlySpan<OwnerOperation>(_outgoingOperations, 0, _operationCount);
+        // Received commits applied this step, retaining original owner ticks for Runtime's later result agreement.
+        public ReadOnlySpan<OwnerOperation> AppliedOperations => new ReadOnlySpan<OwnerOperation>(_appliedOperations, 0, _appliedOperationCount);
 
         public bool TryGetShip(EntityId id, out ShipState ship)
         {
@@ -92,6 +96,16 @@ namespace CombatSimulation.Core
                 Array.Resize(ref _outgoingHits, Math.Max(hits.Count, _outgoingHits.Length * 2));
             hits.CopyTo(_outgoingHits);
             _hitCount = hits.Count;
+            var operations = battle.OutgoingOperations;
+            if (_outgoingOperations.Length < operations.Count)
+                Array.Resize(ref _outgoingOperations, Math.Max(operations.Count, _outgoingOperations.Length * 2));
+            operations.CopyTo(_outgoingOperations);
+            _operationCount = operations.Count;
+            var applied = battle.AppliedOperations;
+            if (_appliedOperations.Length < applied.Count)
+                Array.Resize(ref _appliedOperations, Math.Max(applied.Count, _appliedOperations.Length * 2));
+            applied.CopyTo(_appliedOperations);
+            _appliedOperationCount = applied.Count;
         }
 
         private readonly RosterSlotState[] _roster;
@@ -103,6 +117,10 @@ namespace CombatSimulation.Core
         private int _eventCount;
         private ResolvedHit[] _outgoingHits = new ResolvedHit[16];
         private int _hitCount;
+        private OwnerOperation[] _outgoingOperations = new OwnerOperation[16];
+        private int _operationCount;
+        private OwnerOperation[] _appliedOperations = new OwnerOperation[16];
+        private int _appliedOperationCount;
     }
 
     // The events of the tick being processed. Stage 14 copies them into the snapshot.

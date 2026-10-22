@@ -20,7 +20,7 @@ namespace CombatSimulation.Core
         public readonly HitImpactKind ImpactKind;
         public readonly float Amount;
 
-        internal ResolvedHit(BattleId battleId, long tick, EntityId attackerId, int attackerOwner, int deviceIndex,
+        public ResolvedHit(BattleId battleId, long tick, EntityId attackerId, int attackerOwner, int deviceIndex,
             EntityId targetId, int targetOwner, int targetShape, HitContactState contactState,
             HitImpactKind impactKind, float amount)
         {

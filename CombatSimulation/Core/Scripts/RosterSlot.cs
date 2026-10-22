@@ -44,6 +44,19 @@ namespace CombatSimulation.Core
 
         // Increments on every transition.
         public int Revision { get; private set; }
+        internal float? OwnerDamageFraction { get; private set; }
+
+        internal void Import(in RosterRecord record, ShipEntity ship)
+        {
+            Status = record.Status;
+            ActiveShip = ship;
+            DeploymentCount = record.DeploymentCount;
+            DeploymentOrder = record.DeploymentOrder;
+            Revision = record.Revision;
+            ArmorDeficit = record.ArmorDeficit;
+            ShieldDeficit = record.ShieldDeficit;
+            OwnerDamageFraction = record.DamageFraction;
+        }
 
         internal void Activate(ShipEntity ship, long deploymentOrder)
         {

@@ -16,7 +16,8 @@ namespace CombatSimulation.Core
             float height = 200f,
             long timeLimitTicks = 0,
             int maxActiveShipsPerSide = 1,
-            IReadOnlyCollection<int> localOwners = null)
+            IReadOnlyCollection<int> localOwners = null,
+            IReadOnlyDictionary<int, int> ownerDelays = null)
         {
             if (roster == null) throw new ArgumentNullException(nameof(roster));
             if (!(width > 0f) || float.IsInfinity(width))
@@ -64,6 +65,18 @@ namespace CombatSimulation.Core
                     _localOwners.Add(owner);
                 }
             }
+            foreach (var slot in slots)
+            {
+                _owners.Add(slot.Owner);
+                if (!IsLocalOwner(slot.Owner)) HasRemoteOwners = true;
+            }
+            if (ownerDelays != null)
+                foreach (var pair in ownerDelays)
+                {
+                    if (!_owners.Contains(pair.Key) || pair.Value < 0 || pair.Value > 5)
+                        throw new ArgumentOutOfRangeException(nameof(ownerDelays), "Known owners require delays from 0 to 5 ticks.");
+                    _ownerDelays.Add(pair.Key, pair.Value);
+                }
         }
 
         public BattleId BattleId { get; }
@@ -81,7 +94,12 @@ namespace CombatSimulation.Core
         public int MaxActiveShipsPerSide { get; }
 
         public bool IsLocalOwner(int owner) => _localOwners.Contains(owner);
+        public bool HasRemoteOwners { get; }
+        public bool HasOwner(int owner) => _owners.Contains(owner);
+        public int OwnerDelay(int owner) => _ownerDelays.TryGetValue(owner, out var delay) ? delay : 0;
 
         private readonly HashSet<int> _localOwners;
+        private readonly HashSet<int> _owners = new HashSet<int>();
+        private readonly Dictionary<int, int> _ownerDelays = new Dictionary<int, int>();
     }
 }
