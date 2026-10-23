@@ -10,6 +10,26 @@ namespace CombatSimulation.Runtime.Tests
     [TestFixture]
     public class NetworkSessionTests
     {
+        [Test]
+        public void ObserverCanBeAttachedAndDetachedThroughSession()
+        {
+            var pair = new SessionFixtures.Pair(); var observer = new ObservationCounter();
+            pair.A.Observer = observer; Assert.AreSame(observer, pair.A.Observer);
+            pair.Start(); pair.Run(30); Assert.Greater(observer.Count, 0);
+            pair.A.Observer = null; var count = observer.Count; pair.Run(30);
+            Assert.AreEqual(count, observer.Count);
+        }
+
+        private sealed class ObservationCounter : IBattleObserver
+        {
+            internal int Count;
+            public void Correction(in CorrectionObservation value) { ++Count; }
+            public void Contact(in ContactObservation value) { }
+            public void Projectile(in ProjectileObservation value) { }
+            public void HitProcessed(in HitObservation value) { }
+            public void BeamDamage(in BeamDamageObservation value) { }
+        }
+
         [TestCase(0)] [TestCase(1)] [TestCase(2)] [TestCase(3)] [TestCase(4)] [TestCase(5)]
         public void LocalControlsWaitForSenderDelayAndRemoteUsesTheSameTick(int delay)
         {

@@ -14,6 +14,7 @@ namespace CombatSimulation.Core
             {
                 var record = _remoteHits[count++];
                 var hit = record.Hit;
+                Observer?.HitProcessed(new HitObservation(hit, Tick, LocalHitTarget(hit) != null));
                 RecordAppliedHit(record.SenderOwner, hit.Sequence);
                 if (hit.ImpactKind != HitImpactKind.DamageOverTime)
                 {
@@ -55,6 +56,8 @@ namespace CombatSimulation.Core
                 {
                     var amount = (double)(through - interval.NextTick) * interval.Hit.Amount * TickDuration;
                     AddRemoteDamage(interval.Hit, (float)Math.Min(float.MaxValue, amount));
+                    Observer?.BeamDamage(new BeamDamageObservation(interval.Hit, Tick, interval.NextTick,
+                        through, (float)Math.Min(float.MaxValue, amount)));
                     interval.NextTick = through;
                 }
                 if (interval.EndTick <= Tick + 1) _remoteIntervals.RemoveAt(i);

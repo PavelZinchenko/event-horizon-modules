@@ -32,6 +32,7 @@ namespace CombatSimulation.Runtime
     // One thread, two owners, one match. The caller owns the transport and supplies monotonic seconds.
     public sealed class NetworkSession : IPeerReceiver
     {
+        public IBattleObserver Observer { get => _runner.Observer; set => _runner.Observer = value; }
         public NetworkSession(BattleSetup setup, IPilotProvider pilots, ITransport transport, NetworkSessionOptions options)
         {
             if (setup == null) throw new ArgumentNullException(nameof(setup));

@@ -40,6 +40,7 @@ namespace CombatSimulation.Core
         }
 
         public BattleSetup Setup { get; }
+        public IBattleObserver Observer { get; set; }
         public BattleId BattleId => Setup.BattleId;
 
         // The next tick to execute. The first Step processes tick 0, then leaves Tick at 1.
@@ -126,6 +127,7 @@ namespace CombatSimulation.Core
             UpdateMotion();
             ApplySpawnRequests();
             RunQueries();
+            ObserveProjectiles();
             StepPhysics();
             CollectContacts();
             ResolveContacts();
@@ -485,6 +487,7 @@ namespace CombatSimulation.Core
             for (var i = 0; i < accepted.Length; ++i)
             {
                 ref readonly var hit = ref accepted[i];
+                ObserveContact(hit);
                 if (hit.Kind == ContactKind.Disarm)
                 {
                     if (!_bullets.TryGet(hit.TargetHandle, out var disarmed)) continue;

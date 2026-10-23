@@ -20,6 +20,7 @@ namespace CombatSimulation.Runtime
         }
 
         internal Battle Battle => _battle;
+        public IBattleObserver Observer { get => _battle.Observer; set => _battle.Observer = value; }
         internal bool ApplyControls(EntityId entityId, long tick, in PilotControls controls) =>
             _battle.Submit(ControlFrame.Create(BattleId, _nextCommandId++, tick, entityId,
                 controls.HasCourse ? controls.Course : (float?)null, controls.Throttle, controls.Systems));

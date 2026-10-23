@@ -83,13 +83,18 @@ namespace CombatSimulation.Core
         {
             var tick = correction.Tick;
             ref readonly var body = ref correction.Body;
+            var armorBefore = ship.Armor.Value;
+            var shieldBefore = ship.Shield.Value;
+            var hasHistory = ship.TryGetBodySample(tick, out var sample);
+            var positionError = hasHistory ? World.Torus.Delta(sample.Position, body.Motion.Position) : Vec2.Zero;
+            var angleError = hasHistory ? WrapAngle(body.Motion.Angle - sample.Angle) : 0f;
 
             // Movement: the error at the owner's tick, added to the present. Outside the history, the next
             // correction inside it repairs the movement.
-            if (ship.TryGetBodySample(tick, out var sample))
+            if (hasHistory)
             {
-                var position = World.Torus.Delta(sample.Position, body.Motion.Position);
-                var angle = WrapAngle(body.Motion.Angle - sample.Angle);
+                var position = positionError;
+                var angle = angleError;
                 var linearVelocity = body.Motion.LinearVelocity - sample.LinearVelocity;
                 var angularVelocity = body.Motion.AngularVelocity - sample.AngularVelocity;
                 World.SetPose(ship.Body, World.GetPosition(ship.Body) + position, World.GetAngle(ship.Body) + angle);
@@ -118,6 +123,8 @@ namespace CombatSimulation.Core
             var damage = ReplayPredictedDamage(ship.Id, tick, correction.AppliedHitSequence);
             if (damage > 0f) ApplyShieldFirst(ship, damage);
             ship.LastCorrectionTick = tick;
+            Observer?.Correction(new CorrectionObservation(ship, tick, Tick, hasHistory, positionError,
+                angleError, armorBefore, shieldBefore));
         }
 
         // A full resource without a delay no longer changes.
