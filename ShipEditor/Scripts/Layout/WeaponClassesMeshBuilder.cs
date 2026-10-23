@@ -33,7 +33,7 @@ namespace ShipEditor
 		private bool TryGetWeaponClass(int x, int y, out string weaponClass)
 		{
 			weaponClass = null;
-			if (_layout[x, y] != CellType.Weapon) return false;
+			if (_layout[x, y] != CellType.Weapon && _layout[x, y] != CellType.All && _layout[x, y] != CellType.WeaponOuter && _layout[x, y] != CellType.WeaponInner && _layout[x, y] != CellType.WeaponEngine) return false;
 			weaponClass = _layout.GetWeaponClasses(x, y);
 			return !string.IsNullOrEmpty(weaponClass);
 		}
