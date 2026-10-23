@@ -10,10 +10,19 @@ namespace CombatSimulation.Runtime
     public sealed class BattleRunner
     {
         public BattleRunner(BattleSetup setup, IPilotProvider pilots)
+            : this(setup, pilots, null) { }
+
+        internal BattleRunner(BattleSetup setup, IPilotProvider pilots, Action<EntityId, long, PilotControls> inputSink)
         {
             _battle = new Battle(setup);
             _provider = pilots ?? throw new ArgumentNullException(nameof(pilots));
+            _inputSink = inputSink;
         }
+
+        internal Battle Battle => _battle;
+        internal bool ApplyControls(EntityId entityId, long tick, in PilotControls controls) =>
+            _battle.Submit(ControlFrame.Create(BattleId, _nextCommandId++, tick, entityId,
+                controls.HasCourse ? controls.Course : (float?)null, controls.Throttle, controls.Systems));
 
         public BattleId BattleId => _battle.BattleId;
 
@@ -53,11 +62,13 @@ namespace CombatSimulation.Runtime
                 if (!snapshot.TryGetShip(registration.EntityId, out var ship)) continue;
                 if (!registration.Pilot.Think(snapshot, ship, out var controls)) continue;
 
-                _battle.Submit(ControlFrame.Create(BattleId, _nextCommandId++, snapshot.Tick + registration.Schedule.Delay,
-                    registration.EntityId, controls.HasCourse ? controls.Course : (float?)null, controls.Throttle,
-                    controls.Systems));
-                if (controls.SelfDestruct)
-                    SelfDestruct(registration.EntityId, snapshot.Tick + registration.Schedule.Delay);
+                var target = snapshot.Tick + registration.Schedule.Delay;
+                if (_inputSink != null) _inputSink(registration.EntityId, target, controls);
+                else
+                {
+                    ApplyControls(registration.EntityId, target, controls);
+                    if (controls.SelfDestruct) SelfDestruct(registration.EntityId, target);
+                }
             }
         }
 
@@ -95,6 +106,7 @@ namespace CombatSimulation.Runtime
 
         private readonly Battle _battle;
         private readonly IPilotProvider _provider;
+        private readonly Action<EntityId, long, PilotControls> _inputSink;
         private readonly List<Registration> _pilots = new List<Registration>();
         private ulong _nextCommandId = 1;
 

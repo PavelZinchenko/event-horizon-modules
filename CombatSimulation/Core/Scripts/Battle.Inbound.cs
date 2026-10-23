@@ -48,6 +48,18 @@ namespace CombatSimulation.Core
         internal List<OwnerOperation> OutgoingOperations => _outgoingOperations;
         internal List<OwnerOperation> AppliedOperations => _appliedOperations;
 
+        // Runtime checks the peer binding before submitting controls, including a spawn due in stage 1.
+        internal bool AcceptsInputFrom(EntityId entity, int owner)
+        {
+            var ship = FindShip(entity);
+            if (ship != null) return ship.Owner == owner;
+            foreach (var operation in _remoteOperations)
+                if (operation.EntityId == entity && operation.Owner == owner && operation.Tick <= Tick &&
+                    operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed)
+                    return true;
+            return false;
+        }
+
         private void RequireRunning()
         {
             if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no records.");
@@ -192,7 +204,7 @@ namespace CombatSimulation.Core
             }
             slot.Import(record, ship);
             _deploymentOrder = Math.Max(_deploymentOrder, record.DeploymentOrder);
-            ResetTimer();
+            _flow.Add(operation.Tick, slot.Side, record.PreviousStatus, record.Status);
             AddTransition(slot, record.PreviousStatus, record.Reason, operation.EntityId);
             return true;
         }

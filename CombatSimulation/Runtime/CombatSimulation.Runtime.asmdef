@@ -3,7 +3,8 @@
     "rootNamespace": "CombatSimulation.Runtime",
     "references": [
         "CombatSimulation.Core",
-        "CombatSimulation.Physics"
+        "CombatSimulation.Physics",
+        "CombatSimulation.Network"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -31,6 +31,7 @@ namespace CombatSimulation.Core
                 Substeps = PhysicsSubsteps,
             });
             Roster = new Roster(setup);
+            _flow = new CommittedBattleFlow(setup);
             _targets = new TargetGrid(World.Torus);
 
             _published = new BattleSnapshot(BattleId, Roster.Slots.Count);
@@ -54,6 +55,8 @@ namespace CombatSimulation.Core
         internal PhysicsWorld World { get; }
         internal Roster Roster { get; }
         internal BattleResult Result { get; private set; }
+        internal BattleResult CandidateResult { get; private set; }
+        private readonly CommittedBattleFlow _flow;
 
         // Ticks counted toward the time limit since the last reset.
         internal long TimerElapsedTicks { get; private set; }
@@ -682,25 +685,21 @@ namespace CombatSimulation.Core
 
         private void EvaluateResult()
         {
-            var alive0 = Roster.HasAlive(0);
-            var alive1 = Roster.HasAlive(1);
-            if (!alive0 && !alive1)
+            var frontier = Tick;
+            for (var i = 0; i < Setup.Roster.Count; ++i)
             {
-                Result = new BattleResult(BattleOutcome.Draw, 0, BattleEndReason.Elimination, Tick);
-                return;
+                var slot = Setup.Roster[i];
+                if (Setup.IsLocalOwner(slot.Owner)) continue;
+                if (!_watermarks.TryGetValue(slot.Owner, out var watermark)) { frontier = -1; break; }
+                watermark.Promote(OperationsThrough(slot.Owner));
+                frontier = Math.Min(frontier, watermark.Through);
             }
-            if (!alive0 || !alive1)
-            {
-                Result = new BattleResult(BattleOutcome.Victory, alive0 ? 0 : 1, BattleEndReason.Elimination, Tick);
-                return;
-            }
-
-            // B5: the timer does not advance while either side has no active ship.
-            if (Roster.CountActive(0) == 0 || Roster.CountActive(1) == 0) return;
-
-            ++TimerElapsedTicks;
-            if (Setup.TimeLimitTicks > 0 && TimerElapsedTicks >= Setup.TimeLimitTicks)
-                Result = new BattleResult(BattleOutcome.Draw, 0, BattleEndReason.Timeout, Tick);
+            // Received operations may still wait for a roster revision or their original stage.
+            foreach (var operation in _remoteOperations)
+                frontier = Math.Min(frontier, operation.Tick - 1);
+            Result = _flow.Evaluate(Tick, frontier, out var candidate, out var elapsed);
+            CandidateResult = candidate;
+            TimerElapsedTicks = elapsed;
         }
 
         // Stage 14. Writes the snapshot and the event batch of this tick, then swaps the buffers.
@@ -769,7 +768,6 @@ namespace CombatSimulation.Core
 
             PlaceSpawn(body, id, slot.Side);
             slot.Activate(ship, ++_deploymentOrder);
-            ResetTimer();
 
             _events.Add(BattleEvent.Spawn(BattleId, Tick, _events.Count, ship, Authority(ship.Owner)));
             AddTransition(slot, RosterStatus.Ready, RosterTransitionReason.Deployed, id);
@@ -851,7 +849,6 @@ namespace CombatSimulation.Core
             World.DestroyBody(ship.Body);
             _entities.Remove(ship.Id);
             if (ship.IsDrone) ship.Bay.RecordLoss();
-            else ResetTimer();
             _ships.Release(ship);
         }
 
@@ -859,6 +856,7 @@ namespace CombatSimulation.Core
         {
             _events.Add(BattleEvent.Transition(BattleId, Tick, _events.Count, slot, previousStatus, reason, id,
                 _applyingRemoteOperation ? BattleEventAuthority.Committed : Authority(slot.Owner)));
+            if (!_applyingRemoteOperation) _flow.Add(Tick, slot.Side, previousStatus, slot.Status);
             CaptureRoster(slot, previousStatus, reason, id);
         }
 
@@ -867,9 +865,6 @@ namespace CombatSimulation.Core
             if (ThrowOnDefect) throw new InvalidOperationException(message);
             Trace.LogError(message);
         }
-
-        // Owner: roster ship deployment or removal on either side resets the timer; drones never reset it.
-        private void ResetTimer() => TimerElapsedTicks = 0;
 
         private int FindInsertIndex(in RosterCommand command)
         {

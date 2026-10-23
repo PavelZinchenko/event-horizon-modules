@@ -24,6 +24,7 @@ namespace CombatSimulation.Core
         public long TimerElapsedTicks { get; private set; }
 
         public BattleResult Result { get; private set; }
+        public BattleResult CandidateResult { get; private set; }
         public bool IsCompleted => Result.IsCompleted;
 
         // Active roster ships in roster order, then drones in entity ID order.
@@ -63,6 +64,7 @@ namespace CombatSimulation.Core
             Tick = tick;
             TimerElapsedTicks = battle.TimerElapsedTicks;
             Result = battle.Result;
+            CandidateResult = battle.CandidateResult;
 
             var slots = roster.Slots;
             _shipCount = 0;
