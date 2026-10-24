@@ -25,17 +25,23 @@ namespace CombatSimulation.Runtime.Tests
                 OwnerOperation.Remove(battle, 20, 80, 126, entity, RemovalReason.Expiry),
                 OwnerOperation.BulletFired(battle, 20, 81, 127, entity, new EntityId(15), 7, 3, 5),
             };
-            var bytes = new byte[SessionCodec.RecordCapacity];
+            var bytes = new byte[SessionCodec.BatchHeaderCapacity + SessionCodec.RecordCapacity];
             foreach (var expected in operations)
             {
-                var count = SessionCodec.Operation(bytes, expected);
-                var r = new SessionCodec.Reader(bytes.AsSpan(0, count));
-                var actual = SessionCodec.ReadOperation(ref r); r.End();
+                // Batch tick 125: records 123-127 cover negative, zero and positive tick offsets.
+                var header = SessionCodec.BatchHeader(bytes, battle, 125, 81);
+                var count = header + SessionCodec.Operation(bytes.AsSpan(header), 125, expected);
+                var r = SessionCodec.Reader.Batch(bytes.AsSpan(0, count), battle, 20);
+                Assert.AreEqual(125, r.BatchTick); Assert.AreEqual(81UL, r.LastOperation);
+                Assert.IsTrue(r.NextRecord()); Assert.AreEqual(SessionMessage.Operation, r.Kind);
+                var actual = SessionCodec.ReadOperation(ref r);
+                Assert.IsFalse(r.NextRecord());
                 Assert.AreEqual(expected, actual);
                 for (var size = 0; size < count; ++size)
                 {
+                    if (size == header) continue; // A batch without records is valid.
                     var length = size;
-                    Assert.Throws<FormatException>(() => ReadOperation(bytes, length));
+                    Assert.Throws<FormatException>(() => ReadBatch(bytes, length, battle));
                 }
             }
         }
@@ -45,10 +51,43 @@ namespace CombatSimulation.Runtime.Tests
         {
             var expected = new ResolvedHit(new BattleId(99), 123, new EntityId(4321), 20, -1, new EntityId(5678),
                 10, 3, HitContactState.End, kind, 8.125f, 987);
-            var bytes = new byte[160]; var count = SessionCodec.Hit(bytes, expected);
-            var r = new SessionCodec.Reader(bytes.AsSpan(0, count));
-            var actual = SessionCodec.ReadHit(ref r); r.End();
+            var bytes = new byte[200]; var count = HitBatch(bytes, expected, 122); // An end record is one tick ahead.
+            var r = SessionCodec.Reader.Batch(bytes.AsSpan(0, count), new BattleId(99), 20);
+            Assert.IsTrue(r.NextRecord()); Assert.AreEqual(SessionMessage.Hit, r.Kind);
+            var actual = SessionCodec.ReadHit(ref r);
+            Assert.IsFalse(r.NextRecord());
             Assert.AreEqual(expected, actual);
+        }
+
+        [Test]
+        public void BatchesKeepRecordOrderAndRejectWrongVersionBattleAndTicks()
+        {
+            var battle = new BattleId(0x7700000005);
+            var hit = new ResolvedHit(battle, 10, new EntityId(1), 20, 0, new EntityId(2), 10, 0,
+                HitContactState.Start, HitImpactKind.Impact, 3, 1);
+            var operation = OwnerOperation.Remove(battle, 20, 4, 10, new EntityId(3), RemovalReason.Expiry);
+            var bytes = new byte[400];
+            var count = SessionCodec.BatchHeader(bytes, battle, 10, 4);
+            count += SessionCodec.Hit(bytes.AsSpan(count), 10, hit);
+            count += SessionCodec.Operation(bytes.AsSpan(count), 10, operation);
+            var r = SessionCodec.Reader.Batch(bytes.AsSpan(0, count), battle, 20);
+            Assert.IsTrue(r.NextRecord()); Assert.AreEqual(hit, SessionCodec.ReadHit(ref r));
+            Assert.IsTrue(r.NextRecord()); Assert.AreEqual(operation, SessionCodec.ReadOperation(ref r));
+            Assert.IsFalse(r.NextRecord());
+
+            // Only the low 32 bits of the battle travel; a different low half is rejected.
+            Assert.Throws<FormatException>(() => ReadBatch(bytes, count, new BattleId(0x7700000006)));
+            bytes[0] = 1;
+            Assert.Throws<FormatException>(() => ReadBatch(bytes, count, battle));
+            // A record before tick 0.
+            count = SessionCodec.BatchHeader(bytes, battle, 2, 0);
+            count += SessionCodec.Hit(bytes.AsSpan(count), 20, hit); // Offset −10 from batch tick 2.
+            Assert.Throws<FormatException>(() => ReadBatch(bytes, count, battle));
+            // An empty batch is a watermark only.
+            count = SessionCodec.BatchHeader(bytes, battle, long.MaxValue - 6, ulong.MaxValue);
+            r = SessionCodec.Reader.Batch(bytes.AsSpan(0, count), battle, 20);
+            Assert.AreEqual(long.MaxValue - 6, r.BatchTick); Assert.AreEqual(ulong.MaxValue, r.LastOperation);
+            Assert.IsFalse(r.NextRecord());
         }
 
         [Test]
@@ -76,12 +115,13 @@ namespace CombatSimulation.Runtime.Tests
         {
             var hit = new ResolvedHit(new BattleId(1), 5, new EntityId(1), 20, 0, new EntityId(2), 10, 0,
                 HitContactState.Start, HitImpactKind.Impact, float.NaN, 1);
-            var bytes = new byte[160]; var count = SessionCodec.Hit(bytes, hit);
-            Assert.Throws<FormatException>(() => ReadHit(bytes, count));
+            var bytes = new byte[200]; var count = HitBatch(bytes, hit, 5);
+            Assert.Throws<FormatException>(() => ReadBatch(bytes, count, new BattleId(1)));
             hit = new ResolvedHit(new BattleId(1), 5, new EntityId(1), 20, 0, new EntityId(2), 10, 0,
                 HitContactState.Start, HitImpactKind.Impact, 1, 1);
-            count = SessionCodec.Hit(bytes, hit);
-            Assert.Throws<FormatException>(() => ReadHit(bytes, count + 1));
+            count = HitBatch(bytes, hit, 5);
+            bytes[count] = 0; // Not a record kind.
+            Assert.Throws<FormatException>(() => ReadBatch(bytes, count + 1, new BattleId(1)));
         }
 
         [Test]
@@ -145,9 +185,17 @@ namespace CombatSimulation.Runtime.Tests
             PilotControls.Create((float)(degrees * Math.PI / 180), 0, 0),
             new QuantizedControls(held ?? 0, 0, 0), held.HasValue).Course;
 
-        private static void ReadOperation(byte[] bytes, int length)
-        { var r = new SessionCodec.Reader(bytes.AsSpan(0, length)); SessionCodec.ReadOperation(ref r); r.End(); }
-        private static void ReadHit(byte[] bytes, int length)
-        { var r = new SessionCodec.Reader(bytes.AsSpan(0, length)); SessionCodec.ReadHit(ref r); r.End(); }
+        private static int HitBatch(byte[] bytes, in ResolvedHit hit, long batchTick)
+        {
+            var count = SessionCodec.BatchHeader(bytes, hit.BattleId, batchTick, 0);
+            return count + SessionCodec.Hit(bytes.AsSpan(count), batchTick, hit);
+        }
+
+        private static void ReadBatch(byte[] bytes, int length, BattleId battle)
+        {
+            var r = SessionCodec.Reader.Batch(bytes.AsSpan(0, length), battle, 20);
+            while (r.NextRecord())
+                if (r.Kind == SessionMessage.Hit) SessionCodec.ReadHit(ref r); else SessionCodec.ReadOperation(ref r);
+        }
     }
 }

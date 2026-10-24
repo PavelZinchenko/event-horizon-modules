@@ -47,6 +47,21 @@ namespace CombatSimulation.Network
             Position += value.Length;
             return true;
         }
+
+        // Unsigned LEB128: seven bits per byte, low group first; every byte but the last has its high bit set.
+        public static int VarUIntSize(ulong value)
+        {
+            var size = 1;
+            while (value >= 0x80) { value >>= 7; ++size; }
+            return size;
+        }
+        public bool WriteVarUInt(ulong value)
+        {
+            if (Remaining < VarUIntSize(value)) return false;
+            while (value >= 0x80) { _buffer[Position++] = (byte)(value | 0x80); value >>= 7; }
+            _buffer[Position++] = (byte)value;
+            return true;
+        }
     }
 
     public ref struct ByteReader
@@ -111,6 +126,25 @@ namespace CombatSimulation.Network
             value = _buffer.Slice(Position, length);
             Position += length;
             return true;
+        }
+
+        // Rejects truncated, over-64-bit and non-minimal codes, so every value has one encoding.
+        public bool ReadVarUInt(out ulong value)
+        {
+            value = 0;
+            ulong result = 0;
+            for (var i = 0; i < 10 && Position + i < _buffer.Length; ++i)
+            {
+                var b = _buffer[Position + i];
+                if (i == 9 && b > 1) return false;
+                result |= (ulong)(b & 0x7f) << (7 * i);
+                if ((b & 0x80) != 0) continue;
+                if (b == 0 && i > 0) return false;
+                value = result;
+                Position += i + 1;
+                return true;
+            }
+            return false;
         }
     }
 }

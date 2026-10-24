@@ -8,8 +8,8 @@ namespace CombatSimulation.Network.Tests
     {
         [TestCase(0)]
         [TestCase(1)]
-        [TestCase(1176)]
-        [TestCase(1177)]
+        [TestCase(1190)] // With its 2-byte prefix, fills one datagram exactly.
+        [TestCase(1191)]
         [TestCase(85000)]
         public void LoopbackDeliversCompleteMessagesIncludingMultipleWindows(int size)
         {
@@ -95,8 +95,8 @@ namespace CombatSimulation.Network.Tests
             var receiver = new RecordingReceiver();
             var a = new PeerConnection(link.A, new CountingReceiver(), true);
             var b = new PeerConnection(link.B, receiver, false);
-            a.QueueReliable(new byte[] { 1 }); a.QueueReliable(new byte[] { 2 });
-            a.Update(0);
+            a.QueueReliable(new byte[] { 1 }); a.Update(0);
+            a.QueueReliable(new byte[] { 2 }); a.Update(0);
             a.TrySendInput(new byte[] { 3 });
             a.TrySendUnreliable(new byte[] { 4 });
             b.Update(0);
@@ -118,11 +118,63 @@ namespace CombatSimulation.Network.Tests
             var receiver = new RecordingReceiver();
             var a = new PeerConnection(link.A, new CountingReceiver(), true, 64, uint.MaxValue - 2);
             var b = new PeerConnection(link.B, receiver, false, 64, uint.MaxValue - 2);
-            for (var i = 0; i < 150; ++i) a.QueueReliable(new byte[] { (byte)i });
+            // One message per update: one datagram each, so 150 sequences wrap and span several windows.
+            for (var i = 0; i < 150; ++i) { a.QueueReliable(new byte[] { (byte)i }); Pump(link, a, b, 1); }
             Pump(link, a, b, 400);
             Assert.AreEqual(150, receiver.Reliable.Count);
             for (var i = 0; i < 150; ++i) Assert.AreEqual(i, receiver.Reliable[i][0]);
             Assert.AreEqual(0, a.PendingReliablePackets);
+        }
+
+        [Test]
+        public void MessagesQueuedBetweenUpdatesShareOneDatagram()
+        {
+            var link = new TestLink();
+            var receiver = new RecordingReceiver();
+            var a = new PeerConnection(link.A, new CountingReceiver(), true);
+            var b = new PeerConnection(link.B, receiver, false);
+            for (var i = 0; i < 10; ++i) a.QueueReliable(Payload(i * 7, i));
+            Pump(link, a, b, 20);
+            Assert.AreEqual(1, link.A.ReliableTransmissions);
+            Assert.AreEqual(10, receiver.Reliable.Count);
+            for (var i = 0; i < 10; ++i) CollectionAssert.AreEqual(Payload(i * 7, i), receiver.Reliable[i]);
+        }
+
+        [Test]
+        public void UnsentTailKeepsFillingWhileSendingIsBlocked()
+        {
+            var link = new TestLink();
+            link.A.BlockSend = true;
+            var receiver = new CountingReceiver();
+            var a = new PeerConnection(link.A, new CountingReceiver(), true);
+            var b = new PeerConnection(link.B, receiver, false);
+            for (var i = 0; i < 100; ++i) { a.QueueReliable(new byte[10]); Pump(link, a, b, 1); }
+            Assert.AreEqual(1, a.PendingReliablePackets, "100 messages of 11 bytes fit one 1,200-byte datagram.");
+            link.A.BlockSend = false;
+            Pump(link, a, b, 20);
+            Assert.AreEqual(1, link.A.ReliableTransmissions);
+            Assert.AreEqual(100, receiver.ReliableCount);
+        }
+
+        [Test]
+        public void MissingPacketResendsAfterOneRoundTripWhenALaterPacketIsAcknowledged()
+        {
+            var link = new TestLink();
+            link.A.Delay = link.B.Delay = 0.05;
+            var receiver = new RecordingReceiver();
+            var a = new PeerConnection(link.A, new CountingReceiver(), true);
+            var b = new PeerConnection(link.B, receiver, false);
+            Pump(link, a, b, 100); // Clock probes measure the 0.1 s round trip.
+            Assert.Less(a.Clock.FastResendSeconds + 0.05, a.Clock.ResendSeconds);
+            link.A.DropKind = PacketKind.Reliable; link.A.DropCount = 1;
+            var start = link.Now;
+            a.QueueReliable(new byte[] { 1 }); Pump(link, a, b, 1);
+            a.QueueReliable(new byte[] { 2 });
+            while (receiver.Reliable.Count == 0) Pump(link, a, b, 1);
+            // Timeout resend: 2 round trips + one transit, about 0.29 s. Acknowledged gap: about 0.21 s.
+            Assert.Less(link.Now - start, 0.25);
+            Assert.AreEqual(2, receiver.Reliable.Count);
+            Assert.AreEqual(1, receiver.Reliable[0][0]);
         }
 
         [Test]
@@ -182,9 +234,9 @@ namespace CombatSimulation.Network.Tests
             var peer = new PeerConnection(link.B, receiver, true, 64);
             var malformed = new List<byte[]>
             {
-                Array.Empty<byte>(), new byte[] { 1, 1, 0 }, new byte[] { 2, 1, 0, 0 },
-                new byte[] { 1, 99, 0, 0 }, new byte[] { 1, 1, 1, 0 }, new byte[65],
-                new byte[] { 1, 3, 0, 0 }
+                Array.Empty<byte>(), new byte[] { 2, 1, 0 }, new byte[] { 3, 1, 0, 0 },
+                new byte[] { 2, 99, 0, 0 }, new byte[] { 2, 1, 1, 0 }, new byte[65],
+                new byte[] { 2, 3, 0, 0 }, new byte[] { 2, 2, 4, 0, 0, 0, 0, 0 } // Reliable sequence without data.
             };
             var input = new byte[24];
             PacketFormat.Begin(input, PacketKind.Input, 30); // Declared length exceeds the datagram.
@@ -198,22 +250,37 @@ namespace CombatSimulation.Network.Tests
         }
 
         [Test]
-        public void InvalidReliableFragmentDoesNotConsumeASequence()
+        public void InvalidReliablePacketDoesNotConsumeASequence()
         {
             var link = new TestLink();
             var receiver = new CountingReceiver();
             var a = new PeerConnection(link.A, new CountingReceiver(), true, 64);
             var b = new PeerConnection(link.B, receiver, false, 64);
-            var bytes = new byte[25];
-            var writer = PacketFormat.Begin(bytes, PacketKind.Reliable, 21);
-            writer.WriteUInt32(0); writer.WriteUInt32(0); writer.WriteUInt32(0);
-            writer.WriteUInt32(2); writer.WriteUInt32(1); writer.WriteByte(9); // Impossible fragment count.
+            var bytes = new byte[8];
+            var writer = PacketFormat.Begin(bytes, PacketKind.Reliable, 4);
+            writer.WriteUInt32(0); // A sequence without data.
             link.B.Inject(bytes, 0);
             a.QueueReliable(new byte[] { 8 });
             Pump(link, a, b, 100);
             Assert.AreEqual(1, b.InvalidPackets);
             Assert.AreEqual(1, receiver.ReliableCount);
             Assert.AreEqual(0, a.PendingReliablePackets);
+        }
+
+        [Test]
+        public void UnparsableAcknowledgedStreamFaultsTheConnection()
+        {
+            var link = new TestLink();
+            var receiver = new RecordingReceiver();
+            var b = new PeerConnection(link.B, receiver, false);
+            var bytes = new byte[10];
+            var writer = PacketFormat.Begin(bytes, PacketKind.Reliable, 6);
+            writer.WriteUInt32(0); writer.WriteByte(0x80); writer.WriteByte(0); // Non-minimal length prefix.
+            link.B.Inject(bytes, 0);
+            b.Update(0);
+            Assert.IsTrue(b.IsFaulted);
+            Assert.AreEqual(0, receiver.Reliable.Count);
+            Assert.Throws<InvalidOperationException>(() => b.Update(1));
         }
 
         [Test]

@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using CombatSimulation.Core;
 using CombatSimulation.Network;
@@ -55,16 +56,20 @@ namespace CombatSimulation.Runtime.Tests
             internal Transport Other;
             internal bool Hold;
             internal bool DropUnreliable, DropInput;
-            internal int InputDatagrams;
+            internal int InputDatagrams, ReliableDatagrams;
             private readonly byte[][] _packets = new byte[256][];
             private readonly int[] _lengths = new int[256];
             private int _read, _count;
+            private uint _nextReliable;
             internal Transport() { for (var i = 0; i < _packets.Length; ++i) _packets[i] = new byte[1200]; }
             public bool TrySend(ReadOnlySpan<byte> data)
             {
                 // PacketKind.Unreliable is read from the public framing's fixed kind byte.
                 if (DropUnreliable && data[1] == 6) return true;
                 if (data[1] == 1) { ++InputDatagrams; if (DropInput) return true; }
+                // Counts first sends only: the reliable sequence follows the 4-byte packet header.
+                if (data[1] == 2 && BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4)) >= _nextReliable)
+                { ++ReliableDatagrams; _nextReliable = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4)) + 1; }
                 if (Other._count == _packets.Length) return false;
                 var index = (Other._read + Other._count++) % _packets.Length;
                 data.CopyTo(Other._packets[index]); Other._lengths[index] = data.Length; return true;

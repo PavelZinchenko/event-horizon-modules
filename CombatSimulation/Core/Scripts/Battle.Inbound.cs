@@ -49,10 +49,18 @@ namespace CombatSimulation.Core
         internal List<OwnerOperation> AppliedOperations => _appliedOperations;
 
         // Runtime checks the peer binding before submitting controls, including a spawn due in stage 1.
+        // A received removal or roster exit (stage 12) from an earlier tick is overdue: it applies in stage 1, before
+        // controls, so the entity takes no more input.
         internal bool AcceptsInputFrom(EntityId entity, int owner)
         {
             var ship = FindShip(entity);
-            if (ship != null) return ship.Owner == owner;
+            if (ship != null)
+            {
+                if (ship.Owner != owner) return false;
+                foreach (var operation in _remoteOperations)
+                    if (operation.EntityId == entity && operation.Tick < Tick && OperationStage(operation) == 12) return false;
+                return true;
+            }
             foreach (var operation in _remoteOperations)
                 if (operation.EntityId == entity && operation.Owner == owner && operation.Tick <= Tick &&
                     operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed)

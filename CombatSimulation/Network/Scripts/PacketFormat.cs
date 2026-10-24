@@ -6,9 +6,9 @@ namespace CombatSimulation.Network
 
     internal static class PacketFormat
     {
-        internal const byte Version = 1;
+        internal const byte Version = 2;
         internal const int HeaderSize = 4;
-        internal const int ReliableHeaderSize = 20;
+        internal const int ReliableHeaderSize = 4;
 
         internal static ByteWriter Begin(Span<byte> buffer, PacketKind kind, int payloadLength)
         {

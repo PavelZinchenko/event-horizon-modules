@@ -204,7 +204,7 @@ namespace CombatSimulation.Runtime.Tests
             void Fragment(byte[] bytes, long tick, int offset)
             {
                 var packet = new byte[96]; var writer = new ByteWriter(packet);
-                writer.WriteByte(1); writer.WriteUInt64(pair.B.BattleId.Value); writer.WriteUInt32(10);
+                writer.WriteByte(SessionCodec.Version); writer.WriteUInt64(pair.B.BattleId.Value); writer.WriteUInt32(10);
                 writer.WriteInt64(tick); writer.WriteUInt32((uint)bytes.Length); writer.WriteUInt32((uint)offset);
                 writer.WriteBytes(bytes.AsSpan(offset, Math.Min(67, bytes.Length - offset)));
                 ((IPeerReceiver)pair.B).OnUnreliable(packet.AsSpan(0, writer.Position));
@@ -236,6 +236,21 @@ namespace CombatSimulation.Runtime.Tests
             Assert.AreEqual(mutual ? BattleOutcome.Draw : BattleOutcome.Victory, pair.A.Snapshot.Result.Outcome);
             pair.Run(20); // Final reliable messages and acknowledgements drain after freezing.
             Assert.AreEqual(0, pair.A.PendingReliablePackets); Assert.AreEqual(0, pair.B.PendingReliablePackets);
+        }
+
+        [Test]
+        public void TicksWithoutRecordsSendOnlyAHeartbeatBatch()
+        {
+            var pair = new SessionFixtures.Pair(); pair.Start(); pair.Run(10);
+            var before = pair.TA.ReliableDatagrams;
+            pair.Run(50);
+            Assert.AreEqual(10, pair.TA.ReliableDatagrams - before);
+            // A pending result sends a batch every tick, so it never waits for a heartbeat.
+            pair.TA.Hold = true; pair.A.Surrender(0, pair.A.Tick + 1); // A never sees B's watermark.
+            before = pair.TA.ReliableDatagrams;
+            pair.Run(10);
+            Assert.IsTrue(pair.A.Snapshot.CandidateResult.IsCompleted); Assert.IsFalse(pair.A.IsCompleted);
+            Assert.GreaterOrEqual(pair.TA.ReliableDatagrams - before, 9, "Heartbeats alone would send 2-3.");
         }
 
         [Test]

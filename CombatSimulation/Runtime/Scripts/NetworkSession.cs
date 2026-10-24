@@ -127,16 +127,7 @@ namespace CombatSimulation.Runtime
             _localInputs.Apply(_runner, _options.LocalOwner, _runner.Battle.Setup.OwnerDelay(_options.LocalOwner));
             _remoteInputs.Apply(_runner, _options.RemoteOwner, _runner.Battle.Setup.OwnerDelay(_options.RemoteOwner));
             _runner.Step();
-            foreach (var hit in Snapshot.OutgoingHits)
-                SendRecord(SessionCodec.Hit(_record, hit));
-            foreach (var operation in Snapshot.OutgoingOperations)
-            {
-                SendRecord(SessionCodec.Operation(_record, operation));
-                _lastOperation = operation.Sequence;
-                if (Spawns(operation)) _controls.Register(operation.EntityId, _nextLocalControl++);
-            }
-            SendRecord(SessionCodec.Watermark(_record,
-                new OwnerWatermark(BattleId, _options.LocalOwner, Snapshot.Tick, _lastOperation)));
+            SendBatch();
             if (!IsCompleted && Tick >= (_nextCorrectionMilliseconds + 19) / 20)
             {
                 SendCorrection();
@@ -163,7 +154,34 @@ namespace CombatSimulation.Runtime
             _samples.Insert(index, new Sample(entity, tick, controls));
         }
 
-        private void SendRecord(int length) => _peer.QueueReliable(_record.AsSpan(0, length));
+        // One reliable batch per tick: hits, then operations in sequence order. The batch is also the tick's watermark,
+        // "all my records through this tick are sent". A tick without records sends one only every HeartbeatTicks,
+        // or every tick while a result is pending or final, so result agreement never waits for a heartbeat.
+        private void SendBatch()
+        {
+            var hits = Snapshot.OutgoingHits;
+            var operations = Snapshot.OutgoingOperations;
+            foreach (var operation in operations)
+            {
+                _lastOperation = operation.Sequence;
+                if (Spawns(operation)) _controls.Register(operation.EntityId, _nextLocalControl++);
+            }
+            var tick = Snapshot.Tick;
+            if (hits.Length == 0 && operations.Length == 0 && !IsCompleted && !Snapshot.CandidateResult.IsCompleted &&
+                tick - _lastBatchTick < HeartbeatTicks) return;
+            _batchLength = SessionCodec.BatchHeader(_batch, BattleId, tick, _lastOperation);
+            foreach (var hit in hits) AppendRecord(SessionCodec.Hit(_record, tick, hit));
+            foreach (var operation in operations) AppendRecord(SessionCodec.Operation(_record, tick, operation));
+            _peer.QueueReliable(_batch.AsSpan(0, _batchLength));
+            _lastBatchTick = tick;
+        }
+
+        private void AppendRecord(int length)
+        {
+            if (_batch.Length - _batchLength < length) Array.Resize(ref _batch, Math.Max(_batch.Length * 2, _batchLength + length));
+            _record.AsSpan(0, length).CopyTo(_batch.AsSpan(_batchLength));
+            _batchLength += length;
+        }
 
         private void SendCorrection()
         {
@@ -185,13 +203,13 @@ namespace CombatSimulation.Runtime
 
         // Callbacks only copy data. Core is never entered from inside PeerConnection.Update.
         void IPeerReceiver.OnInput(ReadOnlySpan<byte> payload) => Receive(SessionMessage.Input, payload);
-        void IPeerReceiver.OnReliable(ReadOnlySpan<byte> payload) => Receive(SessionMessage.Operation, payload);
+        void IPeerReceiver.OnReliable(ReadOnlySpan<byte> payload) => Receive(SessionMessage.Batch, payload);
         void IPeerReceiver.OnUnreliable(ReadOnlySpan<byte> payload) => Receive(SessionMessage.Correction, payload);
 
         private void Receive(SessionMessage channel, ReadOnlySpan<byte> payload)
         {
             if (IsCompleted) return;
-            if (channel == SessionMessage.Operation && payload.Length > SessionCodec.RecordCapacity)
+            if (channel == SessionMessage.Batch && payload.Length > SessionCodec.MaxBatchBytes)
             { ++InvalidMessages; return; }
             if (_receivedCount == _received.Count) _received.Add(new Received());
             var item = _received[_receivedCount++];
@@ -216,24 +234,31 @@ namespace CombatSimulation.Runtime
             {
                 if (item.Channel == SessionMessage.Correction) { ReadFragment(item.Bytes.AsSpan(0, item.Length)); return; }
                 if (item.Channel == SessionMessage.Input) { ReadInputs(item.Bytes.AsSpan(0, item.Length)); return; }
-                var r = new SessionCodec.Reader(item.Bytes.AsSpan(0, item.Length));
-                SessionCodec.Require(r.Battle == BattleId && r.Owner == _options.RemoteOwner);
-                switch (r.Kind)
-                {
-                    case SessionMessage.Hit:
-                        var hit = SessionCodec.ReadHit(ref r); r.End();
-                        _runner.Battle.Submit(new InboundHit(_options.RemoteOwner, hit)); break;
-                    case SessionMessage.Operation:
-                        var operation = SessionCodec.ReadOperation(ref r); r.End();
-                        if (Spawns(operation)) _remoteControls[_nextRemoteControl++] = operation.EntityId;
-                        _runner.Battle.Submit(_options.RemoteOwner, operation); break;
-                    case SessionMessage.Watermark:
-                        var watermark = new OwnerWatermark(r.Battle, r.Owner, r.Tick, r.U64()); r.End();
-                        _runner.Battle.Submit(_options.RemoteOwner, watermark); break;
-                    default: throw new FormatException("Wrong session channel.");
-                }
+                ReadBatch(item.Bytes.AsSpan(0, item.Length));
             }
             catch (FormatException) { ++InvalidMessages; }
+        }
+
+        // The first pass validates the whole batch, so a malformed batch submits nothing. Its operation sequences then
+        // stay missing, and every later watermark waits for them: the result cannot finalize over lost records.
+        private void ReadBatch(ReadOnlySpan<byte> bytes)
+        {
+            var check = SessionCodec.Reader.Batch(bytes, BattleId, _options.RemoteOwner);
+            while (check.NextRecord())
+                if (check.Kind == SessionMessage.Hit) SessionCodec.ReadHit(ref check); else SessionCodec.ReadOperation(ref check);
+            var r = SessionCodec.Reader.Batch(bytes, BattleId, _options.RemoteOwner);
+            while (r.NextRecord())
+            {
+                if (r.Kind == SessionMessage.Hit)
+                {
+                    _runner.Battle.Submit(new InboundHit(_options.RemoteOwner, SessionCodec.ReadHit(ref r)));
+                    continue;
+                }
+                var operation = SessionCodec.ReadOperation(ref r);
+                if (Spawns(operation)) _remoteControls[_nextRemoteControl++] = operation.EntityId;
+                _runner.Battle.Submit(_options.RemoteOwner, operation);
+            }
+            _runner.Battle.Submit(_options.RemoteOwner, new OwnerWatermark(BattleId, _options.RemoteOwner, r.BatchTick, r.LastOperation));
         }
 
         // A record whose index has no spawn record yet is dropped; a later copy or refresh delivers it.
@@ -282,12 +307,16 @@ namespace CombatSimulation.Runtime
         }
 
         private const int FragmentHeader = 29;
+        private const int HeartbeatTicks = 5;
         private readonly NetworkSessionOptions _options;
         private readonly BattleRunner _runner;
         private readonly PeerConnection _peer;
         private readonly InputSchedule _localInputs = new InputSchedule(), _remoteInputs = new InputSchedule();
         private readonly List<Sample> _samples = new List<Sample>();
         private readonly byte[] _record = new byte[SessionCodec.RecordCapacity];
+        private byte[] _batch = new byte[SessionCodec.BatchHeaderCapacity + 16 * SessionCodec.RecordCapacity];
+        private int _batchLength;
+        private long _lastBatchTick = -HeartbeatTicks;
         private readonly byte[] _fragment, _input;
         private readonly ControlSender _controls = new ControlSender();
         private readonly Dictionary<uint, EntityId> _remoteControls = new Dictionary<uint, EntityId>();

@@ -11,10 +11,12 @@ namespace CombatSimulation.Network.Tests
             var clock = new TickClock(false);
             Assert.IsFalse(clock.HasEstimate);
             Assert.AreEqual(0.2, clock.ResendSeconds);
+            Assert.AreEqual(0.2, clock.FastResendSeconds);
             Assert.IsTrue(clock.Observe(1, 11.03, 11.05, 1.08));
             Assert.AreEqual(0.06, clock.RoundTripSeconds, 1e-12);
             Assert.AreEqual(10, clock.OffsetSeconds, 1e-12);
             Assert.AreEqual(0.12, clock.ResendSeconds, 1e-12);
+            Assert.AreEqual(0.075, clock.FastResendSeconds, 1e-12);
             Assert.IsTrue(clock.HasEstimate);
         }
 

@@ -241,6 +241,22 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(pose.Position.Y + 4f * Battle.TickDuration, ship.Position.Y, 1e-4f);
         }
 
+        [TestCase(1, false)] // Overdue: the exit applies at stage 1 of the next step, before controls.
+        [TestCase(3, true)] // On time: the exit applies at stage 12, after the controls of its tick.
+        public void ReceivedRosterExitStopsInputOnlyWhenItAppliesBeforeControls(long exitTick, bool accepted)
+        {
+            var d = new Driver(Setup());
+            Assert.IsTrue(d.Battle.Submit(20, DeployRecord(d)));
+            for (var i = 0; i < 3; ++i) d.Step();
+            var entity = d.Entity(101);
+            Assert.IsTrue(d.Battle.AcceptsInputFrom(entity, 20));
+            Assert.IsFalse(d.Battle.AcceptsInputFrom(entity, 10));
+            Assert.IsTrue(d.Battle.Submit(20, RetreatRecord(d, entity, tick: exitTick)));
+            Assert.AreEqual(accepted, d.Battle.AcceptsInputFrom(entity, 20));
+            d.Step();
+            Assert.IsNull(d.Battle.FindShip(entity));
+        }
+
         [Test]
         public void LateDeploymentKeepsSpawnIdentityAndDoesNotAdvanceMissedMotion()
         {

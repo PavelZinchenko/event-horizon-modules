@@ -75,7 +75,7 @@ namespace CombatSimulation.Network
                 if (!valid) ++InvalidPackets;
                 if (IsFaulted) return;
             }
-            _reliable.Flush(now, Clock.ResendSeconds);
+            _reliable.Flush(now, Clock.ResendSeconds, Clock.FastResendSeconds);
             if (now >= _nextProbeTime) SendProbe(now);
             if (Clock.IsStarted) Clock.Advance(now);
         }

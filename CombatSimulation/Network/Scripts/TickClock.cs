@@ -17,6 +17,8 @@ namespace CombatSimulation.Network
         public double TickPosition { get; private set; }
         public double ErrorTicks { get; private set; }
         public double ResendSeconds => _sampleCount == 0 ? 0.2 : Math.Max(0.1, Math.Min(1, 2 * RoundTripSeconds));
+        // For a packet sent before one the peer has acknowledged: it is probably lost, so wait one round trip, not two.
+        public double FastResendSeconds => _sampleCount == 0 ? ResendSeconds : Math.Max(0.05, Math.Min(ResendSeconds, 1.25 * RoundTripSeconds));
 
         public TickClock(bool isReference) { IsReference = isReference; }
 

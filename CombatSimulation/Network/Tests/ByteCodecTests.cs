@@ -75,6 +75,38 @@ namespace CombatSimulation.Network.Tests
             Assert.IsFalse(reader.ReadByte(out _));
         }
 
+        [TestCase(0UL, new byte[] { 0 })]
+        [TestCase(127UL, new byte[] { 127 })]
+        [TestCase(128UL, new byte[] { 0x80, 1 })]
+        [TestCase(300UL, new byte[] { 0xac, 2 })]
+        [TestCase(ulong.MaxValue, new byte[] { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 1 })]
+        public void VarUIntUsesSevenBitGroupsLowFirst(ulong value, byte[] expected)
+        {
+            var bytes = new byte[10];
+            var writer = new ByteWriter(bytes);
+            Assert.AreEqual(expected.Length, ByteWriter.VarUIntSize(value));
+            Assert.IsTrue(writer.WriteVarUInt(value));
+            CollectionAssert.AreEqual(expected, bytes.AsSpan(0, writer.Position).ToArray());
+            var reader = new ByteReader(expected);
+            Assert.IsTrue(reader.ReadVarUInt(out var actual));
+            Assert.AreEqual(value, actual);
+            Assert.AreEqual(0, reader.Remaining);
+            Assert.IsFalse(new ByteWriter(new byte[expected.Length - 1]).WriteVarUInt(value));
+        }
+
+        [TestCase(new byte[0])]
+        [TestCase(new byte[] { 0x80 })]
+        [TestCase(new byte[] { 0x80, 0 })]
+        [TestCase(new byte[] { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 2 })]
+        [TestCase(new byte[] { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x81, 0 })]
+        public void VarUIntRejectsTruncatedOversizedAndNonMinimalCodes(byte[] bytes)
+        {
+            var reader = new ByteReader(bytes);
+            Assert.IsFalse(reader.ReadVarUInt(out var value));
+            Assert.AreEqual(0UL, value);
+            Assert.AreEqual(0, reader.Position);
+        }
+
         [Test]
         public void ReadersAndWritersAllocateNothing()
         {
