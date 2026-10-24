@@ -129,7 +129,7 @@ namespace ShipEditor.UI
 			if (stats.ArmorRepairRate > 0)
 				yield return new KeyValuePair<string, string>("$RepairRate", FormatFloat(stats.ArmorRepairRate));
 			if(stats.ArmorRepairCooldownMultiplier.Bonus != 0)
-				yield return new KeyValuePair<string, string>("$RepairCooldown", FormatFloat(stats.ArmorRepairCooldownMultiplier.Bonus));
+				yield return new KeyValuePair<string, string>("$RepairCooldown", FormatPercent(stats.ArmorRepairCooldownMultiplier.Bonus));
 
 			if (!Mathf.Approximately(stats.EnergyPoints, 0))
 				yield return new KeyValuePair<string, string>("$Energy", FormatFloat(stats.EnergyPoints));
@@ -139,14 +139,14 @@ namespace ShipEditor.UI
 			if (stats.EnergyRecharge > 0)
 				yield return new KeyValuePair<string, string>("$EnergyRechargeRate", FormatFloat(stats.EnergyRecharge));
 			if (stats.EnergyRechargeCooldownMultiplier.Bonus != 0)
-				yield return new KeyValuePair<string, string>("$EnergyRechargeCooldown", FormatFloat(stats.EnergyRechargeCooldownMultiplier.Bonus));
+				yield return new KeyValuePair<string, string>("$EnergyRechargeCooldown", FormatPercent(stats.EnergyRechargeCooldownMultiplier.Bonus));
 
 			if (!Mathf.Approximately(stats.ShieldPoints, 0))
 				yield return new KeyValuePair<string, string>("$ShieldPoints", FormatFloat(stats.ShieldPoints));
 			if (!Mathf.Approximately(stats.ShieldRechargeRate, 0))
 				yield return new KeyValuePair<string, string>("$ShieldRechargeRate", FormatFloat(stats.ShieldRechargeRate));
 			if (stats.ShieldRechargeCooldownMultiplier.Bonus != 0)
-				yield return new KeyValuePair<string, string>("$ShieldRechargeCooldown", FormatFloat(stats.ShieldRechargeCooldownMultiplier.Bonus));
+				yield return new KeyValuePair<string, string>("$ShieldRechargeCooldown", FormatPercent(stats.ShieldRechargeCooldownMultiplier.Bonus));
 
 			if (stats.EnginePower != 0)
 				yield return new KeyValuePair<string, string>("$Velocity", FormatFloat(stats.EnginePower));
