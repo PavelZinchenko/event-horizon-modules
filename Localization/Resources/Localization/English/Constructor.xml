@@ -27,6 +27,8 @@
     <string name="RepairCooldown">Repair cooldown</string>
     <string name="EnergyRechargeRate">Energy Recharge rate</string>
     <string name="EnergyRechargeCooldown">Energy Recharge cooldown</string>
+    <string name="RechargeRate">Recharge rate</string>
+    <string name="RechargeCooldown">Recharge cooldown</string>
     <string name="Weight">Mass</string>
     <string name="EquipmentWeight">Equipment Mass</string>
     <string name="RamDamage">Ramming damage</string>
