@@ -54,7 +54,8 @@ namespace CombatSimulation.Runtime.Tests
         {
             internal Transport Other;
             internal bool Hold;
-            internal bool DropUnreliable;
+            internal bool DropUnreliable, DropInput;
+            internal int InputDatagrams;
             private readonly byte[][] _packets = new byte[256][];
             private readonly int[] _lengths = new int[256];
             private int _read, _count;
@@ -63,6 +64,7 @@ namespace CombatSimulation.Runtime.Tests
             {
                 // PacketKind.Unreliable is read from the public framing's fixed kind byte.
                 if (DropUnreliable && data[1] == 6) return true;
+                if (data[1] == 1) { ++InputDatagrams; if (DropInput) return true; }
                 if (Other._count == _packets.Length) return false;
                 var index = (Other._read + Other._count++) % _packets.Length;
                 data.CopyTo(Other._packets[index]); Other._lengths[index] = data.Length; return true;
@@ -102,6 +104,9 @@ namespace CombatSimulation.Runtime.Tests
             { A.Deploy(new RosterId(1), 0); B.Deploy(new RosterId(101), 0); Step(); Step(); }
             internal void Run(int ticks) { for (var i = 0; i < ticks; ++i) Step(); }
         }
+
+        // The value both copies apply after network quantization.
+        internal static float Quantized(float throttle) => QuantizedControls.Dequantize(QuantizedControls.QuantizeThrottle(throttle));
 
         internal static ShipState Owned(NetworkSession session, int owner)
         {

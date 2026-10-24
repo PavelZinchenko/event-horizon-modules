@@ -103,12 +103,10 @@ namespace CombatSimulation.Network.Tests
     {
         internal readonly List<byte[]> Reliable = new List<byte[]>();
         internal readonly List<byte[]> Unreliable = new List<byte[]>();
-        internal readonly List<Input> Inputs = new List<Input>();
-        internal struct Input { internal ulong Key; internal long Tick; internal byte[] Bytes; }
+        internal readonly List<byte[]> Inputs = new List<byte[]>();
         public void OnReliable(ReadOnlySpan<byte> payload) => Reliable.Add(payload.ToArray());
         public void OnUnreliable(ReadOnlySpan<byte> payload) => Unreliable.Add(payload.ToArray());
-        public void OnInput(ulong entityKey, long originalTick, ReadOnlySpan<byte> payload) =>
-            Inputs.Add(new Input { Key = entityKey, Tick = originalTick, Bytes = payload.ToArray() });
+        public void OnInput(ReadOnlySpan<byte> payload) => Inputs.Add(payload.ToArray());
     }
 
     internal sealed class CountingReceiver : IPeerReceiver
@@ -117,6 +115,6 @@ namespace CombatSimulation.Network.Tests
         internal long Bytes;
         public void OnReliable(ReadOnlySpan<byte> payload) { ++ReliableCount; Bytes += payload.Length; }
         public void OnUnreliable(ReadOnlySpan<byte> payload) { ++UnreliableCount; Bytes += payload.Length; }
-        public void OnInput(ulong entityKey, long originalTick, ReadOnlySpan<byte> payload) { ++InputCount; Bytes += payload.Length; }
+        public void OnInput(ReadOnlySpan<byte> payload) { ++InputCount; Bytes += payload.Length; }
     }
 }

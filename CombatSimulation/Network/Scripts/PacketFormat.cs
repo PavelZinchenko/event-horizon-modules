@@ -9,7 +9,6 @@ namespace CombatSimulation.Network
         internal const byte Version = 1;
         internal const int HeaderSize = 4;
         internal const int ReliableHeaderSize = 20;
-        internal const int InputHeaderSize = 18;
 
         internal static ByteWriter Begin(Span<byte> buffer, PacketKind kind, int payloadLength)
         {

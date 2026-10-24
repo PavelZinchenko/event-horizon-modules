@@ -40,8 +40,9 @@ namespace CombatSimulation.Runtime.Tests
             for (var i = 0; i <= delay; ++i)
             {
                 pair.Step();
-                Assert.AreEqual(i == delay ? 0.75f : 0, SessionFixtures.Owned(pair.A, 10).Throttle);
-                Assert.AreEqual(i == delay ? 0.75f : 0, SessionFixtures.Owned(pair.B, 10).Throttle);
+                var expected = i == delay ? SessionFixtures.Quantized(0.75f) : 0;
+                Assert.AreEqual(expected, SessionFixtures.Owned(pair.A, 10).Throttle);
+                Assert.AreEqual(expected, SessionFixtures.Owned(pair.B, 10).Throttle);
             }
         }
 
@@ -62,51 +63,94 @@ namespace CombatSimulation.Runtime.Tests
         public void ReorderedFutureFramesWaitAndOverdueFramesNeverReplaceThePresentFrame()
         {
             var pair = new SessionFixtures.Pair(2); pair.Start();
-            var entity = SessionFixtures.Owned(pair.B, 10).Id;
+            var entity = Index(pair.A, SessionFixtures.Owned(pair.A, 10).Id);
             Inject(pair.B, entity, 4, 0.4f); Inject(pair.B, entity, 2, 0.2f); Inject(pair.B, entity, 3, 0.3f);
             pair.Run(3); // tick 4 applies original tick 2, despite tick 4 arriving first.
-            Assert.AreEqual(0.2f, SessionFixtures.Owned(pair.B, 10).Throttle);
+            Assert.AreEqual(SessionFixtures.Quantized(0.2f), SessionFixtures.Owned(pair.B, 10).Throttle);
             Inject(pair.B, entity, 2, 0.9f); // duplicate/stale
-            pair.Step(); Assert.AreEqual(0.3f, SessionFixtures.Owned(pair.B, 10).Throttle);
-            pair.Step(); Assert.AreEqual(0.4f, SessionFixtures.Owned(pair.B, 10).Throttle);
+            pair.Step(); Assert.AreEqual(SessionFixtures.Quantized(0.3f), SessionFixtures.Owned(pair.B, 10).Throttle);
+            pair.Step(); Assert.AreEqual(SessionFixtures.Quantized(0.4f), SessionFixtures.Owned(pair.B, 10).Throttle);
             pair.Run(3); // present tick 10
             Inject(pair.B, entity, 6, 1); Inject(pair.B, entity, 7, 0); // overdue press and release
             Inject(pair.B, entity, 8, 0.8f); // exactly present
-            pair.Step(); Assert.AreEqual(0.8f, SessionFixtures.Owned(pair.B, 10).Throttle);
+            pair.Step(); Assert.AreEqual(SessionFixtures.Quantized(0.8f), SessionFixtures.Owned(pair.B, 10).Throttle);
             Inject(pair.B, entity, 5, 1); pair.Step();
-            Assert.AreEqual(0.8f, SessionFixtures.Owned(pair.B, 10).Throttle);
+            Assert.AreEqual(SessionFixtures.Quantized(0.8f), SessionFixtures.Owned(pair.B, 10).Throttle);
         }
 
         [Test]
         public void OnlyTheNewestOverdueFrameApplies()
         {
             var pair = new SessionFixtures.Pair(); pair.Start(); pair.Run(8);
-            var entity = SessionFixtures.Owned(pair.B, 10).Id;
+            var entity = Index(pair.A, SessionFixtures.Owned(pair.A, 10).Id);
             Inject(pair.B, entity, 4, 1); Inject(pair.B, entity, 5, 0);
             pair.Step(); Assert.AreEqual(0, SessionFixtures.Owned(pair.B, 10).Throttle);
         }
 
         [Test]
-        public void WrongOwnerBattleVersionAndMalformedInputDoNotControlAShip()
+        public void UnknownIndexWrongBattleVersionAndMalformedInputDoNotControlAShip()
         {
             var pair = new SessionFixtures.Pair(); pair.Start();
-            var own = SessionFixtures.Owned(pair.B, 20).Id;
-            Inject(pair.B, own, pair.B.Tick, 1); // A cannot control B's ship.
-            var bytes = new byte[160]; var input = PilotControls.Create(0, 1, 0);
-            var length = SessionCodec.Input(bytes, pair.B.BattleId, 20, pair.B.Tick, input);
-            var remote = SessionFixtures.Owned(pair.B, 10).Id;
-            ((IPeerReceiver)pair.B).OnInput(remote.Value, pair.B.Tick, bytes.AsSpan(0, length));
-            length = SessionCodec.Input(bytes, new BattleId(999), 10, pair.B.Tick, input);
-            ((IPeerReceiver)pair.B).OnInput(remote.Value, pair.B.Tick, bytes.AsSpan(0, length));
-            length = SessionCodec.Input(bytes, pair.B.BattleId, 10, pair.B.Tick, input);
-            bytes[0] = 99;
-            ((IPeerReceiver)pair.B).OnInput(remote.Value, pair.B.Tick, bytes.AsSpan(0, length));
-            bytes[0] = 1;
-            ((IPeerReceiver)pair.B).OnInput(remote.Value, pair.B.Tick, bytes.AsSpan(0, length - 1));
+            var remote = Index(pair.A, SessionFixtures.Owned(pair.A, 10).Id);
+            // Indices name only the sender's spawns: no index can reach B's own ship.
+            Inject(pair.B, remote + 1, pair.B.Tick, 1);
+            var length = Packet(pair.B.BattleId, remote, pair.B.Tick, 1, out var bytes);
+            bytes[0] = 99; Deliver(pair.B, bytes, length); // version
+            length = Packet(new BattleId(999), remote, pair.B.Tick, 1, out bytes); Deliver(pair.B, bytes, length);
+            length = Packet(pair.B.BattleId, remote, pair.B.Tick, 1, out bytes); Deliver(pair.B, bytes, length - 1);
+            length = Packet(pair.B.BattleId, remote, pair.B.Tick, 1, out bytes);
+            bytes[length - 1] |= 0x80; Deliver(pair.B, bytes, length); // nonzero padding
             pair.Step();
             Assert.AreEqual(4, pair.B.InvalidMessages);
             Assert.AreEqual(0, SessionFixtures.Owned(pair.B, 20).Throttle);
             Assert.AreEqual(0, SessionFixtures.Owned(pair.B, 10).Throttle);
+        }
+
+        [Test]
+        public void BothCopiesFlyTheSameQuantizedFrames()
+        {
+            var pair = new SessionFixtures.Pair(2, 3,
+                pilots: new SessionFixtures.Pilots { Enabled = true, AimAtEnemy = true, Throttle = 0.37f });
+            pair.Start(); pair.Run(200);
+            foreach (var owner in new[] { 10, 20 })
+            {
+                var a = SessionFixtures.Owned(pair.A, owner); var b = SessionFixtures.Owned(pair.B, owner);
+                Assert.IsTrue(a.HasCourse); Assert.AreEqual(a.Course, b.Course); Assert.AreEqual(a.Throttle, b.Throttle);
+                Assert.AreEqual(SessionFixtures.Quantized(0.37f), a.Throttle);
+                var degrees = a.Course * 180 / Math.PI;
+                Assert.AreEqual(Math.Round(degrees), degrees, 1e-4, "Course is a whole degree.");
+            }
+        }
+
+        [Test]
+        public void UnchangedControlsSendOnlyRefreshes()
+        {
+            var pair = new SessionFixtures.Pair(pilots: new SessionFixtures.Pilots { Enabled = true, Throttle = 0.5f });
+            pair.Start(); pair.Run(50);
+            pair.TA.InputDatagrams = 0; pair.Run(100);
+            Assert.AreEqual(100 / ControlSender.RefreshTicks, pair.TA.InputDatagrams);
+            Assert.AreEqual(SessionFixtures.Quantized(0.5f), SessionFixtures.Owned(pair.B, 10).Throttle);
+        }
+
+        [Test]
+        public void AChangeUsesThreeDatagramsAndARefreshRepairsALostChange()
+        {
+            var pair = new SessionFixtures.Pair(); pair.Start(); pair.Run(3);
+            var entity = SessionFixtures.Owned(pair.A, 10).Id;
+            pair.TA.InputDatagrams = 0;
+            pair.A.SubmitControls(entity, pair.A.Tick, PilotControls.Create(0.25f, 0.5f, 1));
+            pair.Run(10);
+            Assert.AreEqual(ControlSender.Copies, pair.TA.InputDatagrams);
+            Assert.AreEqual(SessionFixtures.Quantized(0.5f), SessionFixtures.Owned(pair.B, 10).Throttle);
+
+            pair.TA.DropInput = true;
+            pair.A.SubmitControls(entity, pair.A.Tick, PilotControls.Create(1.5f, 1, 0));
+            pair.Run(ControlSender.Copies + 1);
+            pair.TA.DropInput = false;
+            Assert.AreEqual(SessionFixtures.Quantized(0.5f), SessionFixtures.Owned(pair.B, 10).Throttle);
+            pair.Run(ControlSender.RefreshTicks);
+            var a = SessionFixtures.Owned(pair.A, 10); var b = SessionFixtures.Owned(pair.B, 10);
+            Assert.AreEqual(1, b.Throttle); Assert.AreEqual(a.Course, b.Course); Assert.AreEqual(a.Systems, b.Systems);
         }
 
         [TestCase(100, 10)] [TestCase(150, 6)] [TestCase(200, 5)]
@@ -173,7 +217,7 @@ namespace CombatSimulation.Runtime.Tests
             var pair = new SessionFixtures.Pair();
             pair.A.Deploy(new RosterId(1), 0);
             pair.A.Step(0);
-            var entity = SessionFixtures.Owned(pair.A, 10).Id;
+            var entity = Index(pair.A, SessionFixtures.Owned(pair.A, 10).Id);
             Inject(pair.B, entity, 0, 1);
             pair.B.Step(0);
             Assert.AreEqual(1, SessionFixtures.Owned(pair.B, 10).Throttle);
@@ -313,11 +357,28 @@ namespace CombatSimulation.Runtime.Tests
             }
         }
 
-        private static void Inject(NetworkSession session, EntityId entity, long tick, float throttle)
+        private static uint Index(NetworkSession owner, EntityId entity)
         {
-            var bytes = new byte[160];
-            var length = SessionCodec.Input(bytes, session.BattleId, 10, tick, PilotControls.Create(0, throttle, 0));
-            ((IPeerReceiver)session).OnInput(entity.Value, tick, bytes.AsSpan(0, length));
+            Assert.IsTrue(owner.TryGetLocalControlIndex(entity, out var index));
+            return index;
+        }
+
+        private static void Inject(NetworkSession session, uint index, long tick, float throttle)
+        {
+            var length = Packet(session.BattleId, index, tick, throttle, out var bytes);
+            Deliver(session, bytes, length);
+        }
+
+        private static void Deliver(NetworkSession session, byte[] bytes, int length) =>
+            ((IPeerReceiver)session).OnInput(bytes.AsSpan(0, length));
+
+        private static int Packet(BattleId battle, uint index, long tick, float throttle, out byte[] bytes)
+        {
+            bytes = new byte[64];
+            var w = InputCodec.Begin(bytes, battle, tick);
+            InputCodec.Write(ref w, tick, new ControlRecord(index, tick,
+                QuantizedControls.From(PilotControls.Create(0, throttle, 0), default, false)));
+            return w.Finish();
         }
     }
 }

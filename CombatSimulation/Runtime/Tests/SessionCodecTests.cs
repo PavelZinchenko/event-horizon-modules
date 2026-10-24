@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CombatSimulation.Core;
 using CombatSimulation.Physics;
 using NUnit.Framework;
@@ -73,16 +74,80 @@ namespace CombatSimulation.Runtime.Tests
         [Test]
         public void InvalidFloatAndTrailingDataAreRejected()
         {
-            var bytes = new byte[160];
-            var count = SessionCodec.Input(bytes, new BattleId(1), 20, 5, PilotControls.Create(0, float.NaN, 0));
-            Assert.Throws<FormatException>(() => ReadInput(bytes, count));
-            count = SessionCodec.Input(bytes, new BattleId(1), 20, 5, PilotControls.Create(0, 1, 0));
-            Assert.Throws<FormatException>(() => ReadInput(bytes, count + 1));
+            var hit = new ResolvedHit(new BattleId(1), 5, new EntityId(1), 20, 0, new EntityId(2), 10, 0,
+                HitContactState.Start, HitImpactKind.Impact, float.NaN, 1);
+            var bytes = new byte[160]; var count = SessionCodec.Hit(bytes, hit);
+            Assert.Throws<FormatException>(() => ReadHit(bytes, count));
+            hit = new ResolvedHit(new BattleId(1), 5, new EntityId(1), 20, 0, new EntityId(2), 10, 0,
+                HitContactState.Start, HitImpactKind.Impact, 1, 1);
+            count = SessionCodec.Hit(bytes, hit);
+            Assert.Throws<FormatException>(() => ReadHit(bytes, count + 1));
         }
+
+        [Test]
+        public void QuantizedCoursesUseWholeDegreesWithHysteresis()
+        {
+            Assert.AreEqual(10, Course(10.4)); Assert.AreEqual(11, Course(10.6));
+            Assert.AreEqual(0, Course(359.6)); Assert.AreEqual(0, Course(-0.4)); Assert.AreEqual(359, Course(-1));
+            Assert.AreEqual(QuantizedControls.NoCourse, QuantizedControls.From(PilotControls.Create(null, 0, 0), default, false).Course);
+            Assert.AreEqual(10, Course(10.74, 10)); Assert.AreEqual(11, Course(10.76, 10));
+            Assert.AreEqual(10, Course(9.26, 10)); Assert.AreEqual(9, Course(9.24, 10));
+            Assert.AreEqual(0, Course(359.5, 0)); Assert.AreEqual(359, Course(359.2, 0));
+            Assert.AreEqual(95, QuantizedControls.QuantizeThrottle(0.75f)); Assert.AreEqual(127, QuantizedControls.QuantizeThrottle(1));
+            var controls = new QuantizedControls(90, 127, 5).ToControls();
+            Assert.AreEqual(90 * (float)(Math.PI / 180.0), controls.Course); Assert.AreEqual(1, controls.Throttle);
+            Assert.AreEqual(5UL, controls.Systems);
+        }
+
+        [Test]
+        public void InputRecordsRoundTripWithLargeIndicesAgesAndSystems()
+        {
+            const long baseTick = 9500;
+            var expected = new[]
+            {
+                new ControlRecord(0, baseTick, new QuantizedControls(0, 0, 0)),
+                new ControlRecord(70000, baseTick - 5000, new QuantizedControls(359, 127, ulong.MaxValue)),
+                new ControlRecord(5, baseTick - 1, new QuantizedControls(QuantizedControls.NoCourse, 64, 3)),
+                new ControlRecord(uint.MaxValue, 0, new QuantizedControls(180, 1, 1UL << 63)),
+            };
+            var bytes = new byte[64]; var w = InputCodec.Begin(bytes, new BattleId(0x1234567890), baseTick);
+            foreach (var record in expected) Assert.IsTrue(InputCodec.Write(ref w, baseTick, record));
+            var records = new List<ControlRecord>();
+            InputCodec.Read(bytes.AsSpan(0, w.Finish()), new BattleId(0x1234567890), records);
+            Assert.AreEqual(expected.Length, records.Count);
+            for (var i = 0; i < expected.Length; ++i)
+            {
+                Assert.AreEqual(expected[i].Index, records[i].Index); Assert.AreEqual(expected[i].Tick, records[i].Tick);
+                Assert.AreEqual(expected[i].Controls, records[i].Controls);
+            }
+        }
+
+        [Test]
+        public void InvalidRecordsRejectTheWholeDatagram()
+        {
+            var records = new List<ControlRecord>();
+            foreach (var bad in new[] { new QuantizedControls(360, 0, 0), new QuantizedControls(510, 0, 0) })
+            {
+                var bytes = new byte[64]; var w = InputCodec.Begin(bytes, new BattleId(1), 10);
+                InputCodec.Write(ref w, 10, new ControlRecord(1, 10, new QuantizedControls(5, 5, 0)));
+                InputCodec.Write(ref w, 10, new ControlRecord(2, 10, bad));
+                var length = w.Finish();
+                Assert.Throws<FormatException>(() => InputCodec.Read(bytes.AsSpan(0, length), new BattleId(1), records));
+                Assert.AreEqual(0, records.Count);
+            }
+            var future = new byte[64]; var writer = InputCodec.Begin(future, new BattleId(1), 10);
+            InputCodec.Write(ref writer, 10, new ControlRecord(1, -1, new QuantizedControls(5, 5, 0))); // age 11 > base tick
+            var size = writer.Finish();
+            Assert.Throws<FormatException>(() => InputCodec.Read(future.AsSpan(0, size), new BattleId(1), records));
+        }
+
+        private static int Course(double degrees, int? held = null) => QuantizedControls.From(
+            PilotControls.Create((float)(degrees * Math.PI / 180), 0, 0),
+            new QuantizedControls(held ?? 0, 0, 0), held.HasValue).Course;
 
         private static void ReadOperation(byte[] bytes, int length)
         { var r = new SessionCodec.Reader(bytes.AsSpan(0, length)); SessionCodec.ReadOperation(ref r); r.End(); }
-        private static void ReadInput(byte[] bytes, int length)
-        { var r = new SessionCodec.Reader(bytes.AsSpan(0, length)); SessionCodec.ReadInput(ref r); r.End(); }
+        private static void ReadHit(byte[] bytes, int length)
+        { var r = new SessionCodec.Reader(bytes.AsSpan(0, length)); SessionCodec.ReadHit(ref r); r.End(); }
     }
 }

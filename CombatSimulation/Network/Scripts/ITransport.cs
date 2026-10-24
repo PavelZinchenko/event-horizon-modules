@@ -16,7 +16,8 @@ namespace CombatSimulation.Network
     public interface IPeerReceiver
     {
         // Spans are valid only during the callback. Callbacks must not reenter PeerConnection.
-        void OnInput(ulong entityKey, long originalTick, ReadOnlySpan<byte> payload);
+        // One input datagram's payload. Runtime owns its encoding, change detection and redundancy.
+        void OnInput(ReadOnlySpan<byte> payload);
         void OnReliable(ReadOnlySpan<byte> payload);
         void OnUnreliable(ReadOnlySpan<byte> payload);
     }

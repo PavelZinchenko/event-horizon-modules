@@ -5,6 +5,7 @@ using CombatSimulation.Physics;
 
 namespace CombatSimulation.Runtime
 {
+    // Input (1) is a separate bit-packed datagram (InputCodec); here it only tags the receive queue.
     internal enum SessionMessage : byte { Input = 1, Hit, Operation, Watermark, Correction }
 
     // Versioned little-endian messages. The caller supplies reusable buffers with the stated capacity.
@@ -20,21 +21,6 @@ namespace CombatSimulation.Runtime
             w.WriteByte(Version); w.WriteByte((byte)kind); w.WriteUInt64(battle.Value);
             w.WriteUInt32((uint)owner); w.WriteInt64(tick);
             return w;
-        }
-
-        internal static int Input(Span<byte> buffer, BattleId battle, int owner, long tick, in PilotControls input)
-        {
-            var w = Header(buffer, SessionMessage.Input, battle, owner, tick);
-            w.WriteByte(input.HasCourse ? (byte)1 : (byte)0); w.WriteSingle(input.Course);
-            w.WriteSingle(input.Throttle); w.WriteUInt64(input.Systems);
-            return w.Position;
-        }
-
-        internal static PilotControls ReadInput(ref Reader r)
-        {
-            var course = r.Bool(); var angle = r.Float(); var throttle = r.Float(); var systems = r.U64();
-            Require(throttle >= 0 && throttle <= 1);
-            return PilotControls.Create(course ? angle : (float?)null, throttle, systems);
         }
 
         internal static int Hit(Span<byte> buffer, in ResolvedHit hit)

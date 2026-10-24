@@ -97,7 +97,7 @@ namespace CombatSimulation.Network.Tests
             var b = new PeerConnection(link.B, receiver, false);
             a.QueueReliable(new byte[] { 1 }); a.QueueReliable(new byte[] { 2 });
             a.Update(0);
-            a.QueueInput(7, 0, new byte[] { 3 }); a.SendInputs(0);
+            a.TrySendInput(new byte[] { 3 });
             a.TrySendUnreliable(new byte[] { 4 });
             b.Update(0);
             Assert.AreEqual(0, receiver.Reliable.Count);
@@ -126,63 +126,34 @@ namespace CombatSimulation.Network.Tests
         }
 
         [Test]
-        public void InputsRepeatCurrentAndThreePreviousTicksAndPreserveOlderArrivals()
-        {
-            var link = new TestLink();
-            var receiver = new RecordingReceiver();
-            var a = new PeerConnection(link.A, new CountingReceiver(), true);
-            var b = new PeerConnection(link.B, receiver, false);
-            for (var tick = 0; tick < 6; ++tick) a.QueueInput(10, tick, new byte[] { (byte)tick });
-            a.SendInputs(5); b.Update(0);
-            Assert.AreEqual(4, receiver.Inputs.Count);
-            for (var i = 0; i < 4; ++i)
-            {
-                Assert.AreEqual(5 - i, receiver.Inputs[i].Tick);
-                Assert.AreEqual(5 - i, receiver.Inputs[i].Bytes[0]);
-            }
-            a.SendInputs(6); b.Update(0);
-            Assert.AreEqual(7, receiver.Inputs.Count, "No invented input for tick 6; repeats are exposed to Runtime.");
-            a.SendInputs(100); b.Update(0);
-            Assert.AreEqual(7, receiver.Inputs.Count, "A large tick jump must not replay expired input.");
-        }
-
-        [Test]
-        public void InputRedundancyRecoversThreeLostTicksAndSplitsAtRecordBoundaries()
+        public void InputDatagramsArriveWholeOnTheirOwnChannel()
         {
             var link = new TestLink();
             var receiver = new RecordingReceiver();
             var a = new PeerConnection(link.A, new CountingReceiver(), true, 64);
             var b = new PeerConnection(link.B, receiver, false, 64);
-            link.A.Loss = 1;
-            for (var tick = 0; tick < 4; ++tick)
-            {
-                for (ulong key = 1; key <= 21; ++key) a.QueueInput(key, tick, new byte[20]);
-                if (tick == 3) link.A.Loss = 0;
-                a.SendInputs(tick);
-            }
+            Assert.AreEqual(60, a.MaxInputPayload);
+            var payload = Payload(60, 5);
+            Assert.IsTrue(a.TrySendInput(payload)); Assert.IsTrue(a.TrySendInput(Array.Empty<byte>()));
             b.Update(0);
-            Assert.AreEqual(84, receiver.Inputs.Count);
-            var unique = new HashSet<string>();
-            foreach (var input in receiver.Inputs) unique.Add(input.Key + ":" + input.Tick);
-            Assert.AreEqual(84, unique.Count);
-            Assert.LessOrEqual(link.A.LargestDatagram, 64);
+            Assert.AreEqual(2, receiver.Inputs.Count);
+            CollectionAssert.AreEqual(payload, receiver.Inputs[0]);
+            Assert.AreEqual(0, receiver.Inputs[1].Length);
+            Assert.AreEqual(0, receiver.Unreliable.Count + receiver.Reliable.Count);
         }
 
         [Test]
-        public void QueueCopiesBuffersAndReplacesAnInputForTheSameEntityAndTick()
+        public void QueueCopiesReliableBuffers()
         {
             var link = new TestLink();
             var receiver = new RecordingReceiver();
             var a = new PeerConnection(link.A, new CountingReceiver(), true);
             var b = new PeerConnection(link.B, receiver, false);
             var buffer = new byte[] { 1 };
-            a.QueueReliable(buffer); a.QueueInput(1, 0, buffer);
-            buffer[0] = 2; a.QueueInput(1, 0, buffer);
-            buffer[0] = 3;
-            a.SendInputs(0); Pump(link, a, b, 10);
+            a.QueueReliable(buffer);
+            buffer[0] = 2;
+            Pump(link, a, b, 10);
             Assert.AreEqual(1, receiver.Reliable[0][0]);
-            Assert.AreEqual(1, receiver.Inputs.Count);
-            Assert.AreEqual(2, receiver.Inputs[0].Bytes[0]);
         }
 
         [Test]
@@ -216,9 +187,7 @@ namespace CombatSimulation.Network.Tests
                 new byte[] { 1, 3, 0, 0 }
             };
             var input = new byte[24];
-            var writer = PacketFormat.Begin(input, PacketKind.Input, 20);
-            writer.WriteUInt64(1); writer.WriteInt64(0); writer.WriteUInt16(0);
-            writer.WriteByte(99); writer.WriteByte(99); // Valid record, then truncated record.
+            PacketFormat.Begin(input, PacketKind.Input, 30); // Declared length exceeds the datagram.
             malformed.Add(input);
             foreach (var bytes in malformed) link.B.Inject(bytes, 0);
             peer.QueueReliable(new byte[] { 42 });
@@ -252,11 +221,8 @@ namespace CombatSimulation.Network.Tests
         {
             var link = new TestLink();
             var peer = new PeerConnection(link.A, new CountingReceiver(), true, 64);
-            Assert.Throws<ArgumentOutOfRangeException>(() => peer.QueueInput(1, -1, Array.Empty<byte>()));
-            Assert.Throws<ArgumentOutOfRangeException>(() => peer.QueueInput(1, 0, new byte[43]));
+            Assert.Throws<ArgumentOutOfRangeException>(() => peer.TrySendInput(new byte[61]));
             Assert.Throws<ArgumentOutOfRangeException>(() => peer.TrySendUnreliable(new byte[61]));
-            peer.QueueInput(1, 3, Array.Empty<byte>());
-            Assert.Throws<ArgumentOutOfRangeException>(() => peer.QueueInput(1, 2, Array.Empty<byte>()));
             peer.Update(3);
             Assert.Throws<ArgumentOutOfRangeException>(() => peer.Update(2));
             Assert.Throws<ArgumentOutOfRangeException>(() => peer.Update(double.NaN));
@@ -289,8 +255,7 @@ namespace CombatSimulation.Network.Tests
         private static void Traffic(TestLink link, PeerConnection a, PeerConnection b, byte[] payload, int tick)
         {
             a.QueueReliable(payload); b.QueueReliable(payload);
-            a.QueueInput(1, tick, payload.AsSpan(0, 20)); b.QueueInput(2, tick, payload.AsSpan(0, 20));
-            a.SendInputs(tick); b.SendInputs(tick);
+            a.TrySendInput(payload.AsSpan(0, 20)); b.TrySendInput(payload.AsSpan(0, 20));
             a.TrySendUnreliable(payload.AsSpan(0, 40)); b.TrySendUnreliable(payload.AsSpan(0, 40));
             Pump(link, a, b, 2);
         }

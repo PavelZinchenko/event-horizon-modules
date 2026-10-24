@@ -23,12 +23,11 @@ namespace CombatSimulation.Network
             _sendBuffer = new byte[maxDatagramSize];
             Clock = new TickClock(isClockReference);
             _reliable = new ReliableChannel(transport, receiver, maxDatagramSize, initialSequence);
-            _inputs = new InputChannel(transport, maxDatagramSize);
         }
 
         public TickClock Clock { get; }
         public int MaxDatagramSize { get; }
-        public int MaxInputPayload => _inputs.MaxPayload;
+        public int MaxInputPayload => MaxDatagramSize - PacketFormat.HeaderSize;
         public int MaxUnreliablePayload => MaxDatagramSize - PacketFormat.HeaderSize;
         public int PendingReliablePackets => _reliable.PendingPackets;
         public long InvalidPackets { get; private set; }
@@ -36,18 +35,15 @@ namespace CombatSimulation.Network
 
         // Queue methods copy payloads; callers may immediately reuse their buffers.
         public void QueueReliable(ReadOnlySpan<byte> payload) { EnsureHealthy(); _reliable.Queue(payload); }
-        public void QueueInput(ulong entityKey, long originalTick, ReadOnlySpan<byte> payload)
-        {
-            EnsureHealthy();
-            _inputs.Queue(entityKey, originalTick, payload);
-        }
-        public void SendInputs(long currentTick) { EnsureHealthy(); _inputs.Send(currentTick); }
+        // Input and plain unreliable data: one datagram each, no delivery promise. False means local backpressure.
+        public bool TrySendInput(ReadOnlySpan<byte> payload) => SendDatagram(PacketKind.Input, payload);
+        public bool TrySendUnreliable(ReadOnlySpan<byte> payload) => SendDatagram(PacketKind.Unreliable, payload);
 
-        public bool TrySendUnreliable(ReadOnlySpan<byte> payload)
+        private bool SendDatagram(PacketKind kind, ReadOnlySpan<byte> payload)
         {
             EnsureHealthy();
-            if (payload.Length > MaxUnreliablePayload) throw new ArgumentOutOfRangeException(nameof(payload));
-            var writer = PacketFormat.Begin(_sendBuffer, PacketKind.Unreliable, payload.Length);
+            if (payload.Length > MaxDatagramSize - PacketFormat.HeaderSize) throw new ArgumentOutOfRangeException(nameof(payload));
+            var writer = PacketFormat.Begin(_sendBuffer, kind, payload.Length);
             writer.WriteBytes(payload);
             return _transport.TrySend(_sendBuffer.AsSpan(0, writer.Position));
         }
@@ -69,7 +65,7 @@ namespace CombatSimulation.Network
                 var valid = true;
                 switch (kind)
                 {
-                    case PacketKind.Input: valid = InputChannel.Receive(payload, _receiver); break;
+                    case PacketKind.Input: _receiver.OnInput(payload); break;
                     case PacketKind.Reliable: valid = _reliable.Receive(payload); break;
                     case PacketKind.Ack: valid = _reliable.ReceiveAck(payload); break;
                     case PacketKind.Probe: valid = ReceiveProbe(payload, now); break;
@@ -132,7 +128,6 @@ namespace CombatSimulation.Network
         private readonly ITransport _transport;
         private readonly IPeerReceiver _receiver;
         private readonly ReliableChannel _reliable;
-        private readonly InputChannel _inputs;
         private readonly byte[] _receiveBuffer, _sendBuffer;
         private readonly Probe[] _probes = new Probe[16];
         private uint _nextProbe;

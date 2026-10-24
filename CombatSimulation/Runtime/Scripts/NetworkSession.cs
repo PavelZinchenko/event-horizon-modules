@@ -46,6 +46,7 @@ namespace CombatSimulation.Runtime
             _runner = new BattleRunner(setup, pilots, QueueControls);
             _peer = new PeerConnection(transport, this, options.IsClockReference, options.MaxDatagramSize);
             _fragment = new byte[_peer.MaxUnreliablePayload];
+            _input = new byte[_peer.MaxInputPayload];
             _fragmentPayload = _fragment.Length - FragmentHeader;
             _nextCorrectionMilliseconds = options.CorrectionIntervalMilliseconds;
         }
@@ -111,13 +112,18 @@ namespace CombatSimulation.Runtime
                 if (sample.Tick > Tick) { ++i; continue; }
                 if (Snapshot.TryGetShip(sample.Entity, out var ship) && ship.Owner == _options.LocalOwner)
                 {
-                    var length = SessionCodec.Input(_record, BattleId, _options.LocalOwner, sample.Tick, sample.Controls);
-                    _peer.QueueInput(sample.Entity.Value, sample.Tick, _record.AsSpan(0, length));
-                    _localInputs.Add(sample.Entity, sample.Tick, sample.Controls);
+                    // Both copies apply the quantized frame; an unchanged frame is neither applied nor sent.
+                    if (_controls.Quantize(sample.Entity, sample.Controls, out var controls))
+                    {
+                        _controls.Changed(sample.Entity, sample.Tick, controls);
+                        _localInputs.Add(sample.Entity, sample.Tick, controls.ToControls(sample.Controls.SelfDestruct));
+                    }
+                    else if (sample.Controls.SelfDestruct && _controls.TryGetHeld(sample.Entity, out controls))
+                        _localInputs.Add(sample.Entity, sample.Tick, controls.ToControls(true));
                 }
                 _samples.RemoveAt(i);
             }
-            _peer.SendInputs(Tick);
+            _controls.Send(_peer, BattleId, Tick, _input);
             _localInputs.Apply(_runner, _options.LocalOwner, _runner.Battle.Setup.OwnerDelay(_options.LocalOwner));
             _remoteInputs.Apply(_runner, _options.RemoteOwner, _runner.Battle.Setup.OwnerDelay(_options.RemoteOwner));
             _runner.Step();
@@ -127,6 +133,7 @@ namespace CombatSimulation.Runtime
             {
                 SendRecord(SessionCodec.Operation(_record, operation));
                 _lastOperation = operation.Sequence;
+                if (Spawns(operation)) _controls.Register(operation.EntityId, _nextLocalControl++);
             }
             SendRecord(SessionCodec.Watermark(_record,
                 new OwnerWatermark(BattleId, _options.LocalOwner, Snapshot.Tick, _lastOperation)));
@@ -137,8 +144,14 @@ namespace CombatSimulation.Runtime
             }
             foreach (var item in Snapshot.Events)
                 if (item.Kind == BattleEventKind.Removal && !item.IsBullet)
-                { _localInputs.Forget(item.EntityId); _remoteInputs.Forget(item.EntityId); }
+                { _localInputs.Forget(item.EntityId); _remoteInputs.Forget(item.EntityId); _controls.Forget(item.EntityId); }
         }
+
+        // Ships and drones get control indices in spawn-operation order. Both peers count the same ordered stream.
+        private static bool Spawns(in OwnerOperation operation) => operation.Kind == OwnerOperationKind.DroneSpawn ||
+            (operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed);
+
+        internal bool TryGetLocalControlIndex(EntityId entity, out uint index) => _controls.TryGetIndex(entity, out index);
 
         private void QueueControls(EntityId entity, long tick, PilotControls controls)
         {
@@ -171,56 +184,65 @@ namespace CombatSimulation.Runtime
         }
 
         // Callbacks only copy data. Core is never entered from inside PeerConnection.Update.
-        void IPeerReceiver.OnInput(ulong entityKey, long originalTick, ReadOnlySpan<byte> payload) =>
-            Receive(SessionMessage.Input, entityKey, originalTick, payload);
-        void IPeerReceiver.OnReliable(ReadOnlySpan<byte> payload) => Receive(SessionMessage.Operation, 0, 0, payload);
-        void IPeerReceiver.OnUnreliable(ReadOnlySpan<byte> payload) => Receive(SessionMessage.Correction, 0, 0, payload);
+        void IPeerReceiver.OnInput(ReadOnlySpan<byte> payload) => Receive(SessionMessage.Input, payload);
+        void IPeerReceiver.OnReliable(ReadOnlySpan<byte> payload) => Receive(SessionMessage.Operation, payload);
+        void IPeerReceiver.OnUnreliable(ReadOnlySpan<byte> payload) => Receive(SessionMessage.Correction, payload);
 
-        private void Receive(SessionMessage channel, ulong entity, long tick, ReadOnlySpan<byte> payload)
+        private void Receive(SessionMessage channel, ReadOnlySpan<byte> payload)
         {
             if (IsCompleted) return;
-            if (channel != SessionMessage.Correction && payload.Length > SessionCodec.RecordCapacity)
+            if (channel == SessionMessage.Operation && payload.Length > SessionCodec.RecordCapacity)
             { ++InvalidMessages; return; }
             if (_receivedCount == _received.Count) _received.Add(new Received());
             var item = _received[_receivedCount++];
             if (item.Bytes.Length < payload.Length) Array.Resize(ref item.Bytes, payload.Length);
             payload.CopyTo(item.Bytes); item.Length = payload.Length;
-            item.Channel = channel; item.Entity = entity; item.Tick = tick;
+            item.Channel = channel;
         }
 
+        // Inputs drain after the batch's reliable records, so a control index that arrives with its spawn resolves.
         private void Drain()
         {
             for (var i = 0; i < _receivedCount; ++i)
-            {
-                var item = _received[i];
-                try
-                {
-                    if (item.Channel == SessionMessage.Correction) { ReadFragment(item.Bytes.AsSpan(0, item.Length)); continue; }
-                    var r = new SessionCodec.Reader(item.Bytes.AsSpan(0, item.Length));
-                    SessionCodec.Require(r.Battle == BattleId && r.Owner == _options.RemoteOwner);
-                    if (item.Channel == SessionMessage.Input)
-                    {
-                        SessionCodec.Require(r.Kind == SessionMessage.Input && item.Entity != 0 && r.Tick == item.Tick);
-                        var controls = SessionCodec.ReadInput(ref r); r.End();
-                        _remoteInputs.Add(new EntityId(item.Entity), item.Tick, controls);
-                    }
-                    else switch (r.Kind)
-                    {
-                        case SessionMessage.Hit:
-                            var hit = SessionCodec.ReadHit(ref r); r.End();
-                            _runner.Battle.Submit(new InboundHit(_options.RemoteOwner, hit)); break;
-                        case SessionMessage.Operation:
-                            var operation = SessionCodec.ReadOperation(ref r); r.End();
-                            _runner.Battle.Submit(_options.RemoteOwner, operation); break;
-                        case SessionMessage.Watermark:
-                            var watermark = new OwnerWatermark(r.Battle, r.Owner, r.Tick, r.U64()); r.End();
-                            _runner.Battle.Submit(_options.RemoteOwner, watermark); break;
-                        default: throw new FormatException("Wrong session channel.");
-                    }
-                }
-                catch (FormatException) { ++InvalidMessages; }
-            }
+                if (_received[i].Channel != SessionMessage.Input) DrainItem(_received[i]);
+            for (var i = 0; i < _receivedCount; ++i)
+                if (_received[i].Channel == SessionMessage.Input) DrainItem(_received[i]);
             _receivedCount = 0;
+        }
+
+        private void DrainItem(Received item)
+        {
+            try
+            {
+                if (item.Channel == SessionMessage.Correction) { ReadFragment(item.Bytes.AsSpan(0, item.Length)); return; }
+                if (item.Channel == SessionMessage.Input) { ReadInputs(item.Bytes.AsSpan(0, item.Length)); return; }
+                var r = new SessionCodec.Reader(item.Bytes.AsSpan(0, item.Length));
+                SessionCodec.Require(r.Battle == BattleId && r.Owner == _options.RemoteOwner);
+                switch (r.Kind)
+                {
+                    case SessionMessage.Hit:
+                        var hit = SessionCodec.ReadHit(ref r); r.End();
+                        _runner.Battle.Submit(new InboundHit(_options.RemoteOwner, hit)); break;
+                    case SessionMessage.Operation:
+                        var operation = SessionCodec.ReadOperation(ref r); r.End();
+                        if (Spawns(operation)) _remoteControls[_nextRemoteControl++] = operation.EntityId;
+                        _runner.Battle.Submit(_options.RemoteOwner, operation); break;
+                    case SessionMessage.Watermark:
+                        var watermark = new OwnerWatermark(r.Battle, r.Owner, r.Tick, r.U64()); r.End();
+                        _runner.Battle.Submit(_options.RemoteOwner, watermark); break;
+                    default: throw new FormatException("Wrong session channel.");
+                }
+            }
+            catch (FormatException) { ++InvalidMessages; }
+        }
+
+        // A record whose index has no spawn record yet is dropped; a later copy or refresh delivers it.
+        private void ReadInputs(ReadOnlySpan<byte> payload)
+        {
+            InputCodec.Read(payload, BattleId, _inputRecords);
+            foreach (var record in _inputRecords)
+                if (_remoteControls.TryGetValue(record.Index, out var entity))
+                    _remoteInputs.Add(entity, record.Tick, record.Controls.ToControls());
         }
 
         private void ReadFragment(ReadOnlySpan<byte> bytes)
@@ -266,7 +288,11 @@ namespace CombatSimulation.Runtime
         private readonly InputSchedule _localInputs = new InputSchedule(), _remoteInputs = new InputSchedule();
         private readonly List<Sample> _samples = new List<Sample>();
         private readonly byte[] _record = new byte[SessionCodec.RecordCapacity];
-        private readonly byte[] _fragment;
+        private readonly byte[] _fragment, _input;
+        private readonly ControlSender _controls = new ControlSender();
+        private readonly Dictionary<uint, EntityId> _remoteControls = new Dictionary<uint, EntityId>();
+        private readonly List<ControlRecord> _inputRecords = new List<ControlRecord>();
+        private uint _nextLocalControl, _nextRemoteControl;
         private readonly int _fragmentPayload;
         private readonly List<Received> _received = new List<Received>();
         private int _receivedCount;
@@ -283,8 +309,6 @@ namespace CombatSimulation.Runtime
             internal byte[] Bytes = Array.Empty<byte>();
             internal int Length;
             internal SessionMessage Channel;
-            internal ulong Entity;
-            internal long Tick;
         }
         private readonly struct Sample
         {
