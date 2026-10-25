@@ -48,6 +48,8 @@ namespace CombatSimulation.Runtime
             _correction = new byte[_peer.MaxUnreliablePayload];
             _input = new byte[_peer.MaxInputPayload];
             _arena = new CorrectionCodec.Arena(setup.Width, setup.Height);
+            _local = new StreamNames(SpawnDefinition);
+            _remote = new StreamNames(SpawnDefinition);
             _nextCorrectionMilliseconds = options.CorrectionIntervalMilliseconds;
         }
 
@@ -138,10 +140,6 @@ namespace CombatSimulation.Runtime
                 { _localInputs.Forget(item.EntityId); _remoteInputs.Forget(item.EntityId); _controls.Forget(item.EntityId); }
         }
 
-        // Ships and drones get control indices in spawn-operation order. Both peers count the same ordered stream.
-        private static bool Spawns(in OwnerOperation operation) => operation.Kind == OwnerOperationKind.DroneSpawn ||
-            (operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed);
-
         internal bool TryGetLocalControlIndex(EntityId entity, out uint index) => _controls.TryGetIndex(entity, out index);
 
         private void QueueControls(EntityId entity, long tick, PilotControls controls)
@@ -154,35 +152,24 @@ namespace CombatSimulation.Runtime
             _samples.Insert(index, new Sample(entity, tick, controls));
         }
 
-        // One reliable batch per tick: hits, then operations in sequence order. The batch is also the tick's watermark,
+        // One reliable batch per tick: operations in sequence order, then hits. The batch is also the tick's watermark,
         // "all my records through this tick are sent". A tick without records sends one only every HeartbeatTicks,
         // or every tick while a result is pending or final, so result agreement never waits for a heartbeat.
+        // Ships and drones get control indices in spawn-record order; the receiver counts the same ordered stream.
         private void SendBatch()
         {
             var hits = Snapshot.OutgoingHits;
             var operations = Snapshot.OutgoingOperations;
-            foreach (var operation in operations)
-            {
-                _lastOperation = operation.Sequence;
-                if (!Spawns(operation)) continue;
-                _controls.Register(operation.EntityId, (uint)_localBodies.Count);
-                _localBodies.Add(new ControlledBody(operation.EntityId, SpawnDefinition(operation)));
-            }
             var tick = Snapshot.Tick;
             if (hits.Length == 0 && operations.Length == 0 && !IsCompleted && !Snapshot.CandidateResult.IsCompleted &&
                 tick - _lastBatchTick < HeartbeatTicks) return;
-            _batchLength = SessionCodec.BatchHeader(_batch, BattleId, tick, _lastOperation);
-            foreach (var hit in hits) AppendRecord(SessionCodec.Hit(_record, tick, hit));
-            foreach (var operation in operations) AppendRecord(SessionCodec.Operation(_record, tick, operation));
-            _peer.QueueReliable(_batch.AsSpan(0, _batchLength));
+            var capacity = SessionCodec.Capacity(operations.Length + hits.Length);
+            if (_batch.Length < capacity) Array.Resize(ref _batch, Math.Max(capacity, _batch.Length * 2));
+            var bodies = _local.Bodies.Count;
+            var length = SessionCodec.WriteBatch(_batch, tick, operations, hits, _local, _remote);
+            for (var i = bodies; i < _local.Bodies.Count; ++i) _controls.Register(_local.Bodies[i].Entity, (uint)i);
+            _peer.QueueReliable(_batch.AsSpan(0, length));
             _lastBatchTick = tick;
-        }
-
-        private void AppendRecord(int length)
-        {
-            if (_batch.Length - _batchLength < length) Array.Resize(ref _batch, Math.Max(_batch.Length * 2, _batchLength + length));
-            _record.AsSpan(0, length).CopyTo(_batch.AsSpan(_batchLength));
-            _batchLength += length;
         }
 
         // The definition a spawn record names; both peers derive it from the same setup.
@@ -230,7 +217,7 @@ namespace CombatSimulation.Runtime
             {
                 ref readonly var body = ref bodies[_sortedBodies[i]];
                 var index = _sortedIndices[i];
-                var definition = _localBodies[(int)index].Definition;
+                var definition = _local.Bodies[(int)index].Definition;
                 if (!CorrectionCodec.Write(ref w, _arena, (uint)(index - previous - 1), body, definition, batch.GetTimers(body)))
                 {
                     if (empty) throw new InvalidOperationException("A correction body does not fit in one datagram.");
@@ -290,26 +277,22 @@ namespace CombatSimulation.Runtime
             catch (FormatException) { ++InvalidMessages; }
         }
 
-        // The first pass validates the whole batch, so a malformed batch submits nothing. Its operation sequences then
-        // stay missing, and every later watermark waits for them: the result cannot finalize over lost records.
+        // A batch is decoded whole before any record is submitted, so a malformed batch submits nothing. Its records
+        // named entities of the stream, so the stream stops there: every later batch is dropped too. Its operation
+        // sequences then stay missing, and the result cannot finalize over lost records.
         private void ReadBatch(ReadOnlySpan<byte> bytes)
         {
-            var check = SessionCodec.Reader.Batch(bytes, BattleId, _options.RemoteOwner);
-            while (check.NextRecord())
-                if (check.Kind == SessionMessage.Hit) SessionCodec.ReadHit(ref check); else SessionCodec.ReadOperation(ref check);
-            var r = SessionCodec.Reader.Batch(bytes, BattleId, _options.RemoteOwner);
-            while (r.NextRecord())
+            SessionCodec.Require(!_remoteStreamFaulted);
+            OwnerWatermark watermark;
+            try
             {
-                if (r.Kind == SessionMessage.Hit)
-                {
-                    _runner.Battle.Submit(new InboundHit(_options.RemoteOwner, SessionCodec.ReadHit(ref r)));
-                    continue;
-                }
-                var operation = SessionCodec.ReadOperation(ref r);
-                if (Spawns(operation)) _remoteBodies.Add(new ControlledBody(operation.EntityId, SpawnDefinition(operation)));
-                _runner.Battle.Submit(_options.RemoteOwner, operation);
+                watermark = SessionCodec.ReadBatch(bytes, BattleId, _options.RemoteOwner, _options.LocalOwner,
+                    _remote, _local, _receivedOperations, _receivedHits);
             }
-            _runner.Battle.Submit(_options.RemoteOwner, new OwnerWatermark(BattleId, _options.RemoteOwner, r.BatchTick, r.LastOperation));
+            catch (FormatException) { _remoteStreamFaulted = true; throw; }
+            foreach (var operation in _receivedOperations) _runner.Battle.Submit(_options.RemoteOwner, operation);
+            foreach (var hit in _receivedHits) _runner.Battle.Submit(new InboundHit(_options.RemoteOwner, hit));
+            _runner.Battle.Submit(_options.RemoteOwner, watermark);
         }
 
         // A record whose index has no spawn record yet is dropped; a later copy or refresh delivers it.
@@ -317,15 +300,15 @@ namespace CombatSimulation.Runtime
         {
             InputCodec.Read(payload, BattleId, _inputRecords);
             foreach (var record in _inputRecords)
-                if (record.Index < (uint)_remoteBodies.Count)
-                    _remoteInputs.Add(_remoteBodies[(int)record.Index].Entity, record.Tick, record.Controls.ToControls());
+                if (record.Index < (uint)_remote.Bodies.Count)
+                    _remoteInputs.Add(_remote.Bodies[(int)record.Index].Entity, record.Tick, record.Controls.ToControls());
         }
 
         // Each datagram is a complete correction for its bodies. Core drops a body that is not newer than the
         // correction it holds or applied, so a late or repeated datagram changes nothing.
         private void ReadCorrection(ReadOnlySpan<byte> payload)
         {
-            CorrectionCodec.Read(payload, BattleId, _options.RemoteOwner, _arena, _remoteBodies, _incomingCorrection, ref _timers);
+            CorrectionCodec.Read(payload, BattleId, _options.RemoteOwner, _arena, _remote.Bodies, _incomingCorrection, ref _timers);
             _runner.Battle.Submit(_options.RemoteOwner, _incomingCorrection);
             if (_incomingCorrection.Tick <= _lastCorrectionTick) return;
             _lastCorrectionTick = _incomingCorrection.Tick;
@@ -338,15 +321,16 @@ namespace CombatSimulation.Runtime
         private readonly PeerConnection _peer;
         private readonly InputSchedule _localInputs = new InputSchedule(), _remoteInputs = new InputSchedule();
         private readonly List<Sample> _samples = new List<Sample>();
-        private readonly byte[] _record = new byte[SessionCodec.RecordCapacity];
-        private byte[] _batch = new byte[SessionCodec.BatchHeaderCapacity + 16 * SessionCodec.RecordCapacity];
-        private int _batchLength;
+        private byte[] _batch = new byte[SessionCodec.Capacity(16)];
         private long _lastBatchTick = -HeartbeatTicks;
         private readonly byte[] _correction, _input;
         private readonly CorrectionCodec.Arena _arena;
         private readonly ControlSender _controls = new ControlSender();
-        // Indexed by control index: the spawn records of each owner in sequence order.
-        private readonly List<ControlledBody> _localBodies = new List<ControlledBody>(), _remoteBodies = new List<ControlledBody>();
+        // The names of each owner's reliable stream: control indices, bullet indices, hit and operation counts.
+        private readonly StreamNames _local, _remote;
+        private readonly List<OwnerOperation> _receivedOperations = new List<OwnerOperation>();
+        private readonly List<ResolvedHit> _receivedHits = new List<ResolvedHit>();
+        private bool _remoteStreamFaulted;
         private readonly List<ControlRecord> _inputRecords = new List<ControlRecord>();
         private readonly List<Received> _received = new List<Received>();
         private int _receivedCount;
@@ -354,7 +338,6 @@ namespace CombatSimulation.Runtime
         private int[] _sortedBodies = Array.Empty<int>();
         private uint[] _sortedIndices = Array.Empty<uint>();
         private PointDefenseTimers[] _timers = Array.Empty<PointDefenseTimers>();
-        private ulong _lastOperation;
         private long _nextCorrectionMilliseconds, _lastCorrectionTick = -1;
         private sealed class Received
         {

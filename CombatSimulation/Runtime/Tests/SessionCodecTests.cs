@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CombatSimulation.Core;
+using CombatSimulation.Network;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -10,85 +11,195 @@ namespace CombatSimulation.Runtime.Tests
     public class SessionCodecTests
     {
         [Test]
-        public void EveryOwnerOperationPreservesItsFullPayload()
+        public void EveryRecordKindRoundTripsAndNamesEntitiesByTheirStreamIndex()
         {
-            var battle = new BattleId(0x123456789abcdef0); var entity = new EntityId(1234);
+            var link = new Link();
+            var batch = link.Battle;
+            var ship = new EntityId(1234); var drone = new EntityId(5678); var bay = new DroneBayKey(new RosterId(99), 6);
             var pose = new SpawnPose(new Vec2(1.25f, -20.5f), 2.5f, new Vec2(-5, 7), -3);
-            var bay = new DroneBayKey(new RosterId(99), 6);
+            var shot = SpawnIdentity.CreateChild(ship, 127, 7, 3, 0);
+            var child = SpawnIdentity.CreateChild(shot, 125, 2, 0, 1);
+            // Batch tick 125: records 123-127 cover negative, zero and positive tick offsets.
             var operations = new[]
             {
-                OwnerOperation.RosterChange(battle, 20, 77, 123, entity,
+                OwnerOperation.RosterChange(batch, 20, 1, 123, ship,
                     new RosterRecord(new RosterId(99), 4, RosterStatus.Ready, RosterStatus.Active,
                         RosterTransitionReason.Deployed, 2, 5, 22.5f, 9.25f, 0.25f), pose),
-                OwnerOperation.DroneLaunch(battle, 20, 78, 124, entity, bay, new EntityId(15), pose),
-                OwnerOperation.Remove(battle, 20, 79, 125, entity, RemovalReason.Death, bay),
-                OwnerOperation.Remove(battle, 20, 80, 126, entity, RemovalReason.Expiry),
-                OwnerOperation.BulletFired(battle, 20, 81, 127, entity, new EntityId(15), 7, 3, 5),
+                OwnerOperation.DroneLaunch(batch, 20, 2, 124, drone, bay, ship, pose),
+                OwnerOperation.BulletFired(batch, 20, 3, 127, shot, ship, 7, 3, 0),
+                OwnerOperation.BulletFired(batch, 20, 4, 125, child, shot, 2, 0, 1),
+                OwnerOperation.RetreatStarted(batch, 20, 5, 125, ship),
+                OwnerOperation.Remove(batch, 20, 6, 125, drone, RemovalReason.Death, bay),
+                OwnerOperation.Remove(batch, 20, 7, 126, shot, RemovalReason.Expiry),
             };
-            var bytes = new byte[SessionCodec.BatchHeaderCapacity + SessionCodec.RecordCapacity];
-            foreach (var expected in operations)
+            // A removed bullet can still attack in its own batch. An end record is one tick ahead.
+            var hits = new[]
             {
-                // Batch tick 125: records 123-127 cover negative, zero and positive tick offsets.
-                var header = SessionCodec.BatchHeader(bytes, battle, 125, 81);
-                var count = header + SessionCodec.Operation(bytes.AsSpan(header), 125, expected);
-                var r = SessionCodec.Reader.Batch(bytes.AsSpan(0, count), battle, 20);
-                Assert.AreEqual(125, r.BatchTick); Assert.AreEqual(81UL, r.LastOperation);
-                Assert.IsTrue(r.NextRecord()); Assert.AreEqual(SessionMessage.Operation, r.Kind);
-                var actual = SessionCodec.ReadOperation(ref r);
-                Assert.IsFalse(r.NextRecord());
-                Assert.AreEqual(expected, actual);
-                for (var size = 0; size < count; ++size)
-                {
-                    if (size == header) continue; // A batch without records is valid.
-                    var length = size;
-                    Assert.Throws<FormatException>(() => ReadBatch(bytes, length, battle));
-                }
-            }
-        }
+                new ResolvedHit(batch, 125, shot, 20, 7, link.Target, 10, 3, HitContactState.Start, HitImpactKind.Energy, 8.125f, 1),
+                new ResolvedHit(batch, 126, ship, 20, -1, link.Target, 10, 0, HitContactState.End, HitImpactKind.DamageOverTime, 40, 2),
+                new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 1, HitContactState.Start, HitImpactKind.Impact, 0, 3),
+            };
+            var bytes = link.Write(125, operations, hits);
+            var scan = new List<SessionCodec.ScannedRecord>();
+            var watermark = link.Read(bytes, out var actualOperations, out var actualHits, scan);
+            Assert.AreEqual(125, watermark.Tick); Assert.AreEqual(7UL, watermark.OperationSequence);
+            Assert.AreEqual(20, watermark.Owner); Assert.AreEqual(batch, watermark.BattleId);
+            CollectionAssert.AreEqual(operations, actualOperations);
+            CollectionAssert.AreEqual(hits, actualHits);
 
-        [TestCase(HitImpactKind.Impact)] [TestCase(HitImpactKind.Energy)] [TestCase(HitImpactKind.DamageOverTime)]
-        public void HitsPreserveDamageAuthorityAndSequence(HitImpactKind kind)
-        {
-            var expected = new ResolvedHit(new BattleId(99), 123, new EntityId(4321), 20, -1, new EntityId(5678),
-                10, 3, HitContactState.End, kind, 8.125f, 987);
-            var bytes = new byte[200]; var count = HitBatch(bytes, expected, 122); // An end record is one tick ahead.
-            var r = SessionCodec.Reader.Batch(bytes.AsSpan(0, count), new BattleId(99), 20);
-            Assert.IsTrue(r.NextRecord()); Assert.AreEqual(SessionMessage.Hit, r.Kind);
-            var actual = SessionCodec.ReadHit(ref r);
-            Assert.IsFalse(r.NextRecord());
-            Assert.AreEqual(expected, actual);
+            // Both peers name the same bodies; the removed bullet has no name after the batch, the child keeps age 0.
+            Assert.AreEqual(2, link.ReceiverPeer.Bodies.Count); Assert.AreEqual(bay, link.ReceiverPeer.Bodies[1].Bay);
+            Assert.IsFalse(link.ReceiverPeer.TryGetBullet(1, out _)); Assert.IsFalse(link.SenderOwn.TryGetBullet(shot, out _));
+            Assert.IsTrue(link.ReceiverPeer.TryGetBullet(0, out var named)); Assert.AreEqual(child, named);
+
+            // Sizes the plan expected: bullet spawn about 5 bytes, removal about 4, hit about 11.
+            CollectionAssert.AreEqual(new[] { SessionCodec.RecordKind.Roster, SessionCodec.RecordKind.DroneLaunch,
+                SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.Retreat,
+                SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Hit,
+                SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
+            Assert.LessOrEqual(scan[2].Bits, 40); Assert.LessOrEqual(scan[6].Bits, 32); Assert.LessOrEqual(scan[7].Bits, 88);
+            Assert.AreEqual(RemovalReason.Expiry, scan[6].RemovalReason);
+
+            // A later hit cannot name the removed bullet.
+            Assert.Throws<InvalidOperationException>(() => link.Write(126, Array.Empty<OwnerOperation>(), new[]
+            {
+                new ResolvedHit(batch, 126, shot, 20, 7, link.Target, 10, 3, HitContactState.Start, HitImpactKind.Energy, 1, 4),
+            }));
         }
 
         [Test]
-        public void BatchesKeepRecordOrderAndRejectWrongVersionBattleAndTicks()
+        public void BatchesRejectWrongVersionTicksKindsAndUnknownNames()
         {
-            var battle = new BattleId(0x7700000005);
-            var hit = new ResolvedHit(battle, 10, new EntityId(1), 20, 0, new EntityId(2), 10, 0,
-                HitContactState.Start, HitImpactKind.Impact, 3, 1);
-            var operation = OwnerOperation.Remove(battle, 20, 4, 10, new EntityId(3), RemovalReason.Expiry);
-            var bytes = new byte[400];
-            var count = SessionCodec.BatchHeader(bytes, battle, 10, 4);
-            count += SessionCodec.Hit(bytes.AsSpan(count), 10, hit);
-            count += SessionCodec.Operation(bytes.AsSpan(count), 10, operation);
-            var r = SessionCodec.Reader.Batch(bytes.AsSpan(0, count), battle, 20);
-            Assert.IsTrue(r.NextRecord()); Assert.AreEqual(hit, SessionCodec.ReadHit(ref r));
-            Assert.IsTrue(r.NextRecord()); Assert.AreEqual(operation, SessionCodec.ReadOperation(ref r));
-            Assert.IsFalse(r.NextRecord());
-
-            // Only the low 32 bits of the battle travel; a different low half is rejected.
-            Assert.Throws<FormatException>(() => ReadBatch(bytes, count, new BattleId(0x7700000006)));
-            bytes[0] = 1;
-            Assert.Throws<FormatException>(() => ReadBatch(bytes, count, battle));
-            // A record before tick 0.
-            count = SessionCodec.BatchHeader(bytes, battle, 2, 0);
-            count += SessionCodec.Hit(bytes.AsSpan(count), 20, hit); // Offset −10 from batch tick 2.
-            Assert.Throws<FormatException>(() => ReadBatch(bytes, count, battle));
+            var link = new Link();
             // An empty batch is a watermark only.
-            count = SessionCodec.BatchHeader(bytes, battle, long.MaxValue - 6, ulong.MaxValue);
-            r = SessionCodec.Reader.Batch(bytes.AsSpan(0, count), battle, 20);
-            Assert.AreEqual(long.MaxValue - 6, r.BatchTick); Assert.AreEqual(ulong.MaxValue, r.LastOperation);
-            Assert.IsFalse(r.NextRecord());
+            var watermark = link.Read(link.Write(long.MaxValue - 6, Array.Empty<OwnerOperation>(), Array.Empty<ResolvedHit>()), out _, out _);
+            Assert.AreEqual(long.MaxValue - 6, watermark.Tick); Assert.AreEqual(0UL, watermark.OperationSequence);
+
+            var bytes = new Link().Write(10, new[] { Deploy(link.Battle) }, Array.Empty<ResolvedHit>());
+            bytes[0] = 2;
+            Assert.Throws<FormatException>(() => new Link().Read(bytes, out _, out _));
+            // The header's last sequence must match the records.
+            bytes = new Link().Write(10, new[] { Deploy(link.Battle) }, Array.Empty<ResolvedHit>());
+            var other = new Link(); other.ReceiverPeer.LastOperation = 1;
+            Assert.Throws<FormatException>(() => other.Read(bytes, out _, out _));
+
+            // A record before tick 0, kind 0 and kind 7.
+            Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 4, Zigzag(-3)), out _, out _));
+            Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 0, 0), out _, out _));
+            Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 7, 0), out _, out _));
+
+            // With ship 0 named: a hit on an unknown target index, a NaN amount, a removal of an unknown bullet age,
+            // the never-sent reason Unconfirmed, an unknown retreat ship.
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 5, 1)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, float.NaN)), out _, out _));
+            Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 1), 1), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 4, 0, (ref BitWriter w) =>
+            { w.WriteBool(true); w.WriteBits((ulong)RemovalReason.Expiry, 3); w.WriteVarUInt(0); }, 2), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 4, 0, (ref BitWriter w) =>
+            { w.WriteBool(false); w.WriteBits((ulong)RemovalReason.Unconfirmed, 3); w.WriteVarUInt(0); }, 2), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 6, 0, (ref BitWriter w) => w.WriteVarUInt(1), 2), out _, out _));
+            // A roster ship has no bay, so a removal cannot name it.
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 4, 0, (ref BitWriter w) =>
+            { w.WriteBool(false); w.WriteBits((ulong)RemovalReason.Death, 3); w.WriteVarUInt(0); }, 2), out _, out _));
+
+            // The sender refuses records its streams cannot name, and entity IDs that are not derived from the record.
+            var ship = new EntityId(77);
+            Assert.Throws<InvalidOperationException>(() => new Link().Write(10, Array.Empty<OwnerOperation>(), new[]
+            { new ResolvedHit(link.Battle, 10, ship, 20, 0, link.Target, 10, 0, HitContactState.Start, HitImpactKind.Impact, 1, 1) }));
+            Assert.Throws<InvalidOperationException>(() => new Link().Write(10, new[]
+            { OwnerOperation.Remove(link.Battle, 20, 1, 10, ship, RemovalReason.Expiry) }, Array.Empty<ResolvedHit>()));
+            var named = new Link(); named.Write(10, new[] { Deploy(link.Battle) }, Array.Empty<ResolvedHit>());
+            Assert.Throws<InvalidOperationException>(() => named.Write(11, new[]
+            { OwnerOperation.BulletFired(link.Battle, 20, 2, 11, new EntityId(5), ship, 0, 0, 0) }, Array.Empty<ResolvedHit>()));
+            Assert.Throws<InvalidOperationException>(() => new Link().Write(10, new[]
+            { OwnerOperation.RetreatStarted(link.Battle, 20, 1, 10, ship) }, Array.Empty<ResolvedHit>()));
+
+            Link Deployed()
+            {
+                var deployed = new Link();
+                deployed.Read(deployed.Write(10, new[] { Deploy(link.Battle) }, Array.Empty<ResolvedHit>()), out _, out _);
+                return deployed;
+            }
+
+            void Hit(ref BitWriter w, ulong target, float amount)
+            {
+                w.WriteBool(false); w.WriteVarUInt(0); w.WriteVarUInt(target); w.WriteVarUInt(0); w.WriteVarUInt(0); w.WriteBits(0, 4);
+                w.WriteBits(unchecked((uint)BitConverter.SingleToInt32Bits(amount)), 32);
+            }
         }
+
+        private static OwnerOperation Deploy(BattleId battle) => OwnerOperation.RosterChange(battle, 20, 1, 10, new EntityId(77),
+            new RosterRecord(new RosterId(99), 1, RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0));
+
+        // Every cut of a batch either throws or reads a prefix of its records; it never misreads one.
+        [Test]
+        public void TruncatedBatchesNeverMisreadARecord()
+        {
+            var link = new Link(); var ship = new EntityId(1234);
+            var shot = SpawnIdentity.CreateChild(ship, 10, 0, 0, 0);
+            var operations = new[]
+            {
+                OwnerOperation.RosterChange(link.Battle, 20, 1, 10, ship, new RosterRecord(new RosterId(99), 1,
+                    RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0)),
+                OwnerOperation.BulletFired(link.Battle, 20, 2, 10, shot, ship, 0, 0, 0),
+            };
+            var hits = new[] { new ResolvedHit(link.Battle, 10, shot, 20, 0, link.Target, 10, 0, HitContactState.Start, HitImpactKind.Energy, 3, 1) };
+            var bytes = link.Write(10, operations, hits);
+            for (var size = 0; size < bytes.Length; ++size)
+            {
+                var cut = new Link();
+                try { cut.Read(bytes.AsSpan(0, size).ToArray(), out var ops, out var read); CollectionAssert.AreEqual(operations, ops); Assert.AreEqual(0, read.Count); }
+                catch (FormatException) { }
+            }
+        }
+
+        // A sender (owner 20) and a receiver (owner 10) with one ship of the receiver's stream deployed on both sides.
+        private sealed class Link
+        {
+            internal readonly BattleId Battle = new BattleId(0x123456789abcdef0);
+            internal readonly EntityId Target = new EntityId(42);
+            internal readonly StreamNames SenderOwn = Names(), SenderPeer = Names(), ReceiverPeer = Names(), ReceiverOwn = Names();
+            private readonly List<OwnerOperation> _operations = new List<OwnerOperation>();
+            private readonly List<ResolvedHit> _hits = new List<ResolvedHit>();
+
+            internal Link()
+            {
+                var deploy = OwnerOperation.RosterChange(Battle, 10, 1, 0, Target, new RosterRecord(new RosterId(1), 1,
+                    RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0));
+                SenderPeer.AddBody(deploy); ReceiverOwn.AddBody(deploy);
+            }
+
+            internal byte[] Write(long tick, OwnerOperation[] operations, ResolvedHit[] hits)
+            {
+                var buffer = new byte[SessionCodec.Capacity(operations.Length + hits.Length)];
+                var length = SessionCodec.WriteBatch(buffer, tick, operations, hits, SenderOwn, SenderPeer);
+                return buffer.AsSpan(0, length).ToArray();
+            }
+
+            internal OwnerWatermark Read(byte[] bytes, out List<OwnerOperation> operations, out List<ResolvedHit> hits,
+                List<SessionCodec.ScannedRecord> scan = null)
+            {
+                operations = _operations; hits = _hits;
+                SessionCodec.ReadBatch(bytes, Battle, 20, 10, null, null, null, null, scan);
+                return SessionCodec.ReadBatch(bytes, Battle, 20, 10, ReceiverPeer, ReceiverOwn, _operations, _hits);
+            }
+
+            private static StreamNames Names() => new StreamNames((in OwnerOperation _) => null);
+        }
+
+        private static ulong Zigzag(long offset) => unchecked((ulong)((offset << 1) ^ (offset >> 63)));
+
+        // A hand-written batch: header, then one record of the kind with the tick offset code and fields.
+        private static byte[] Raw(long tick, ulong kind, ulong offset, BitAction fields = null, ulong lastOperation = 1)
+        {
+            var bytes = new byte[64]; var w = new BitWriter(bytes);
+            w.WriteBits(SessionCodec.Version, 8); w.WriteVarUInt((ulong)tick); w.WriteVarUInt(lastOperation);
+            w.WriteBits(kind, 3); w.WriteVarUInt(offset);
+            fields?.Invoke(ref w);
+            return bytes.AsSpan(0, w.Finish()).ToArray();
+        }
+
+        private delegate void BitAction(ref BitWriter w);
 
         [Test]
         public void CorrectionsKeepBodiesOnTheirGridsAndEscapeFastVelocities()
@@ -207,20 +318,6 @@ namespace CombatSimulation.Runtime.Tests
         }
 
         [Test]
-        public void InvalidFloatAndTrailingDataAreRejected()
-        {
-            var hit = new ResolvedHit(new BattleId(1), 5, new EntityId(1), 20, 0, new EntityId(2), 10, 0,
-                HitContactState.Start, HitImpactKind.Impact, float.NaN, 1);
-            var bytes = new byte[200]; var count = HitBatch(bytes, hit, 5);
-            Assert.Throws<FormatException>(() => ReadBatch(bytes, count, new BattleId(1)));
-            hit = new ResolvedHit(new BattleId(1), 5, new EntityId(1), 20, 0, new EntityId(2), 10, 0,
-                HitContactState.Start, HitImpactKind.Impact, 1, 1);
-            count = HitBatch(bytes, hit, 5);
-            bytes[count] = 0; // Not a record kind.
-            Assert.Throws<FormatException>(() => ReadBatch(bytes, count + 1, new BattleId(1)));
-        }
-
-        [Test]
         public void QuantizedCoursesUseWholeDegreesWithHysteresis()
         {
             Assert.AreEqual(10, Course(10.4)); Assert.AreEqual(11, Course(10.6));
@@ -280,18 +377,5 @@ namespace CombatSimulation.Runtime.Tests
         private static int Course(double degrees, int? held = null) => QuantizedControls.From(
             PilotControls.Create((float)(degrees * Math.PI / 180), 0, 0),
             new QuantizedControls(held ?? 0, 0, 0), held.HasValue).Course;
-
-        private static int HitBatch(byte[] bytes, in ResolvedHit hit, long batchTick)
-        {
-            var count = SessionCodec.BatchHeader(bytes, hit.BattleId, batchTick, 0);
-            return count + SessionCodec.Hit(bytes.AsSpan(count), batchTick, hit);
-        }
-
-        private static void ReadBatch(byte[] bytes, int length, BattleId battle)
-        {
-            var r = SessionCodec.Reader.Batch(bytes.AsSpan(0, length), battle, 20);
-            while (r.NextRecord())
-                if (r.Kind == SessionMessage.Hit) SessionCodec.ReadHit(ref r); else SessionCodec.ReadOperation(ref r);
-        }
     }
 }

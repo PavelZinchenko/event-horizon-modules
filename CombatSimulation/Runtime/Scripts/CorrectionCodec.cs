@@ -7,11 +7,14 @@ using CombatSimulation.Physics;
 namespace CombatSimulation.Runtime
 {
     // A ship or drone by control index. Both peers know its definition from the spawn record, so no counts travel.
+    // A drone also keeps its bay from the launch record, so its removal names no bay.
     internal readonly struct ControlledBody
     {
         internal readonly EntityId Entity;
         internal readonly ShipDefinition Definition;
-        internal ControlledBody(EntityId entity, ShipDefinition definition) { Entity = entity; Definition = definition; }
+        internal readonly DroneBayKey? Bay;
+        internal ControlledBody(EntityId entity, ShipDefinition definition, DroneBayKey? bay = null)
+        { Entity = entity; Definition = definition; Bay = bay; }
     }
 
     // Correction datagram payload (network plan, G1), a bit stream (BitWriter):

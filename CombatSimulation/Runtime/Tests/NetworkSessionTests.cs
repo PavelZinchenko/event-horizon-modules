@@ -106,6 +106,18 @@ namespace CombatSimulation.Runtime.Tests
             Assert.AreEqual(0, SessionFixtures.Owned(pair.B, 10).Throttle);
         }
 
+        // A malformed batch submits nothing. The stream names entities by count, so every later batch is dropped too.
+        [Test]
+        public void AMalformedBatchStopsTheReliableStream()
+        {
+            var pair = new SessionFixtures.Pair(); pair.Start();
+            ((IPeerReceiver)pair.B).OnReliable(new byte[] { SessionCodec.Version, 0, 0, 0xff }); // record kind 0
+            pair.Step();
+            Assert.AreEqual(1, pair.B.InvalidMessages);
+            pair.Run(10);
+            Assert.Greater(pair.B.InvalidMessages, 1);
+        }
+
         [Test]
         public void BothCopiesFlyTheSameQuantizedFrames()
         {
