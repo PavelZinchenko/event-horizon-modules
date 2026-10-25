@@ -8,8 +8,8 @@ namespace CombatSimulation.Network.Tests
     {
         [TestCase(0)]
         [TestCase(1)]
-        [TestCase(1190)] // With its 2-byte prefix, fills one datagram exactly.
-        [TestCase(1191)]
+        [TestCase(1191)] // With its 2-byte prefix, fills one datagram exactly.
+        [TestCase(1192)]
         [TestCase(85000)]
         public void LoopbackDeliversCompleteMessagesIncludingMultipleWindows(int size)
         {
@@ -99,6 +99,7 @@ namespace CombatSimulation.Network.Tests
             a.QueueReliable(new byte[] { 2 }); a.Update(0);
             a.TrySendInput(new byte[] { 3 });
             a.TrySendUnreliable(new byte[] { 4 });
+            a.Update(0);
             b.Update(0);
             Assert.AreEqual(0, receiver.Reliable.Count);
             Assert.AreEqual(1, receiver.Inputs.Count);
@@ -178,15 +179,18 @@ namespace CombatSimulation.Network.Tests
         }
 
         [Test]
-        public void InputDatagramsArriveWholeOnTheirOwnChannel()
+        public void InputSectionsArriveWholeOnTheirOwnChannel()
         {
             var link = new TestLink();
             var receiver = new RecordingReceiver();
             var a = new PeerConnection(link.A, new CountingReceiver(), true, 64);
             var b = new PeerConnection(link.B, receiver, false, 64);
-            Assert.AreEqual(60, a.MaxInputPayload);
-            var payload = Payload(60, 5);
+            Assert.AreEqual(61, a.MaxInputPayload); // 64 bytes: version byte, 2-byte section header.
+            var payload = Payload(61, 5);
+            // The second section does not fit, so the first datagram leaves before it is queued.
             Assert.IsTrue(a.TrySendInput(payload)); Assert.IsTrue(a.TrySendInput(Array.Empty<byte>()));
+            Assert.AreEqual(64, link.A.LargestDatagram);
+            a.Update(0);
             b.Update(0);
             Assert.AreEqual(2, receiver.Inputs.Count);
             CollectionAssert.AreEqual(payload, receiver.Inputs[0]);
@@ -234,13 +238,13 @@ namespace CombatSimulation.Network.Tests
             var peer = new PeerConnection(link.B, receiver, true, 64);
             var malformed = new List<byte[]>
             {
-                Array.Empty<byte>(), new byte[] { 2, 1, 0 }, new byte[] { 3, 1, 0, 0 },
-                new byte[] { 2, 99, 0, 0 }, new byte[] { 2, 1, 1, 0 }, new byte[65],
-                new byte[] { 2, 3, 0, 0 }, new byte[] { 2, 2, 4, 0, 0, 0, 0, 0 } // Reliable sequence without data.
+                Array.Empty<byte>(), new byte[] { 3 }, new byte[] { 2, 9, 7 }, // No section; version 2.
+                new byte[] { 3, 8, 7 }, new byte[] { 3, 15, 7 }, // Kinds 0 and 7.
+                new byte[] { 3, 17, 7 }, new byte[] { 3, 0x81, 0 }, new byte[65], // Truncated; non-minimal header; oversized.
+                new byte[] { 3, 9, 7, 17, 7 }, // A valid input section, then a truncated one: neither is delivered.
+                // Framing is valid, contents are not: reliable sequence without data, ack without mask, short probe.
+                new byte[] { 3, 34, 0, 0, 0, 0 }, new byte[] { 3, 35, 0, 0, 0, 0 }, new byte[] { 3, 20, 0, 0 },
             };
-            var input = new byte[24];
-            PacketFormat.Begin(input, PacketKind.Input, 30); // Declared length exceeds the datagram.
-            malformed.Add(input);
             foreach (var bytes in malformed) link.B.Inject(bytes, 0);
             peer.QueueReliable(new byte[] { 42 });
             peer.Update(0);
@@ -250,16 +254,72 @@ namespace CombatSimulation.Network.Tests
         }
 
         [Test]
+        public void SectionsOfOneUpdateShareOneDatagram()
+        {
+            var link = new TestLink();
+            var receiver = new RecordingReceiver();
+            var a = new PeerConnection(link.A, new CountingReceiver(), true);
+            var b = new PeerConnection(link.B, receiver, false);
+            Pump(link, a, b, 10);
+            var sent = link.A.Datagrams;
+            a.TrySendInput(new byte[] { 1 }); a.TrySendUnreliable(new byte[] { 2 }); a.QueueReliable(new byte[] { 3 });
+            Pump(link, a, b, 1);
+            Assert.AreEqual(1, link.A.Datagrams - sent, "Input, unreliable and reliable data share one datagram.");
+            Assert.AreEqual(1, receiver.Inputs.Count); Assert.AreEqual(1, receiver.Unreliable.Count); Assert.AreEqual(1, receiver.Reliable.Count);
+        }
+
+        [Test]
+        public void AcknowledgementWaitsForData()
+        {
+            var link = new TestLink();
+            var receiver = new RecordingReceiver();
+            var a = new PeerConnection(link.A, new CountingReceiver(), true);
+            var b = new PeerConnection(link.B, receiver, false);
+            Pump(link, a, b, 10);
+            a.QueueReliable(new byte[] { 1 }); a.Update(link.Now);
+            var sent = link.B.Datagrams;
+            b.Update(link.Now);
+            Assert.AreEqual(sent, link.B.Datagrams, "An acknowledgement alone is held.");
+            b.TrySendInput(new byte[] { 2 }); b.Update(link.Now);
+            Assert.AreEqual(sent + 1, link.B.Datagrams);
+            a.Update(link.Now);
+            Assert.AreEqual(0, a.PendingReliablePackets, "The acknowledgement travelled with the input.");
+            a.QueueReliable(new byte[] { 3 }); a.Update(link.Now); b.Update(link.Now);
+            Assert.AreEqual(sent + 1, link.B.Datagrams);
+            link.Now += 0.02; b.Update(link.Now);
+            Assert.AreEqual(sent + 1, link.B.Datagrams);
+            link.Now += 0.02; b.Update(link.Now);
+            Assert.AreEqual(sent + 2, link.B.Datagrams, "A held acknowledgement leaves after 1.5 ticks.");
+        }
+
+        [Test]
+        public void RefusedDatagramReturnsNewPacketsToTheUnsentStream()
+        {
+            var link = new TestLink();
+            var receiver = new RecordingReceiver();
+            var a = new PeerConnection(link.A, new CountingReceiver(), true, 64);
+            var b = new PeerConnection(link.B, receiver, false, 64);
+            Pump(link, a, b, 10);
+            link.A.BlockSend = true;
+            a.QueueReliable(new byte[] { 1 }); Pump(link, a, b, 1);
+            a.QueueReliable(new byte[] { 2 }); Pump(link, a, b, 1);
+            Assert.AreEqual(1, a.PendingReliablePackets, "No sequence for bytes that never left.");
+            link.A.BlockSend = false;
+            Pump(link, a, b, 10);
+            Assert.AreEqual(1, link.A.ReliableTransmissions);
+            Assert.AreEqual(2, receiver.Reliable.Count);
+        }
+
+        [Test]
         public void InvalidReliablePacketDoesNotConsumeASequence()
         {
             var link = new TestLink();
             var receiver = new CountingReceiver();
             var a = new PeerConnection(link.A, new CountingReceiver(), true, 64);
             var b = new PeerConnection(link.B, receiver, false, 64);
-            var bytes = new byte[8];
-            var writer = PacketFormat.Begin(bytes, PacketKind.Reliable, 4);
-            writer.WriteUInt32(0); // A sequence without data.
-            link.B.Inject(bytes, 0);
+            var datagram = new OutgoingDatagram(64);
+            new ByteWriter(datagram.Add(PacketKind.Reliable, 4, true)).WriteUInt32(0); // A sequence without data.
+            link.B.Inject(datagram.Bytes, 0);
             a.QueueReliable(new byte[] { 8 });
             Pump(link, a, b, 100);
             Assert.AreEqual(1, b.InvalidPackets);
@@ -273,10 +333,10 @@ namespace CombatSimulation.Network.Tests
             var link = new TestLink();
             var receiver = new RecordingReceiver();
             var b = new PeerConnection(link.B, receiver, false);
-            var bytes = new byte[10];
-            var writer = PacketFormat.Begin(bytes, PacketKind.Reliable, 6);
+            var datagram = new OutgoingDatagram(64);
+            var writer = new ByteWriter(datagram.Add(PacketKind.Reliable, 6, true));
             writer.WriteUInt32(0); writer.WriteByte(0x80); writer.WriteByte(0); // Non-minimal length prefix.
-            link.B.Inject(bytes, 0);
+            link.B.Inject(datagram.Bytes, 0);
             b.Update(0);
             Assert.IsTrue(b.IsFaulted);
             Assert.AreEqual(0, receiver.Reliable.Count);
@@ -288,8 +348,8 @@ namespace CombatSimulation.Network.Tests
         {
             var link = new TestLink();
             var peer = new PeerConnection(link.A, new CountingReceiver(), true, 64);
-            Assert.Throws<ArgumentOutOfRangeException>(() => peer.TrySendInput(new byte[61]));
-            Assert.Throws<ArgumentOutOfRangeException>(() => peer.TrySendUnreliable(new byte[61]));
+            Assert.Throws<ArgumentOutOfRangeException>(() => peer.TrySendInput(new byte[62]));
+            Assert.Throws<ArgumentOutOfRangeException>(() => peer.TrySendUnreliable(new byte[62]));
             peer.Update(3);
             Assert.Throws<ArgumentOutOfRangeException>(() => peer.Update(2));
             Assert.Throws<ArgumentOutOfRangeException>(() => peer.Update(double.NaN));

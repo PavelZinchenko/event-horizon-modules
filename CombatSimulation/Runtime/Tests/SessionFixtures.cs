@@ -56,23 +56,43 @@ namespace CombatSimulation.Runtime.Tests
             internal Transport Other;
             internal bool Hold;
             internal bool DropUnreliable, DropInput;
-            internal int InputDatagrams, ReliableDatagrams, UnreliableDatagrams;
+            // Sections; reliable packets count first sends only.
+            internal int InputSections, ReliablePackets, UnreliableSections;
             private readonly byte[][] _packets = new byte[256][];
             private readonly int[] _lengths = new int[256];
             private int _read, _count;
             private uint _nextReliable;
             internal Transport() { for (var i = 0; i < _packets.Length; ++i) _packets[i] = new byte[1200]; }
+            // Packet format version 3, read from its public layout: a version byte, then sections. A section is a LEB128
+            // header (payload length * 8 + kind), then the payload. Kinds: input 1, reliable 2, unreliable 6.
+            // Dropped kinds are cut out of the datagram; the rest is delivered.
             public bool TrySend(ReadOnlySpan<byte> data)
             {
-                // PacketKind.Unreliable is read from the public framing's fixed kind byte.
-                if (data[1] == 6) { ++UnreliableDatagrams; if (DropUnreliable) return true; }
-                if (data[1] == 1) { ++InputDatagrams; if (DropInput) return true; }
-                // Counts first sends only: the reliable sequence follows the 4-byte packet header.
-                if (data[1] == 2 && BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4)) >= _nextReliable)
-                { ++ReliableDatagrams; _nextReliable = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4)) + 1; }
-                if (Other._count == _packets.Length) return false;
-                var index = (Other._read + Other._count++) % _packets.Length;
-                data.CopyTo(Other._packets[index]); Other._lengths[index] = data.Length; return true;
+                var full = Other._count == _packets.Length;
+                var index = (Other._read + Other._count) % _packets.Length;
+                var target = Other._packets[index];
+                var length = 1;
+                target[0] = data[0];
+                var reader = new ByteReader(data.Slice(1));
+                while (reader.Remaining != 0)
+                {
+                    var start = 1 + reader.Position;
+                    reader.ReadVarUInt(out var header);
+                    reader.ReadBytes((int)(header >> 3), out var payload);
+                    var kind = header & 7;
+                    var drop = false;
+                    if (kind == 6) { ++UnreliableSections; drop = DropUnreliable; }
+                    if (kind == 1) { ++InputSections; drop = DropInput; }
+                    if (kind == 2 && BinaryPrimitives.ReadUInt32LittleEndian(payload) >= _nextReliable)
+                    { ++ReliablePackets; _nextReliable = BinaryPrimitives.ReadUInt32LittleEndian(payload) + 1; }
+                    if (drop || full) continue;
+                    var section = data.Slice(start, 1 + reader.Position - start);
+                    section.CopyTo(target.AsSpan(length));
+                    length += section.Length;
+                }
+                if (full) return false;
+                if (length == 1) return true;
+                Other._lengths[index] = length; ++Other._count; return true;
             }
             public bool TryReceive(Span<byte> buffer, out int length)
             {

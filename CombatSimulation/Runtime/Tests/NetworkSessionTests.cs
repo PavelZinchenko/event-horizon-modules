@@ -139,8 +139,8 @@ namespace CombatSimulation.Runtime.Tests
         {
             var pair = new SessionFixtures.Pair(pilots: new SessionFixtures.Pilots { Enabled = true, Throttle = 0.5f });
             pair.Start(); pair.Run(50);
-            pair.TA.InputDatagrams = 0; pair.Run(100);
-            Assert.AreEqual(100 / ControlSender.RefreshTicks, pair.TA.InputDatagrams);
+            pair.TA.InputSections = 0; pair.Run(100);
+            Assert.AreEqual(100 / ControlSender.RefreshTicks, pair.TA.InputSections);
             Assert.AreEqual(SessionFixtures.Quantized(0.5f), SessionFixtures.Owned(pair.B, 10).Throttle);
         }
 
@@ -149,10 +149,10 @@ namespace CombatSimulation.Runtime.Tests
         {
             var pair = new SessionFixtures.Pair(); pair.Start(); pair.Run(3);
             var entity = SessionFixtures.Owned(pair.A, 10).Id;
-            pair.TA.InputDatagrams = 0;
+            pair.TA.InputSections = 0;
             pair.A.SubmitControls(entity, pair.A.Tick, PilotControls.Create(0.25f, 0.5f, 1));
             pair.Run(10);
-            Assert.AreEqual(ControlSender.Copies, pair.TA.InputDatagrams);
+            Assert.AreEqual(ControlSender.Copies, pair.TA.InputSections);
             Assert.AreEqual(SessionFixtures.Quantized(0.5f), SessionFixtures.Owned(pair.B, 10).Throttle);
 
             pair.TA.DropInput = true;
@@ -193,7 +193,7 @@ namespace CombatSimulation.Runtime.Tests
             for (var i = 0; i < 6; ++i) { pair.A.Deploy(new RosterId((uint)(1 + i)), 0); pair.B.Deploy(new RosterId((uint)(101 + i)), 0); }
             pair.Run(6);
             Assert.AreEqual(1, pair.A.SentCorrectionBatches);
-            Assert.AreEqual(2, pair.TA.UnreliableDatagrams);
+            Assert.AreEqual(2, pair.TA.UnreliableSections);
             Assert.AreEqual(6, observer.Count);
             Assert.AreEqual(1, pair.B.ReceivedCorrectionBatches);
             Assert.AreEqual(0, pair.B.InvalidMessages);
@@ -252,15 +252,15 @@ namespace CombatSimulation.Runtime.Tests
         public void TicksWithoutRecordsSendOnlyAHeartbeatBatch()
         {
             var pair = new SessionFixtures.Pair(); pair.Start(); pair.Run(10);
-            var before = pair.TA.ReliableDatagrams;
+            var before = pair.TA.ReliablePackets;
             pair.Run(50);
-            Assert.AreEqual(10, pair.TA.ReliableDatagrams - before);
+            Assert.AreEqual(10, pair.TA.ReliablePackets - before);
             // A pending result sends a batch every tick, so it never waits for a heartbeat.
             pair.TA.Hold = true; pair.A.Surrender(0, pair.A.Tick + 1); // A never sees B's watermark.
-            before = pair.TA.ReliableDatagrams;
+            before = pair.TA.ReliablePackets;
             pair.Run(10);
             Assert.IsTrue(pair.A.Snapshot.CandidateResult.IsCompleted); Assert.IsFalse(pair.A.IsCompleted);
-            Assert.GreaterOrEqual(pair.TA.ReliableDatagrams - before, 9, "Heartbeats alone would send 2-3.");
+            Assert.GreaterOrEqual(pair.TA.ReliablePackets - before, 9, "Heartbeats alone would send 2-3.");
         }
 
         [Test]
@@ -300,12 +300,14 @@ namespace CombatSimulation.Runtime.Tests
         public void ClockDrivenUpdatesUseTheExistingPacedClock()
         {
             var pair = new SessionFixtures.Pair();
-            pair.A.Pump(0); pair.B.Pump(0); pair.A.Pump(0); pair.B.Pump(0);
+            // Probes and replies alone wait 1.5 ticks for data, so the exchange ends near 0.06. 1 ms steps keep both
+            // transit times under 1 ms, so the offset estimate stays far below a tick.
+            for (var i = 0; i <= 70; ++i) { pair.A.Pump(0.001 * i); pair.B.Pump(0.001 * i); }
             Assert.IsTrue(pair.B.Clock.HasEstimate);
-            pair.A.StartClock(0, 0.1); pair.B.StartClock(0, 0.1);
+            pair.A.StartClock(0.07, 0.1); pair.B.StartClock(0.07, 0.1);
             pair.A.Update(0.08); pair.B.Update(0.08);
             Assert.AreEqual(0, pair.A.Tick);
-            pair.A.Update(0.2); pair.B.Update(0.2);
+            pair.A.Update(0.21); pair.B.Update(0.21); // Half a tick past tick 5, away from rounding at the boundary.
             Assert.AreEqual(6, pair.A.Tick); Assert.AreEqual(6, pair.B.Tick);
             Assert.That(pair.B.Clock.Rate, Is.InRange(0.98, 1.02));
         }

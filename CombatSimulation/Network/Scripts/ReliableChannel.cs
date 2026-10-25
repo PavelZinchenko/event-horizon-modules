@@ -3,61 +3,62 @@ using System.Collections.Generic;
 
 namespace CombatSimulation.Network
 {
-    // One ordered byte stream of length-prefixed messages, cut into datagrams. Sequence numbers count datagrams.
-    // Messages queued between two flushes share a datagram, and the unsent tail keeps filling while the window is full.
+    // One ordered byte stream of length-prefixed messages, cut into numbered packets. Sequence numbers count packets.
+    // A packet is cut from the unsent stream at its first send, to the space its datagram has left, and resent unchanged.
+    // So messages queued between two flushes share a packet, and the unsent stream keeps growing while the window is full.
     // Sequence arithmetic uses unsigned distances. The live window never spans half the sequence space.
     internal sealed class ReliableChannel
     {
         internal const int WindowSize = 64;
         private const int MaxPrefixSize = 5;
+        // A packet that cannot take all unsent bytes is cut only if it gets at least this many, or it starts a datagram.
+        private const int MinCut = 64;
 
-        internal ReliableChannel(ITransport transport, IPeerReceiver receiver, int datagramSize, uint initialSequence)
+        internal ReliableChannel(IPeerReceiver receiver, int datagramSize, uint initialSequence)
         {
-            _transport = transport;
             _receiver = receiver;
-            _datagramSize = datagramSize;
-            _dataOffset = PacketFormat.HeaderSize + PacketFormat.ReliableHeaderSize;
-            _dataCapacity = datagramSize - _dataOffset;
+            DataCapacity = PacketFormat.MaxPayload(datagramSize - PacketFormat.HeaderSize) - PacketFormat.SequenceSize;
             _sendBase = _nextSend = _ackFrontier = _receiveNext = initialSequence;
-            for (var i = 0; i < WindowSize; ++i) _received[i] = new ReceivedPacket(_dataCapacity);
+            for (var i = 0; i < WindowSize; ++i) _received[i] = new ReceivedPacket(DataCapacity);
         }
 
-        internal int PendingPackets => _pending.Count + (int)unchecked(_nextSend - _sendBase);
+        // The most stream bytes one packet carries: a datagram with only this section.
+        internal int DataCapacity { get; }
+        internal int PendingPackets => (int)unchecked(_nextSend - _sendBase) + (_unsentLength + DataCapacity - 1) / DataCapacity;
         internal bool IsFaulted { get; private set; }
+        internal bool AckDue => _ackDirty;
 
         internal void Queue(ReadOnlySpan<byte> message)
         {
             Span<byte> prefix = stackalloc byte[MaxPrefixSize];
             var writer = new ByteWriter(prefix);
             writer.WriteVarUInt((uint)message.Length);
-            var added = ((long)writer.Position + message.Length + _dataCapacity - 1) / _dataCapacity + 1;
-            if (PendingPackets + added >= int.MaxValue)
-                throw new InvalidOperationException("Reliable sequence space exhausted.");
-            Append(prefix.Slice(0, writer.Position));
-            Append(message);
+            if (message.Length > int.MaxValue - writer.Position - _unsentLength)
+                throw new InvalidOperationException("Reliable queue exhausted.");
+            Reserve(writer.Position + message.Length);
+            var end = _unsentStart + _unsentLength;
+            prefix.Slice(0, writer.Position).CopyTo(_unsent.AsSpan(end));
+            message.CopyTo(_unsent.AsSpan(end + writer.Position));
+            _unsentLength += writer.Position + message.Length;
         }
 
-        private void Append(ReadOnlySpan<byte> data)
+        private void Reserve(int count)
         {
-            while (!data.IsEmpty)
-            {
-                if (_tail == null || _tail.Length == _datagramSize)
-                {
-                    _tail = _pool.Count == 0 ? new SentPacket(_datagramSize) : _pool.Pop();
-                    _tail.Length = _dataOffset;
-                    _tail.Acknowledged = false;
-                    _pending.Enqueue(_tail);
-                }
-                var count = Math.Min(data.Length, _datagramSize - _tail.Length);
-                data.Slice(0, count).CopyTo(_tail.Buffer.AsSpan(_tail.Length));
-                _tail.Length += count;
-                data = data.Slice(count);
-            }
+            if (_unsent.Length - _unsentStart - _unsentLength >= count) return;
+            var required = _unsentLength + count;
+            var target = _unsent;
+            if (target.Length < required)
+                target = new byte[Math.Max(required, _unsent.Length <= int.MaxValue / 2 ? _unsent.Length * 2 : required)];
+            _unsent.AsSpan(_unsentStart, _unsentLength).CopyTo(target);
+            _unsent = target;
+            _unsentStart = 0;
         }
 
-        internal void Flush(double now, double resendSeconds, double fastResendSeconds)
+        // Writes due resends, then new packets, into the datagram as far as they fit. Written packets count as sent
+        // until Sent(false) takes them back. True: more is due; send the datagram and call again with an empty one.
+        internal bool Write(OutgoingDatagram datagram, double now, double resendSeconds, double fastResendSeconds)
         {
-            if (IsFaulted) return;
+            if (IsFaulted) return false;
             var outstanding = unchecked(_nextSend - _sendBase);
             var missing = unchecked(_ackFrontier - _sendBase);
             if (missing > outstanding) missing = 0;
@@ -66,37 +67,87 @@ namespace CombatSimulation.Network
                 var packet = _sent[unchecked(_sendBase + i) % WindowSize];
                 // The peer has acknowledged a later packet, so this one is probably lost.
                 var wait = i < missing ? fastResendSeconds : resendSeconds;
-                if (!packet.Acknowledged && now - packet.LastSent >= wait &&
-                    _transport.TrySend(packet.Buffer.AsSpan(0, packet.Length))) packet.LastSent = now;
-            }
-            while (_pending.Count != 0 && unchecked(_nextSend - _sendBase) < WindowSize)
-            {
-                var packet = _pending.Peek();
-                // The sequence is assigned at the first send, so an unsent tail can still take more messages.
-                packet.Sequence = _nextSend;
-                var header = PacketFormat.Begin(packet.Buffer, PacketKind.Reliable, packet.Length - PacketFormat.HeaderSize);
-                header.WriteUInt32(packet.Sequence);
-                if (!_transport.TrySend(packet.Buffer.AsSpan(0, packet.Length))) break;
-                _pending.Dequeue();
-                if (packet == _tail) _tail = null;
+                if (packet.Acknowledged || now - packet.LastSent < wait) continue;
+                if (!datagram.Fits(PacketFormat.SequenceSize + packet.Length)) return true;
+                WritePacket(datagram, packet);
+                packet.PreviousSent = packet.LastSent;
                 packet.LastSent = now;
+                _resent.Add(packet);
+            }
+            while (_unsentLength != 0 && unchecked(_nextSend - _sendBase) < WindowSize)
+            {
+                var count = Math.Min(_unsentLength, PacketFormat.MaxPayload(datagram.Space) - PacketFormat.SequenceSize);
+                if (datagram.Sections != 0 && (count <= 0 || (count < _unsentLength && count < MinCut))) return true;
+                if (!_cutting) { _cutting = true; _firstCut = _nextSend; }
+                var packet = _pool.Count == 0 ? new SentPacket(DataCapacity) : _pool.Pop();
+                _unsent.AsSpan(_unsentStart, count).CopyTo(packet.Buffer);
+                _unsentStart += count;
+                _unsentLength -= count;
+                packet.Sequence = _nextSend;
+                packet.Length = count;
+                packet.LastSent = now;
+                packet.Acknowledged = false;
                 _sent[_nextSend % WindowSize] = packet;
                 ++_nextSend;
+                WritePacket(datagram, packet);
             }
-            if (!_ackDirty) return;
-            ulong mask = 0;
-            for (var i = 0; i < WindowSize; ++i)
-                if (_received[unchecked(_receiveNext + (uint)i) % WindowSize].Present) mask |= 1UL << i;
-            var writer = PacketFormat.Begin(_ackBuffer, PacketKind.Ack, 12);
-            writer.WriteUInt32(_receiveNext);
-            writer.WriteUInt64(mask);
-            if (_transport.TrySend(_ackBuffer)) _ackDirty = false;
+            return false;
         }
+
+        private static void WritePacket(OutgoingDatagram datagram, SentPacket packet)
+        {
+            var writer = new ByteWriter(datagram.Add(PacketKind.Reliable, PacketFormat.SequenceSize + packet.Length, true));
+            writer.WriteUInt32(packet.Sequence);
+            writer.WriteBytes(packet.Buffer.AsSpan(0, packet.Length));
+        }
+
+        // After the datagram from Write: false (local backpressure or held) restores resend times and returns new
+        // packets to the unsent stream, so a sequence is assigned only to bytes that left.
+        internal void Sent(bool sent)
+        {
+            if (!sent)
+            {
+                foreach (var packet in _resent) packet.LastSent = packet.PreviousSent;
+                if (_cutting)
+                    while (_nextSend != _firstCut)
+                    {
+                        --_nextSend;
+                        var packet = _sent[_nextSend % WindowSize];
+                        _sent[_nextSend % WindowSize] = null;
+                        _unsentStart -= packet.Length;
+                        _unsentLength += packet.Length;
+                        _pool.Push(packet);
+                    }
+            }
+            _resent.Clear();
+            _cutting = false;
+        }
+
+        internal int AckSize()
+        {
+            // Bit 0 is always clear: _receiveNext itself is never buffered.
+            _ackMask = 0;
+            for (var i = 1; i < WindowSize; ++i)
+                if (_received[unchecked(_receiveNext + (uint)i) % WindowSize].Present) _ackMask |= 1UL << (i - 1);
+            return 4 + ByteWriter.VarUIntSize(_ackMask);
+        }
+
+        // Call AckSize first; the span has its size.
+        internal void WriteAck(Span<byte> payload)
+        {
+            var writer = new ByteWriter(payload);
+            writer.WriteUInt32(_receiveNext);
+            writer.WriteVarUInt(_ackMask);
+        }
+
+        internal void AckSent() => _ackDirty = false;
 
         internal bool ReceiveAck(ReadOnlySpan<byte> payload)
         {
             var reader = new ByteReader(payload);
-            if (!reader.ReadUInt32(out var next) || !reader.ReadUInt64(out var mask) || reader.Remaining != 0) return false;
+            if (!reader.ReadUInt32(out var next) || !reader.ReadVarUInt(out var later) || reader.Remaining != 0 ||
+                (later >> (WindowSize - 1)) != 0) return false;
+            var mask = later << 1;
             var outstanding = unchecked(_nextSend - _sendBase);
             var advance = unchecked(next - _sendBase);
             // Old ACKs are harmless; future ACKs must never free unsent data.
@@ -126,7 +177,7 @@ namespace CombatSimulation.Network
         internal bool Receive(ReadOnlySpan<byte> payload)
         {
             var reader = new ByteReader(payload);
-            if (!reader.ReadUInt32(out var sequence) || reader.Remaining == 0 || reader.Remaining > _dataCapacity) return false;
+            if (!reader.ReadUInt32(out var sequence) || reader.Remaining == 0 || reader.Remaining > DataCapacity) return false;
 
             var distance = unchecked(sequence - _receiveNext);
             if (distance >= WindowSize)
@@ -211,7 +262,7 @@ namespace CombatSimulation.Network
             internal readonly byte[] Buffer;
             internal uint Sequence;
             internal int Length;
-            internal double LastSent;
+            internal double LastSent, PreviousSent;
             internal bool Acknowledged;
             internal SentPacket(int size) { Buffer = new byte[size]; }
         }
@@ -223,19 +274,19 @@ namespace CombatSimulation.Network
             internal ReceivedPacket(int size) { Buffer = new byte[size]; }
         }
 
-        private readonly ITransport _transport;
         private readonly IPeerReceiver _receiver;
-        private readonly int _datagramSize, _dataOffset, _dataCapacity;
-        private readonly Queue<SentPacket> _pending = new Queue<SentPacket>();
         private readonly Stack<SentPacket> _pool = new Stack<SentPacket>();
+        private readonly List<SentPacket> _resent = new List<SentPacket>(WindowSize);
         private readonly SentPacket[] _sent = new SentPacket[WindowSize];
         private readonly ReceivedPacket[] _received = new ReceivedPacket[WindowSize];
-        private readonly byte[] _ackBuffer = new byte[16];
         private byte[] _stream = Array.Empty<byte>();
-        private SentPacket _tail;
+        // Queued stream bytes without a sequence yet.
+        private byte[] _unsent = Array.Empty<byte>();
+        private int _unsentStart, _unsentLength;
         // One past the highest sequence the peer has acknowledged; unacknowledged packets below it are missing.
-        private uint _sendBase, _nextSend, _ackFrontier, _receiveNext;
+        private uint _sendBase, _nextSend, _ackFrontier, _receiveNext, _firstCut;
         private int _streamLength;
-        private bool _ackDirty;
+        private ulong _ackMask;
+        private bool _ackDirty, _cutting;
     }
 }

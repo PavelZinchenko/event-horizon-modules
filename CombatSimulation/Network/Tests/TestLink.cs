@@ -25,7 +25,7 @@ namespace CombatSimulation.Network.Tests
             internal bool BlockSend;
             internal PacketKind DropKind;
             internal int DropCount;
-            internal int LargestDatagram, ReliableTransmissions;
+            internal int LargestDatagram, Datagrams, ReliableTransmissions; // Reliable sections, resends included.
             internal long SentBytes;
             internal ulong Trace = 14695981039346656037UL;
 
@@ -35,10 +35,20 @@ namespace CombatSimulation.Network.Tests
             {
                 if (BlockSend) return false;
                 LargestDatagram = Math.Max(LargestDatagram, datagram.Length);
+                ++Datagrams;
                 SentBytes += datagram.Length;
-                var kind = (PacketKind)datagram[1];
-                if (kind == PacketKind.Reliable) ++ReliableTransmissions;
-                if (kind == DropKind && DropCount > 0) { --DropCount; return true; }
+                // DropKind drops whole datagrams that carry a section of that kind.
+                var drop = false;
+                if (PacketFormat.Validate(datagram))
+                {
+                    var sections = PacketFormat.Sections(datagram);
+                    while (PacketFormat.ReadSection(ref sections, out var kind, out _))
+                    {
+                        if (kind == PacketKind.Reliable) ++ReliableTransmissions;
+                        drop |= kind == DropKind;
+                    }
+                }
+                if (drop && DropCount > 0) { --DropCount; return true; }
                 if ((_link.Now >= BlackoutStart && _link.Now < BlackoutEnd) || _random.NextDouble() < Loss) return true;
                 Schedule(datagram);
                 if (_random.NextDouble() < Duplication) Schedule(datagram);
