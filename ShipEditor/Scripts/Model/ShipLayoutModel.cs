@@ -152,7 +152,7 @@ namespace ShipEditor.Model
 
 		public bool IsCellCompatible(int x, int y, Component component)
 		{
-            if (!_layout.Rect.IsInsideRect(x, y))
+			if (!_layout.Rect.IsInsideRect(x, y))
 				return false;
 
 			var index = CellIndex.FromXY(x, y);
@@ -160,7 +160,7 @@ namespace ShipEditor.Model
 				return false;
 
 			var cellType = Cell(x, y);
-			if (cellType == CellType.Weapon && component.CellType == CellType.Weapon)
+			if ((cellType == CellType.Weapon || cellType == CellType.All || cellType == CellType.WeaponInner || cellType == CellType.WeaponOuter || cellType == CellType.WeaponEngine) && component.CellType == CellType.Weapon)
 			{
 				var requiredSlot = component.WeaponSlotType;
 				if (requiredSlot == default) return true;
