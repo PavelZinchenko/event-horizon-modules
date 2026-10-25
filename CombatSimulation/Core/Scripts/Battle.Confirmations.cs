@@ -55,8 +55,9 @@ namespace CombatSimulation.Core
         }
 
         // Confirms the local copy, or adds the missing bullet at its spawn tick. A bullet this device already removed
-        // by prediction, or a projectile that has expired, stays gone. The shooter's energy, cooldowns and recoil are
-        // left to corrections.
+        // by prediction, or a projectile that has expired, stays gone. The confirmed shot re-syncs the shooter's
+        // cannon and barrel timers (G1): an overdue fire input shifts a held weapon's cooldown phase for the whole
+        // burst. Energy and recoil are left to corrections.
         private bool ApplyRemoteBulletSpawn(in OwnerOperation operation)
         {
             var ship = FindShip(operation.ParentId);
@@ -66,6 +67,8 @@ namespace CombatSimulation.Core
             var beamDevice = device as BeamDevice;
             if (cannon != null ? cannon.Definition.BarrelIndex != operation.BarrelIndex :
                 beamDevice == null || beamDevice.Definition.BarrelIndex != operation.BarrelIndex) return false;
+            cannon?.ConfirmShot(operation.Tick);
+            ship.RecordBarrelShot(operation.BarrelIndex, Math.Max(ship.GetBarrelShotTick(operation.BarrelIndex), operation.Tick));
 
             if (_entities.TryGet(operation.EntityId, out var handle))
             {
@@ -160,11 +163,13 @@ namespace CombatSimulation.Core
             ReleaseBullet(index);
         }
 
-        private void DetachBeam(in BulletEntity beam, EntityHandle handle)
+        private void DetachBeam(in BulletEntity beam, EntityHandle handle) => DetachBeam(beam, handle, Tick);
+
+        private void DetachBeam(in BulletEntity beam, EntityHandle handle, long stopTick)
         {
             var ship = FindShip(beam.ParentId);
             if (ship != null && beam.DeviceIndex < ship.DeviceCount && ship.GetDevice(beam.DeviceIndex) is BeamDevice device)
-                device.Detach(handle, Tick);
+                device.Detach(handle, stopTick);
         }
 
         // A remote bullet that this device removed before its owner confirmed it (N2, expiry, beam stop).

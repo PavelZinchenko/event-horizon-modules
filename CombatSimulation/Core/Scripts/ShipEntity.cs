@@ -51,20 +51,17 @@ namespace CombatSimulation.Core
         public long Tick;
         public ulong AppliedHitSequence;
         public BodyCorrection Body;
-        public DeviceState[] Devices = System.Array.Empty<DeviceState>();
-        public long[] BarrelShotTicks = System.Array.Empty<long>();
+        public PointDefenseTimers[] Timers = System.Array.Empty<PointDefenseTimers>();
 
         public void Store(long tick, ulong appliedHitSequence, in BodyCorrection body,
-            System.ReadOnlySpan<DeviceState> devices, System.ReadOnlySpan<long> barrelShotTicks)
+            System.ReadOnlySpan<PointDefenseTimers> timers)
         {
             IsSet = true;
             Tick = tick;
             AppliedHitSequence = appliedHitSequence;
             Body = body;
-            if (Devices.Length < devices.Length) Devices = new DeviceState[devices.Length];
-            if (BarrelShotTicks.Length < barrelShotTicks.Length) BarrelShotTicks = new long[barrelShotTicks.Length];
-            devices.CopyTo(Devices);
-            barrelShotTicks.CopyTo(BarrelShotTicks);
+            if (Timers.Length < timers.Length) Timers = new PointDefenseTimers[timers.Length];
+            timers.CopyTo(Timers);
         }
     }
 
@@ -181,7 +178,7 @@ namespace CombatSimulation.Core
             LastCorrectionTick = NoCorrection;
             Correction.IsSet = false;
 
-            Armor = ResourcePool.CreateArmor(Definition.Armor);
+            Armor = ResourcePool.Create(Definition.ArmorResource);
             Shield = ResourcePool.Create(Definition.Shield);
             Energy = ResourcePool.Create(Definition.Energy);
 

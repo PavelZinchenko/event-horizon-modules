@@ -162,14 +162,9 @@ namespace CombatSimulation.Runtime.Tests
         }
 
         [Test]
-        public void FragmentedCorrectionsRecoverAfterUnreliableLoss()
+        public void CorrectionsRecoverAfterUnreliableLoss()
         {
-            var devices = new DeviceDefinition[64];
-            for (var i = 0; i < devices.Length; ++i) devices[i] = new CannonDefinition(0, 1, 1, 0, new BulletDefinition(0.1f, 10, 10, 1));
-            var ship = new ShipDefinition(1, 1, new EngineDefinition(20, 10, 5, 2), 1000,
-                new ResourceDefinition(0, 0, 0), new ResourceDefinition(100, 1, 0),
-                barrels: new[] { new BarrelDefinition(Vec2.Zero) }, devices: devices);
-            var pair = new SessionFixtures.Pair(ship: ship, datagram: 100); pair.Start();
+            var pair = new SessionFixtures.Pair(); pair.Start();
             pair.TA.DropUnreliable = true; pair.Run(10);
             Assert.AreEqual(0, pair.B.ReceivedCorrectionBatches);
             pair.TA.DropUnreliable = false; pair.Run(10);
@@ -177,38 +172,41 @@ namespace CombatSimulation.Runtime.Tests
             Assert.AreEqual(0, pair.B.InvalidMessages);
         }
 
+        // Datagram 80 holds five resting bodies, so six ships need two self-contained datagrams per batch.
         [Test]
-        public void NewerFragmentedBatchReplacesIncompleteOlderBatchAndIgnoresDuplicates()
+        public void ABatchLargerThanOneDatagramContinuesInMoreDatagrams()
         {
-            var pair = new SessionFixtures.Pair(datagram: 100); pair.Start();
-            var ship = SessionFixtures.Owned(pair.B, 10);
-            var old = Correction(0, 111); var current = Correction(1, 222);
-            Fragment(old, 0, 0); Fragment(current, 1, 67);
-            Fragment(old, 0, 67); Fragment(current, 1, 67); // stale and duplicate
-            pair.Step();
-            Assert.AreEqual(0, pair.B.ReceivedCorrectionBatches);
-            Assert.AreEqual(1000, SessionFixtures.Owned(pair.B, 10).Armor.Value);
-            Fragment(current, 1, 0); pair.Step();
+            var pair = new SessionFixtures.Pair(datagram: 80, slots: 6, maxActive: 6); var observer = new ObservationCounter();
+            pair.B.Observer = observer;
+            for (var i = 0; i < 6; ++i) { pair.A.Deploy(new RosterId((uint)(1 + i)), 0); pair.B.Deploy(new RosterId((uint)(101 + i)), 0); }
+            pair.Run(6);
+            Assert.AreEqual(1, pair.A.SentCorrectionBatches);
+            Assert.AreEqual(2, pair.TA.UnreliableDatagrams);
+            Assert.AreEqual(6, observer.Count);
             Assert.AreEqual(1, pair.B.ReceivedCorrectionBatches);
-            Assert.AreEqual(222, SessionFixtures.Owned(pair.B, 10).Armor.Value);
             Assert.AreEqual(0, pair.B.InvalidMessages);
+        }
 
-            byte[] Correction(long tick, float armor)
-            {
-                var batch = new CorrectionBatch(); batch.Begin(pair.B.BattleId, 10, tick, 0);
-                batch.Add(ship.Id, new SpawnPose(ship.Position, ship.Angle, ship.LinearVelocity, ship.AngularVelocity),
-                    armor, new RechargeState(200, 0), new RechargeState(100, 0), -1,
-                    ReadOnlySpan<DeviceState>.Empty, ReadOnlySpan<long>.Empty);
-                var bytes = new byte[SessionCodec.CorrectionSize(batch)]; SessionCodec.Correction(bytes, batch); return bytes;
-            }
-            void Fragment(byte[] bytes, long tick, int offset)
-            {
-                var packet = new byte[96]; var writer = new ByteWriter(packet);
-                writer.WriteByte(SessionCodec.Version); writer.WriteUInt64(pair.B.BattleId.Value); writer.WriteUInt32(10);
-                writer.WriteInt64(tick); writer.WriteUInt32((uint)bytes.Length); writer.WriteUInt32((uint)offset);
-                writer.WriteBytes(bytes.AsSpan(offset, Math.Min(67, bytes.Length - offset)));
-                ((IPeerReceiver)pair.B).OnUnreliable(packet.AsSpan(0, writer.Position));
-            }
+        // Control indices arrive in spawn order, so the first unknown index ends the datagram without an error.
+        [Test]
+        public void ACorrectionStopsAtTheFirstBodyWithoutASpawnRecord()
+        {
+            var pair = new SessionFixtures.Pair(); pair.Start(); var observer = new ObservationCounter();
+            pair.B.Observer = observer;
+            var ship = SessionFixtures.Owned(pair.B, 10);
+            var batch = new CorrectionBatch(); batch.Begin(pair.B.BattleId, 10, pair.B.Tick - 1, 0);
+            batch.Add(ship.Id, new SpawnPose(ship.Position, ship.Angle, ship.LinearVelocity, ship.AngularVelocity),
+                ResourceLevel.Partial(64, false), ResourceLevel.Full, ResourceLevel.Full, ReadOnlySpan<PointDefenseTimers>.Empty);
+            var body = batch.Bodies[0];
+            var bytes = new byte[64]; var arena = new CorrectionCodec.Arena(200, 200);
+            var w = CorrectionCodec.Begin(bytes, pair.B.BattleId, batch.Tick, 0);
+            Assert.IsTrue(CorrectionCodec.Write(ref w, arena, 0, body, SessionFixtures.Ship, ReadOnlySpan<PointDefenseTimers>.Empty));
+            Assert.IsTrue(CorrectionCodec.Write(ref w, arena, 4, body, SessionFixtures.Ship, ReadOnlySpan<PointDefenseTimers>.Empty));
+            ((IPeerReceiver)pair.B).OnUnreliable(bytes.AsSpan(0, w.Finish()));
+            pair.Step();
+            Assert.AreEqual(1, observer.Count);
+            Assert.AreEqual(250, SessionFixtures.Owned(pair.B, 10).Armor.Value);
+            Assert.AreEqual(0, pair.B.InvalidMessages);
         }
 
         [Test]

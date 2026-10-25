@@ -96,37 +96,95 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(1, p.B.Battle.Submit(NetPair.OwnerA, old));
             p.Step();
             Assert.AreEqual(old.Tick, p.B.Ship(101).LastCorrectionTick);
-            Assert.AreEqual(700f, p.B.Ship(101).Armor.Value);
+            // 700 of 1000 rounds up to level 180.
+            Assert.AreEqual(703.125f, p.B.Ship(101).Armor.Value);
             Assert.AreEqual(2f, Offset(p, 101).Y, 1e-4f);
         }
 
         [Test]
-        public void GameplayStateIsSetExactlyThenRecharged()
+        public void ResourceLevelsRoundArmorUpAndNeverFillAPartialResource()
+        {
+            var armor = ResourcePool.CreateArmor(1000f);
+            armor.Value = 0.5f;
+            Assert.AreEqual(ResourceLevel.Partial(1, false), ResourceLevel.Of(armor, true));
+            armor.Value = 999.9f;
+            Assert.AreEqual(ResourceLevel.Partial(255, false), ResourceLevel.Of(armor, true));
+            armor.Value = 1000f;
+            Assert.AreEqual(ResourceLevel.Full, ResourceLevel.Of(armor, true));
+
+            var energy = ResourcePool.Create(new ResourceDefinition(256f, 10f, 1f));
+            energy.Value = 100.4f;
+            energy.DelayRemaining = 0.5f;
+            Assert.AreEqual(ResourceLevel.Partial(100, true), ResourceLevel.Of(energy, false));
+            energy.Value = 255.9f;
+            energy.DelayRemaining = 0f;
+            Assert.AreEqual(ResourceLevel.Partial(255, false), ResourceLevel.Of(energy, false));
+
+            Assert.AreEqual(ResourceLevel.Full, ResourceLevel.Of(ResourcePool.Create(new ResourceDefinition(0f)), false));
+            var flat = ResourcePool.Create(new ResourceDefinition(100f));
+            flat.Value = 50f;
+            flat.DelayRemaining = 1f;
+            Assert.AreEqual(ResourceLevel.Partial(128, false), ResourceLevel.Of(flat, false));
+        }
+
+        // Armor 1000: one level is 3.90625.
+        [Test]
+        public void AResourceMovesOnlyWhenItDiffersByMoreThanOneLevel()
         {
             var p = new NetPair();
-            var owner = p.A.Ship(101);
-            owner.Energy.Value = 10f;
-            owner.Energy.DelayRemaining = 0.1f;
-            owner.Shield.Value = 100f;
-            owner.Shield.DelayRemaining = 0.5f;
-            p.Step();
-            var correction = Write(p.A);
-            p.Step(8);
-            Assert.AreEqual(1, p.B.Battle.Submit(NetPair.OwnerA, correction));
-
-            // A remote shield does not recharge between corrections, so it matches the tick before.
-            var shield = owner.Shield.Value;
-            p.Step();
             var copy = p.B.Ship(101);
-            Assert.AreEqual(owner.Energy.Value, copy.Energy.Value, 1e-5f);
-            Assert.AreEqual(owner.Energy.DelayRemaining, copy.Energy.DelayRemaining, 1e-6f);
-            Assert.AreEqual(shield, copy.Shield.Value, 1e-5f);
-            Assert.Greater(copy.Energy.Value, 10f);
-            Assert.Greater(copy.Shield.DelayRemaining, 0f);
+            copy.Armor.Value = 600f;
+            Submit(p, Levels(p, armor: ResourceLevel.Partial(154, false)));
+            p.Step();
+            Assert.AreEqual(600f, copy.Armor.Value);
+
+            copy.Armor.Value = 590f;
+            Submit(p, Levels(p, armor: ResourceLevel.Partial(154, false)));
+            p.Step();
+            Assert.AreEqual(601.5625f, copy.Armor.Value);
+        }
+
+        // Energy 300 recharges 20/s after a 0.5 s delay: 0.4 per tick. Level 128 is 150.
+        [Test]
+        public void TheDelayFlagClearsKeepsOrStartsTheRechargeDelay()
+        {
+            var p = new NetPair();
+            var copy = p.B.Ship(101);
+            copy.Energy.Value = 150f;
+            copy.Energy.DelayRemaining = 0.3f;
+            Submit(p, Levels(p, energy: ResourceLevel.Partial(128, false)));
+            p.Step();
+            Assert.AreEqual(150.4f, copy.Energy.Value, 1e-4f);
+            Assert.AreEqual(0f, copy.Energy.DelayRemaining);
+
+            // Within one level the value stays; the running local delay goes on.
+            copy.Energy.DelayRemaining = 0.3f;
+            Submit(p, Levels(p, energy: ResourceLevel.Partial(128, true)));
+            p.Step();
+            Assert.AreEqual(150.4f, copy.Energy.Value, 1e-4f);
+            Assert.AreEqual(0.28f, copy.Energy.DelayRemaining, 1e-5f);
+
+            // Without a local delay, the full delay starts at the owner's tick.
+            copy.Energy.DelayRemaining = 0f;
+            Submit(p, Levels(p, energy: ResourceLevel.Partial(128, true)));
+            p.Step();
+            Assert.AreEqual(0.48f, copy.Energy.DelayRemaining, 1e-5f);
         }
 
         [Test]
-        public void RetreatFromACorrectionStopsTheCopy()
+        public void TheCandidateRechargesFromTheOwnersTick()
+        {
+            var p = new NetPair();
+            var levels = Levels(p, energy: ResourceLevel.Partial(128, false));
+            p.Step(5);
+            var applyTick = p.B.Tick;
+            Submit(p, levels);
+            p.Step();
+            Assert.AreEqual(150f + 0.4f * (applyTick - levels.Tick), p.B.Ship(101).Energy.Value, 1e-3f);
+        }
+
+        [Test]
+        public void ARetreatRecordStopsTheCopyFromItsReceipt()
         {
             var p = new NetPair(ship101: Beam());
             p.A.Control(101, throttle: 1f, systems: 1);
@@ -134,46 +192,101 @@ namespace CombatSimulation.Core.Tests
             p.Step(3);
             Assert.IsTrue(Device<BeamDevice>(p.B, 0).TryGetBeam(out _));
 
+            // The record of tick R reaches the copy after its tick R, so it applies at R + 1.
             p.A.Retreat(p.A.Entity(101));
             p.Step();
-            Assert.AreEqual(1, p.Correct(p.A, p.B));
-            p.Step(2);
-
+            Assert.AreEqual(ShipEntity.NoRetreat, p.B.Ship(101).RetreatCompletionTick);
+            p.Step();
             Assert.AreEqual(p.A.Ship(101).RetreatCompletionTick, p.B.Ship(101).RetreatCompletionTick);
             Assert.IsFalse(Device<BeamDevice>(p.B, 0).TryGetBeam(out _));
             Assert.AreEqual(0, p.B.Battle.Snapshot.Bullets.Length);
+
+            Assert.AreEqual(1, p.Correct(p.A, p.B));
+            p.Step();
             AssertSameMotion(p, 101);
         }
 
         [Test]
-        public void DeviceTimersFollowTheOwner()
+        public void PointDefenseTimersFollowTheOwner()
+        {
+            var definition = new PointDefenseDefinition(5f, 0.1f, 0f);
+            var ship = Fixtures.ShipWith(energy: new ResourceDefinition(100000f), devices: new DeviceDefinition[] { definition });
+            var p = new NetPair(ship101: ship);
+            p.A.Control(101, systems: 1);
+            p.Step(5);
+            p.A.Control(101, systems: 0);
+            p.Step(2);
+            var tick = p.A.Tick - 1;
+            var owner = Device<PointDefenseDevice>(p.A, 0);
+            var copy = Device<PointDefenseDevice>(p.B, 0);
+            Assert.AreNotEqual(PointDefenseTimers.Ready, owner.Export(tick).StopAge);
+            Assert.AreNotEqual(owner.Export(tick), copy.Export(tick));
+
+            Assert.AreEqual(1, p.Correct(p.A, p.B));
+            p.Step();
+            Assert.AreEqual(owner.Export(tick), copy.Export(tick));
+            Assert.AreEqual(owner.Export(p.A.Tick - 1), copy.Export(p.A.Tick - 1));
+
+            // An age at the ready threshold has only one valid form: Ready.
+            var batch = Write(p.A);
+            var body = batch.Bodies[0];
+            var bad = new CorrectionBatch();
+            bad.Begin(p.B.BattleId, NetPair.OwnerA, batch.Tick, 0);
+            bad.Add(body.EntityId, body.Motion, body.Armor, body.Shield, body.Energy,
+                new[] { new PointDefenseTimers(definition.ActivationCooldownTicks - 1, PointDefenseTimers.Ready) });
+            Assert.AreEqual(0, p.B.Battle.Submit(NetPair.OwnerA, bad));
+            Assert.AreEqual(1, p.B.Battle.Submit(NetPair.OwnerA, batch));
+        }
+
+        [Test]
+        public void AConfirmedShotResyncsTheCannonAndBarrel()
         {
             var ship = Fixtures.ShipWith(energy: new ResourceDefinition(100000f),
                 barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
-                devices: new DeviceDefinition[]
-                {
-                    new CannonDefinition(0, 0.1f, 0f, 0f, Fixtures.Bolt),
-                    new BeamDefinition(0, 0.2f, 0f, 0f, 10f, 8f),
-                    new PointDefenseDefinition(5f, 0.1f, 0f),
-                });
+                devices: new DeviceDefinition[] { new CannonDefinition(0, 0.1f, 0f, 0f, Fixtures.Bolt) });
             var p = new NetPair(ship101: ship);
-            p.A.Control(101, systems: 0b111);
-            p.Step(5);
-            p.A.Control(101, systems: 0b101);
-            p.Step(3);
-            Assert.AreEqual(1, p.Correct(p.A, p.B));
-
-            // From here both copies run the same input.
-            p.A.Control(101, systems: 0b101);
-            p.B.Control(101, systems: 0b101);
+            p.A.Control(101, systems: 1);
             p.Step();
-            for (var d = 0; d < 3; ++d)
-                Assert.AreEqual(p.A.Ship(101).GetDevice(d).Export(), p.B.Ship(101).GetDevice(d).Export(), $"device {d}");
-            Assert.AreEqual(p.A.Ship(101).GetBarrelShotTick(0), p.B.Ship(101).GetBarrelShotTick(0));
-            Assert.IsTrue(((PointDefenseDevice)p.B.Ship(101).GetDevice(2)).Enabled);
 
-            var bay = DroneBayTests.Carrier().Devices[0].CreateDevice(0);
-            Assert.AreEqual(default(DeviceState), bay.Export());
+            // The copy holds the trigger one tick late. The confirmation applies first, so the copy keeps the owner's phase.
+            p.B.Control(101, systems: 1);
+            for (var i = 0; i < 12; ++i)
+            {
+                p.Step();
+                Assert.AreEqual(Device<CannonDevice>(p.A, 0).LastShotTick, Device<CannonDevice>(p.B, 0).LastShotTick, $"step {i}");
+                Assert.AreEqual(p.A.Ship(101).GetBarrelShotTick(0), p.B.Ship(101).GetBarrelShotTick(0), $"step {i}");
+            }
+        }
+
+        [Test]
+        public void AConfirmationKeepsALaterPredictedShot()
+        {
+            var cannon = new CannonDevice(new CannonDefinition(0, 0.1f, 0f, 0f, Fixtures.Bolt), 0);
+            var cooldown = cannon.Definition.CooldownTicks;
+            cannon.ConfirmShot(10);
+            Assert.AreEqual(10, cannon.LastShotTick);
+            cannon.ConfirmShot(9);
+            Assert.AreEqual(9, cannon.LastShotTick);
+            cannon.ConfirmShot(9 - cooldown);
+            Assert.AreEqual(9, cannon.LastShotTick);
+        }
+
+        [Test]
+        public void ABeamRemovalRecordSetsTheStopTick()
+        {
+            var p = new NetPair(ship101: Beam());
+            p.A.Control(101, systems: 1);
+            p.B.Control(101, systems: 1);
+            p.Step(3);
+            p.A.Control(101, systems: 0);
+            p.Step();
+            var stop = p.A.Tick - 1;
+
+            // The copy releases one tick late; the owner's removal record applies before its devices run.
+            p.B.Control(101, systems: 0);
+            p.Step();
+            Assert.AreEqual(stop, Device<BeamDevice>(p.A, 0).StoppedTick);
+            Assert.AreEqual(stop, Device<BeamDevice>(p.B, 0).StoppedTick);
         }
 
         [Test]
@@ -189,8 +302,7 @@ namespace CombatSimulation.Core.Tests
             var body = batch.Bodies[0];
             var forged = new CorrectionBatch();
             forged.Begin(p.B.BattleId, NetPair.OwnerA, batch.Tick, 0);
-            forged.Add(body.EntityId, body.Motion, body.Armor, body.Shield, body.Energy, body.RetreatCompletionTick,
-                batch.GetDevices(body), batch.GetBarrelShotTicks(body));
+            forged.Add(body.EntityId, body.Motion, body.Armor, body.Shield, body.Energy, batch.GetTimers(body));
             Assert.AreEqual(0, p.B.Battle.Submit(NetPair.OwnerA, forged));
 
             Assert.Throws<ArgumentException>(() => p.B.Battle.WriteCorrections(NetPair.OwnerA, NetPair.OwnerB, batch));
@@ -204,25 +316,27 @@ namespace CombatSimulation.Core.Tests
             var body = batch.Bodies[0];
             var bad = new CorrectionBatch();
 
+            // Armor never recharges, so it has no delay; a full resource has none either.
             bad.Begin(p.B.BattleId, NetPair.OwnerA, batch.Tick, 0);
-            bad.Add(body.EntityId, body.Motion, 1001f, body.Shield, body.Energy, -1, default, default);
+            bad.Add(body.EntityId, body.Motion, ResourceLevel.Partial(10, true), body.Shield, body.Energy, default);
             Assert.AreEqual(0, p.B.Battle.Submit(NetPair.OwnerA, bad));
 
             bad.Begin(p.B.BattleId, NetPair.OwnerA, batch.Tick, 0);
-            bad.Add(body.EntityId, body.Motion, body.Armor, new RechargeState(1f, 5f), body.Energy, -1, default, default);
+            bad.Add(body.EntityId, body.Motion, body.Armor, new ResourceLevel(true, true, 0), body.Energy, default);
             Assert.AreEqual(0, p.B.Battle.Submit(NetPair.OwnerA, bad));
 
             bad.Begin(p.B.BattleId, NetPair.OwnerA, batch.Tick, 0);
             bad.Add(body.EntityId, new SpawnPose(new Vec2(float.NaN, 0f), 0f, Vec2.Zero), body.Armor, body.Shield,
-                body.Energy, -1, default, default);
+                body.Energy, default);
             Assert.AreEqual(0, p.B.Battle.Submit(NetPair.OwnerA, bad));
 
+            // Timers for a ship without point defense.
             bad.Begin(p.B.BattleId, NetPair.OwnerA, batch.Tick, 0);
-            bad.Add(body.EntityId, body.Motion, body.Armor, body.Shield, body.Energy, -1, new DeviceState[1], default);
+            bad.Add(body.EntityId, body.Motion, body.Armor, body.Shield, body.Energy, new PointDefenseTimers[1]);
             Assert.AreEqual(0, p.B.Battle.Submit(NetPair.OwnerA, bad));
 
             bad.Begin(new BattleId(5), NetPair.OwnerA, batch.Tick, 0);
-            bad.Add(body.EntityId, body.Motion, body.Armor, body.Shield, body.Energy, -1, default, default);
+            bad.Add(body.EntityId, body.Motion, body.Armor, body.Shield, body.Energy, default);
             Assert.AreEqual(0, p.B.Battle.Submit(NetPair.OwnerA, bad));
 
             Assert.AreEqual(1, p.B.Battle.Submit(NetPair.OwnerA, batch));
@@ -270,6 +384,22 @@ namespace CombatSimulation.Core.Tests
             devices: new[] { new BeamDefinition(0, 0f, 0f, 0f, 10f, 8f) });
 
         private static T Device<T>(Driver driver, int index) where T : ShipDevice => (T)driver.Ship(101).GetDevice(index);
+
+        // A correction for A's last tick with A's motion and the given levels; full by default.
+        private static CorrectionBatch Levels(NetPair p, ResourceLevel? armor = null, ResourceLevel? shield = null,
+            ResourceLevel? energy = null)
+        {
+            var batch = Write(p.A);
+            var body = batch.Bodies[0];
+            var levels = new CorrectionBatch();
+            levels.Begin(batch.BattleId, NetPair.OwnerA, batch.Tick, batch.AppliedHitSequence);
+            levels.Add(body.EntityId, body.Motion, armor ?? ResourceLevel.Full, shield ?? ResourceLevel.Full,
+                energy ?? ResourceLevel.Full, batch.GetTimers(body));
+            return levels;
+        }
+
+        private static void Submit(NetPair p, CorrectionBatch batch) =>
+            Assert.AreEqual(1, p.B.Battle.Submit(NetPair.OwnerA, batch));
 
         private static CorrectionBatch Write(Driver owner)
         {

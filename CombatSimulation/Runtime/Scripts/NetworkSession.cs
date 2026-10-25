@@ -45,9 +45,9 @@ namespace CombatSimulation.Runtime
                     throw new ArgumentException("A session supports exactly two owners.", nameof(setup));
             _runner = new BattleRunner(setup, pilots, QueueControls);
             _peer = new PeerConnection(transport, this, options.IsClockReference, options.MaxDatagramSize);
-            _fragment = new byte[_peer.MaxUnreliablePayload];
+            _correction = new byte[_peer.MaxUnreliablePayload];
             _input = new byte[_peer.MaxInputPayload];
-            _fragmentPayload = _fragment.Length - FragmentHeader;
+            _arena = new CorrectionCodec.Arena(setup.Width, setup.Height);
             _nextCorrectionMilliseconds = options.CorrectionIntervalMilliseconds;
         }
 
@@ -164,7 +164,9 @@ namespace CombatSimulation.Runtime
             foreach (var operation in operations)
             {
                 _lastOperation = operation.Sequence;
-                if (Spawns(operation)) _controls.Register(operation.EntityId, _nextLocalControl++);
+                if (!Spawns(operation)) continue;
+                _controls.Register(operation.EntityId, (uint)_localBodies.Count);
+                _localBodies.Add(new ControlledBody(operation.EntityId, SpawnDefinition(operation)));
             }
             var tick = Snapshot.Tick;
             if (hits.Length == 0 && operations.Length == 0 && !IsCompleted && !Snapshot.CandidateResult.IsCompleted &&
@@ -183,22 +185,71 @@ namespace CombatSimulation.Runtime
             _batchLength += length;
         }
 
+        // The definition a spawn record names; both peers derive it from the same setup.
+        private ShipDefinition SpawnDefinition(in OwnerOperation operation)
+        {
+            if (operation.Kind == OwnerOperationKind.Roster)
+                return _runner.Battle.Roster.Find(operation.Roster.RosterId)?.Setup.Ship;
+            var bay = operation.BayKey.Value;
+            var devices = _runner.Battle.Roster.Find(bay.RosterId)?.Setup.Ship.Devices;
+            return devices != null && bay.DeviceIndex < devices.Count ? (devices[bay.DeviceIndex] as DroneBayDefinition)?.Drone : null;
+        }
+
+        // Bodies go in control index order. Normally one datagram holds the batch; a larger batch continues in more
+        // self-contained datagrams. An empty batch is not sent.
         private void SendCorrection()
         {
-            _runner.Battle.WriteCorrections(_options.LocalOwner, _options.RemoteOwner, _outgoingCorrection);
-            var size = SessionCodec.CorrectionSize(_outgoingCorrection);
-            if (size > _options.MaxCorrectionBytes) throw new InvalidOperationException("Correction exceeds the configured byte limit.");
-            if (_correctionBytes.Length < size) Array.Resize(ref _correctionBytes, size);
-            var length = SessionCodec.Correction(_correctionBytes, _outgoingCorrection);
-            for (var offset = 0; offset < length; offset += _fragmentPayload)
+            var batch = _outgoingCorrection;
+            _runner.Battle.WriteCorrections(_options.LocalOwner, _options.RemoteOwner, batch);
+            var bodies = batch.Bodies;
+            if (_sortedBodies.Length < bodies.Length)
             {
-                var w = new ByteWriter(_fragment);
-                w.WriteByte(SessionCodec.Version); w.WriteUInt64(BattleId.Value); w.WriteUInt32((uint)_options.LocalOwner);
-                w.WriteInt64(Snapshot.Tick); w.WriteUInt32((uint)length); w.WriteUInt32((uint)offset);
-                w.WriteBytes(_correctionBytes.AsSpan(offset, Math.Min(_fragmentPayload, length - offset)));
-                if (!_peer.TrySendUnreliable(_fragment.AsSpan(0, w.Position))) break;
+                Array.Resize(ref _sortedBodies, bodies.Length);
+                Array.Resize(ref _sortedIndices, bodies.Length);
             }
-            ++SentCorrectionBatches;
+            var count = 0;
+            for (var i = 0; i < bodies.Length; ++i)
+            {
+                if (!_controls.TryGetIndex(bodies[i].EntityId, out var index)) continue;
+                var at = count++;
+                for (; at > 0 && _sortedIndices[at - 1] > index; --at)
+                {
+                    _sortedIndices[at] = _sortedIndices[at - 1];
+                    _sortedBodies[at] = _sortedBodies[at - 1];
+                }
+                _sortedIndices[at] = index;
+                _sortedBodies[at] = i;
+            }
+            if (count == 0) return;
+
+            var w = CorrectionCodec.Begin(_correction, BattleId, batch.Tick, batch.AppliedHitSequence);
+            var empty = true;
+            var previous = -1L;
+            var total = 0;
+            for (var i = 0; i < count; ++i)
+            {
+                ref readonly var body = ref bodies[_sortedBodies[i]];
+                var index = _sortedIndices[i];
+                var definition = _localBodies[(int)index].Definition;
+                if (!CorrectionCodec.Write(ref w, _arena, (uint)(index - previous - 1), body, definition, batch.GetTimers(body)))
+                {
+                    if (empty) throw new InvalidOperationException("A correction body does not fit in one datagram.");
+                    if (!SendCorrectionDatagram(ref w, ref total)) return;
+                    w = CorrectionCodec.Begin(_correction, BattleId, batch.Tick, batch.AppliedHitSequence);
+                    CorrectionCodec.Write(ref w, _arena, index, body, definition, batch.GetTimers(body));
+                }
+                empty = false;
+                previous = index;
+            }
+            if (SendCorrectionDatagram(ref w, ref total)) ++SentCorrectionBatches;
+        }
+
+        private bool SendCorrectionDatagram(ref BitWriter w, ref int total)
+        {
+            var length = w.Finish();
+            total += length;
+            if (total > _options.MaxCorrectionBytes) throw new InvalidOperationException("Correction exceeds the configured byte limit.");
+            return _peer.TrySendUnreliable(_correction.AsSpan(0, length));
         }
 
         // Callbacks only copy data. Core is never entered from inside PeerConnection.Update.
@@ -232,7 +283,7 @@ namespace CombatSimulation.Runtime
         {
             try
             {
-                if (item.Channel == SessionMessage.Correction) { ReadFragment(item.Bytes.AsSpan(0, item.Length)); return; }
+                if (item.Channel == SessionMessage.Correction) { ReadCorrection(item.Bytes.AsSpan(0, item.Length)); return; }
                 if (item.Channel == SessionMessage.Input) { ReadInputs(item.Bytes.AsSpan(0, item.Length)); return; }
                 ReadBatch(item.Bytes.AsSpan(0, item.Length));
             }
@@ -255,7 +306,7 @@ namespace CombatSimulation.Runtime
                     continue;
                 }
                 var operation = SessionCodec.ReadOperation(ref r);
-                if (Spawns(operation)) _remoteControls[_nextRemoteControl++] = operation.EntityId;
+                if (Spawns(operation)) _remoteBodies.Add(new ControlledBody(operation.EntityId, SpawnDefinition(operation)));
                 _runner.Battle.Submit(_options.RemoteOwner, operation);
             }
             _runner.Battle.Submit(_options.RemoteOwner, new OwnerWatermark(BattleId, _options.RemoteOwner, r.BatchTick, r.LastOperation));
@@ -266,47 +317,21 @@ namespace CombatSimulation.Runtime
         {
             InputCodec.Read(payload, BattleId, _inputRecords);
             foreach (var record in _inputRecords)
-                if (_remoteControls.TryGetValue(record.Index, out var entity))
-                    _remoteInputs.Add(entity, record.Tick, record.Controls.ToControls());
+                if (record.Index < (uint)_remoteBodies.Count)
+                    _remoteInputs.Add(_remoteBodies[(int)record.Index].Entity, record.Tick, record.Controls.ToControls());
         }
 
-        private void ReadFragment(ReadOnlySpan<byte> bytes)
+        // Each datagram is a complete correction for its bodies. Core drops a body that is not newer than the
+        // correction it holds or applied, so a late or repeated datagram changes nothing.
+        private void ReadCorrection(ReadOnlySpan<byte> payload)
         {
-            var r = new ByteReader(bytes);
-            SessionCodec.Require(r.ReadByte(out var version) && version == SessionCodec.Version);
-            SessionCodec.Require(r.ReadUInt64(out var battle) && battle == BattleId.Value);
-            SessionCodec.Require(r.ReadUInt32(out var owner) && owner == (uint)_options.RemoteOwner);
-            SessionCodec.Require(r.ReadInt64(out var tick) && tick >= 0 && tick <= long.MaxValue - 6);
-            SessionCodec.Require(r.ReadUInt32(out var size) && size >= 34 && size <= _options.MaxCorrectionBytes);
-            SessionCodec.Require(r.ReadUInt32(out var offset) && offset < size && offset % _fragmentPayload == 0);
-            var length = Math.Min(_fragmentPayload, (int)(size - offset));
-            SessionCodec.Require(r.Remaining == length && r.ReadBytes(length, out _));
-            if (tick < _assemblyTick || tick <= _lastCorrectionTick) return;
-            var count = ((int)size - 1) / _fragmentPayload + 1;
-            if (tick > _assemblyTick)
-            {
-                _assemblyTick = tick; _assemblySize = (int)size; _assemblyCount = 0;
-                if (_assembly.Length < size) Array.Resize(ref _assembly, (int)size);
-                if (_pieces.Length < count) Array.Resize(ref _pieces, count);
-                Array.Clear(_pieces, 0, count);
-            }
-            SessionCodec.Require(_assemblySize == size);
-            var index = (int)offset / _fragmentPayload;
-            var piece = bytes.Slice(FragmentHeader);
-            if (_pieces[index])
-            { SessionCodec.Require(piece.SequenceEqual(_assembly.AsSpan((int)offset, length))); return; }
-            piece.CopyTo(_assembly.AsSpan((int)offset)); _pieces[index] = true;
-            if (++_assemblyCount != count) return;
-            var decoded = new SessionCodec.Reader(_assembly.AsSpan(0, _assemblySize));
-            SessionCodec.Require(decoded.Kind == SessionMessage.Correction && decoded.Battle == BattleId &&
-                decoded.Owner == _options.RemoteOwner && decoded.Tick == tick);
-            SessionCodec.ReadCorrection(ref decoded, _incomingCorrection, ref _devices, ref _barrels); decoded.End();
+            CorrectionCodec.Read(payload, BattleId, _options.RemoteOwner, _arena, _remoteBodies, _incomingCorrection, ref _timers);
             _runner.Battle.Submit(_options.RemoteOwner, _incomingCorrection);
-            _lastCorrectionTick = tick;
+            if (_incomingCorrection.Tick <= _lastCorrectionTick) return;
+            _lastCorrectionTick = _incomingCorrection.Tick;
             ++ReceivedCorrectionBatches;
         }
 
-        private const int FragmentHeader = 29;
         private const int HeartbeatTicks = 5;
         private readonly NetworkSessionOptions _options;
         private readonly BattleRunner _runner;
@@ -317,22 +342,20 @@ namespace CombatSimulation.Runtime
         private byte[] _batch = new byte[SessionCodec.BatchHeaderCapacity + 16 * SessionCodec.RecordCapacity];
         private int _batchLength;
         private long _lastBatchTick = -HeartbeatTicks;
-        private readonly byte[] _fragment, _input;
+        private readonly byte[] _correction, _input;
+        private readonly CorrectionCodec.Arena _arena;
         private readonly ControlSender _controls = new ControlSender();
-        private readonly Dictionary<uint, EntityId> _remoteControls = new Dictionary<uint, EntityId>();
+        // Indexed by control index: the spawn records of each owner in sequence order.
+        private readonly List<ControlledBody> _localBodies = new List<ControlledBody>(), _remoteBodies = new List<ControlledBody>();
         private readonly List<ControlRecord> _inputRecords = new List<ControlRecord>();
-        private uint _nextLocalControl, _nextRemoteControl;
-        private readonly int _fragmentPayload;
         private readonly List<Received> _received = new List<Received>();
         private int _receivedCount;
         private readonly CorrectionBatch _outgoingCorrection = new CorrectionBatch(), _incomingCorrection = new CorrectionBatch();
-        private byte[] _correctionBytes = Array.Empty<byte>(), _assembly = Array.Empty<byte>();
-        private bool[] _pieces = Array.Empty<bool>();
-        private DeviceState[] _devices = Array.Empty<DeviceState>();
-        private long[] _barrels = Array.Empty<long>();
+        private int[] _sortedBodies = Array.Empty<int>();
+        private uint[] _sortedIndices = Array.Empty<uint>();
+        private PointDefenseTimers[] _timers = Array.Empty<PointDefenseTimers>();
         private ulong _lastOperation;
-        private long _nextCorrectionMilliseconds, _assemblyTick = -1, _lastCorrectionTick = -1;
-        private int _assemblySize, _assemblyCount;
+        private long _nextCorrectionMilliseconds, _lastCorrectionTick = -1;
         private sealed class Received
         {
             internal byte[] Bytes = Array.Empty<byte>();

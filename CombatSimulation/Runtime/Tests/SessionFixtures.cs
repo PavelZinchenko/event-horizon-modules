@@ -13,7 +13,7 @@ namespace CombatSimulation.Runtime.Tests
             new ResourceDefinition(500, 10, 1), new ResourceDefinition(300, 20, 0.5f));
 
         internal static BattleSetup Setup(int owner, int delay0 = 0, int delay1 = 0, long timeout = 0,
-            ShipDefinition ship = null, int slots = 1)
+            ShipDefinition ship = null, int slots = 1, int maxActive = 1)
         {
             var roster = new List<RosterSlotSetup>();
             for (var i = 0; i < slots; ++i)
@@ -21,7 +21,7 @@ namespace CombatSimulation.Runtime.Tests
                 roster.Add(new RosterSlotSetup(new RosterId((uint)(1 + i)), 0, ship ?? Ship, 10));
                 roster.Add(new RosterSlotSetup(new RosterId((uint)(101 + i)), 1, ship ?? Ship, 20));
             }
-            return new BattleSetup(new BattleId(123), 7, roster, timeLimitTicks: timeout, localOwners: new[] { owner },
+            return new BattleSetup(new BattleId(123), 7, roster, timeLimitTicks: timeout, maxActiveShipsPerSide: maxActive, localOwners: new[] { owner },
                 ownerDelays: new Dictionary<int, int> { { 10, delay0 }, { 20, delay1 } });
         }
 
@@ -56,7 +56,7 @@ namespace CombatSimulation.Runtime.Tests
             internal Transport Other;
             internal bool Hold;
             internal bool DropUnreliable, DropInput;
-            internal int InputDatagrams, ReliableDatagrams;
+            internal int InputDatagrams, ReliableDatagrams, UnreliableDatagrams;
             private readonly byte[][] _packets = new byte[256][];
             private readonly int[] _lengths = new int[256];
             private int _read, _count;
@@ -65,7 +65,7 @@ namespace CombatSimulation.Runtime.Tests
             public bool TrySend(ReadOnlySpan<byte> data)
             {
                 // PacketKind.Unreliable is read from the public framing's fixed kind byte.
-                if (DropUnreliable && data[1] == 6) return true;
+                if (data[1] == 6) { ++UnreliableDatagrams; if (DropUnreliable) return true; }
                 if (data[1] == 1) { ++InputDatagrams; if (DropInput) return true; }
                 // Counts first sends only: the reliable sequence follows the 4-byte packet header.
                 if (data[1] == 2 && BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4)) >= _nextReliable)
@@ -90,12 +90,12 @@ namespace CombatSimulation.Runtime.Tests
             internal readonly NetworkSession A, B;
             internal double Now;
             internal Pair(int delay0 = 0, int delay1 = 0, long timeout = 0, int interval = 100,
-                ShipDefinition ship = null, Pilots pilots = null, int datagram = 1200, int slots = 1)
+                ShipDefinition ship = null, Pilots pilots = null, int datagram = 1200, int slots = 1, int maxActive = 1)
             {
                 TA.Other = TB; TB.Other = TA;
-                A = new NetworkSession(Setup(10, delay0, delay1, timeout, ship, slots), pilots ?? new Pilots(), TA,
+                A = new NetworkSession(Setup(10, delay0, delay1, timeout, ship, slots, maxActive), pilots ?? new Pilots(), TA,
                     new NetworkSessionOptions(10, 20, true, interval, datagram));
-                B = new NetworkSession(Setup(20, delay0, delay1, timeout, ship, slots), pilots ?? new Pilots(), TB,
+                B = new NetworkSession(Setup(20, delay0, delay1, timeout, ship, slots, maxActive), pilots ?? new Pilots(), TB,
                     new NetworkSessionOptions(20, 10, false, interval, datagram));
             }
             internal void Step()

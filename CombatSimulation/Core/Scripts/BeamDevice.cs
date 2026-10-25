@@ -5,6 +5,7 @@ namespace CombatSimulation.Core
         public BeamDevice(BeamDefinition definition, int index) : base(index) => Definition = definition;
 
         public BeamDefinition Definition { get; }
+        internal long StoppedTick => _stoppedTick;
 
         public override void Reset()
         {
@@ -31,9 +32,6 @@ namespace CombatSimulation.Core
             battle.RequestSpawn(new SpawnRequest(ship, this));
         }
 
-        public override DeviceState Export() => new DeviceState(_stoppedTick);
-        public override void Import(in DeviceState state) => _stoppedTick = state.LastTick;
-
         public void Attach(EntityHandle handle)
         {
             _handle = handle;
@@ -47,8 +45,8 @@ namespace CombatSimulation.Core
             return _active;
         }
 
-        // The beam left without the device stopping it: an owner removal or an unconfirmed remote beam.
-        // The stop starts the cooldown, as Deactivate does.
+        // The beam left without the device stopping it: an owner removal (stop at the owner's removal tick) or an
+        // unconfirmed remote beam. The stop starts the cooldown, as Deactivate does.
         public void Detach(EntityHandle handle, long tick)
         {
             if (!_active || _handle.Index != handle.Index || _handle.Generation != handle.Generation) return;

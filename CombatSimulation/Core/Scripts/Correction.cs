@@ -2,70 +2,92 @@ using System;
 
 namespace CombatSimulation.Core
 {
-    // A recharging resource at the end of a tick (legacy Energy): value and seconds left before the recharge resumes.
-    public readonly struct RechargeState
+    // A resource at the end of the batch tick on an 8-bit grid (network plan, G1). Full: the maximum, and no delay.
+    // Otherwise Level / 256 of the maximum, and whether the recharge delay runs. Armor rounds up, so a living ship
+    // never reads as empty; shield and energy round to the nearest step.
+    public readonly struct ResourceLevel : IEquatable<ResourceLevel>
     {
-        public readonly float Value;
-        public readonly float DelayRemaining;
+        public const int Steps = 256;
+        public static readonly ResourceLevel Full = new ResourceLevel(true, false, 0);
 
-        public RechargeState(float value, float delayRemaining)
+        public readonly bool IsFull;
+        public readonly bool DelayRunning;
+        public readonly byte Level;
+
+        public ResourceLevel(bool isFull, bool delayRunning, byte level)
         {
-            Value = value;
-            DelayRemaining = delayRemaining;
+            IsFull = isFull;
+            DelayRunning = delayRunning;
+            Level = level;
         }
+
+        public static ResourceLevel Partial(byte level, bool delayRunning) => new ResourceLevel(false, delayRunning, level);
+
+        // A resource with maximum 0 is always full. A delay runs only on a resource that recharges.
+        internal static ResourceLevel Of(in ResourcePool pool, bool roundUp)
+        {
+            if (!(pool.Value < pool.Max)) return Full;
+            var steps = pool.Value / (double)pool.Max * Steps;
+            var level = roundUp ? Math.Ceiling(steps) : Math.Round(steps);
+            return Partial((byte)Math.Max(0.0, Math.Min(Steps - 1, level)), pool.DelayRemaining > 0f && pool.RechargeRate > 0f);
+        }
+
+        internal float Value(float max) => IsFull ? max : Level * max / Steps;
+
+        internal bool IsValidFor(in ResourcePool pool) =>
+            (pool.Max > 0f || IsFull) && !(IsFull && DelayRunning) && !(DelayRunning && !(pool.RechargeRate > 0f));
+
+        public bool Equals(ResourceLevel other) => IsFull == other.IsFull && DelayRunning == other.DelayRunning && Level == other.Level;
+        public override bool Equals(object obj) => obj is ResourceLevel other && Equals(other);
+        public override int GetHashCode() => (IsFull ? 512 : 0) | (DelayRunning ? 256 : 0) | Level;
     }
 
-    // The timers of one device. The fields mean, by device:
-    // cannon: LastTick = last shot; beam: LastTick = last stop;
-    // point defense: LastTick = last stop, NextTick = next query, Enabled, Started (the first query was scheduled).
-    // A drone bay has no device state: its launch timer runs only on its owner.
-    public readonly struct DeviceState
+    // The timers of one point-defense device at the batch tick t, as ages in ticks: since the activation stop, and
+    // since the last query start (a zap or the first activation). Ready: the timer no longer blocks any tick after t.
+    // Other devices send nothing: cannon, beam and barrel timers follow fire confirmations and removals, and a
+    // drone bay runs only on its owner.
+    public readonly struct PointDefenseTimers : IEquatable<PointDefenseTimers>
     {
-        public readonly long LastTick;
-        public readonly long NextTick;
-        public readonly bool Enabled;
-        public readonly bool Started;
+        public const int Ready = -1;
+        public static readonly PointDefenseTimers AllReady = new PointDefenseTimers(Ready, Ready);
 
-        public DeviceState(long lastTick, long nextTick = 0, bool enabled = false, bool started = false)
+        public readonly int StopAge;
+        public readonly int QueryAge;
+
+        public PointDefenseTimers(int stopAge, int queryAge)
         {
-            LastTick = lastTick;
-            NextTick = nextTick;
-            Enabled = enabled;
-            Started = started;
+            StopAge = stopAge;
+            QueryAge = queryAge;
         }
+
+        public bool Equals(PointDefenseTimers other) => StopAge == other.StopAge && QueryAge == other.QueryAge;
+        public override bool Equals(object obj) => obj is PointDefenseTimers other && Equals(other);
+        public override int GetHashCode() => StopAge * 397 ^ QueryAge;
     }
 
-    // The owner's state of one ship or drone at the end of the batch tick (network plan, step 5).
-    // Motion is additive on the receiver; the other values are set exactly. Device and barrel states are ranges
-    // of the batch arrays, in definition order.
+    // The owner's state of one ship or drone at the end of the batch tick (network plan, step 5 and G1).
+    // Motion is additive on the receiver. Point-defense timers are a range of the batch array, in device order.
+    // Retreat is a reliable owner operation, not part of a correction.
     public readonly struct BodyCorrection
     {
         public readonly EntityId EntityId;
         public readonly SpawnPose Motion;
-        public readonly float Armor;
-        public readonly RechargeState Shield;
-        public readonly RechargeState Energy;
-        // The absolute retreat completion tick, or -1 without a retreat.
-        public readonly long RetreatCompletionTick;
-        public readonly int FirstDevice;
-        public readonly int DeviceCount;
-        public readonly int FirstBarrel;
-        public readonly int BarrelCount;
+        public readonly ResourceLevel Armor;
+        public readonly ResourceLevel Shield;
+        public readonly ResourceLevel Energy;
+        public readonly int FirstTimer;
+        public readonly int TimerCount;
 
-        internal BodyCorrection(EntityId entityId, in SpawnPose motion, float armor, in RechargeState shield,
-            in RechargeState energy, long retreatCompletionTick, int firstDevice, int deviceCount, int firstBarrel,
-            int barrelCount)
+        internal BodyCorrection(EntityId entityId, in SpawnPose motion, in ResourceLevel armor, in ResourceLevel shield,
+            in ResourceLevel energy, int firstTimer, int timerCount)
         {
             EntityId = entityId;
             Motion = motion;
             Armor = armor;
             Shield = shield;
             Energy = energy;
-            RetreatCompletionTick = retreatCompletionTick;
-            FirstDevice = firstDevice;
-            DeviceCount = deviceCount;
-            FirstBarrel = firstBarrel;
-            BarrelCount = barrelCount;
+            FirstTimer = firstTimer;
+            TimerCount = timerCount;
         }
     }
 
@@ -79,14 +101,9 @@ namespace CombatSimulation.Core
         public ulong AppliedHitSequence { get; private set; }
 
         public ReadOnlySpan<BodyCorrection> Bodies => new ReadOnlySpan<BodyCorrection>(_bodies, 0, _bodyCount);
-        public ReadOnlySpan<DeviceState> Devices => new ReadOnlySpan<DeviceState>(_devices, 0, _deviceCount);
-        public ReadOnlySpan<long> BarrelShotTicks => new ReadOnlySpan<long>(_barrels, 0, _barrelCount);
 
-        public ReadOnlySpan<DeviceState> GetDevices(in BodyCorrection body) =>
-            new ReadOnlySpan<DeviceState>(_devices, body.FirstDevice, body.DeviceCount);
-
-        public ReadOnlySpan<long> GetBarrelShotTicks(in BodyCorrection body) =>
-            new ReadOnlySpan<long>(_barrels, body.FirstBarrel, body.BarrelCount);
+        public ReadOnlySpan<PointDefenseTimers> GetTimers(in BodyCorrection body) =>
+            new ReadOnlySpan<PointDefenseTimers>(_timers, body.FirstTimer, body.TimerCount);
 
         // Clears the batch and sets its header.
         public void Begin(BattleId battleId, int owner, long tick, ulong appliedHitSequence)
@@ -95,49 +112,36 @@ namespace CombatSimulation.Core
             Owner = owner;
             Tick = tick;
             AppliedHitSequence = appliedHitSequence;
-            _bodyCount = _deviceCount = _barrelCount = 0;
-            _bodyDevices = _bodyBarrels = 0;
+            _bodyCount = _timerCount = _bodyTimers = 0;
         }
 
-        public void Add(EntityId entityId, in SpawnPose motion, float armor, in RechargeState shield,
-            in RechargeState energy, long retreatCompletionTick, ReadOnlySpan<DeviceState> devices,
-            ReadOnlySpan<long> barrelShotTicks)
+        public void Add(EntityId entityId, in SpawnPose motion, in ResourceLevel armor, in ResourceLevel shield,
+            in ResourceLevel energy, ReadOnlySpan<PointDefenseTimers> timers)
         {
-            for (var i = 0; i < devices.Length; ++i) AddDevice(devices[i]);
-            for (var i = 0; i < barrelShotTicks.Length; ++i) AddBarrel(barrelShotTicks[i]);
-            CommitBody(entityId, motion, armor, shield, energy, retreatCompletionTick);
+            for (var i = 0; i < timers.Length; ++i) AddTimers(timers[i]);
+            CommitBody(entityId, motion, armor, shield, energy);
         }
 
-        // The devices and barrels added since the last body belong to the next committed body.
-        internal void AddDevice(in DeviceState state)
+        // The timers added since the last body belong to the next committed body.
+        internal void AddTimers(in PointDefenseTimers timers)
         {
-            if (_deviceCount == _devices.Length) Array.Resize(ref _devices, _devices.Length * 2);
-            _devices[_deviceCount++] = state;
+            if (_timerCount == _timers.Length) Array.Resize(ref _timers, _timers.Length * 2);
+            _timers[_timerCount++] = timers;
         }
 
-        internal void AddBarrel(long shotTick)
-        {
-            if (_barrelCount == _barrels.Length) Array.Resize(ref _barrels, _barrels.Length * 2);
-            _barrels[_barrelCount++] = shotTick;
-        }
-
-        internal void CommitBody(EntityId entityId, in SpawnPose motion, float armor, in RechargeState shield,
-            in RechargeState energy, long retreatCompletionTick)
+        internal void CommitBody(EntityId entityId, in SpawnPose motion, in ResourceLevel armor, in ResourceLevel shield,
+            in ResourceLevel energy)
         {
             if (_bodyCount == _bodies.Length) Array.Resize(ref _bodies, _bodies.Length * 2);
-            _bodies[_bodyCount++] = new BodyCorrection(entityId, motion, armor, shield, energy, retreatCompletionTick,
-                _bodyDevices, _deviceCount - _bodyDevices, _bodyBarrels, _barrelCount - _bodyBarrels);
-            _bodyDevices = _deviceCount;
-            _bodyBarrels = _barrelCount;
+            _bodies[_bodyCount++] = new BodyCorrection(entityId, motion, armor, shield, energy, _bodyTimers,
+                _timerCount - _bodyTimers);
+            _bodyTimers = _timerCount;
         }
 
         private BodyCorrection[] _bodies = new BodyCorrection[8];
-        private DeviceState[] _devices = new DeviceState[16];
-        private long[] _barrels = new long[16];
+        private PointDefenseTimers[] _timers = new PointDefenseTimers[8];
         private int _bodyCount;
-        private int _deviceCount;
-        private int _barrelCount;
-        private int _bodyDevices;
-        private int _bodyBarrels;
+        private int _timerCount;
+        private int _bodyTimers;
     }
 }

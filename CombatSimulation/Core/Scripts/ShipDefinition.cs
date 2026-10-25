@@ -53,11 +53,14 @@ namespace CombatSimulation.Core
             Engine = engine ?? throw new ArgumentNullException(nameof(engine));
             EngineWithoutEnergy = engineWithoutEnergy;
             Armor = armor;
+            ArmorResource = new ResourceDefinition(armor);
             Shield = shield;
             Energy = energy;
             RammingDamageMultiplier = rammingDamageMultiplier;
             Barrels = barrelArray;
             Devices = deviceArray;
+            foreach (var device in deviceArray)
+                if (device is PointDefenseDefinition) ++PointDefenseCount;
         }
 
         // The main hull circle at the body origin. Phase 4 replaces circles with collider outlines.
@@ -77,6 +80,10 @@ namespace CombatSimulation.Core
         // Maximum armor. Armor does not regenerate (Q7).
         public float Armor { get; }
 
+        // Armor as a resource, the one source for the armor pool and its correction bits. Legacy armor repair
+        // (ArmorRepairRate, ArmorRepairCooldown) is not in the core yet, so the rate and delay are 0.
+        internal ResourceDefinition ArmorResource { get; }
+
         public ResourceDefinition Shield { get; }
         public ResourceDefinition Energy { get; }
 
@@ -87,5 +94,8 @@ namespace CombatSimulation.Core
 
         // In control-bit order: device i reads bit i of the control frame.
         public IReadOnlyList<DeviceDefinition> Devices { get; }
+
+        // A correction carries timers for these devices only (network plan, G1).
+        internal int PointDefenseCount { get; }
     }
 }

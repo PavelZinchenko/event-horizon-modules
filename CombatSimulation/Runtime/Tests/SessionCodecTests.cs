@@ -91,23 +91,119 @@ namespace CombatSimulation.Runtime.Tests
         }
 
         [Test]
-        public void CorrectionsPreserveAllBodiesResourcesDevicesAndBarrels()
+        public void CorrectionsKeepBodiesOnTheirGridsAndEscapeFastVelocities()
         {
-            var batch = new CorrectionBatch(); batch.Begin(new BattleId(1), 20, 50, 123456);
-            for (var i = 0; i < 3; ++i)
-                batch.Add(new EntityId((ulong)(i + 1)), new SpawnPose(new Vec2(i, -i), 0.5f, new Vec2(2, 3), -2),
-                    50.25f, new RechargeState(42, 0.75f), new RechargeState(18, 0.25f), i == 0 ? -1 : 500,
-                    new[] { new DeviceState(-1, 0, true, false), new DeviceState(42, 51, false, true) }, new long[] { -1, 45 });
-            var bytes = new byte[SessionCodec.CorrectionSize(batch)];
-            Assert.AreEqual(bytes.Length, SessionCodec.Correction(bytes, batch));
-            var r = new SessionCodec.Reader(bytes); var actual = new CorrectionBatch();
-            var devices = Array.Empty<DeviceState>(); var barrels = Array.Empty<long>();
-            SessionCodec.ReadCorrection(ref r, actual, ref devices, ref barrels); r.End();
-            Assert.AreEqual(batch.BattleId, actual.BattleId); Assert.AreEqual(batch.Owner, actual.Owner);
+            var bodies = CorrectionBodies();
+            var batch = new CorrectionBatch(); batch.Begin(new BattleId(0x500000001), 20, 50, 123456);
+            batch.Add(bodies[0].Entity, new SpawnPose(new Vec2(199.9999f, 0.3f), -0.25f, new Vec2(2.5f, -3.3f), 1.7f),
+                ResourceLevel.Partial(1, false), ResourceLevel.Full, ResourceLevel.Partial(255, true), ReadOnlySpan<PointDefenseTimers>.Empty);
+            batch.Add(bodies[2].Entity, new SpawnPose(new Vec2(12.345f, 187.5f), 7f, new Vec2(500f, -127.99f), -40f),
+                ResourceLevel.Full, ResourceLevel.Full, ResourceLevel.Partial(0, false),
+                new[] { new PointDefenseTimers(3, PointDefenseTimers.Ready), PointDefenseTimers.AllReady });
+            var bytes = new byte[100]; var arena = new CorrectionCodec.Arena(200, 200);
+            Assert.AreEqual(18, arena.XBits);
+            var w = CorrectionCodec.Begin(bytes, batch.BattleId, batch.Tick, batch.AppliedHitSequence);
+            var start = w.BitPosition;
+            Assert.IsTrue(CorrectionCodec.Write(ref w, arena, 0, batch.Bodies[0], bodies[0].Definition, batch.GetTimers(batch.Bodies[0])));
+            Assert.AreEqual(CorrectionCodec.BodyBits(arena, 0, batch.Bodies[0], bodies[0].Definition,
+                batch.GetTimers(batch.Bodies[0])), w.BitPosition - start);
+            Assert.IsTrue(CorrectionCodec.Write(ref w, arena, 1, batch.Bodies[1], bodies[2].Definition, batch.GetTimers(batch.Bodies[1])));
+            var length = w.Finish();
+
+            var actual = new CorrectionBatch(); var timers = Array.Empty<PointDefenseTimers>();
+            CorrectionCodec.Read(bytes.AsSpan(0, length), batch.BattleId, 20, arena, bodies, actual, ref timers);
+            Assert.AreEqual(batch.BattleId, actual.BattleId); Assert.AreEqual(20, actual.Owner);
             Assert.AreEqual(batch.Tick, actual.Tick); Assert.AreEqual(batch.AppliedHitSequence, actual.AppliedHitSequence);
-            CollectionAssert.AreEqual(batch.Bodies.ToArray(), actual.Bodies.ToArray());
-            CollectionAssert.AreEqual(batch.Devices.ToArray(), actual.Devices.ToArray());
-            CollectionAssert.AreEqual(batch.BarrelShotTicks.ToArray(), actual.BarrelShotTicks.ToArray());
+            Assert.AreEqual(2, actual.Bodies.Length);
+            for (var i = 0; i < 2; ++i)
+            {
+                var expected = batch.Bodies[i]; var body = actual.Bodies[i];
+                Assert.AreEqual(expected.EntityId, body.EntityId);
+                Assert.AreEqual(expected.Armor, body.Armor); Assert.AreEqual(expected.Shield, body.Shield);
+                Assert.AreEqual(expected.Energy, body.Energy);
+                CollectionAssert.AreEqual(batch.GetTimers(expected).ToArray(), actual.GetTimers(body).ToArray());
+            }
+            // The first body wraps to cell 0 and stays inside one grid step; the second escapes vx and spin.
+            var first = actual.Bodies[0].Motion;
+            Assert.AreEqual(0f, first.Position.X); Assert.AreEqual(0.3f, first.Position.Y, 0.5f / 1024);
+            Assert.AreEqual(2 * Math.PI - 0.25, first.Angle, Math.PI / 16384);
+            Assert.AreEqual(2.5f, first.LinearVelocity.X, 0.5f / 128); Assert.AreEqual(-3.3f, first.LinearVelocity.Y, 0.5f / 128);
+            Assert.AreEqual(1.7f, first.AngularVelocity, 0.5f / 512);
+            var second = actual.Bodies[1].Motion;
+            Assert.AreEqual(500f, second.LinearVelocity.X); Assert.AreEqual(-40f, second.AngularVelocity);
+            Assert.AreEqual(-127.99f, second.LinearVelocity.Y, 0.5f / 128);
+            Assert.AreEqual(7 - 2 * Math.PI, second.Angle, Math.PI / 16384);
+
+            // A drone without shield, with energy in use, costs 106 bits (about 13 bytes); the plan expected about 15.
+            var drone = new SpawnPose(new Vec2(100, 100), 1, new Vec2(3, 4), 0.5f);
+            batch.Begin(batch.BattleId, 20, 50, 0);
+            batch.Add(bodies[0].Entity, drone, ResourceLevel.Full, ResourceLevel.Full, ResourceLevel.Partial(200, true),
+                ReadOnlySpan<PointDefenseTimers>.Empty);
+            Assert.AreEqual(106, CorrectionCodec.BodyBits(arena, 0, batch.Bodies[0], bodies[0].Definition, ReadOnlySpan<PointDefenseTimers>.Empty));
+        }
+
+        [Test]
+        public void MalformedCorrectionsAreRejectedAndUnknownIndicesEndTheDatagram()
+        {
+            var bodies = CorrectionBodies(); var arena = new CorrectionCodec.Arena(200, 200);
+            var batch = new CorrectionBatch(); batch.Begin(new BattleId(9), 20, 50, 0);
+            batch.Add(bodies[0].Entity, new SpawnPose(new Vec2(1, 2), 0, Vec2.Zero), ResourceLevel.Full,
+                ResourceLevel.Full, ResourceLevel.Partial(9, true), ReadOnlySpan<PointDefenseTimers>.Empty);
+            batch.Add(bodies[2].Entity, new SpawnPose(new Vec2(3, 4), 0, Vec2.Zero), ResourceLevel.Full,
+                ResourceLevel.Full, ResourceLevel.Full, new[] { new PointDefenseTimers(1, 2), PointDefenseTimers.AllReady });
+            var bytes = new byte[64];
+            var w = CorrectionCodec.Begin(bytes, batch.BattleId, 50, 0);
+            CorrectionCodec.Write(ref w, arena, 0, batch.Bodies[0], bodies[0].Definition, ReadOnlySpan<PointDefenseTimers>.Empty);
+            CorrectionCodec.Write(ref w, arena, 1, batch.Bodies[1], bodies[2].Definition, batch.GetTimers(batch.Bodies[1]));
+            var length = w.Finish();
+            Assert.Throws<FormatException>(() => Read(bytes, length, new BattleId(10)));
+            // A cut that ends in zero bits at a body boundary reads as padding: it may lose bodies, never misread one.
+            for (var size = 1; size < length; ++size)
+            {
+                var into = new CorrectionBatch(); var scratch = Array.Empty<PointDefenseTimers>();
+                try { CorrectionCodec.Read(bytes.AsSpan(0, size), new BattleId(9), 20, arena, bodies, into, ref scratch); }
+                catch (FormatException) { continue; }
+                Assert.Less(into.Bodies.Length, 2, $"length {size}");
+                if (into.Bodies.Length == 1) Assert.AreEqual(bodies[0].Entity, into.Bodies[0].EntityId);
+            }
+
+            // Index 1 has no spawn record: reading stops after the first body, without an error.
+            w = CorrectionCodec.Begin(bytes, batch.BattleId, 50, 0);
+            CorrectionCodec.Write(ref w, arena, 0, batch.Bodies[0], bodies[0].Definition, ReadOnlySpan<PointDefenseTimers>.Empty);
+            CorrectionCodec.Write(ref w, arena, 0, batch.Bodies[0], bodies[0].Definition, ReadOnlySpan<PointDefenseTimers>.Empty);
+            length = w.Finish();
+            var actual = new CorrectionBatch(); var timers = Array.Empty<PointDefenseTimers>();
+            CorrectionCodec.Read(bytes.AsSpan(0, length), new BattleId(9), 20, arena, bodies, actual, ref timers);
+            Assert.AreEqual(1, actual.Bodies.Length);
+
+            // A position cell past the arena.
+            w = CorrectionCodec.Begin(bytes, batch.BattleId, 50, 0);
+            w.WriteVarUInt(0); w.WriteBits((1UL << 18) - 1, 18); w.WriteBits(0, 18 + 14);
+            w.WriteBits(1UL << 14, 15); w.WriteBits(1UL << 14, 15); w.WriteBits(1UL << 13, 14); w.WriteBits(7, 3);
+            length = w.Finish();
+            Assert.Throws<FormatException>(() => Read(bytes, length, new BattleId(9)));
+            bytes[0] = 2;
+            Assert.Throws<FormatException>(() => Read(bytes, length, new BattleId(9)));
+
+            void Read(byte[] data, int size, BattleId battle)
+            {
+                var into = new CorrectionBatch(); var scratch = Array.Empty<PointDefenseTimers>();
+                CorrectionCodec.Read(data.AsSpan(0, size), battle, 20, arena, bodies, into, ref scratch);
+            }
+        }
+
+        // Index 0: shield 0 and energy without recharge, no devices. Index 1: none. Index 2: two point-defense devices.
+        private static List<ControlledBody> CorrectionBodies()
+        {
+            var engine = new EngineDefinition(20, 10, 5, 2);
+            var plain = new ShipDefinition(1, 1, engine, 1000, new ResourceDefinition(0), new ResourceDefinition(100, 5, 1));
+            var defended = new ShipDefinition(1, 1, engine, 1000, new ResourceDefinition(500, 10, 1), new ResourceDefinition(300),
+                devices: new DeviceDefinition[] { new PointDefenseDefinition(3, 0.2f, 0), new PointDefenseDefinition(3, 0.2f, 0) });
+            return new List<ControlledBody>
+            {
+                new ControlledBody(new EntityId(11), plain), new ControlledBody(new EntityId(12), null),
+                new ControlledBody(new EntityId(13), defended),
+            };
         }
 
         [Test]

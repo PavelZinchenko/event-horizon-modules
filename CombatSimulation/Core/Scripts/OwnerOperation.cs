@@ -49,7 +49,7 @@ namespace CombatSimulation.Core
         }
     }
 
-    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn }
+    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn, Retreat }
 
     // One logical commit. A roster operation includes its entity spawn/removal, never a second message.
     // Sequence starts at 1 per owner and covers this batch only (hits have their own sequence).
@@ -115,6 +115,11 @@ namespace CombatSimulation.Core
             EntityId entityId, EntityId parentId, int deviceIndex, int barrelIndex, uint spawnSequence) =>
             new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.BulletSpawn, entityId,
                 parentId: parentId, deviceIndex: deviceIndex, barrelIndex: barrelIndex, spawnSequence: spawnSequence);
+
+        // A roster ship started its retreat at tick (network plan, G1). It completes Battle.RetreatTicks later.
+        // A retreat happens at most once per ship and cannot be cancelled.
+        public static OwnerOperation RetreatStarted(BattleId battleId, int owner, ulong sequence, long tick, EntityId entityId) =>
+            new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.Retreat, entityId);
     }
 
     // "All my operations through tick Tick are sent; the last one has sequence OperationSequence" (0: none yet).

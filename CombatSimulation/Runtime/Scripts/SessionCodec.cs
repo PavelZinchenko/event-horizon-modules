@@ -5,29 +5,20 @@ using CombatSimulation.Physics;
 
 namespace CombatSimulation.Runtime
 {
-    // Input (1) is a separate bit-packed datagram (InputCodec) and Batch (4) is one reliable tick batch;
-    // both only tag the receive queue. Hit and Operation are record kinds inside a batch.
+    // Input (1) and Correction (5) are separate bit-packed datagrams (InputCodec, CorrectionCodec) and Batch (4) is
+    // one reliable tick batch; they only tag the receive queue. Hit and Operation are record kinds inside a batch.
     internal enum SessionMessage : byte { Input = 1, Hit, Operation, Batch, Correction }
 
-    // Versioned little-endian messages. The caller supplies reusable buffers with the stated capacity.
+    // Versioned little-endian tick batches. The caller supplies reusable buffers with the stated capacity.
     // A tick batch has its own short header: version, battle ID low 32 bits, tick and last operation sequence
     // (both VarUInt). Then records until the end: kind, record tick − batch tick (zigzag VarUInt), fields.
-    // The sender is the owner of every record. Corrections keep the 22-byte message header.
+    // The sender is the owner of every record.
     internal static class SessionCodec
     {
         internal const byte Version = 2;
-        internal const int HeaderSize = 22;
         internal const int RecordCapacity = 160;
         internal const int BatchHeaderCapacity = 1 + 4 + 10 + 10;
         internal const int MaxBatchBytes = 1 << 20;
-
-        internal static ByteWriter Header(Span<byte> buffer, SessionMessage kind, BattleId battle, int owner, long tick)
-        {
-            var w = new ByteWriter(buffer);
-            w.WriteByte(Version); w.WriteByte((byte)kind); w.WriteUInt64(battle.Value);
-            w.WriteUInt32((uint)owner); w.WriteInt64(tick);
-            return w;
-        }
 
         internal static int BatchHeader(Span<byte> buffer, BattleId battle, long tick, ulong lastOperation)
         {
@@ -90,6 +81,8 @@ namespace CombatSimulation.Runtime
                     w.WriteUInt64(op.ParentId.Value); w.WriteUInt32((uint)op.DeviceIndex);
                     w.WriteUInt32((uint)op.BarrelIndex); w.WriteUInt32(op.SpawnSequence);
                     break;
+                case OwnerOperationKind.Retreat:
+                    break;
             }
             return w.Position;
         }
@@ -122,54 +115,10 @@ namespace CombatSimulation.Runtime
                     parent = new EntityId(r.U64()); var device = r.I32(); var barrel = r.I32(); var spawn = r.U32();
                     Require(!entity.IsNull && !parent.IsNull && device >= 0 && barrel >= 0);
                     return OwnerOperation.BulletFired(r.Battle, r.Owner, sequence, r.Tick, entity, parent, device, barrel, spawn);
+                case OwnerOperationKind.Retreat:
+                    Require(!entity.IsNull);
+                    return OwnerOperation.RetreatStarted(r.Battle, r.Owner, sequence, r.Tick, entity);
                 default: throw new FormatException("Unknown owner operation.");
-            }
-        }
-
-        internal static int CorrectionSize(CorrectionBatch batch) => checked(HeaderSize + 12 +
-            batch.Bodies.Length * 68 + batch.Devices.Length * 18 + batch.BarrelShotTicks.Length * 8);
-
-        internal static int Correction(Span<byte> buffer, CorrectionBatch batch)
-        {
-            if (buffer.Length < CorrectionSize(batch)) throw new ArgumentException("Correction buffer is too small.", nameof(buffer));
-            var w = Header(buffer, SessionMessage.Correction, batch.BattleId, batch.Owner, batch.Tick);
-            w.WriteUInt64(batch.AppliedHitSequence); w.WriteUInt32((uint)batch.Bodies.Length);
-            foreach (var body in batch.Bodies)
-            {
-                w.WriteUInt64(body.EntityId.Value); Pose(ref w, body.Motion); w.WriteSingle(body.Armor);
-                w.WriteSingle(body.Shield.Value); w.WriteSingle(body.Shield.DelayRemaining);
-                w.WriteSingle(body.Energy.Value); w.WriteSingle(body.Energy.DelayRemaining);
-                w.WriteInt64(body.RetreatCompletionTick); w.WriteUInt32((uint)body.DeviceCount); w.WriteUInt32((uint)body.BarrelCount);
-                foreach (var device in batch.GetDevices(body))
-                {
-                    w.WriteInt64(device.LastTick); w.WriteInt64(device.NextTick);
-                    w.WriteByte(device.Enabled ? (byte)1 : (byte)0); w.WriteByte(device.Started ? (byte)1 : (byte)0);
-                }
-                foreach (var tick in batch.GetBarrelShotTicks(body)) w.WriteInt64(tick);
-            }
-            return w.Position;
-        }
-
-        // Scratch arrays grow only when a larger body first appears. Nothing reaches Core until End succeeds.
-        internal static void ReadCorrection(ref Reader r, CorrectionBatch batch, ref DeviceState[] devices, ref long[] barrels)
-        {
-            var sequence = r.U64(); var count = r.I32();
-            Require(count >= 0 && count <= r.Remaining / 68);
-            batch.Begin(r.Battle, r.Owner, r.Tick, sequence);
-            for (var i = 0; i < count; ++i)
-            {
-                var entity = new EntityId(r.U64()); var pose = r.Pose(); var armor = r.Float();
-                var shield = new RechargeState(r.Float(), r.Float()); var energy = new RechargeState(r.Float(), r.Float());
-                var retreat = r.I64(); var deviceCount = r.I32(); var barrelCount = r.I32();
-                Require(!entity.IsNull && armor >= 0 && shield.Value >= 0 && shield.DelayRemaining >= 0 &&
-                    energy.Value >= 0 && energy.DelayRemaining >= 0 && retreat >= -1 &&
-                    deviceCount >= 0 && deviceCount <= ShipDefinition.MaxDevices && barrelCount >= 0 &&
-                    (long)deviceCount * 18 + (long)barrelCount * 8 <= r.Remaining);
-                if (devices.Length < deviceCount) Array.Resize(ref devices, deviceCount);
-                if (barrels.Length < barrelCount) Array.Resize(ref barrels, barrelCount);
-                for (var d = 0; d < deviceCount; ++d) devices[d] = new DeviceState(r.I64(), r.I64(), r.Bool(), r.Bool());
-                for (var b = 0; b < barrelCount; ++b) barrels[b] = r.I64();
-                batch.Add(entity, pose, armor, shield, energy, retreat, devices.AsSpan(0, deviceCount), barrels.AsSpan(0, barrelCount));
             }
         }
 
@@ -192,13 +141,6 @@ namespace CombatSimulation.Runtime
             internal long BatchTick;
             internal ulong LastOperation;
             internal int Remaining => _reader.Remaining;
-            internal Reader(ReadOnlySpan<byte> data)
-            {
-                this = default; _reader = new ByteReader(data);
-                Require(Byte() == Version); Kind = (SessionMessage)Byte();
-                Battle = new BattleId(U64()); Owner = I32(); Tick = I64();
-                Require(Owner >= 0 && Tick >= 0 && Tick <= long.MaxValue - 6);
-            }
 
             // The batch names only the low 32 bits of the battle; the receiver supplies its own ID and the sender.
             internal static Reader Batch(ReadOnlySpan<byte> data, BattleId battle, int owner)

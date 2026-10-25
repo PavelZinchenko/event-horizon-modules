@@ -399,10 +399,8 @@ namespace CombatSimulation.Core.Tests
             var world = d.Battle.World;
             batch.Begin(d.BattleId, 20, d.Tick - 1, ulong.MaxValue);
             batch.Add(ship.Id, new SpawnPose(world.GetPosition(ship.Body), world.GetAngle(ship.Body),
-                    world.GetLinearVelocity(ship.Body), world.GetAngularVelocity(ship.Body)), ship.Armor.Value,
-                new RechargeState(ship.Shield.Value, ship.Shield.DelayRemaining),
-                new RechargeState(ship.Energy.Value, ship.Energy.DelayRemaining), ShipEntity.NoRetreat,
-                ReadOnlySpan<DeviceState>.Empty, ReadOnlySpan<long>.Empty);
+                    world.GetLinearVelocity(ship.Body), world.GetAngularVelocity(ship.Body)), ResourceLevel.Of(ship.Armor, true),
+                ResourceLevel.Of(ship.Shield, false), ResourceLevel.Of(ship.Energy, false), ReadOnlySpan<PointDefenseTimers>.Empty);
             if (d.Battle.Submit(20, batch) != 1) throw new InvalidOperationException("Rejected correction.");
         }
 

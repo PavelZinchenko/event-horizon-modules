@@ -799,6 +799,8 @@ namespace CombatSimulation.Core
             if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) { Reject(command, "already retreating"); return; }
 
             ship.RetreatCompletionTick = Tick + RetreatTicks;
+            if (ShouldCapture(ship.Owner))
+                _outgoingOperations.Add(OwnerOperation.RetreatStarted(BattleId, ship.Owner, NextOperationSequence(ship.Owner), Tick, ship.Id));
         }
 
         // Legacy Scene.FindFreePlace and ShipInfo.Create, with counter-based random.

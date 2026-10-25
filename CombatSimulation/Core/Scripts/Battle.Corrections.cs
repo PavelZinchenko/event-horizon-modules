@@ -4,10 +4,10 @@ using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
-    // Owner corrections and predicted damage (network plan, step 5). The owner writes the end-of-tick state of its
-    // ships and drones; the receiver adds the movement error to the present and sets the gameplay state exactly.
-    // Damage this device sends to a remote ship is applied to the copy at once and replayed after each correction
-    // until the target owner acknowledges it.
+    // Owner corrections and predicted damage (network plan, step 5 and G1). The owner writes the end-of-tick state of
+    // its ships and drones; the receiver adds the movement error to the present, and moves resources and
+    // point-defense timers to the owner's. Damage this device sends to a remote ship is applied to the copy at once
+    // and replayed after each correction until the target owner acknowledges it.
     public sealed partial class Battle
     {
         // Call after Step: the batch describes the last completed tick. AppliedHitSequence acknowledges the hits
@@ -25,11 +25,10 @@ namespace CombatSimulation.Core
                 var ship = GetShipEntry(i);
                 if (ship == null || ship.Owner != owner) continue;
 
-                for (var d = 0; d < ship.DeviceCount; ++d) batch.AddDevice(ship.GetDevice(d).Export());
-                for (var b = 0; b < ship.Definition.Barrels.Count; ++b) batch.AddBarrel(ship.GetBarrelShotTick(b));
-                batch.CommitBody(ship.Id, ReadSpawnPose(ship), ship.Armor.Value,
-                    new RechargeState(ship.Shield.Value, ship.Shield.DelayRemaining),
-                    new RechargeState(ship.Energy.Value, ship.Energy.DelayRemaining), ship.RetreatCompletionTick);
+                for (var d = 0; d < ship.DeviceCount; ++d)
+                    if (ship.GetDevice(d) is PointDefenseDevice pointDefense) batch.AddTimers(pointDefense.Export(Tick - 1));
+                batch.CommitBody(ship.Id, ReadSpawnPose(ship), ResourceLevel.Of(ship.Armor, true),
+                    ResourceLevel.Of(ship.Shield, false), ResourceLevel.Of(ship.Energy, false));
             }
         }
 
@@ -46,25 +45,26 @@ namespace CombatSimulation.Core
             foreach (var body in batch.Bodies)
             {
                 var ship = FindShip(body.EntityId);
-                if (ship == null || ship.Owner != senderOwner || !ValidCorrection(ship, body)) continue;
+                if (ship == null || ship.Owner != senderOwner || !ValidCorrection(ship, batch, body)) continue;
                 if (batch.Tick <= ship.LastCorrectionTick || (ship.Correction.IsSet && batch.Tick <= ship.Correction.Tick))
                     continue;
-                ship.Correction.Store(batch.Tick, batch.AppliedHitSequence, body, batch.GetDevices(body),
-                    batch.GetBarrelShotTicks(body));
+                ship.Correction.Store(batch.Tick, batch.AppliedHitSequence, body, batch.GetTimers(body));
                 ++held;
             }
             return held;
         }
 
-        private static bool ValidCorrection(ShipEntity ship, in BodyCorrection body) =>
-            body.DeviceCount == ship.DeviceCount && body.BarrelCount == ship.Definition.Barrels.Count &&
-            ValidPose(body.Motion) && Finite(body.Armor) && body.Armor >= 0f && body.Armor <= ship.Armor.Max &&
-            ValidResource(body.Shield, ship.Shield) && ValidResource(body.Energy, ship.Energy) &&
-            (body.RetreatCompletionTick == ShipEntity.NoRetreat || body.RetreatCompletionTick >= 0);
-
-        private static bool ValidResource(in RechargeState state, in ResourcePool pool) =>
-            Finite(state.Value) && state.Value >= 0f && state.Value <= pool.Max &&
-            Finite(state.DelayRemaining) && state.DelayRemaining >= 0f && state.DelayRemaining <= pool.RechargeDelay;
+        private static bool ValidCorrection(ShipEntity ship, CorrectionBatch batch, in BodyCorrection body)
+        {
+            if (body.TimerCount != ship.Definition.PointDefenseCount || !ValidPose(body.Motion) ||
+                !body.Armor.IsValidFor(ship.Armor) || !body.Shield.IsValidFor(ship.Shield) ||
+                !body.Energy.IsValidFor(ship.Energy)) return false;
+            var timers = batch.GetTimers(body);
+            var next = 0;
+            for (var d = 0; d < ship.DeviceCount; ++d)
+                if (ship.GetDevice(d) is PointDefenseDevice pointDefense && !pointDefense.IsValid(timers[next++])) return false;
+            return true;
+        }
 
         // Stage 1, after received operations and before commands.
         private void ApplyCorrections()
@@ -103,32 +103,53 @@ namespace CombatSimulation.Core
                 ship.ShiftHistory(tick, World.Torus, position, angle, linearVelocity, angularVelocity);
             }
 
-            // Gameplay: set exactly at the owner's tick, then recharge through the last completed tick.
-            ship.Armor.Value = body.Armor;
-            ship.Shield.Value = body.Shield.Value;
-            ship.Shield.DelayRemaining = body.Shield.DelayRemaining;
-            ship.Energy.Value = body.Energy.Value;
-            ship.Energy.DelayRemaining = body.Energy.DelayRemaining;
-            for (var t = tick + 1; t < Tick && !(IsSettled(ship.Shield) && IsSettled(ship.Energy)); ++t)
+            // Gameplay (G1): each resource gets a candidate, the owner's level at its tick recharged through the last
+            // completed tick, minus the damage this device sent that the owner had not applied by its tick. The
+            // candidate replaces the value only when they differ by more than one level. The delay always follows.
+            var elapsed = (Tick - 1 - tick) * TickDuration;
+            var armor = Candidate(ship.Armor, body.Armor, elapsed);
+            var shield = Candidate(ship.Shield, body.Shield, elapsed);
+            var energy = Candidate(ship.Energy, body.Energy, elapsed);
+            for (var t = tick + 1; t < Tick && !(IsSettled(armor) && IsSettled(shield) && IsSettled(energy)); ++t)
             {
-                ship.Shield.Update(TickDuration);
-                ship.Energy.Update(TickDuration);
+                armor.Update(TickDuration);
+                shield.Update(TickDuration);
+                energy.Update(TickDuration);
             }
-
-            ship.RetreatCompletionTick = body.RetreatCompletionTick;
-            for (var b = 0; b < body.BarrelCount; ++b) ship.RecordBarrelShot(b, correction.BarrelShotTicks[b]);
-            for (var d = 0; d < body.DeviceCount; ++d) ship.GetDevice(d).Import(correction.Devices[d]);
-
-            // Damage this device sent that the owner had not applied by its tick.
             var damage = ReplayPredictedDamage(ship.Id, tick, correction.AppliedHitSequence);
-            if (damage > 0f) ApplyShieldFirst(ship, damage);
+            if (damage > 0f) ApplyShieldFirst(ref shield, ref armor, damage);
+            Settle(ref ship.Armor, armor);
+            Settle(ref ship.Shield, shield);
+            Settle(ref ship.Energy, energy);
+
+            var next = 0;
+            for (var d = 0; d < ship.DeviceCount; ++d)
+                if (ship.GetDevice(d) is PointDefenseDevice pointDefense) pointDefense.Import(tick, correction.Timers[next++]);
             ship.LastCorrectionTick = tick;
             Observer?.Correction(new CorrectionObservation(ship, tick, Tick, hasHistory, positionError,
                 angleError, armorBefore, shieldBefore));
         }
 
-        // A full resource without a delay no longer changes.
-        private static bool IsSettled(in ResourcePool pool) => pool.DelayRemaining <= 0f && pool.Value >= pool.Max;
+        // A full resource without a delay no longer changes; nor does one that does not recharge.
+        private static bool IsSettled(in ResourcePool pool) =>
+            pool.DelayRemaining <= 0f && (pool.Value >= pool.Max || pool.RechargeRate == 0f);
+
+        // The owner's level at its tick. Delay flag 0 clears the delay. Flag 1 keeps a running local delay, moved
+        // back to the owner's tick, or starts the full delay there; the recharge to the present then advances it.
+        private static ResourcePool Candidate(in ResourcePool local, in ResourceLevel level, float elapsed)
+        {
+            var candidate = local;
+            candidate.Value = level.Value(local.Max);
+            candidate.DelayRemaining = !level.DelayRunning ? 0f : local.DelayRemaining > 0f
+                ? Math.Min(local.RechargeDelay, local.DelayRemaining + elapsed) : local.RechargeDelay;
+            return candidate;
+        }
+
+        private static void Settle(ref ResourcePool local, in ResourcePool candidate)
+        {
+            if (Math.Abs(candidate.Value - local.Value) > local.Max / ResourceLevel.Steps) local.Value = candidate.Value;
+            local.DelayRemaining = candidate.DelayRemaining;
+        }
 
         private static float WrapAngle(float angle)
         {
@@ -139,12 +160,14 @@ namespace CombatSimulation.Core
             return angle;
         }
 
+        private static void ApplyShieldFirst(ShipEntity ship, float damage) => ApplyShieldFirst(ref ship.Shield, ref ship.Armor, damage);
+
         // Legacy Impact.ApplyShield and ShipStats.ApplyDamage: shield first, then armor.
-        private static void ApplyShieldFirst(ShipEntity ship, float damage)
+        private static void ApplyShieldFirst(ref ResourcePool shield, ref ResourcePool armor, float damage)
         {
-            var absorbed = ship.Shield.Max > 0f && ship.Shield.Value > 0f ? Math.Min(damage, ship.Shield.Value) : 0f;
-            if (absorbed > 0f) ship.Shield.Consume(absorbed);
-            ship.Armor.Consume(damage - absorbed);
+            var absorbed = shield.Max > 0f && shield.Value > 0f ? Math.Min(damage, shield.Value) : 0f;
+            if (absorbed > 0f) shield.Consume(absorbed);
+            armor.Consume(damage - absorbed);
         }
 
         // Stage 14, before the snapshot: the end-of-tick state a correction for this tick describes.

@@ -45,7 +45,7 @@ namespace CombatSimulation.Core.Tests
             pair.A.Ship(101).Armor.Value = 700; pair.B.Ship(101).Armor.Value = 900;
             pair.A.Ship(101).Shield.Value = 50; pair.B.Ship(101).Shield.Value = 80;
             pair.Step(); pair.Correct(pair.A, pair.B); pair.Step();
-            Assert.AreEqual(900, observer.Last.ArmorBefore); Assert.AreEqual(700, observer.Last.ArmorAfter);
+            Assert.AreEqual(900, observer.Last.ArmorBefore); Assert.AreEqual(703.125f, observer.Last.ArmorAfter); // level 180
             Assert.AreEqual(80, observer.Last.ShieldBefore); Assert.AreEqual(50, observer.Last.ShieldAfter);
             Assert.AreEqual(1000, observer.Last.ArmorMax); Assert.AreEqual(100, observer.Last.ShieldMax);
         }

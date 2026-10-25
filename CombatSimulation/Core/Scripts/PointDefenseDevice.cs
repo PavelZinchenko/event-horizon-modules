@@ -1,3 +1,5 @@
+using System;
+
 namespace CombatSimulation.Core
 {
     internal sealed class PointDefenseDevice : ShipDevice
@@ -40,15 +42,36 @@ namespace CombatSimulation.Core
 
         public override void Deactivate(Battle battle) => Disable(battle.Tick);
 
-        public override DeviceState Export() => new DeviceState(_stoppedTick, NextQueryTick, Enabled, _started);
-
-        public override void Import(in DeviceState state)
+        // The timers at the end of tick t (network plan, G1). Enabled and started are not sent: the copy derives
+        // them from the owner's controls and its corrected energy.
+        internal PointDefenseTimers Export(long tick)
         {
-            _stoppedTick = state.LastTick;
-            NextQueryTick = state.NextTick;
-            Enabled = state.Enabled;
-            _started = state.Started;
+            var stop = tick - _stoppedTick;
+            var query = tick - (NextQueryTick - Definition.QueryCooldownTicks);
+            return new PointDefenseTimers(
+                stop >= Definition.ActivationCooldownTicks - 1 ? PointDefenseTimers.Ready : (int)Math.Max(0L, stop),
+                query >= Definition.QueryCooldownTicks - 1 ? PointDefenseTimers.Ready : (int)Math.Max(0L, query));
         }
+
+        // A ready timer only stops blocking; an age sets the timer exactly. A query age means the device has started.
+        internal void Import(long tick, in PointDefenseTimers timers)
+        {
+            _stoppedTick = timers.StopAge == PointDefenseTimers.Ready
+                ? Math.Min(_stoppedTick, tick + 1 - Definition.ActivationCooldownTicks) : tick - timers.StopAge;
+            if (timers.QueryAge == PointDefenseTimers.Ready) NextQueryTick = Math.Min(NextQueryTick, tick + 1);
+            else
+            {
+                NextQueryTick = tick - timers.QueryAge + Definition.QueryCooldownTicks;
+                _started = true;
+            }
+        }
+
+        // An age is valid only below its ready threshold.
+        internal bool IsValid(in PointDefenseTimers timers) =>
+            (timers.StopAge == PointDefenseTimers.Ready ||
+             (timers.StopAge >= 0 && timers.StopAge < Definition.ActivationCooldownTicks - 1)) &&
+            (timers.QueryAge == PointDefenseTimers.Ready ||
+             (timers.QueryAge >= 0 && timers.QueryAge < Definition.QueryCooldownTicks - 1));
 
         // Stage 6 captures the payment context. A successful zap delays the next query, not the other
         // candidates from this query. Empty queries and candidates skipped by the resolver spend nothing.

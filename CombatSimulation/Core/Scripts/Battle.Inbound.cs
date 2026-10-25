@@ -132,6 +132,9 @@ namespace CombatSimulation.Core
                         (EntityOwner(handle) == operation.Owner &&
                          (handle.Kind == EntityKind.Bullet ? !operation.BayKey.HasValue :
                           _ships.Get(handle)?.Bay?.Key == operation.BayKey && operation.BayKey.HasValue));
+                case OwnerOperationKind.Retreat:
+                    return !operation.EntityId.IsNull && (!_entities.TryGet(operation.EntityId, out handle) ||
+                        (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner && _ships.Get(handle)?.Slot != null));
                 // The parent may not exist yet; it is checked when the record applies.
                 case OwnerOperationKind.BulletSpawn:
                     return !operation.ParentId.IsNull && operation.DeviceIndex >= 0 && operation.BarrelIndex >= 0 &&
@@ -172,6 +175,10 @@ namespace CombatSimulation.Core
                         else if (operation.Kind == OwnerOperationKind.BulletSpawn)
                         {
                             if (ApplyRemoteBulletSpawn(operation)) _appliedOperations.Add(operation);
+                        }
+                        else if (operation.Kind == OwnerOperationKind.Retreat)
+                        {
+                            if (ApplyRemoteRetreat(operation)) _appliedOperations.Add(operation);
                         }
                         else if (ApplyRemoteRemoval(operation)) _appliedOperations.Add(operation);
                         _remoteOperations.RemoveAt(i);
@@ -237,6 +244,17 @@ namespace CombatSimulation.Core
             return true;
         }
 
+        // The completion tick is absolute. An overdue record turns the copy's engine and devices off from now on;
+        // the owner's roster record completes the retreat.
+        private bool ApplyRemoteRetreat(in OwnerOperation operation)
+        {
+            var ship = FindShip(operation.EntityId);
+            if (ship == null || ship.Owner != operation.Owner || ship.Slot == null ||
+                ship.RetreatCompletionTick != ShipEntity.NoRetreat) return false;
+            ship.RetreatCompletionTick = operation.Tick + RetreatTicks;
+            return true;
+        }
+
         private bool ApplyRemoteRemoval(in OwnerOperation operation)
         {
             if (!_entities.TryGet(operation.EntityId, out var handle))
@@ -251,7 +269,7 @@ namespace CombatSimulation.Core
                 if (operation.BayKey.HasValue || !_bullets.TryGet(handle, out var index)) return false;
                 ref var bullet = ref _bullets[index];
                 bullet.PendingRemoval = operation.RemovalReason;
-                if (bullet.IsBeam) DetachBeam(bullet, handle);
+                if (bullet.IsBeam) DetachBeam(bullet, handle, operation.Tick);
                 _events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _events.Count, bullet));
                 ReleaseBullet(index);
             }
@@ -343,6 +361,7 @@ namespace CombatSimulation.Core
         private static int OperationStage(in OwnerOperation operation) =>
             operation.Kind == OwnerOperationKind.DroneSpawn ? 5 :
             operation.Kind == OwnerOperationKind.BulletSpawn ? 6 :
+            operation.Kind == OwnerOperationKind.Retreat ? 1 :
             operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed ? 1 : 12;
 
         private static int CompareHits(in InboundHit a, in InboundHit b)
