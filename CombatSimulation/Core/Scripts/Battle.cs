@@ -347,7 +347,7 @@ namespace CombatSimulation.Core
         {
             var ship = request.Ship;
             var index = CreateBullet(ship, request.DeviceIndex, request.BarrelIndex, sequence, request.Bullet,
-                request.Spread, Tick, ReadSpawnSample(ship), out var muzzle, out var direction);
+                request.Spread, Tick, ReadSpawnSample(ship), out var muzzle, out var direction, out var angle);
             if (index < 0) return;
 
             var definition = request.Bullet;
@@ -355,13 +355,15 @@ namespace CombatSimulation.Core
 
             ref readonly var bullet = ref _bullets[index];
             _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, bullet, Authority(bullet.Owner)));
-            CaptureBulletSpawn(bullet, request.BarrelIndex, sequence);
+            CaptureBulletSpawn(bullet, request.BarrelIndex, sequence, !definition.IsHoming, muzzle, angle);
         }
 
         // Legacy BulletFactory.ConfigureBody at the muzzle of the sample. A spawn tick before the present advances the
         // bullet on a line, step by step as physics moves it, without hit tests. Returns -1 on an ID collision.
+        // With an owner launch pose (P1), the muzzle and angle come from it; the inherited velocity stays the sample's.
         private int CreateBullet(ShipEntity ship, int deviceIndex, int barrelIndex, uint sequence,
-            BulletDefinition definition, float spread, long spawnTick, in SpawnSample sample, out Vec2 muzzle, out Vec2 direction)
+            BulletDefinition definition, float spread, long spawnTick, in SpawnSample sample, out Vec2 muzzle,
+            out Vec2 direction, out float angle, in OwnerOperation launch = default)
         {
             var id = SpawnIdentity.CreateChild(ship.Id, spawnTick, (uint)deviceIndex, (uint)barrelIndex, sequence);
             var index = _bullets.Allocate();
@@ -369,25 +371,12 @@ namespace CombatSimulation.Core
             {
                 _bullets.Release(index);
                 muzzle = direction = default;
+                angle = 0f;
                 return -1;
             }
 
-            var barrel = ship.Definition.Barrels[barrelIndex];
-            muzzle = sample.Position + sample.Rotation.Rotate(barrel.Position);
-
-            var random = CounterRandom.Create(Setup.MatchSeed, id, spawnTick, RandomPurpose.WeaponSpread);
-            var angle = sample.Angle + barrel.Angle + (random.NextFloat() - 0.5f) * spread;
-            direction = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
-            var velocity = definition.Speed * definition.StartingVelocityMultiplier * direction +
-                           definition.ParentVelocityEffect * sample.LinearVelocity;
-
-            var position = muzzle;
-            if (spawnTick < Tick)
-            {
-                position = World.Torus.Wrap(position);
-                for (var tick = spawnTick; tick < Tick; ++tick)
-                    position = World.Torus.Wrap(position + TickDuration * velocity);
-            }
+            Launch(ship, barrelIndex, id, definition, spread, spawnTick, sample, launch, out muzzle, out angle,
+                out direction, out var velocity, out var position);
 
             var body = World.CreateBullet(new BulletDef
             {
@@ -417,6 +406,37 @@ namespace CombatSimulation.Core
             bullet.NextSearchTick = spawnTick + 1;
             _bullets.SetBody(index, body);
             return index;
+        }
+
+        // The launch of a projectile and its position at the present tick, before this tick's physics.
+        private void Launch(ShipEntity ship, int barrelIndex, EntityId id, BulletDefinition definition, float spread,
+            long spawnTick, in SpawnSample sample, in OwnerOperation launch, out Vec2 muzzle, out float angle,
+            out Vec2 direction, out Vec2 velocity, out Vec2 position)
+        {
+            if (launch.HasLaunchPose)
+            {
+                muzzle = launch.Pose.Position;
+                angle = launch.Pose.Angle;
+            }
+            else
+            {
+                var barrel = ship.Definition.Barrels[barrelIndex];
+                muzzle = sample.Position + sample.Rotation.Rotate(barrel.Position);
+                var random = CounterRandom.Create(Setup.MatchSeed, id, spawnTick, RandomPurpose.WeaponSpread);
+                angle = sample.Angle + barrel.Angle + (random.NextFloat() - 0.5f) * spread;
+            }
+
+            direction = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
+            velocity = definition.Speed * definition.StartingVelocityMultiplier * direction +
+                       definition.ParentVelocityEffect * sample.LinearVelocity;
+
+            position = muzzle;
+            if (spawnTick < Tick)
+            {
+                position = World.Torus.Wrap(position);
+                for (var tick = spawnTick; tick < Tick; ++tick)
+                    position = World.Torus.Wrap(position + TickDuration * velocity);
+            }
         }
 
         private void SpawnBeam(in SpawnRequest request, uint sequence)

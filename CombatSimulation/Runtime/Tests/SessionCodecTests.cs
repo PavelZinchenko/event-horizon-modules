@@ -26,7 +26,7 @@ namespace CombatSimulation.Runtime.Tests
                     new RosterRecord(new RosterId(99), 4, RosterStatus.Ready, RosterStatus.Active,
                         RosterTransitionReason.Deployed, 2, 5, 22.5f, 9.25f, 0.25f), pose),
                 OwnerOperation.DroneLaunch(batch, 20, 2, 124, drone, bay, ship, pose),
-                OwnerOperation.BulletFired(batch, 20, 3, 127, shot, ship, 7, 3, 0),
+                OwnerOperation.BulletFired(batch, 20, 3, 127, shot, ship, 7, 3, 0, new Vec2(12.5f, 187.25f), GridAngle(1000)),
                 OwnerOperation.BulletFired(batch, 20, 4, 125, child, shot, 2, 0, 1),
                 OwnerOperation.RetreatStarted(batch, 20, 5, 125, ship),
                 OwnerOperation.Remove(batch, 20, 6, 125, drone, RemovalReason.Death, bay),
@@ -52,12 +52,13 @@ namespace CombatSimulation.Runtime.Tests
             Assert.IsFalse(link.ReceiverPeer.TryGetBullet(1, out _)); Assert.IsFalse(link.SenderOwn.TryGetBullet(shot, out _));
             Assert.IsTrue(link.ReceiverPeer.TryGetBullet(0, out var named)); Assert.AreEqual(child, named);
 
-            // Sizes the plan expected: bullet spawn about 5 bytes, removal about 4, hit about 11.
+            // Sizes the plan expected: bullet spawn about 5 bytes, removal about 4, hit about 11; a launch pose (P1) adds
+            // 1 + 18 + 18 + 14 bits in a 200-unit arena.
             CollectionAssert.AreEqual(new[] { SessionCodec.RecordKind.Roster, SessionCodec.RecordKind.DroneLaunch,
                 SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.Retreat,
                 SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Hit,
                 SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
-            Assert.LessOrEqual(scan[2].Bits, 40); Assert.LessOrEqual(scan[6].Bits, 32); Assert.LessOrEqual(scan[7].Bits, 88);
+            Assert.LessOrEqual(scan[3].Bits, 41); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 32); Assert.LessOrEqual(scan[7].Bits, 88);
             Assert.AreEqual(RemovalReason.Expiry, scan[6].RemovalReason);
 
             // A later hit cannot name the removed bullet.
@@ -128,6 +129,33 @@ namespace CombatSimulation.Runtime.Tests
             }
         }
 
+        // A launch pose travels on the correction grid: the muzzle within half a 1/1024 cell, wrapped into the arena; the
+        // angle within half a 14-bit step, in [0, 2 pi).
+        [Test]
+        public void LaunchPosesRoundToTheCorrectionGrid()
+        {
+            var link = new Link(); var ship = new EntityId(1234);
+            var shot = SpawnIdentity.CreateChild(ship, 10, 0, 0, 0);
+            var operations = new[]
+            {
+                OwnerOperation.RosterChange(link.Battle, 20, 1, 10, ship, new RosterRecord(new RosterId(99), 1,
+                    RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0)),
+                OwnerOperation.BulletFired(link.Battle, 20, 2, 10, shot, ship, 0, 0, 0, new Vec2(-0.3001f, 123.45678f), -7.1234f),
+            };
+            link.Read(link.Write(10, operations, Array.Empty<ResolvedHit>()), out var read, out _);
+            var launch = read[1];
+            Assert.IsTrue(launch.HasLaunchPose);
+            Assert.AreEqual(199.6999f, launch.Pose.Position.X, 0.5 / 1024 + 1e-4);
+            Assert.AreEqual(123.45678f, launch.Pose.Position.Y, 0.5 / 1024 + 1e-4);
+            Assert.That(launch.Pose.Angle, Is.InRange(0f, (float)(2 * Math.PI)));
+            var error = Math.IEEERemainder(launch.Pose.Angle - -7.1234, 2 * Math.PI);
+            Assert.LessOrEqual(Math.Abs(error), Math.PI / (1 << CorrectionCodec.AngleBits) + 1e-6);
+        }
+
+        private static float GridAngle(int cell) => (float)(cell * (2 * Math.PI / (1 << CorrectionCodec.AngleBits)));
+
+        private static readonly CorrectionCodec.Arena Arena = new CorrectionCodec.Arena(200, 200);
+
         private static OwnerOperation Deploy(BattleId battle) => OwnerOperation.RosterChange(battle, 20, 1, 10, new EntityId(77),
             new RosterRecord(new RosterId(99), 1, RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0));
 
@@ -172,7 +200,7 @@ namespace CombatSimulation.Runtime.Tests
             internal byte[] Write(long tick, OwnerOperation[] operations, ResolvedHit[] hits)
             {
                 var buffer = new byte[SessionCodec.Capacity(operations.Length + hits.Length)];
-                var length = SessionCodec.WriteBatch(buffer, tick, operations, hits, SenderOwn, SenderPeer);
+                var length = SessionCodec.WriteBatch(buffer, tick, operations, hits, SenderOwn, SenderPeer, Arena);
                 return buffer.AsSpan(0, length).ToArray();
             }
 
@@ -180,8 +208,8 @@ namespace CombatSimulation.Runtime.Tests
                 List<SessionCodec.ScannedRecord> scan = null)
             {
                 operations = _operations; hits = _hits;
-                SessionCodec.ReadBatch(bytes, Battle, 20, 10, null, null, null, null, scan);
-                return SessionCodec.ReadBatch(bytes, Battle, 20, 10, ReceiverPeer, ReceiverOwn, _operations, _hits);
+                SessionCodec.ReadBatch(bytes, Battle, 20, 10, Arena, null, null, null, null, scan);
+                return SessionCodec.ReadBatch(bytes, Battle, 20, 10, Arena, ReceiverPeer, ReceiverOwn, _operations, _hits);
             }
 
             private static StreamNames Names() => new StreamNames((in OwnerOperation _) => null);

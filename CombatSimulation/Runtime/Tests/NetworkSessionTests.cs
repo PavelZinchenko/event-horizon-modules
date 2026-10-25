@@ -365,9 +365,21 @@ namespace CombatSimulation.Runtime.Tests
             {
                 if (item.Value.Tick > 300) continue;
                 Assert.IsTrue(applied.TryGetValue(item.Key, out var copy), $"Missing {item.Value.Kind} {item.Key}");
-                Assert.AreEqual(item.Value, copy);
+                Assert.AreEqual(OnGrid(item.Value), copy);
             }
             Assert.AreEqual(0, pair.A.InvalidMessages); Assert.AreEqual(0, pair.B.InvalidMessages);
+
+            // A launch pose (P1) travels on the correction grid.
+            OwnerOperation OnGrid(in OwnerOperation o)
+            {
+                if (!o.HasLaunchPose) return o;
+                var setup = SessionFixtures.Setup(10); var arena = new CorrectionCodec.Arena(setup.Width, setup.Height);
+                var x = CorrectionCodec.Position(o.Pose.Position.X, arena.XCells) / CorrectionCodec.PositionScale;
+                var y = CorrectionCodec.Position(o.Pose.Position.Y, arena.YCells) / CorrectionCodec.PositionScale;
+                var angle = CorrectionCodec.Angle(o.Pose.Angle) * (2 * Math.PI / (1 << CorrectionCodec.AngleBits));
+                return OwnerOperation.BulletFired(o.BattleId, o.Owner, o.Sequence, o.Tick, o.EntityId, o.ParentId,
+                    o.DeviceIndex, o.BarrelIndex, o.SpawnSequence, new Vec2((float)x, (float)y), (float)angle);
+            }
 
             void Capture(NetworkSession session, long before)
             {

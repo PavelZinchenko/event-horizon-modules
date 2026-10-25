@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
@@ -47,11 +48,18 @@ namespace CombatSimulation.Core
             }
         }
 
-        private void CaptureBulletSpawn(in BulletEntity bullet, int barrelIndex, uint sequence)
+        // A plain projectile sends its launch (P1): the receiver's copy of the shooter aims a little differently, and
+        // the error grows with flight time.
+        private void CaptureBulletSpawn(in BulletEntity bullet, int barrelIndex, uint sequence, bool sendLaunch = false,
+            Vec2 muzzle = default, float angle = 0f)
         {
-            if (ShouldCapture(bullet.Owner))
-                _outgoingOperations.Add(OwnerOperation.BulletFired(BattleId, bullet.Owner, NextOperationSequence(bullet.Owner),
-                    Tick, bullet.Id, bullet.ParentId, bullet.DeviceIndex, barrelIndex, sequence));
+            if (!ShouldCapture(bullet.Owner)) return;
+            var operationSequence = NextOperationSequence(bullet.Owner);
+            _outgoingOperations.Add(sendLaunch
+                ? OwnerOperation.BulletFired(BattleId, bullet.Owner, operationSequence, Tick, bullet.Id, bullet.ParentId,
+                    bullet.DeviceIndex, barrelIndex, sequence, muzzle, angle)
+                : OwnerOperation.BulletFired(BattleId, bullet.Owner, operationSequence, Tick, bullet.Id, bullet.ParentId,
+                    bullet.DeviceIndex, barrelIndex, sequence));
         }
 
         // Confirms the local copy, or adds the missing bullet at its spawn tick. A bullet this device already removed
@@ -74,6 +82,7 @@ namespace CombatSimulation.Core
             {
                 if (!_bullets.TryGet(handle, out var existing) || _bullets[existing].Owner != operation.Owner) return false;
                 _bullets[existing].Confirmed = true;
+                if (cannon != null && operation.HasLaunchPose) Reaim(ship, cannon, existing, operation);
                 return true;
             }
 
@@ -86,7 +95,8 @@ namespace CombatSimulation.Core
             {
                 if (!ship.TryGetSpawnSample(operation.Tick, out var sample)) sample = ReadSpawnSample(ship);
                 index = CreateBullet(ship, operation.DeviceIndex, operation.BarrelIndex, operation.SpawnSequence,
-                    cannon.Definition.Bullet, cannon.Definition.Spread, operation.Tick, sample, out _, out _);
+                    cannon.Definition.Bullet, cannon.Definition.Spread, operation.Tick, sample, out _, out _, out _,
+                    operation.HasLaunchPose ? operation : default);
             }
             else
             {
@@ -104,6 +114,19 @@ namespace CombatSimulation.Core
             _bullets[index].Confirmed = true;
             _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, _bullets[index]));
             return true;
+        }
+
+        // P1: the copy of a plain projectile takes the owner's launch, on its own line from the spawn tick to the present,
+        // without hit tests. Contacts the copy made before are not undone; a copy already removed is not re-added.
+        private void Reaim(ShipEntity ship, CannonDevice cannon, int index, in OwnerOperation launch)
+        {
+            ref readonly var bullet = ref _bullets[index];
+            if (bullet.IsBeam || bullet.Definition.IsHoming) return;
+            if (!ship.TryGetSpawnSample(launch.Tick, out var sample)) sample = ReadSpawnSample(ship);
+            Launch(ship, launch.BarrelIndex, bullet.Id, bullet.Definition, cannon.Definition.Spread, bullet.SpawnTick,
+                sample, launch, out _, out var angle, out _, out var velocity, out var position);
+            World.SetBulletPose(bullet.Body, position, angle);
+            World.SetBulletVelocity(bullet.Body, velocity);
         }
 
         // A bullet that spawned and died between two deliveries: its owner removal is in the same batch.

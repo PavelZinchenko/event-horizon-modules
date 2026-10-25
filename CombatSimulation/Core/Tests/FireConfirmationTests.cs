@@ -183,6 +183,34 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(9, spawn.Tick);
         }
 
+        // P1: the receiver's copy of the shooter aims 0.05 rad off; the owner's launch moves the copy onto the owner's line.
+        [Test]
+        public void PredictedShotIsReaimedOnTheOwnersLaunch()
+        {
+            var (owner, remote, link) = Pair(Cannon);
+            owner.Place(101, new Vec2(40f, 60f), new Vec2(5f, -3f), 0.7f);
+            remote.Place(101, new Vec2(40f, 60f), new Vec2(5f, -3f), 0.75f);
+            owner.Control(101, systems: 1);
+            remote.Control(101, systems: 1);
+            Tick(owner, remote, link, deliver: false);
+            owner.Control(101, systems: 0);
+            remote.Control(101, systems: 0);
+            for (var i = 0; i < 6; ++i) Tick(owner, remote, link, deliver: false);
+
+            var shot = Shot(owner, 2);
+            var fired = link.Held.Single(o => o.Kind == OwnerOperationKind.BulletSpawn);
+            Assert.IsTrue(fired.HasLaunchPose);
+            Assert.AreNotEqual(Position(owner, shot), Position(remote, shot));
+            link.Deliver(remote);
+            owner.Step();
+            remote.Step();
+            Assert.AreEqual(Position(owner, shot), Position(remote, shot));
+            var world = remote.Battle.World;
+            Assert.AreEqual(owner.Battle.World.GetBulletVelocity(owner.Battle.Bullets[Find(owner, shot)].Body),
+                world.GetBulletVelocity(remote.Battle.Bullets[Find(remote, shot)].Body));
+            Assert.IsEmpty(Events(remote, shot), "The re-aim adds no event.");
+        }
+
         [Test]
         public void SpawnOlderThanTheHistoryUsesTheOldestSample()
         {
@@ -196,7 +224,15 @@ namespace CombatSimulation.Core.Tests
             owner.Control(101, systems: 0);
             while (owner.Tick < spawnTick + 20) Tick(owner, remote, link, deliver: false);
 
-            // Stage 1 of tick S + 20 holds samples S + 4 .. S + 19: the muzzle is 4 ticks of ship motion ahead.
+            // Stage 1 of tick S + 20 holds samples S + 4 .. S + 19: the muzzle is 4 ticks of ship motion ahead. Only a
+            // record without a launch pose (a homing projectile) reads the muzzle from the history, so drop the pose.
+            for (var i = 0; i < link.Held.Count; ++i)
+            {
+                var o = link.Held[i];
+                if (o.Kind == OwnerOperationKind.BulletSpawn)
+                    link.Held[i] = OwnerOperation.BulletFired(o.BattleId, o.Owner, o.Sequence, o.Tick, o.EntityId, o.ParentId,
+                        o.DeviceIndex, o.BarrelIndex, o.SpawnSequence);
+            }
             link.Deliver(remote);
             owner.Step();
             remote.Step();

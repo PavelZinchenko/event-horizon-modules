@@ -94,7 +94,9 @@ namespace CombatSimulation.Runtime
     //   Removal: entity kind (1 bit), reason (3), control index or bullet age (VarUInt). A drone's bay is known from
     //     its launch.
     //   Bullet spawn: parent kind (1 bit), parent control index or bullet age (VarUInt), device, barrel and spawn
-    //     sequence (VarUInt). The receiver derives the entity ID with SpawnIdentity.CreateChild.
+    //     sequence (VarUInt), launch flag (1 bit); with the flag, the muzzle position per axis on the correction grid
+    //     (CorrectionCodec.Arena) and the launch angle (14 bits), network plan P1. The receiver derives the entity ID
+    //     with SpawnIdentity.CreateChild.
     //   Retreat: ship control index (VarUInt).
     //   Pose: position, angle, linear velocity, angular velocity (six 32-bit floats).
     // Operation sequences are consecutive inside a batch and end at the header's value. Operations come before hits,
@@ -115,20 +117,21 @@ namespace CombatSimulation.Runtime
         // Writes the tick batch of the local owner (own) and advances its names. Hit targets are named in the peer's
         // stream. A record that names an entity the streams do not know, or a sequence gap, is a session bug and throws.
         internal static int WriteBatch(Span<byte> buffer, long tick, ReadOnlySpan<OwnerOperation> operations,
-            ReadOnlySpan<ResolvedHit> hits, StreamNames own, StreamNames peer)
+            ReadOnlySpan<ResolvedHit> hits, StreamNames own, StreamNames peer, in CorrectionCodec.Arena arena)
         {
             if (buffer.Length < Capacity(operations.Length + hits.Length))
                 throw new ArgumentException("Batch buffer is too small.", nameof(buffer));
             var w = new BitWriter(buffer);
             var lastOperation = own.LastOperation + (ulong)operations.Length;
             w.WriteBits(Version, 8); w.WriteVarUInt((ulong)tick); w.WriteVarUInt(lastOperation);
-            foreach (var operation in operations) WriteOperation(ref w, tick, operation, own);
+            foreach (var operation in operations) WriteOperation(ref w, tick, operation, own, arena);
             foreach (var hit in hits) WriteHit(ref w, tick, hit, own, peer);
             own.EndBatch();
             return w.Finish();
         }
 
-        private static void WriteOperation(ref BitWriter w, long batchTick, in OwnerOperation op, StreamNames own)
+        private static void WriteOperation(ref BitWriter w, long batchTick, in OwnerOperation op, StreamNames own,
+            in CorrectionCodec.Arena arena)
         {
             if (op.Sequence != own.LastOperation + 1) throw new InvalidOperationException("Operation sequences must be consecutive.");
             own.LastOperation = op.Sequence;
@@ -174,6 +177,13 @@ namespace CombatSimulation.Runtime
                     Header(ref w, RecordKind.BulletSpawn, batchTick, op.Tick);
                     w.WriteBool(parentBullet); w.WriteVarUInt(parent);
                     w.WriteVarUInt((ulong)op.DeviceIndex); w.WriteVarUInt((ulong)op.BarrelIndex); w.WriteVarUInt(op.SpawnSequence);
+                    w.WriteBool(op.HasLaunchPose);
+                    if (op.HasLaunchPose)
+                    {
+                        w.WriteBits((ulong)CorrectionCodec.Position(op.Pose.Position.X, arena.XCells), arena.XBits);
+                        w.WriteBits((ulong)CorrectionCodec.Position(op.Pose.Position.Y, arena.YCells), arena.YBits);
+                        w.WriteBits((ulong)CorrectionCodec.Angle(op.Pose.Angle), CorrectionCodec.AngleBits);
+                    }
                     own.AddBullet(op.EntityId);
                     break;
                 case OwnerOperationKind.Retreat:
@@ -221,7 +231,7 @@ namespace CombatSimulation.Runtime
         // changed, so the caller must drop it and every later batch. With null names the batch is only scanned: the
         // records are checked and listed in scan, nothing is resolved or returned.
         internal static OwnerWatermark ReadBatch(ReadOnlySpan<byte> data, BattleId battle, int sender, int receiver,
-            StreamNames peer, StreamNames own, List<OwnerOperation> operations, List<ResolvedHit> hits,
+            in CorrectionCodec.Arena arena, StreamNames peer, StreamNames own, List<OwnerOperation> operations, List<ResolvedHit> hits,
             List<ScannedRecord> scan = null)
         {
             operations?.Clear(); hits?.Clear();
@@ -280,13 +290,25 @@ namespace CombatSimulation.Runtime
                     case RecordKind.BulletSpawn:
                         var parentBullet = r.Bool(); var parentName = r.VarUInt();
                         device = r.Int(); var barrel = r.Int(); var spawn = r.VarUInt();
+                        var launched = r.Bool();
+                        ulong muzzleX = 0, muzzleY = 0, angle = 0;
+                        if (launched)
+                        {
+                            muzzleX = r.Bits(arena.XBits); muzzleY = r.Bits(arena.YBits); angle = r.Bits(CorrectionCodec.AngleBits);
+                            Require((long)muzzleX < arena.XCells && (long)muzzleY < arena.YCells);
+                        }
                         Require(spawn <= uint.MaxValue);
                         if (!resolve) break;
                         parent = parentBullet ? Bullet(peer, parentName) : Body(peer, parentName);
                         entity = SpawnIdentity.CreateChild(parent, r.Tick, (uint)device, (uint)barrel, (uint)spawn);
                         peer.AddBullet(entity);
-                        operations.Add(OwnerOperation.BulletFired(battle, sender, ++peer.LastOperation, r.Tick, entity, parent,
-                            device, barrel, (uint)spawn));
+                        operations.Add(launched
+                            ? OwnerOperation.BulletFired(battle, sender, ++peer.LastOperation, r.Tick, entity, parent,
+                                device, barrel, (uint)spawn,
+                                new Vec2((float)(muzzleX / CorrectionCodec.PositionScale), (float)(muzzleY / CorrectionCodec.PositionScale)),
+                                (float)(angle * (2 * Math.PI / (1 << CorrectionCodec.AngleBits))))
+                            : OwnerOperation.BulletFired(battle, sender, ++peer.LastOperation, r.Tick, entity, parent,
+                                device, barrel, (uint)spawn));
                         break;
                     case RecordKind.Retreat:
                         name = r.VarUInt();

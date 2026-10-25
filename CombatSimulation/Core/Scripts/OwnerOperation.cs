@@ -73,11 +73,15 @@ namespace CombatSimulation.Core
         public readonly int BarrelIndex;
         public readonly uint SpawnSequence;
 
+        // Plain projectile spawns only (network plan, P1): Pose holds the owner's muzzle position and launch angle.
+        public readonly bool HasLaunchPose;
+
         private OwnerOperation(BattleId battleId, int owner, ulong sequence, long tick, OwnerOperationKind kind,
             EntityId entityId, RosterRecord roster = default, DroneBayKey? bayKey = null, EntityId parentId = default,
             SpawnPose pose = default, RemovalReason removalReason = RemovalReason.None,
-            int deviceIndex = 0, int barrelIndex = 0, uint spawnSequence = 0)
+            int deviceIndex = 0, int barrelIndex = 0, uint spawnSequence = 0, bool hasLaunchPose = false)
         {
+            HasLaunchPose = hasLaunchPose;
             DeviceIndex = deviceIndex;
             BarrelIndex = barrelIndex;
             SpawnSequence = spawnSequence;
@@ -109,12 +113,20 @@ namespace CombatSimulation.Core
             new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.Removal, entityId,
                 bayKey: bayKey, removalReason: reason);
 
-        // A fire confirmation: one projectile or beam the owner created. It carries no pose; the receiver places a
-        // missing bullet from its own spawn history of the parent.
+        // A fire confirmation: one projectile or beam the owner created. A plain projectile carries its launch: the
+        // muzzle position and the launch angle (P1); the receiver aims its copy with them. Beams and homing projectiles
+        // carry none; the receiver places a missing one from its own spawn history of the parent.
         public static OwnerOperation BulletFired(BattleId battleId, int owner, ulong sequence, long tick,
             EntityId entityId, EntityId parentId, int deviceIndex, int barrelIndex, uint spawnSequence) =>
             new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.BulletSpawn, entityId,
                 parentId: parentId, deviceIndex: deviceIndex, barrelIndex: barrelIndex, spawnSequence: spawnSequence);
+
+        public static OwnerOperation BulletFired(BattleId battleId, int owner, ulong sequence, long tick,
+            EntityId entityId, EntityId parentId, int deviceIndex, int barrelIndex, uint spawnSequence,
+            Vec2 muzzle, float angle) =>
+            new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.BulletSpawn, entityId,
+                parentId: parentId, pose: new SpawnPose(muzzle, angle, Vec2.Zero), deviceIndex: deviceIndex,
+                barrelIndex: barrelIndex, spawnSequence: spawnSequence, hasLaunchPose: true);
 
         // A roster ship started its retreat at tick (network plan, G1). It completes Battle.RetreatTicks later.
         // A retreat happens at most once per ship and cannot be cancelled.

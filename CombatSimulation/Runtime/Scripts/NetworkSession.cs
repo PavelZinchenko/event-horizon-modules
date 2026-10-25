@@ -166,7 +166,7 @@ namespace CombatSimulation.Runtime
             var capacity = SessionCodec.Capacity(operations.Length + hits.Length);
             if (_batch.Length < capacity) Array.Resize(ref _batch, Math.Max(capacity, _batch.Length * 2));
             var bodies = _local.Bodies.Count;
-            var length = SessionCodec.WriteBatch(_batch, tick, operations, hits, _local, _remote);
+            var length = SessionCodec.WriteBatch(_batch, tick, operations, hits, _local, _remote, _arena);
             for (var i = bodies; i < _local.Bodies.Count; ++i) _controls.Register(_local.Bodies[i].Entity, (uint)i);
             _peer.QueueReliable(_batch.AsSpan(0, length));
             _lastBatchTick = tick;
@@ -286,7 +286,7 @@ namespace CombatSimulation.Runtime
             OwnerWatermark watermark;
             try
             {
-                watermark = SessionCodec.ReadBatch(bytes, BattleId, _options.RemoteOwner, _options.LocalOwner,
+                watermark = SessionCodec.ReadBatch(bytes, BattleId, _options.RemoteOwner, _options.LocalOwner, _arena,
                     _remote, _local, _receivedOperations, _receivedHits);
             }
             catch (FormatException) { _remoteStreamFaulted = true; throw; }
