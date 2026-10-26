@@ -31,6 +31,9 @@ namespace CombatSimulation.Runtime.Tests
                 OwnerOperation.RetreatStarted(batch, 20, 5, 125, ship),
                 OwnerOperation.Remove(batch, 20, 6, 125, drone, RemovalReason.Death, bay),
                 OwnerOperation.Remove(batch, 20, 7, 126, shot, RemovalReason.Expiry),
+                // P3: the child missile's target, then no target.
+                OwnerOperation.MissileTargetChanged(batch, 20, 8, 126, child, link.Target),
+                OwnerOperation.MissileTargetChanged(batch, 20, 9, 127, child, default),
             };
             // A removed bullet can still attack in its own batch. An end record is one tick ahead.
             var hits = new[]
@@ -42,7 +45,7 @@ namespace CombatSimulation.Runtime.Tests
             var bytes = link.Write(125, operations, hits);
             var scan = new List<SessionCodec.ScannedRecord>();
             var watermark = link.Read(bytes, out var actualOperations, out var actualHits, scan);
-            Assert.AreEqual(125, watermark.Tick); Assert.AreEqual(7UL, watermark.OperationSequence);
+            Assert.AreEqual(125, watermark.Tick); Assert.AreEqual(9UL, watermark.OperationSequence);
             Assert.AreEqual(20, watermark.Owner); Assert.AreEqual(batch, watermark.BattleId);
             CollectionAssert.AreEqual(operations, actualOperations);
             CollectionAssert.AreEqual(hits, actualHits);
@@ -56,9 +59,12 @@ namespace CombatSimulation.Runtime.Tests
             // 1 + 18 + 18 + 14 bits in a 200-unit arena.
             CollectionAssert.AreEqual(new[] { SessionCodec.RecordKind.Roster, SessionCodec.RecordKind.DroneLaunch,
                 SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.Retreat,
-                SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Hit,
-                SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
-            Assert.LessOrEqual(scan[3].Bits, 41); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 32); Assert.LessOrEqual(scan[7].Bits, 88);
+                SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.MissileTarget,
+                SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit,
+                SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
+            Assert.LessOrEqual(scan[3].Bits, 41); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 32); Assert.LessOrEqual(scan[9].Bits, 88);
+            // A missile target is about 3 bytes in the plan: here 2 bytes, with tick offsets +1 and +2 (0 in a real batch).
+            Assert.AreEqual(16, scan[7].Bits); Assert.AreEqual(11, scan[8].Bits);
             Assert.AreEqual(RemovalReason.Expiry, scan[6].RemovalReason);
 
             // A later hit cannot name the removed bullet.
@@ -77,14 +83,14 @@ namespace CombatSimulation.Runtime.Tests
             Assert.AreEqual(long.MaxValue - 6, watermark.Tick); Assert.AreEqual(0UL, watermark.OperationSequence);
 
             var bytes = new Link().Write(10, new[] { Deploy(link.Battle) }, Array.Empty<ResolvedHit>());
-            bytes[0] = 2;
+            bytes[0] = 1;
             Assert.Throws<FormatException>(() => new Link().Read(bytes, out _, out _));
             // The header's last sequence must match the records.
             bytes = new Link().Write(10, new[] { Deploy(link.Battle) }, Array.Empty<ResolvedHit>());
             var other = new Link(); other.ReceiverPeer.LastOperation = 1;
             Assert.Throws<FormatException>(() => other.Read(bytes, out _, out _));
 
-            // A record before tick 0, kind 0 and kind 7.
+            // A record before tick 0, kind 0, and a missile target (kind 7) that names no known missile.
             Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 4, Zigzag(-3)), out _, out _));
             Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 0, 0), out _, out _));
             Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 7, 0), out _, out _));
@@ -103,6 +109,12 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 4, 0, (ref BitWriter w) =>
             { w.WriteBool(false); w.WriteBits((ulong)RemovalReason.Death, 3); w.WriteVarUInt(0); }, 2), out _, out _));
 
+            // With ship 0 named: a missile target on an unknown target index.
+            var withMissile = Deployed();
+            var missile = SpawnIdentity.CreateChild(new EntityId(1), 10, 0, 0, 0);
+            Assert.Throws<FormatException>(() => withMissile.Read(Raw(10, 7, 0, (ref BitWriter w) =>
+            { w.WriteVarUInt(0); w.WriteVarUInt(3); }, 2), out _, out _));
+
             // The sender refuses records its streams cannot name, and entity IDs that are not derived from the record.
             var ship = new EntityId(77);
             Assert.Throws<InvalidOperationException>(() => new Link().Write(10, Array.Empty<OwnerOperation>(), new[]
@@ -114,6 +126,8 @@ namespace CombatSimulation.Runtime.Tests
             { OwnerOperation.BulletFired(link.Battle, 20, 2, 11, new EntityId(5), ship, 0, 0, 0) }, Array.Empty<ResolvedHit>()));
             Assert.Throws<InvalidOperationException>(() => new Link().Write(10, new[]
             { OwnerOperation.RetreatStarted(link.Battle, 20, 1, 10, ship) }, Array.Empty<ResolvedHit>()));
+            Assert.Throws<InvalidOperationException>(() => new Link().Write(10, new[]
+            { OwnerOperation.MissileTargetChanged(link.Battle, 20, 1, 10, missile, default) }, Array.Empty<ResolvedHit>()));
 
             Link Deployed()
             {
@@ -232,7 +246,7 @@ namespace CombatSimulation.Runtime.Tests
         [Test]
         public void CorrectionsKeepBodiesOnTheirGridsAndEscapeFastVelocities()
         {
-            var bodies = CorrectionBodies();
+            var names = CorrectionNames(); var bodies = names.Bodies;
             var batch = new CorrectionBatch(); batch.Begin(new BattleId(0x500000001), 20, 50, 123456);
             batch.Add(bodies[0].Entity, new SpawnPose(new Vec2(199.9999f, 0.3f), -0.25f, new Vec2(2.5f, -3.3f), 1.7f),
                 ResourceLevel.Partial(1, false), ResourceLevel.Full, ResourceLevel.Partial(255, true), ReadOnlySpan<PointDefenseTimers>.Empty);
@@ -250,7 +264,7 @@ namespace CombatSimulation.Runtime.Tests
             var length = w.Finish();
 
             var actual = new CorrectionBatch(); var timers = Array.Empty<PointDefenseTimers>();
-            CorrectionCodec.Read(bytes.AsSpan(0, length), batch.BattleId, 20, arena, bodies, actual, ref timers);
+            CorrectionCodec.Read(bytes.AsSpan(0, length), batch.BattleId, 20, arena, names, actual, ref timers);
             Assert.AreEqual(batch.BattleId, actual.BattleId); Assert.AreEqual(20, actual.Owner);
             Assert.AreEqual(batch.Tick, actual.Tick); Assert.AreEqual(batch.AppliedHitSequence, actual.AppliedHitSequence);
             Assert.AreEqual(2, actual.Bodies.Length);
@@ -281,10 +295,63 @@ namespace CombatSimulation.Runtime.Tests
             Assert.AreEqual(106, CorrectionCodec.BodyBits(arena, 0, batch.Bodies[0], bodies[0].Definition, ReadOnlySpan<PointDefenseTimers>.Empty));
         }
 
+        // P3: missiles by absolute bullet index, before the bodies. An unknown index is skipped, later ones still read.
+        [Test]
+        public void MissileCorrectionsUseAbsoluteIndicesAndSkipUnknownBullets()
+        {
+            var names = CorrectionNames(); var arena = new CorrectionCodec.Arena(200, 200);
+            var known = new[] { new EntityId(101), new EntityId(102), new EntityId(103) };
+            foreach (var id in known) names.AddBullet(id);
+            names.RemoveBullet(known[1]); names.EndBatch();
+            var moving = new MissileCorrection(known[0], new Vec2(10.5f, 199.99f), -1f, true, new Vec2(3.25f, -24.5f));
+            var cruising = new MissileCorrection(known[2], new Vec2(50f, 60f), 2f, false, new Vec2(9f, 9f));
+            var gone = new MissileCorrection(known[1], new Vec2(1f, 1f), 0f, false, Vec2.Zero);
+            var bytes = new byte[100];
+            var w = CorrectionCodec.Begin(bytes, new BattleId(9), 50, 0, 3);
+            var start = w.BitPosition;
+            Assert.IsTrue(CorrectionCodec.WriteMissile(ref w, arena, 0, moving));
+            Assert.AreEqual(CorrectionCodec.MissileBits(arena, 0, moving), w.BitPosition - start);
+            Assert.IsTrue(CorrectionCodec.WriteMissile(ref w, arena, 0, gone));
+            start = w.BitPosition;
+            Assert.IsTrue(CorrectionCodec.WriteMissile(ref w, arena, 0, cruising));
+            // About 7 bytes at full speed in the plan: index gap 1, position 36, angle 14, flag 1.
+            Assert.AreEqual(52, w.BitPosition - start);
+            Assert.IsTrue(CorrectionCodec.Write(ref w, arena, 0, Body(names.Bodies[0].Entity), names.Bodies[0].Definition,
+                ReadOnlySpan<PointDefenseTimers>.Empty));
+            var length = w.Finish();
+
+            var actual = new CorrectionBatch(); var timers = Array.Empty<PointDefenseTimers>();
+            CorrectionCodec.Read(bytes.AsSpan(0, length), new BattleId(9), 20, arena, names, actual, ref timers);
+            Assert.AreEqual(2, actual.Missiles.Length);
+            Assert.AreEqual(1, actual.Bodies.Length);
+            var first = actual.Missiles[0];
+            Assert.AreEqual(known[0], first.EntityId); Assert.IsTrue(first.HasVelocity);
+            Assert.AreEqual(10.5f, first.Position.X, 0.5f / 1024); Assert.AreEqual(199.99f, first.Position.Y, 0.5f / 1024);
+            Assert.AreEqual(2 * Math.PI - 1, first.Angle, Math.PI / 16384);
+            Assert.AreEqual(3.25f, first.Velocity.X, 0.5f / 128); Assert.AreEqual(-24.5f, first.Velocity.Y, 0.5f / 128);
+            Assert.AreEqual(known[2], actual.Missiles[1].EntityId);
+            Assert.IsFalse(actual.Missiles[1].HasVelocity); Assert.AreEqual(Vec2.Zero, actual.Missiles[1].Velocity);
+
+            // A missile count larger than the payload holds is malformed.
+            w = CorrectionCodec.Begin(bytes, new BattleId(9), 50, 0, 2);
+            CorrectionCodec.WriteMissile(ref w, arena, 0, moving);
+            length = w.Finish();
+            Assert.Throws<FormatException>(() =>
+                CorrectionCodec.Read(bytes.AsSpan(0, length), new BattleId(9), 20, arena, names, new CorrectionBatch(), ref timers));
+
+            BodyCorrection Body(EntityId entity)
+            {
+                var batch = new CorrectionBatch(); batch.Begin(new BattleId(9), 20, 50, 0);
+                batch.Add(entity, new SpawnPose(new Vec2(1, 2), 0, Vec2.Zero), ResourceLevel.Full, ResourceLevel.Full,
+                    ResourceLevel.Full, ReadOnlySpan<PointDefenseTimers>.Empty);
+                return batch.Bodies[0];
+            }
+        }
+
         [Test]
         public void MalformedCorrectionsAreRejectedAndUnknownIndicesEndTheDatagram()
         {
-            var bodies = CorrectionBodies(); var arena = new CorrectionCodec.Arena(200, 200);
+            var names = CorrectionNames(); var bodies = names.Bodies; var arena = new CorrectionCodec.Arena(200, 200);
             var batch = new CorrectionBatch(); batch.Begin(new BattleId(9), 20, 50, 0);
             batch.Add(bodies[0].Entity, new SpawnPose(new Vec2(1, 2), 0, Vec2.Zero), ResourceLevel.Full,
                 ResourceLevel.Full, ResourceLevel.Partial(9, true), ReadOnlySpan<PointDefenseTimers>.Empty);
@@ -300,7 +367,7 @@ namespace CombatSimulation.Runtime.Tests
             for (var size = 1; size < length; ++size)
             {
                 var into = new CorrectionBatch(); var scratch = Array.Empty<PointDefenseTimers>();
-                try { CorrectionCodec.Read(bytes.AsSpan(0, size), new BattleId(9), 20, arena, bodies, into, ref scratch); }
+                try { CorrectionCodec.Read(bytes.AsSpan(0, size), new BattleId(9), 20, arena, names, into, ref scratch); }
                 catch (FormatException) { continue; }
                 Assert.Less(into.Bodies.Length, 2, $"length {size}");
                 if (into.Bodies.Length == 1) Assert.AreEqual(bodies[0].Entity, into.Bodies[0].EntityId);
@@ -312,7 +379,7 @@ namespace CombatSimulation.Runtime.Tests
             CorrectionCodec.Write(ref w, arena, 0, batch.Bodies[0], bodies[0].Definition, ReadOnlySpan<PointDefenseTimers>.Empty);
             length = w.Finish();
             var actual = new CorrectionBatch(); var timers = Array.Empty<PointDefenseTimers>();
-            CorrectionCodec.Read(bytes.AsSpan(0, length), new BattleId(9), 20, arena, bodies, actual, ref timers);
+            CorrectionCodec.Read(bytes.AsSpan(0, length), new BattleId(9), 20, arena, names, actual, ref timers);
             Assert.AreEqual(1, actual.Bodies.Length);
 
             // A position cell past the arena.
@@ -321,17 +388,24 @@ namespace CombatSimulation.Runtime.Tests
             w.WriteBits(1UL << 14, 15); w.WriteBits(1UL << 14, 15); w.WriteBits(1UL << 13, 14); w.WriteBits(7, 3);
             length = w.Finish();
             Assert.Throws<FormatException>(() => Read(bytes, length, new BattleId(9)));
-            bytes[0] = 2;
+            bytes[0] = 1;
             Assert.Throws<FormatException>(() => Read(bytes, length, new BattleId(9)));
 
             void Read(byte[] data, int size, BattleId battle)
             {
                 var into = new CorrectionBatch(); var scratch = Array.Empty<PointDefenseTimers>();
-                CorrectionCodec.Read(data.AsSpan(0, size), battle, 20, arena, bodies, into, ref scratch);
+                CorrectionCodec.Read(data.AsSpan(0, size), battle, 20, arena, names, into, ref scratch);
             }
         }
 
         // Index 0: shield 0 and energy without recharge, no devices. Index 1: none. Index 2: two point-defense devices.
+        private static StreamNames CorrectionNames()
+        {
+            var names = new StreamNames(null);
+            names.Bodies.AddRange(CorrectionBodies());
+            return names;
+        }
+
         private static List<ControlledBody> CorrectionBodies()
         {
             var engine = new EngineDefinition(20, 10, 5, 2);

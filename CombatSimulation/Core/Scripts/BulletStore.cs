@@ -45,6 +45,14 @@ namespace CombatSimulation.Core
         // are confirmed at creation.
         public long SpawnTick;
         public bool Confirmed;
+
+        // Homing projectiles in a network battle (network plan, P3). On the owner: the batch tick of the last
+        // correction sent. On a remote copy: the tick of the last correction applied, and one held for stage 1.
+        public bool Corrected;
+        public long CorrectedTick;
+        public bool HasCorrection;
+        public long CorrectionTick;
+        public MissileCorrection Correction;
     }
 
     // Bullets in a struct array with a LIFO free list (about 2,000 at R2). Allocation order never affects public IDs.

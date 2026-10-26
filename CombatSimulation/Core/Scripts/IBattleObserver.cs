@@ -17,7 +17,9 @@ namespace CombatSimulation.Core
     {
         public readonly EntityId Entity;
         public readonly long SourceTick, AppliedTick;
-        public readonly bool HasHistory, IsDrone;
+        // IsMissile (P3): a homing projectile, corrected by replacement. The errors are the change of its present
+        // position and angle, Radius is its own, and it has no resources.
+        public readonly bool HasHistory, IsDrone, IsMissile;
         public readonly Vec2 PositionError;
         public readonly float AngleError, Radius, ArmorBefore, ArmorAfter, ArmorMax, ShieldBefore, ShieldAfter, ShieldMax;
         internal CorrectionObservation(ShipEntity ship, long source, long applied, bool history, Vec2 position,
@@ -27,6 +29,13 @@ namespace CombatSimulation.Core
             IsDrone = ship.IsDrone; PositionError = position; AngleError = angle; Radius = ship.Definition.HullRadius;
             ArmorBefore = armorBefore; ArmorAfter = ship.Armor.Value; ArmorMax = ship.Armor.Max;
             ShieldBefore = shieldBefore; ShieldAfter = ship.Shield.Value; ShieldMax = ship.Shield.Max;
+            IsMissile = false;
+        }
+        internal CorrectionObservation(in BulletEntity missile, long source, long applied, Vec2 position, float angle)
+        {
+            Entity = missile.Id; SourceTick = source; AppliedTick = applied; HasHistory = true; IsDrone = false;
+            IsMissile = true; PositionError = position; AngleError = angle; Radius = missile.Definition.Radius;
+            ArmorBefore = ArmorAfter = ArmorMax = ShieldBefore = ShieldAfter = ShieldMax = 0f;
         }
     }
 

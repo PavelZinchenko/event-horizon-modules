@@ -190,6 +190,8 @@ namespace CombatSimulation.Core
             _entities.Remove(previous);
             TryRegister(operation.EntityId, _bullets.GetHandle(index));
             bullet.Id = operation.EntityId;
+            // A homing copy keeps its search phase relative to the owner's spawn tick (P3).
+            bullet.NextSearchTick += operation.Tick - bullet.SpawnTick;
             bullet.SpawnTick = operation.Tick;
             if (!bullet.IsBeam) bullet.ExpiryTick = operation.Tick + bullet.Definition.LifetimeTicks - 1;
             bullet.Confirmed = true;

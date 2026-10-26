@@ -17,9 +17,14 @@ namespace CombatSimulation.Runtime
         { Entity = entity; Definition = definition; Bay = bay; }
     }
 
-    // Correction datagram payload (network plan, G1), a bit stream (BitWriter):
-    //   version (8 bits), battle ID low 32 bits, batch tick and applied hit sequence (both VarUInt), then bodies in
-    //   increasing control index order until only zero padding remains. The owner of every body is the sending peer.
+    // Correction datagram payload (network plan, G1 and P3), a bit stream (BitWriter):
+    //   version (8 bits), battle ID low 32 bits, batch tick and applied hit sequence (both VarUInt), missile count
+    //   (VarUInt) and the missiles, then bodies in increasing control index order until only zero padding remains. The
+    //   owner of every body and missile is the sending peer.
+    // Missile (P3), in increasing bullet index order: index gap (VarUInt: the absolute bullet index in the sender's
+    //   stream minus the previous index minus 1; the first: its index), position per axis on the body grid, angle
+    //   (14 bits), velocity flag (1 bit) and, with the flag, linear velocity per axis as for a body. Without the flag the
+    //   missile flies at full speed along its angle. An index the receiver does not know is skipped.
     // Body: index gap (VarUInt: the index minus the previous index minus 1; the first body: its index). Position per
     //   axis on a 1/1024-unit grid, with the bit count from the arena size; angle (14 bits); linear velocity per axis on
     //   a 1/128 unit/s grid (15 bits); angular velocity on a 1/512 rad/s grid (14 bits). Velocity field 0 escapes to a
@@ -30,7 +35,7 @@ namespace CombatSimulation.Runtime
     // A batch that does not fit in one datagram continues in more datagrams, each with its own header.
     internal static class CorrectionCodec
     {
-        internal const byte Version = 1;
+        internal const byte Version = 2;
         internal const double PositionScale = 1024, LinearScale = 128, AngularScale = 512;
         internal const int AngleBits = 14, LinearBits = 15, AngularBits = 14, LevelBits = 8;
 
@@ -48,13 +53,34 @@ namespace CombatSimulation.Runtime
             private static long Cells(float size) => Math.Max(1L, (long)Math.Ceiling(size * PositionScale));
         }
 
-        internal static BitWriter Begin(Span<byte> buffer, BattleId battle, long tick, ulong appliedHitSequence)
+        internal static BitWriter Begin(Span<byte> buffer, BattleId battle, long tick, ulong appliedHitSequence,
+            uint missiles = 0)
         {
             var w = new BitWriter(buffer);
             if (!w.WriteBits(Version, 8) || !w.WriteBits(unchecked((uint)battle.Value), 32) ||
-                !w.WriteVarUInt((ulong)tick) || !w.WriteVarUInt(appliedHitSequence))
+                !w.WriteVarUInt((ulong)tick) || !w.WriteVarUInt(appliedHitSequence) || !w.WriteVarUInt(missiles))
                 throw new ArgumentException("Correction buffer is too small.", nameof(buffer));
             return w;
+        }
+
+        internal static int MissileBits(in Arena arena, ulong gap, in MissileCorrection missile) =>
+            BitWriter.VarUIntBits(gap) + arena.XBits + arena.YBits + AngleBits + 1 + (missile.HasVelocity
+                ? VelocityBits(missile.Velocity.X, LinearScale, LinearBits) + VelocityBits(missile.Velocity.Y, LinearScale, LinearBits)
+                : 0);
+
+        // False, with nothing written, when the missile does not fit.
+        internal static bool WriteMissile(ref BitWriter w, in Arena arena, ulong gap, in MissileCorrection missile)
+        {
+            if (w.RemainingBits < MissileBits(arena, gap, missile)) return false;
+            w.WriteVarUInt(gap);
+            w.WriteBits((ulong)Position(missile.Position.X, arena.XCells), arena.XBits);
+            w.WriteBits((ulong)Position(missile.Position.Y, arena.YCells), arena.YBits);
+            w.WriteBits((ulong)Angle(missile.Angle), AngleBits);
+            w.WriteBool(missile.HasVelocity);
+            if (!missile.HasVelocity) return true;
+            WriteVelocity(ref w, missile.Velocity.X, LinearScale, LinearBits);
+            WriteVelocity(ref w, missile.Velocity.Y, LinearScale, LinearBits);
+            return true;
         }
 
         internal static int BodyBits(in Arena arena, uint gap, in BodyCorrection body, ShipDefinition definition,
@@ -96,13 +122,29 @@ namespace CombatSimulation.Runtime
         // sorted by index and the receiver knows a prefix of the indices, so reading stops at the first index whose
         // spawn record has not arrived: every later body is unknown too.
         internal static void Read(ReadOnlySpan<byte> payload, BattleId battle, int owner, in Arena arena,
-            List<ControlledBody> bodies, CorrectionBatch batch, ref PointDefenseTimers[] timers)
+            StreamNames names, CorrectionBatch batch, ref PointDefenseTimers[] timers)
         {
             var r = new BitReader(payload);
             var header = r.ReadBits(8, out var version) & r.ReadBits(32, out var id) & r.ReadVarUInt(out var tick) &
-                r.ReadVarUInt(out var ack);
+                r.ReadVarUInt(out var ack) & r.ReadVarUInt(out var missiles);
             Require(header && version == Version && id == unchecked((uint)battle.Value) && tick <= long.MaxValue - 6);
             batch.Begin(battle, owner, (long)tick, ack);
+            var next = 0UL;
+            for (var i = 0UL; i < missiles; ++i)
+            {
+                Require(r.ReadVarUInt(out var gap) && gap < ulong.MaxValue - next);
+                var bullet = next + gap;
+                next = bullet + 1;
+                var x = Bits(ref r, arena.XBits); var y = Bits(ref r, arena.YBits);
+                Require((long)x < arena.XCells && (long)y < arena.YCells);
+                var angle = Bits(ref r, AngleBits) * (2 * Math.PI / (1 << AngleBits));
+                var moving = Bits(ref r, 1) != 0;
+                var velocity = moving ? new Vec2(ReadVelocity(ref r, LinearScale, LinearBits), ReadVelocity(ref r, LinearScale, LinearBits)) : Vec2.Zero;
+                if (!names.TryGetBulletAt(bullet, out var entity)) continue;
+                batch.AddMissile(new MissileCorrection(entity, new Vec2((float)(x / PositionScale), (float)(y / PositionScale)),
+                    (float)angle, moving, velocity));
+            }
+            var bodies = names.Bodies;
             var index = -1L;
             while (!r.AtPadding())
             {

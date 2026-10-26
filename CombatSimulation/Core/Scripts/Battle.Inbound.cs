@@ -132,6 +132,13 @@ namespace CombatSimulation.Core
                         (EntityOwner(handle) == operation.Owner &&
                          (handle.Kind == EntityKind.Bullet ? !operation.BayKey.HasValue :
                           _ships.Get(handle)?.Bay?.Key == operation.BayKey && operation.BayKey.HasValue));
+                // The missile or its target may be gone; a live missile must be the owner's homing projectile.
+                case OwnerOperationKind.MissileTarget:
+                    if (operation.EntityId.IsNull) return false;
+                    if (_entities.TryGet(operation.TargetId, out handle) && handle.Kind == EntityKind.Bullet) return false;
+                    return !_entities.TryGet(operation.EntityId, out handle) ||
+                        (_bullets.TryGet(handle, out var missile) && _bullets[missile].Owner == operation.Owner &&
+                         !_bullets[missile].IsBeam && _bullets[missile].Definition.IsHoming);
                 case OwnerOperationKind.Retreat:
                     return !operation.EntityId.IsNull && (!_entities.TryGet(operation.EntityId, out handle) ||
                         (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner && _ships.Get(handle)?.Slot != null));
@@ -179,6 +186,11 @@ namespace CombatSimulation.Core
                         else if (operation.Kind == OwnerOperationKind.Retreat)
                         {
                             if (ApplyRemoteRetreat(operation)) _appliedOperations.Add(operation);
+                        }
+                        else if (operation.Kind == OwnerOperationKind.MissileTarget)
+                        {
+                            ApplyRemoteMissileTarget(operation);
+                            _appliedOperations.Add(operation);
                         }
                         else if (ApplyRemoteRemoval(operation)) _appliedOperations.Add(operation);
                         _remoteOperations.RemoveAt(i);
@@ -255,6 +267,16 @@ namespace CombatSimulation.Core
             return true;
         }
 
+        // P3: the copy takes the owner's target and search schedule. A copy that is already gone needs nothing; the
+        // record still commits. A target that is gone here makes the copy search at once (HomingSteering).
+        private void ApplyRemoteMissileTarget(in OwnerOperation operation)
+        {
+            if (!_entities.TryGet(operation.EntityId, out var handle) || !_bullets.TryGet(handle, out var index)) return;
+            ref var bullet = ref _bullets[index];
+            bullet.TargetId = operation.TargetId;
+            bullet.NextSearchTick = operation.Tick + HomingSteering.SearchTicks;
+        }
+
         private bool ApplyRemoteRemoval(in OwnerOperation operation)
         {
             if (!_entities.TryGet(operation.EntityId, out var handle))
@@ -320,6 +342,14 @@ namespace CombatSimulation.Core
                     Tick, ship.Id, ship.Bay.Key, parent, ReadSpawnPose(ship)));
         }
 
+        // P3: an owner search changed a homing projectile's target.
+        internal void CaptureMissileTarget(in BulletEntity bullet, EntityId target)
+        {
+            if (ShouldCapture(bullet.Owner))
+                _outgoingOperations.Add(OwnerOperation.MissileTargetChanged(BattleId, bullet.Owner,
+                    NextOperationSequence(bullet.Owner), Tick, bullet.Id, target));
+        }
+
         private void CaptureRemoval(EntityId id, int owner, RemovalReason reason, DroneBayKey? bay = null)
         {
             if (ShouldCapture(owner))
@@ -357,8 +387,10 @@ namespace CombatSimulation.Core
             return compare == 0 ? a.Sequence.CompareTo(b.Sequence) : compare;
         }
 
-        // Stage 6 stands for the end of stage 5: fire confirmations follow the local spawns of their tick.
+        // Stage 6 stands for the end of stage 5: fire confirmations follow the local spawns of their tick. A missile
+        // target applies before the steering of its tick, where the owner's search ran.
         private static int OperationStage(in OwnerOperation operation) =>
+            operation.Kind == OwnerOperationKind.MissileTarget ? 4 :
             operation.Kind == OwnerOperationKind.DroneSpawn ? 5 :
             operation.Kind == OwnerOperationKind.BulletSpawn ? 6 :
             operation.Kind == OwnerOperationKind.Retreat ? 1 :

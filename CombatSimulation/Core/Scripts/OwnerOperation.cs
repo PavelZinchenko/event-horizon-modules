@@ -49,7 +49,7 @@ namespace CombatSimulation.Core
         }
     }
 
-    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn, Retreat }
+    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn, Retreat, MissileTarget }
 
     // One logical commit. A roster operation includes its entity spawn/removal, never a second message.
     // Sequence starts at 1 per owner and covers this batch only (hits have their own sequence).
@@ -76,12 +76,17 @@ namespace CombatSimulation.Core
         // Plain projectile spawns only (network plan, P1): Pose holds the owner's muzzle position and launch angle.
         public readonly bool HasLaunchPose;
 
+        // Missile target changes only (network plan, P3): the new homing target, or null.
+        public readonly EntityId TargetId;
+
         private OwnerOperation(BattleId battleId, int owner, ulong sequence, long tick, OwnerOperationKind kind,
             EntityId entityId, RosterRecord roster = default, DroneBayKey? bayKey = null, EntityId parentId = default,
             SpawnPose pose = default, RemovalReason removalReason = RemovalReason.None,
-            int deviceIndex = 0, int barrelIndex = 0, uint spawnSequence = 0, bool hasLaunchPose = false)
+            int deviceIndex = 0, int barrelIndex = 0, uint spawnSequence = 0, bool hasLaunchPose = false,
+            EntityId targetId = default)
         {
             HasLaunchPose = hasLaunchPose;
+            TargetId = targetId;
             DeviceIndex = deviceIndex;
             BarrelIndex = barrelIndex;
             SpawnSequence = spawnSequence;
@@ -132,6 +137,12 @@ namespace CombatSimulation.Core
         // A retreat happens at most once per ship and cannot be cancelled.
         public static OwnerOperation RetreatStarted(BattleId battleId, int owner, ulong sequence, long tick, EntityId entityId) =>
             new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.Retreat, entityId);
+
+        // A homing projectile's search at tick chose another target, or none (network plan, P3). The receiver's copy
+        // takes it and the owner's search schedule; between the owner's records the copy searches locally.
+        public static OwnerOperation MissileTargetChanged(BattleId battleId, int owner, ulong sequence, long tick,
+            EntityId entityId, EntityId targetId) =>
+            new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.MissileTarget, entityId, targetId: targetId);
     }
 
     // "All my operations through tick Tick are sent; the last one has sequence OperationSequence" (0: none yet).

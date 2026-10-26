@@ -31,6 +31,7 @@ namespace CombatSimulation.Core
             {
                 battle.Targets.FindMissileTarget(position, heading, bullet.Side,
                     definition.Range * BulletDefinition.SearchRangeFactor, definition.Radius, out var id);
+                if (id != bullet.TargetId) battle.CaptureMissileTarget(bullet, id);
                 bullet.TargetId = id;
                 bullet.NextSearchTick = battle.Tick + SearchTicks;
                 target = id.IsNull ? null : battle.FindShip(id);
@@ -58,6 +59,36 @@ namespace CombatSimulation.Core
 
             var turn = across >= 0f ? definition.TurnRate : -definition.TurnRate;
             world.SetBulletPose(bullet.Body, position, rotation.Angle + turn * Battle.TickDuration);
+        }
+
+        // Network plan, P3: a remote missile's state at the end of an owner tick, advanced by count ticks as stage 4
+        // and physics move it, toward the target's present position and without a search or hit tests.
+        public static void Advance(Battle battle, in BulletEntity bullet, int count, ref Vec2 position, ref float angle,
+            ref Vec2 velocity)
+        {
+            var world = battle.World;
+            var definition = bullet.Definition;
+            var target = bullet.TargetId.IsNull ? null : battle.FindShip(bullet.TargetId);
+            var targetPosition = target == null ? Vec2.Zero : world.GetPosition(target.Body);
+            for (var i = 0; i < count; ++i)
+            {
+                var heading = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
+                if (Vec2.Dot(velocity, heading) < definition.Speed)
+                {
+                    var change = definition.Speed * heading - velocity;
+                    var length = change.Length;
+                    if (length > MinThrustDirection) velocity += definition.Acceleration * Battle.TickDuration / length * change;
+                }
+                if (target != null)
+                {
+                    var delta = world.Torus.Delta(position, targetPosition);
+                    var along = Vec2.Dot(heading, delta);
+                    var across = Vec2.Cross(heading, delta);
+                    if ((along != 0f || across != 0f) && !(along > 0f && Math.Abs(across) <= along * DeadZoneTan))
+                        angle += (across >= 0f ? definition.TurnRate : -definition.TurnRate) * Battle.TickDuration;
+                }
+                position = world.Torus.Wrap(position + Battle.TickDuration * velocity);
+            }
         }
     }
 }

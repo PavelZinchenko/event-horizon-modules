@@ -281,7 +281,9 @@ namespace CombatSimulation.Core
                 ship.PreStepVelocity = World.GetLinearVelocity(ship.Body);
             }
 
-            // Each missile reads only its own state and the grid, so the storage order has no effect.
+            // Each missile reads only its own state and the grid, so the storage order has no effect. Owner target
+            // records of this tick apply first (P3).
+            ApplyRemoteOperations(4);
             for (var i = 0; i < _bullets.Capacity; ++i)
             {
                 if (!_bullets.IsAlive(i)) continue;

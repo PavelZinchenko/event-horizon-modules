@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -377,6 +378,180 @@ namespace CombatSimulation.Core.Tests
             p.Step();
             if (step % 5 != 0) return;
             if (p.Correct(p.A, p.B) != 1 || p.Correct(p.B, p.A) != 1) throw new InvalidOperationException("Rejected correction.");
+        }
+
+        // P3: the owner sends each target change; the copy takes it and the owner's search schedule.
+        [Test]
+        public void TheOwnersTargetRecordOverridesTheCopyAndItsSearchSchedule()
+        {
+            var p = Missiles();
+            var missile = default(EntityId);
+            for (var i = 0; i < 20 && missile.IsNull; ++i)
+            {
+                p.Step();
+                foreach (var operation in p.A.Battle.Snapshot.OutgoingOperations)
+                    if (operation.Kind == OwnerOperationKind.MissileTarget)
+                    {
+                        missile = operation.EntityId;
+                        Assert.AreEqual(p.A.Entity(1), operation.TargetId);
+                        Assert.AreEqual(p.A.Tick - 1, operation.Tick);
+                    }
+            }
+            Assert.IsFalse(missile.IsNull, "no target record");
+            var searched = p.A.Tick - 1;
+
+            // The record is on its way; the copy lost its target and its schedule meanwhile.
+            ref var copy = ref p.B.Battle.Bullets[Find(p.B, missile)];
+            copy.TargetId = default;
+            copy.NextSearchTick = long.MaxValue;
+            p.Step();
+            copy = ref p.B.Battle.Bullets[Find(p.B, missile)];
+            Assert.AreEqual(p.B.Entity(1), copy.TargetId);
+            Assert.AreEqual(searched + HomingSteering.SearchTicks, copy.NextSearchTick);
+            Assert.AreEqual(p.A.Battle.Bullets[Find(p.A, missile)].NextSearchTick, copy.NextSearchTick);
+        }
+
+        [Test]
+        public void SinglePlayerCapturesNoTargetRecords()
+        {
+            var driver = new Driver(Fixtures.Setup(MissileShip, Fixtures.Ship));
+            driver.Deploy(1); driver.Deploy(101);
+            driver.Step();
+            driver.Control(1, systems: 1);
+            for (var i = 0; i < 30; ++i)
+            {
+                driver.Step();
+                Assert.AreEqual(0, driver.Battle.Snapshot.OutgoingOperations.Length);
+            }
+        }
+
+        // P3, by replacement: the owner's state at its tick, then the steering re-run to the present. With a still
+        // target the copy then flies as the owner's missile does.
+        [Test]
+        public void AMissileCorrectionReplacesTheCopyAndReplaysItsSteering()
+        {
+            var p = Missiles();
+            p.Step(12);
+            var missile = FirstMissile(p.A);
+            var batch = Write(p.A);
+            Assert.AreEqual(missile, batch.Missiles[0].EntityId, "the oldest first");
+            Assert.IsTrue(batch.Missiles[0].HasVelocity, "still accelerating");
+            p.Step(3);
+
+            ref var copy = ref p.B.Battle.Bullets[Find(p.B, missile)];
+            var world = p.B.Battle.World;
+            world.SetBulletPose(copy.Body, world.GetBulletPosition(copy.Body) + new Vec2(0.7f, -0.4f),
+                world.GetBulletRotation(copy.Body).Angle + 0.5f);
+            Assert.AreEqual(1 + batch.Missiles.Length, p.B.Battle.Submit(NetPair.OwnerA, batch));
+            p.Step();
+            copy = ref p.B.Battle.Bullets[Find(p.B, missile)];
+            ref readonly var owner = ref p.A.Battle.Bullets[Find(p.A, missile)];
+            Assert.Less(world.Torus.Delta(p.A.Battle.World.GetBulletPosition(owner.Body), world.GetBulletPosition(copy.Body)).Length, 1e-3f);
+            Assert.Less((p.A.Battle.World.GetBulletVelocity(owner.Body) - world.GetBulletVelocity(copy.Body)).Length, 1e-3f);
+            Assert.AreEqual(batch.Tick, copy.CorrectedTick);
+
+            // An older or repeated correction changes nothing.
+            Assert.AreEqual(0, p.B.Battle.Submit(NetPair.OwnerA, batch));
+        }
+
+        // Never-corrected missiles first, oldest first; then the longest-waiting. Equal weights give round-robin.
+        [Test]
+        public void MissileCorrectionsComeEarlyAfterSpawnThenRoundRobin()
+        {
+            var p = Missiles();
+            p.Step(13);
+            var first = Write(p.A);
+            Assert.AreEqual(3, first.Missiles.Length);
+            var ages = new List<long>();
+            foreach (var missile in first.Missiles) ages.Add(p.A.Battle.Bullets[Find(p.A, missile.EntityId)].SpawnTick);
+            CollectionAssert.AreEqual(new List<long>(ages).OrderBy(t => t).ToList(), ages);
+
+            // The oldest was sent; the two others still wait for their first correction.
+            p.A.Battle.MissileCorrectionSent(first.Missiles[0].EntityId, first.Tick);
+            p.Step();
+            var second = Write(p.A);
+            Assert.AreEqual(first.Missiles[1].EntityId, second.Missiles[0].EntityId);
+            Assert.AreEqual(first.Missiles[0].EntityId, second.Missiles[2].EntityId);
+            p.A.Battle.MissileCorrectionSent(second.Missiles[0].EntityId, second.Tick);
+            p.A.Battle.MissileCorrectionSent(second.Missiles[1].EntityId, second.Tick);
+            p.Step();
+            var third = Write(p.A);
+            Assert.AreEqual(first.Missiles[0].EntityId, third.Missiles[0].EntityId);
+        }
+
+        [Test]
+        public void InvalidMissileCorrectionsAreRejected()
+        {
+            var p = Missiles();
+            p.Step(12);
+            var missile = FirstMissile(p.A);
+            var tick = p.A.Tick - 1;
+            var batch = new CorrectionBatch();
+            batch.Begin(p.A.BattleId, NetPair.OwnerA, tick, 0);
+            batch.AddMissile(new MissileCorrection(missile, new Vec2(float.NaN, 0f), 0f, false, Vec2.Zero));
+            Assert.AreEqual(0, p.B.Battle.Submit(NetPair.OwnerA, batch));
+            // A local bullet is never corrected: B's own missiles are not A's.
+            batch.Begin(p.A.BattleId, NetPair.OwnerB, tick, 0);
+            batch.AddMissile(new MissileCorrection(missile, new Vec2(1f, 1f), 0f, false, Vec2.Zero));
+            Assert.AreEqual(0, p.A.Battle.Submit(NetPair.OwnerB, batch));
+            batch.Begin(p.A.BattleId, NetPair.OwnerA, tick, 0);
+            batch.AddMissile(new MissileCorrection(missile, new Vec2(1f, 1f), 0f, false, Vec2.Zero));
+            Assert.AreEqual(1, p.B.Battle.Submit(NetPair.OwnerA, batch));
+        }
+
+        // The target is out of search range: homing missiles that hit a target allocate in a network pair without P3
+        // too (about 110 bytes per tick and core at 3e0759d), so they would hide what this measures.
+        [Test]
+        public void MissileCorrectionChurnAllocatesNothingAfterWarmup()
+        {
+            var p = Missiles(cooldown: 0.02f);
+            // Missiles hit and circle the target. The live missiles and the unconfirmed hits reach their peak, and the
+            // buffers their last size, by tick 190.
+            for (var i = 0; i < 250; ++i) MissileChurnTick(p, i);
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 250; i < 400; ++i) MissileChurnTick(p, i);
+            var bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.AreEqual(0, bytes);
+        }
+
+        private static void MissileChurnTick(NetPair p, int step)
+        {
+            p.Step();
+            if (step % 5 != 0) return;
+            if (p.Correct(p.A, p.B) < 2) throw new InvalidOperationException("No missile correction held.");
+            // B's corrections acknowledge the hits, so A's predicted damage ledger stays short.
+            if (p.Correct(p.B, p.A) != 1) throw new InvalidOperationException("Rejected correction.");
+        }
+
+        private static readonly ShipDefinition MissileShip = Fixtures.CannonShip(Fixtures.Missile, energy: new ResourceDefinition(100000f));
+
+        // A fires missiles from slot 101 at slot 1, 20 units ahead and hard to kill; both devices run the same input.
+        private static NetPair Missiles(float cooldown = 0.1f)
+        {
+            var ship = cooldown == 0.1f ? MissileShip
+                : Fixtures.CannonShip(Fixtures.Missile, cooldown, energy: new ResourceDefinition(100000f));
+            var p = new NetPair(Fixtures.ShipWith(armor: 1e9f), ship);
+            p.A.Place(1, new Vec2(70f, 50f), Vec2.Zero);
+            p.B.Place(1, new Vec2(70f, 50f), Vec2.Zero);
+            p.A.Control(101, systems: 1);
+            p.B.Control(101, systems: 1);
+            return p;
+        }
+
+        private static int Find(Driver driver, EntityId id)
+        {
+            var bullets = driver.Battle.Bullets;
+            for (var i = 0; i < bullets.Capacity; ++i)
+                if (bullets.IsAlive(i) && bullets[i].Id == id) return i;
+            throw new InvalidOperationException("No such bullet.");
+        }
+
+        private static EntityId FirstMissile(Driver driver)
+        {
+            var bullets = driver.Battle.Bullets;
+            for (var i = 0; i < bullets.Capacity; ++i)
+                if (bullets.IsAlive(i) && !bullets[i].IsBeam && bullets[i].Definition.IsHoming) return bullets[i].Id;
+            throw new InvalidOperationException("No missile.");
         }
 
         internal static ShipDefinition Beam() => Fixtures.ShipWith(

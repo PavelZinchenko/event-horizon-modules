@@ -46,6 +46,11 @@ namespace CombatSimulation.Runtime
             return age < Bullets && _bulletEntities.TryGetValue(Bullets - 1 - age, out entity);
         }
 
+        // Corrections travel unreliably, so the two peers can count different latest indices: they name a bullet by
+        // its absolute index (P3).
+        internal bool TryGetBulletIndex(EntityId entity, out ulong index) => _bulletIndices.TryGetValue(entity, out index);
+        internal bool TryGetBulletAt(ulong index, out EntityId entity) => _bulletEntities.TryGetValue(index, out entity);
+
         internal void AddBody(in OwnerOperation spawn)
         {
             _bodyIndices[spawn.EntityId] = (uint)Bodies.Count;
@@ -98,14 +103,16 @@ namespace CombatSimulation.Runtime
     //     (CorrectionCodec.Arena) and the launch angle (14 bits), network plan P1. The receiver derives the entity ID
     //     with SpawnIdentity.CreateChild.
     //   Retreat: ship control index (VarUInt).
+    //   Missile target (P3): missile bullet age (VarUInt), target control index + 1 in the receiver's stream (VarUInt;
+    //     0: no target).
     //   Pose: position, angle, linear velocity, angular velocity (six 32-bit floats).
     // Operation sequences are consecutive inside a batch and end at the header's value. Operations come before hits,
     // so a hit names only bullets already counted.
     internal static class SessionCodec
     {
-        internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat }
+        internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget }
 
-        internal const byte Version = 3;
+        internal const byte Version = 4;
         internal const int MaxBatchBytes = 1 << 20;
         private const int KindBits = 3, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 2;
         private const int MaxVarUIntBits = 16 + 1 + 64;
@@ -124,14 +131,14 @@ namespace CombatSimulation.Runtime
             var w = new BitWriter(buffer);
             var lastOperation = own.LastOperation + (ulong)operations.Length;
             w.WriteBits(Version, 8); w.WriteVarUInt((ulong)tick); w.WriteVarUInt(lastOperation);
-            foreach (var operation in operations) WriteOperation(ref w, tick, operation, own, arena);
+            foreach (var operation in operations) WriteOperation(ref w, tick, operation, own, peer, arena);
             foreach (var hit in hits) WriteHit(ref w, tick, hit, own, peer);
             own.EndBatch();
             return w.Finish();
         }
 
         private static void WriteOperation(ref BitWriter w, long batchTick, in OwnerOperation op, StreamNames own,
-            in CorrectionCodec.Arena arena)
+            StreamNames peer, in CorrectionCodec.Arena arena)
         {
             if (op.Sequence != own.LastOperation + 1) throw new InvalidOperationException("Operation sequences must be consecutive.");
             own.LastOperation = op.Sequence;
@@ -191,6 +198,19 @@ namespace CombatSimulation.Runtime
                         throw new InvalidOperationException("A retreat names a ship the stream does not know.");
                     Header(ref w, RecordKind.Retreat, batchTick, op.Tick);
                     w.WriteVarUInt(ship);
+                    break;
+                case OwnerOperationKind.MissileTarget:
+                    if (!own.TryGetBullet(op.EntityId, out var missile))
+                        throw new InvalidOperationException("A missile target names a missile the stream does not know.");
+                    var target = 0UL;
+                    if (!op.TargetId.IsNull)
+                    {
+                        if (!peer.TryGetBody(op.TargetId, out var targetIndex))
+                            throw new InvalidOperationException("A missile target names a ship the peer's stream does not know.");
+                        target = (ulong)targetIndex + 1;
+                    }
+                    Header(ref w, RecordKind.MissileTarget, batchTick, op.Tick);
+                    w.WriteVarUInt(missile); w.WriteVarUInt(target);
                     break;
                 default: throw new InvalidOperationException("Unknown owner operation.");
             }
@@ -315,6 +335,12 @@ namespace CombatSimulation.Runtime
                         if (!resolve) break;
                         operations.Add(OwnerOperation.RetreatStarted(battle, sender, ++peer.LastOperation, r.Tick, Body(peer, name)));
                         break;
+                    case RecordKind.MissileTarget:
+                        name = r.VarUInt(); var targetIndex = r.VarUInt();
+                        if (!resolve) break;
+                        operations.Add(OwnerOperation.MissileTargetChanged(battle, sender, ++peer.LastOperation, r.Tick,
+                            Bullet(peer, name), targetIndex == 0 ? default : Body(own, targetIndex - 1)));
+                        break;
                 }
                 scan?.Add(new ScannedRecord(r.Kind, r.BitPosition - start, reason));
                 start = r.BitPosition;
@@ -376,7 +402,7 @@ namespace CombatSimulation.Runtime
             {
                 if (_reader.AtPadding()) return false;
                 var kind = Bits(KindBits);
-                Require(kind >= (ulong)RecordKind.Hit && kind <= (ulong)RecordKind.Retreat);
+                Require(kind >= (ulong)RecordKind.Hit && kind <= (ulong)RecordKind.MissileTarget);
                 Kind = (RecordKind)kind;
                 var code = VarUInt();
                 var offset = (long)(code >> 1) ^ -(long)(code & 1);

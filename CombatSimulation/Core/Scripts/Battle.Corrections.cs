@@ -30,7 +30,65 @@ namespace CombatSimulation.Core
                 batch.CommitBody(ship.Id, ReadSpawnPose(ship), ResourceLevel.Of(ship.Armor, true),
                     ResourceLevel.Of(ship.Shield, false), ResourceLevel.Of(ship.Energy, false));
             }
+            WriteMissileCorrections(owner, peerOwner, batch);
         }
+
+        // P3: every live homing projectile of the owner, highest priority first. A missile never corrected comes first
+        // (the early correction after spawn), older first. Otherwise the priority is the ticks since its last correction
+        // times its weight: NearWeight within one second of flight of a ship of the peer, or inside the peer's
+        // point-defense range; 1 elsewhere. Equal weights give round-robin.
+        private void WriteMissileCorrections(int owner, int peerOwner, CorrectionBatch batch)
+        {
+            var tick = Tick - 1;
+            for (var i = 0; i < _bullets.Capacity; ++i)
+            {
+                if (!_bullets.IsAlive(i)) continue;
+                ref readonly var bullet = ref _bullets[i];
+                if (bullet.Owner != owner || bullet.IsBeam || !bullet.Definition.IsHoming ||
+                    bullet.PendingRemoval != RemovalReason.None) continue;
+                var position = World.GetBulletPosition(bullet.Body);
+                var rotation = World.GetBulletRotation(bullet.Body);
+                var velocity = World.GetBulletVelocity(bullet.Body);
+                var fullSpeed = (velocity - bullet.Definition.Speed * new Vec2(rotation.C, rotation.S)).Length <= FullSpeedTolerance;
+                var priority = !bullet.Corrected ? EarlyPriority + (tick - bullet.SpawnTick)
+                    : (tick - bullet.CorrectedTick) * (IsNearPeer(peerOwner, position, bullet.Definition) ? NearWeight : 1f);
+                batch.AddMissile(new MissileCorrection(bullet.Id, position, rotation.Angle, !fullSpeed, velocity, priority));
+            }
+            batch.SortMissiles();
+        }
+
+        private bool IsNearPeer(int peerOwner, Vec2 position, BulletDefinition definition)
+        {
+            var reach = definition.Speed * NearSeconds;
+            for (var i = 0; i < ShipEntryCount; ++i)
+            {
+                var ship = GetShipEntry(i);
+                if (ship == null || ship.Owner != peerOwner) continue;
+                var distance = World.Torus.Delta(position, World.GetPosition(ship.Body)).Length - ship.Definition.HullRadius;
+                if (distance <= reach) return true;
+                for (var d = 0; d < ship.DeviceCount; ++d)
+                    if (ship.GetDevice(d) is PointDefenseDevice pointDefense &&
+                        distance <= pointDefense.Definition.Radius + definition.Radius) return true;
+            }
+            return false;
+        }
+
+        // Runtime calls this for each missile it sent from a batch for tick.
+        internal void MissileCorrectionSent(EntityId id, long tick)
+        {
+            if (!_entities.TryGet(id, out var handle) || !_bullets.TryGet(handle, out var index)) return;
+            ref var bullet = ref _bullets[index];
+            bullet.Corrected = true;
+            bullet.CorrectedTick = tick;
+        }
+
+        // Placeholders until the owner sets them from a playable scene (network plan, P3).
+        internal const float NearWeight = 4f, NearSeconds = 1f;
+        // An early correction outranks every periodic one that waited under 250,000 ticks at NearWeight (83 minutes).
+        // Spawn ages up to 2^24 ticks stay exact in a float above it.
+        private const float EarlyPriority = 1e6f;
+        // Velocity within this of Speed along the heading is not sent: about 0.3 mm of error per tick.
+        internal const float FullSpeedTolerance = 1f / 64f;
 
         // Holds each valid correction on its remote entity until stage 1 after its tick. A correction that is not
         // newer than the held or last applied one for its entity is dropped. Returns the number held.
@@ -51,8 +109,23 @@ namespace CombatSimulation.Core
                 ship.Correction.Store(batch.Tick, batch.AppliedHitSequence, body, batch.GetTimers(body));
                 ++held;
             }
+            foreach (var missile in batch.Missiles)
+            {
+                if (!_entities.TryGet(missile.EntityId, out var handle) || !_bullets.TryGet(handle, out var index)) continue;
+                ref var bullet = ref _bullets[index];
+                if (bullet.Owner != senderOwner || bullet.IsBeam || !bullet.Definition.IsHoming || !ValidMissile(missile) ||
+                    batch.Tick < bullet.SpawnTick || (bullet.Corrected && batch.Tick <= bullet.CorrectedTick) ||
+                    (bullet.HasCorrection && batch.Tick <= bullet.CorrectionTick)) continue;
+                bullet.HasCorrection = true;
+                bullet.CorrectionTick = batch.Tick;
+                bullet.Correction = missile;
+                ++held;
+            }
             return held;
         }
+
+        private static bool ValidMissile(in MissileCorrection missile) => Finite(missile.Position.X) &&
+            Finite(missile.Position.Y) && Finite(missile.Angle) && Finite(missile.Velocity.X) && Finite(missile.Velocity.Y);
 
         private static bool ValidCorrection(ShipEntity ship, CorrectionBatch batch, in BodyCorrection body)
         {
@@ -77,6 +150,35 @@ namespace CombatSimulation.Core
                 ApplyCorrection(ship, ship.Correction);
                 ship.Correction.IsSet = false;
             }
+            for (var i = 0; i < _bullets.Capacity; ++i)
+            {
+                if (!_bullets.IsAlive(i)) continue;
+                ref var bullet = ref _bullets[i];
+                if (!bullet.HasCorrection || bullet.CorrectionTick >= Tick) continue;
+                ApplyMissileCorrection(ref bullet);
+                bullet.HasCorrection = false;
+            }
+        }
+
+        // P3, by replacement: the owner's state at its tick, then the homing steering re-run to the last completed tick
+        // toward the target's present position. No history, so nothing to overshoot. No event: only the motion changes.
+        private void ApplyMissileCorrection(ref BulletEntity bullet)
+        {
+            var correction = bullet.Correction;
+            var before = World.GetBulletPosition(bullet.Body);
+            var angleBefore = World.GetBulletRotation(bullet.Body).Angle;
+            var position = World.Torus.Wrap(correction.Position);
+            var angle = correction.Angle;
+            var velocity = correction.HasVelocity ? correction.Velocity
+                : bullet.Definition.Speed * new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
+            HomingSteering.Advance(this, bullet, (int)Math.Min(int.MaxValue, Tick - 1 - bullet.CorrectionTick),
+                ref position, ref angle, ref velocity);
+            World.SetBulletPose(bullet.Body, position, angle);
+            World.SetBulletVelocity(bullet.Body, velocity);
+            bullet.Corrected = true;
+            bullet.CorrectedTick = bullet.CorrectionTick;
+            Observer?.Correction(new CorrectionObservation(bullet, bullet.CorrectionTick, Tick,
+                World.Torus.Delta(before, position), WrapAngle(angle - angleBefore)));
         }
 
         private void ApplyCorrection(ShipEntity ship, PendingCorrection correction)

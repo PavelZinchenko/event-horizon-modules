@@ -1,4 +1,5 @@
 using System;
+using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
@@ -91,6 +92,30 @@ namespace CombatSimulation.Core
         }
     }
 
+    // The owner's state of one homing projectile at the end of the batch tick (network plan, P3). Velocity is
+    // omitted at full speed along the heading; the receiver then uses Speed along the angle. Priority orders the
+    // owner's batch (highest first) and does not travel.
+    public readonly struct MissileCorrection
+    {
+        public readonly EntityId EntityId;
+        public readonly Vec2 Position;
+        public readonly float Angle;
+        public readonly bool HasVelocity;
+        public readonly Vec2 Velocity;
+        public readonly float Priority;
+
+        public MissileCorrection(EntityId entityId, Vec2 position, float angle, bool hasVelocity, Vec2 velocity,
+            float priority = 0f)
+        {
+            EntityId = entityId;
+            Position = position;
+            Angle = angle;
+            HasVelocity = hasVelocity;
+            Velocity = hasVelocity ? velocity : Vec2.Zero;
+            Priority = priority;
+        }
+    }
+
     // One owner's corrections for one tick. AppliedHitSequence is the last hit sequence from the receiving owner
     // that the sender had applied by that tick. Reusable: the arrays keep their capacity after warm-up.
     public sealed class CorrectionBatch
@@ -102,6 +127,9 @@ namespace CombatSimulation.Core
 
         public ReadOnlySpan<BodyCorrection> Bodies => new ReadOnlySpan<BodyCorrection>(_bodies, 0, _bodyCount);
 
+        // Homing projectiles. The owner's batch lists every one, highest priority first; Runtime sends a prefix.
+        public ReadOnlySpan<MissileCorrection> Missiles => new ReadOnlySpan<MissileCorrection>(_missiles, 0, _missileCount);
+
         public ReadOnlySpan<PointDefenseTimers> GetTimers(in BodyCorrection body) =>
             new ReadOnlySpan<PointDefenseTimers>(_timers, body.FirstTimer, body.TimerCount);
 
@@ -112,8 +140,42 @@ namespace CombatSimulation.Core
             Owner = owner;
             Tick = tick;
             AppliedHitSequence = appliedHitSequence;
-            _bodyCount = _timerCount = _bodyTimers = 0;
+            _bodyCount = _timerCount = _bodyTimers = _missileCount = 0;
         }
+
+        public void AddMissile(in MissileCorrection missile)
+        {
+            if (_missileCount == _missiles.Length) Array.Resize(ref _missiles, _missiles.Length * 2);
+            _missiles[_missileCount++] = missile;
+        }
+
+        // Highest priority first; equal priorities in entity ID order. A heap sort: no allocation, any count.
+        internal void SortMissiles()
+        {
+            for (var i = _missileCount / 2 - 1; i >= 0; --i) Sift(i, _missileCount);
+            for (var end = _missileCount - 1; end > 0; --end)
+            {
+                (_missiles[0], _missiles[end]) = (_missiles[end], _missiles[0]);
+                Sift(0, end);
+            }
+        }
+
+        // The heap keeps the last item in the final order at its root.
+        private void Sift(int root, int count)
+        {
+            while (true)
+            {
+                var child = 2 * root + 1;
+                if (child >= count) return;
+                if (child + 1 < count && Before(_missiles[child], _missiles[child + 1])) ++child;
+                if (!Before(_missiles[root], _missiles[child])) return;
+                (_missiles[root], _missiles[child]) = (_missiles[child], _missiles[root]);
+                root = child;
+            }
+        }
+
+        private static bool Before(in MissileCorrection a, in MissileCorrection b) =>
+            a.Priority > b.Priority || (a.Priority == b.Priority && a.EntityId.Value < b.EntityId.Value);
 
         public void Add(EntityId entityId, in SpawnPose motion, in ResourceLevel armor, in ResourceLevel shield,
             in ResourceLevel energy, ReadOnlySpan<PointDefenseTimers> timers)
@@ -138,6 +200,8 @@ namespace CombatSimulation.Core
             _bodyTimers = _timerCount;
         }
 
+        private MissileCorrection[] _missiles = new MissileCorrection[8];
+        private int _missileCount;
         private BodyCorrection[] _bodies = new BodyCorrection[8];
         private PointDefenseTimers[] _timers = new PointDefenseTimers[8];
         private int _bodyCount;

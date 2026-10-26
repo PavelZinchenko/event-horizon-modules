@@ -13,20 +13,27 @@ namespace CombatSimulation.Runtime
         public int CorrectionIntervalMilliseconds { get; }
         public int MaxDatagramSize { get; }
         public int MaxCorrectionBytes { get; }
+        // Homing projectile corrections per batch (network plan, P3); a placeholder until the owner sets it from a
+        // playable scene. They go in the batch's first datagram, so at most half of its payload is used.
+        public int MissileCorrectionBytes { get; }
 
         public NetworkSessionOptions(int localOwner, int remoteOwner, bool isClockReference,
             int correctionIntervalMilliseconds = 100, int maxDatagramSize = PeerConnection.DefaultDatagramSize,
-            int maxCorrectionBytes = 1024 * 1024)
+            int maxCorrectionBytes = 1024 * 1024, int missileCorrectionBytes = DefaultMissileCorrectionBytes)
         {
             if (localOwner < 0 || remoteOwner < 0 || localOwner == remoteOwner) throw new ArgumentOutOfRangeException(nameof(localOwner));
             if (correctionIntervalMilliseconds != 100 && correctionIntervalMilliseconds != 150 && correctionIntervalMilliseconds != 200)
                 throw new ArgumentOutOfRangeException(nameof(correctionIntervalMilliseconds));
             if (maxDatagramSize < 80 || maxDatagramSize > ushort.MaxValue) throw new ArgumentOutOfRangeException(nameof(maxDatagramSize));
             if (maxCorrectionBytes < 34) throw new ArgumentOutOfRangeException(nameof(maxCorrectionBytes));
+            if (missileCorrectionBytes < 0) throw new ArgumentOutOfRangeException(nameof(missileCorrectionBytes));
             LocalOwner = localOwner; RemoteOwner = remoteOwner; IsClockReference = isClockReference;
             CorrectionIntervalMilliseconds = correctionIntervalMilliseconds;
             MaxDatagramSize = maxDatagramSize; MaxCorrectionBytes = maxCorrectionBytes;
+            MissileCorrectionBytes = missileCorrectionBytes;
         }
+
+        public const int DefaultMissileCorrectionBytes = 300;
     }
 
     // One thread, two owners, one match. The caller owns the transport and supplies monotonic seconds.
@@ -207,10 +214,21 @@ namespace CombatSimulation.Runtime
                 _sortedIndices[at] = index;
                 _sortedBodies[at] = i;
             }
-            if (count == 0) return;
+            var missiles = SelectMissiles(batch);
+            if (count == 0 && missiles == 0) return;
 
-            var w = CorrectionCodec.Begin(_correction, BattleId, batch.Tick, batch.AppliedHitSequence);
-            var empty = true;
+            var w = CorrectionCodec.Begin(_correction, BattleId, batch.Tick, batch.AppliedHitSequence, (uint)missiles);
+            var nextBullet = 0UL;
+            for (var i = 0; i < missiles; ++i)
+            {
+                var bullet = _missileIndices[i];
+                ref readonly var missile = ref batch.Missiles[_missileOrder[i]];
+                if (!CorrectionCodec.WriteMissile(ref w, _arena, bullet - nextBullet, missile))
+                    throw new InvalidOperationException("Missile corrections do not fit in one datagram.");
+                nextBullet = bullet + 1;
+                _runner.Battle.MissileCorrectionSent(missile.EntityId, batch.Tick);
+            }
+            var empty = missiles == 0;
             var previous = -1L;
             var total = 0;
             for (var i = 0; i < count; ++i)
@@ -229,6 +247,36 @@ namespace CombatSimulation.Runtime
                 previous = index;
             }
             if (SendCorrectionDatagram(ref w, ref total)) ++SentCorrectionBatches;
+        }
+
+        // P3: the batch's missiles in priority order while their bits fit the budget (each counted with its absolute
+        // index, which bounds its gap), then sorted by bullet index for the gap encoding. Returns the count.
+        private int SelectMissiles(CorrectionBatch batch)
+        {
+            var missiles = batch.Missiles;
+            if (_missileOrder.Length < missiles.Length)
+            {
+                Array.Resize(ref _missileOrder, missiles.Length);
+                Array.Resize(ref _missileIndices, missiles.Length);
+            }
+            var budget = 8 * Math.Min(_options.MissileCorrectionBytes, _correction.Length / 2);
+            var count = 0;
+            for (var i = 0; i < missiles.Length; ++i)
+            {
+                if (!_local.TryGetBulletIndex(missiles[i].EntityId, out var bullet)) continue;
+                var bits = CorrectionCodec.MissileBits(_arena, bullet, missiles[i]);
+                if (bits > budget) break;
+                budget -= bits;
+                var at = count++;
+                for (; at > 0 && _missileIndices[at - 1] > bullet; --at)
+                {
+                    _missileIndices[at] = _missileIndices[at - 1];
+                    _missileOrder[at] = _missileOrder[at - 1];
+                }
+                _missileIndices[at] = bullet;
+                _missileOrder[at] = i;
+            }
+            return count;
         }
 
         private bool SendCorrectionDatagram(ref BitWriter w, ref int total)
@@ -308,7 +356,7 @@ namespace CombatSimulation.Runtime
         // correction it holds or applied, so a late or repeated datagram changes nothing.
         private void ReadCorrection(ReadOnlySpan<byte> payload)
         {
-            CorrectionCodec.Read(payload, BattleId, _options.RemoteOwner, _arena, _remote.Bodies, _incomingCorrection, ref _timers);
+            CorrectionCodec.Read(payload, BattleId, _options.RemoteOwner, _arena, _remote, _incomingCorrection, ref _timers);
             _runner.Battle.Submit(_options.RemoteOwner, _incomingCorrection);
             if (_incomingCorrection.Tick <= _lastCorrectionTick) return;
             _lastCorrectionTick = _incomingCorrection.Tick;
@@ -337,6 +385,8 @@ namespace CombatSimulation.Runtime
         private readonly CorrectionBatch _outgoingCorrection = new CorrectionBatch(), _incomingCorrection = new CorrectionBatch();
         private int[] _sortedBodies = Array.Empty<int>();
         private uint[] _sortedIndices = Array.Empty<uint>();
+        private int[] _missileOrder = Array.Empty<int>();
+        private ulong[] _missileIndices = Array.Empty<ulong>();
         private PointDefenseTimers[] _timers = Array.Empty<PointDefenseTimers>();
         private long _nextCorrectionMilliseconds, _lastCorrectionTick = -1;
         private sealed class Received
