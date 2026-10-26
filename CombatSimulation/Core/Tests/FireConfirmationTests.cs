@@ -349,29 +349,100 @@ namespace CombatSimulation.Core.Tests
             Assert.IsEmpty(remote.Battle.Snapshot.AppliedOperations.ToArray());
         }
 
+        // P2: an overdue fire input fires the copy 1 tick late with another ID. The confirmation renames the copy and
+        // moves it onto the owner's launch; no bullet is removed or added.
         [Test]
-        public void MissedBeamIsAttachedReplacesAPredictedBeamAndOwnerRemovalDetachesIt()
+        public void PredictedShotFiredLateIsAdopted()
         {
-            var (owner, remote, link) = Pair(Beam);
-            remote.Control(101, systems: 1);
-            Tick(owner, remote, link, deliver: false);
-            var predicted = Shot(owner, 2);
-            Assert.IsTrue(Has(remote, predicted));
-            Tick(owner, remote, link, deliver: false);
+            var (owner, remote, link) = Pair(Cannon);
+            owner.Place(101, new Vec2(40f, 60f), new Vec2(5f, -3f), 0.7f);
+            remote.Place(101, new Vec2(40f, 60f), new Vec2(5f, -3f), 0.7f);
             owner.Control(101, systems: 1);
             Tick(owner, remote, link, deliver: false);
-            var fired = Shot(owner, 4);
-            Assert.IsTrue(Has(owner, fired));
+            owner.Control(101, systems: 0);
+            remote.Control(101, systems: 1);
+            Tick(owner, remote, link, deliver: false);
+            remote.Control(101, systems: 0);
+            Tick(owner, remote, link, deliver: false);
 
+            var shot = Shot(owner, 2);
+            var copy = Shot(owner, 3);
+            Assert.IsTrue(Has(remote, copy));
+            var body = remote.Battle.Bullets[Find(remote, copy)].Body;
+            link.Deliver(remote);
+            owner.Step();
+            remote.Step();
+
+            Assert.IsFalse(Has(remote, copy));
+            var index = Find(remote, shot);
+            ref readonly var adopted = ref remote.Battle.Bullets[index];
+            Assert.AreEqual(body, adopted.Body);
+            Assert.IsTrue(adopted.Confirmed);
+            Assert.AreEqual(2, adopted.SpawnTick);
+            Assert.AreEqual(owner.Battle.Bullets[Find(owner, shot)].ExpiryTick, adopted.ExpiryTick);
+            Assert.AreEqual(Position(owner, shot), Position(remote, shot));
+            Assert.IsEmpty(Events(remote, copy));
+            var rename = Events(remote, shot).Single();
+            Assert.AreEqual(BattleEventKind.Rename, rename.Kind);
+            Assert.AreEqual(copy, rename.PreviousId);
+            Assert.AreEqual(BattleEventAuthority.Committed, rename.Authority);
+            CollectionAssert.AreEqual(Ids(owner), Ids(remote));
+        }
+
+        // A copy outside the window (shorter than the shortest spacing of two shots) may be another shot: it is not adopted.
+        [Test]
+        public void ShotOutsideTheWindowIsNotAdopted()
+        {
+            var (owner, remote, link) = Pair(Cannon);
+            owner.Control(101, systems: 1);
+            Tick(owner, remote, link, deliver: false);
+            owner.Control(101, systems: 0);
+            for (var i = 0; i < 4; ++i) Tick(owner, remote, link, deliver: false);
+            remote.Control(101, systems: 1);
+            Tick(owner, remote, link, deliver: false);
+            remote.Control(101, systems: 0);
+
+            var shot = Shot(owner, 2);
+            var copy = Shot(owner, 7);
+            Assert.IsTrue(Has(remote, copy));
+            link.Deliver(remote);
+            owner.Step();
+            remote.Step();
+            Assert.IsTrue(Has(remote, shot));
+            Assert.IsFalse(Has(remote, copy));
+            Assert.AreEqual(BattleEventKind.Spawn, Events(remote, shot).Single().Kind);
+            Assert.AreEqual(RemovalReason.Unconfirmed, Events(remote, copy).Single().RemovalReason);
+        }
+
+        // P2 for a beam: the device keeps its attached beam, now under the owner's ID, and the owner's removal stops it.
+        // The beam's start tick may be any distance from the owner's: the device holds one beam.
+        [TestCase(1)]
+        [TestCase(4)]
+        [TestCase(-4)]
+        public void PredictedBeamIsAdopted(int late)
+        {
+            var (owner, remote, link) = Pair(Beam);
+            for (var tick = 2; tick <= 2 + Math.Abs(late); ++tick)
+            {
+                if (tick == 2) (late > 0 ? owner : remote).Control(101, systems: 1);
+                if (tick == 2 + Math.Abs(late)) (late > 0 ? remote : owner).Control(101, systems: 1);
+                Tick(owner, remote, link, deliver: false);
+            }
+
+            var fired = Shot(owner, late > 0 ? 2 : 2 - late);
+            var copy = Shot(owner, late > 0 ? 2 + late : 2);
+            var device = (BeamDevice)remote.Ship(101).GetDevice(0);
+            Assert.IsTrue(device.TryGetBeam(out var before));
             link.Deliver(remote);
             owner.Step();
             link.Capture(owner);
             remote.Step();
-            Assert.IsFalse(Has(remote, predicted));
-            Assert.AreEqual(RemovalReason.Unconfirmed, Events(remote, predicted).Single().RemovalReason);
-            var device = (BeamDevice)remote.Ship(101).GetDevice(0);
-            Assert.IsTrue(device.TryGetBeam(out var handle));
-            Assert.AreEqual(fired, remote.Battle.Bullets[handle.Index].Id);
+
+            Assert.IsTrue(device.TryGetBeam(out var after));
+            Assert.AreEqual(before, after);
+            Assert.AreEqual(fired, remote.Battle.Bullets[after.Index].Id);
+            Assert.IsFalse(Has(remote, copy));
+            Assert.AreEqual(copy, Events(remote, fired).Single(e => e.Kind == BattleEventKind.Rename).PreviousId);
 
             owner.Control(101, systems: 0);
             Tick(owner, remote, link);

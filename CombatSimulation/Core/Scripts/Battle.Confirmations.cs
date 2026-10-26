@@ -62,10 +62,10 @@ namespace CombatSimulation.Core
                     bullet.DeviceIndex, barrelIndex, sequence));
         }
 
-        // Confirms the local copy, or adds the missing bullet at its spawn tick. A bullet this device already removed
-        // by prediction, or a projectile that has expired, stays gone. The confirmed shot re-syncs the shooter's
-        // cannon and barrel timers (G1): an overdue fire input shifts a held weapon's cooldown phase for the whole
-        // burst. Energy and recoil are left to corrections.
+        // Confirms the local copy, adopts a copy fired at another tick (P2), or adds the missing bullet at its spawn
+        // tick. A bullet this device already removed by prediction, or a projectile that has expired, stays gone. The
+        // confirmed shot re-syncs the shooter's cannon and barrel timers (G1): an overdue fire input shifts a held
+        // weapon's cooldown phase for the whole burst. Energy and recoil are left to corrections.
         private bool ApplyRemoteBulletSpawn(in OwnerOperation operation)
         {
             var ship = FindShip(operation.ParentId);
@@ -89,6 +89,13 @@ namespace CombatSimulation.Core
             if (_predictedRemovalIds.Contains(operation.EntityId)) return true;
             if (cannon != null && operation.Tick + cannon.Definition.Bullet.LifetimeTicks - 1 < Tick) return true;
             if (HasDueRemoval(operation.EntityId)) return true;
+
+            var copy = FindCopyOfShot(device, operation);
+            if (copy >= 0)
+            {
+                Adopt(ship, cannon, copy, operation);
+                return true;
+            }
 
             int index;
             if (cannon != null)
@@ -127,6 +134,67 @@ namespace CombatSimulation.Core
                 sample, launch, out _, out var angle, out _, out var velocity, out var position);
             World.SetBulletPose(bullet.Body, position, angle);
             World.SetBulletVelocity(bullet.Body, velocity);
+        }
+
+        // P2: an unconfirmed copy of the confirmed shot from the same device, barrel and spawn sequence, at another spawn
+        // tick (an overdue fire input fires it late).
+        // - Beam: the device's attached beam at any tick. The owner stopped any earlier beam before this one, so the
+        //   attached beam is a prediction; if it was really a later beam, that beam's records restart it.
+        // - Projectile: the window is shorter than the cannon's shortest spacing between two shots, so the copy can be
+        //   no other shot of the owner (a wider window would shift every copy of a held burst). The nearest spawn tick
+        //   wins, then the earlier one.
+        private int FindCopyOfShot(ShipDevice device, in OwnerOperation operation)
+        {
+            if (device is BeamDevice beamDevice)
+            {
+                if (!beamDevice.TryGetBeam(out var current) || !_bullets.TryGet(current, out var beam)) return -1;
+                return IsCopyOfShot(_bullets[beam], operation, long.MaxValue) ? beam : -1;
+            }
+
+            var window = CopyWindow((CannonDevice)device);
+            if (window <= 0) return -1;
+            var found = -1;
+            var foundTick = 0L;
+            for (var i = 0; i < _bullets.Capacity; ++i)
+            {
+                if (!_bullets.IsAlive(i)) continue;
+                ref readonly var bullet = ref _bullets[i];
+                if (bullet.IsBeam || !IsCopyOfShot(bullet, operation, window)) continue;
+                var distance = Math.Abs(bullet.SpawnTick - operation.Tick);
+                var foundDistance = Math.Abs(foundTick - operation.Tick);
+                if (found >= 0 && (distance > foundDistance || distance == foundDistance && bullet.SpawnTick > foundTick))
+                    continue;
+                found = i;
+                foundTick = bullet.SpawnTick;
+            }
+            return found;
+        }
+
+        private static bool IsCopyOfShot(in BulletEntity bullet, in OwnerOperation operation, long window) =>
+            !bullet.Confirmed && bullet.PendingRemoval == RemovalReason.None && bullet.Owner == operation.Owner &&
+            bullet.ParentId == operation.ParentId && bullet.DeviceIndex == operation.DeviceIndex &&
+            bullet.SpawnTick != operation.Tick && Math.Abs(bullet.SpawnTick - operation.Tick) <= window &&
+            bullet.Id == SpawnIdentity.CreateChild(bullet.ParentId, bullet.SpawnTick, (uint)operation.DeviceIndex,
+                (uint)operation.BarrelIndex, operation.SpawnSequence);
+
+        // A cannon fires at most once per cooldown and barrel cooldown.
+        private static long CopyWindow(CannonDevice cannon) =>
+            Math.Max(1, Math.Max(cannon.Definition.CooldownTicks, ShipEntity.BarrelCooldownTicks)) - 1;
+
+        // The copy takes the owner's ID, spawn tick and expiry; a plain projectile also takes the owner's launch (P1).
+        // The body, beam attachment and contacts so far stay. The Rename event lets the scene keep the copy's view.
+        private void Adopt(ShipEntity ship, CannonDevice cannon, int index, in OwnerOperation operation)
+        {
+            ref var bullet = ref _bullets[index];
+            var previous = bullet.Id;
+            _entities.Remove(previous);
+            TryRegister(operation.EntityId, _bullets.GetHandle(index));
+            bullet.Id = operation.EntityId;
+            bullet.SpawnTick = operation.Tick;
+            if (!bullet.IsBeam) bullet.ExpiryTick = operation.Tick + bullet.Definition.LifetimeTicks - 1;
+            bullet.Confirmed = true;
+            _events.Add(BattleEvent.BulletRename(BattleId, Tick, _events.Count, bullet, previous));
+            if (cannon != null && operation.HasLaunchPose) Reaim(ship, cannon, index, operation);
         }
 
         // A bullet that spawned and died between two deliveries: its owner removal is in the same batch.

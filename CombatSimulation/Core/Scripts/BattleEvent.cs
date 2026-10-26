@@ -14,6 +14,10 @@ namespace CombatSimulation.Core
         // For presentation: one accepted hit. The damage is applied at stage 10, shield first.
         Hit = 5,
         Disarm = 6,
+
+        // Network only (P2): a predicted copy of a remote bullet takes its owner's ID. EntityId is the new ID and
+        // PreviousId the copy's; the body and its view stay.
+        Rename = 7,
     }
 
     public enum RemovalReason : byte
@@ -91,6 +95,9 @@ namespace CombatSimulation.Core
         public readonly BeamDefinition BeamDefinition;
         public readonly EntityId ParentId;
 
+        // Rename: the copy's ID before it.
+        public readonly EntityId PreviousId;
+
         public bool IsBullet => BulletDefinition != null || IsBeam;
         public bool IsBeam => BeamDefinition != null;
 
@@ -100,7 +107,7 @@ namespace CombatSimulation.Core
             float armorDeficit, float shieldDeficit, BattleResult result, EntityId attackerId = default,
             float damage = 0f, Vec2 point = default, BulletDefinition bulletDefinition = null, EntityId parentId = default,
             BeamDefinition beamDefinition = null, int deviceIndex = -1, DroneBayKey? bayKey = null,
-            BattleEventAuthority authority = BattleEventAuthority.Committed)
+            BattleEventAuthority authority = BattleEventAuthority.Committed, EntityId previousId = default)
         {
             BattleId = battleId;
             Tick = tick;
@@ -128,6 +135,7 @@ namespace CombatSimulation.Core
             BulletDefinition = bulletDefinition;
             BeamDefinition = beamDefinition;
             ParentId = parentId;
+            PreviousId = previousId;
         }
 
         internal static BattleEvent Spawn(BattleId battleId, long tick, int sequence, ShipEntity ship,
@@ -152,6 +160,13 @@ namespace CombatSimulation.Core
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, bullet.Id, default, bullet.Side, bullet.Owner,
                 null, bullet.PendingRemoval, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
                 bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition, authority: authority);
+
+        internal static BattleEvent BulletRename(BattleId battleId, long tick, int sequence, in BulletEntity bullet,
+            EntityId previousId) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Rename, bullet.Id, default, bullet.Side, bullet.Owner,
+                null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition,
+                previousId: previousId);
 
         internal static BattleEvent Transition(BattleId battleId, long tick, int sequence, RosterSlot slot,
             RosterStatus previousStatus, RosterTransitionReason reason, EntityId entityId,
@@ -199,6 +214,8 @@ namespace CombatSimulation.Core
                     return $"{Tick}.{Sequence} Hit {AttackerId} -> {EntityId} ({Damage})";
                 case BattleEventKind.Disarm:
                     return $"{Tick}.{Sequence} Disarm {AttackerId} device {DeviceIndex} -> {EntityId}";
+                case BattleEventKind.Rename:
+                    return $"{Tick}.{Sequence} Rename bullet {PreviousId} -> {EntityId}";
                 default:
                     return $"{Tick}.{Sequence} {Kind}";
             }
