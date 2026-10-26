@@ -31,13 +31,16 @@ namespace CombatSimulation.Core
                 hit.TargetId.IsNull || hit.Tick < 0 || hit.Tick > long.MaxValue - 6 ||
                 hit.DeviceIndex < -1 || hit.TargetShape < 0 || !Finite(hit.Amount) || hit.Amount < 0f ||
                 hit.ContactState < HitContactState.Start || hit.ContactState > HitContactState.End ||
-                hit.ImpactKind < HitImpactKind.Impact || hit.ImpactKind > HitImpactKind.DamageOverTime)
+                hit.ImpactKind < HitImpactKind.Impact || hit.ImpactKind > HitImpactKind.Stop)
                 return false;
+            // A bullet target: one record per contact. Disarm and Stop name bullets only.
+            if (hit.TargetIsBullet ? hit.TargetShape != 0 || hit.ContactState != HitContactState.Start
+                : hit.ImpactKind > HitImpactKind.DamageOverTime) return false;
             // The attacker may already be gone. A live copy, when present, must agree with the sender.
             if (_entities.TryGet(hit.AttackerId, out var handle) && EntityOwner(handle) != record.SenderOwner)
                 return false;
             if (_entities.TryGet(hit.TargetId, out handle) &&
-                (handle.Kind == EntityKind.Bullet || EntityOwner(handle) != hit.TargetOwner)) return false;
+                ((handle.Kind == EntityKind.Bullet) != hit.TargetIsBullet || EntityOwner(handle) != hit.TargetOwner)) return false;
             if (!AcceptSequence(_hitSequences, record.SenderOwner, record.Sequence)) return false;
             var index = _remoteHits.Count;
             while (index > 0 && CompareHits(record, _remoteHits[index - 1]) < 0) --index;

@@ -16,6 +16,11 @@ namespace CombatSimulation.Core
                 var hit = record.Hit;
                 Observer?.HitProcessed(new HitObservation(hit, Tick, LocalHitTarget(hit) != null));
                 RecordAppliedHit(record.SenderOwner, hit.Sequence);
+                if (hit.TargetIsBullet)
+                {
+                    ApplyBulletContact(hit);
+                    continue;
+                }
                 if (hit.ImpactKind != HitImpactKind.DamageOverTime)
                 {
                     if (hit.ContactState != HitContactState.End) AddRemoteDamage(hit, hit.Amount);
@@ -79,6 +84,66 @@ namespace CombatSimulation.Core
             ship.PendingDamage = (float)Math.Min(float.MaxValue, (double)ship.PendingDamage + amount);
             _events.Add(BattleEvent.RemoteHit(BattleId, Tick, _events.Count, hit, amount));
         }
+
+        // Network plan 9d (owner, 2026-10-26): a contact between bullets, or between point defense and a bullet, counts if
+        // either owner's device sees it. The device that saw it sends the contact on a remote bullet to that bullet's owner.
+        private void ClaimBulletContact(EntityId attacker, int attackerOwner, int deviceIndex, in BulletEntity target,
+            HitImpactKind kind, float amount)
+        {
+            if (!Setup.HasRemoteOwners || !Setup.IsLocalOwner(attackerOwner) || Setup.IsLocalOwner(target.Owner)) return;
+            _outgoingHits.AddBulletContact(new ResolvedHit(BattleId, Tick, attacker, attackerOwner, deviceIndex, target.Id,
+                target.Owner, 0, HitContactState.Start, kind, amount, targetIsBullet: true));
+        }
+
+        // The owner applies a received contact to its bullet if the bullet is still alive. A projectile or ray deals its
+        // damage once: this device's own contact with the same attacker (and tick, for a ray) already dealt it.
+        private void ApplyBulletContact(in ResolvedHit hit)
+        {
+            if (!_entities.TryGet(hit.TargetId, out var handle) || !_bullets.TryGet(handle, out var index)) return;
+            ref readonly var bullet = ref _bullets[index];
+            if (bullet.Owner != hit.TargetOwner || !Setup.IsLocalOwner(bullet.Owner)) return;
+            switch (hit.ImpactKind)
+            {
+                case HitImpactKind.Disarm:
+                    _bullets.MarkRemoval(handle, RemovalReason.Disposal);
+                    _events.Add(BattleEvent.RemoteDisarm(BattleId, Tick, _events.Count, hit));
+                    break;
+                case HitImpactKind.Stop:
+                    _bullets.MarkRemoval(handle, RemovalReason.Death);
+                    break;
+                default:
+                    if (!RecordBulletContact(hit.AttackerId, hit.TargetId,
+                        hit.ImpactKind == HitImpactKind.DamageOverTime ? hit.Tick : -1)) break;
+                    _bullets.AddDamage(handle, hit.Amount);
+                    _events.Add(BattleEvent.RemoteHit(BattleId, Tick, _events.Count, hit, hit.Amount));
+                    break;
+            }
+        }
+
+        // False when the contact of this attacker on this local bullet (at this tick, for a ray; tick -1 otherwise) already
+        // dealt its damage. Entries leave with their bullet.
+        private bool RecordBulletContact(EntityId attacker, EntityId target, long tick)
+        {
+            foreach (var contact in _bulletContacts)
+                if (contact.Attacker == attacker && contact.Target == target && contact.Tick == tick) return false;
+            _bulletContacts.Add(new BulletContact(attacker, target, tick));
+            return true;
+        }
+
+        private void ForgetBulletContacts(EntityId target)
+        {
+            for (var i = _bulletContacts.Count - 1; i >= 0; --i)
+                if (_bulletContacts[i].Target == target) _bulletContacts.RemoveAt(i);
+        }
+
+        private readonly struct BulletContact
+        {
+            public readonly EntityId Attacker, Target;
+            public readonly long Tick;
+            public BulletContact(EntityId attacker, EntityId target, long tick) { Attacker = attacker; Target = target; Tick = tick; }
+        }
+
+        private readonly List<BulletContact> _bulletContacts = new List<BulletContact>();
 
         // The last hit sequence of the sender that this stage has processed; corrections acknowledge it (step 5).
         // Records refused at Submit leave gaps; the next processed record covers them.

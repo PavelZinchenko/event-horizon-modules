@@ -100,6 +100,11 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 5, 1)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, float.NaN)), out _, out _));
             Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 1), 1), out _, out _));
+            // 9d: a bullet target travels as its entity ID; Disarm and Stop name bullets only, and ID 0 is no bullet.
+            Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 77, 0, true, HitImpactKind.Stop), 1), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, false, HitImpactKind.Disarm)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, true, HitImpactKind.Stop)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 77, 0, true, (HitImpactKind)5)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 4, 0, (ref BitWriter w) =>
             { w.WriteBool(true); w.WriteBits((ulong)RemovalReason.Expiry, 3); w.WriteVarUInt(0); }, 2), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 4, 0, (ref BitWriter w) =>
@@ -136,9 +141,11 @@ namespace CombatSimulation.Runtime.Tests
                 return deployed;
             }
 
-            void Hit(ref BitWriter w, ulong target, float amount)
+            void Hit(ref BitWriter w, ulong target, float amount, bool bullet = false, HitImpactKind impact = HitImpactKind.Impact)
             {
-                w.WriteBool(false); w.WriteVarUInt(0); w.WriteVarUInt(target); w.WriteVarUInt(0); w.WriteVarUInt(0); w.WriteBits(0, 4);
+                w.WriteBool(false); w.WriteVarUInt(0); w.WriteBool(bullet);
+                if (bullet) w.WriteBits(target, 64); else w.WriteVarUInt(target);
+                w.WriteVarUInt(0); w.WriteVarUInt(0); w.WriteBits(0, 2); w.WriteBits((ulong)impact, 3);
                 w.WriteBits(unchecked((uint)BitConverter.SingleToInt32Bits(amount)), 32);
             }
         }

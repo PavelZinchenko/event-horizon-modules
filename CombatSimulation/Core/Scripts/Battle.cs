@@ -516,6 +516,10 @@ namespace CombatSimulation.Core
                     _bullets.MarkRemoval(hit.TargetHandle, RemovalReason.Disposal);
                     _events.Add(BattleEvent.DisarmEvent(BattleId, Tick, _events.Count, hit,
                         Authority(_bullets[disarmed].Owner)));
+                    var defender = _ships.Get(hit.AttackerHandle);
+                    if (defender != null)
+                        ClaimBulletContact(hit.Attacker, defender.Owner, hit.AttackerDeviceIndex, _bullets[disarmed],
+                            HitImpactKind.Disarm, 0f);
                     continue;
                 }
                 if (hit.Kind != ContactKind.Hit) continue;
@@ -528,11 +532,30 @@ namespace CombatSimulation.Core
                 if (hit.TargetHandle.Kind == EntityKind.Bullet)
                 {
                     if (!_bullets.TryGet(hit.TargetHandle, out var index)) continue;
-                    authority = Authority(_bullets[index].Owner);
-                    if (authority == BattleEventAuthority.Committed) _bullets.AddDamage(hit.TargetHandle, hit.Damage);
-                    // Resolver walk damage decides predicted removal without changing remote hit points.
-                    else if (_contacts.GetStopTime(hit.TargetHandle) < float.PositiveInfinity)
-                        _bullets.MarkRemoval(hit.TargetHandle, RemovalReason.Death);
+                    ref readonly var targetBullet = ref _bullets[index];
+                    authority = Authority(targetBullet.Owner);
+                    var attackerBullet = _bullets.TryGet(hit.AttackerHandle, out var attackerIndex);
+                    var attackerOwner = attackerBullet ? _bullets[attackerIndex].Owner : _ships.Get(hit.AttackerHandle)?.Owner ?? -1;
+                    var ray = hit.Source == ContactSource.Ray;
+                    if (authority == BattleEventAuthority.Committed)
+                    {
+                        // A remote attacker's contact counts once, whether this device or the attacker's owner saw it.
+                        if (Setup.IsLocalOwner(attackerOwner) || RecordBulletContact(hit.Attacker, hit.Target, ray ? Tick : -1))
+                            _bullets.AddDamage(hit.TargetHandle, hit.Damage);
+                        // A remote projectile that stops at a local bullet stops on its owner too.
+                        if (attackerBullet && !hit.AttackerPassThrough && !ray)
+                            ClaimBulletContact(hit.Target, targetBullet.Owner, -1, _bullets[attackerIndex],
+                                HitImpactKind.Stop, 0f);
+                    }
+                    else
+                    {
+                        // Resolver walk damage decides predicted removal without changing remote hit points.
+                        if (_contacts.GetStopTime(hit.TargetHandle) < float.PositiveInfinity)
+                            _bullets.MarkRemoval(hit.TargetHandle, RemovalReason.Death);
+                        if (attackerOwner >= 0)
+                            ClaimBulletContact(hit.Attacker, attackerOwner, hit.AttackerDeviceIndex, targetBullet,
+                                ray ? HitImpactKind.DamageOverTime : HitImpactKind.Impact, hit.Damage);
+                    }
                 }
                 else
                 {
@@ -696,6 +719,7 @@ namespace CombatSimulation.Core
         {
             ref readonly var bullet = ref _bullets[index];
             if (!bullet.IsBeam) World.DestroyBullet(bullet.Body);
+            if (_bulletContacts.Count > 0) ForgetBulletContacts(bullet.Id);
             _entities.Remove(bullet.Id);
             _bullets.Release(index);
         }

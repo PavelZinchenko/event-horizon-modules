@@ -16,6 +16,9 @@ namespace CombatSimulation.Core
             else Append(hit);
         }
 
+        // A contact on a remote bullet is one record of its tick, also for a ray.
+        public void AddBulletContact(in ResolvedHit hit) => Append(hit);
+
         public void CompleteContacts(long tick)
         {
             foreach (var old in _active)

@@ -290,6 +290,7 @@ namespace CombatSimulation.Core
             for (var i = 0; i < records.Count; ++i)
             {
                 var hit = records[i];
+                if (hit.TargetIsBullet) continue;
                 if (hit.ImpactKind != HitImpactKind.DamageOverTime)
                 {
                     if (hit.ContactState != HitContactState.End) _predictedHits.Add(new PredictedHit(hit));

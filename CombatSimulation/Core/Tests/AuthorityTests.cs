@@ -75,9 +75,22 @@ namespace CombatSimulation.Core.Tests
         {
             var d = Start(Owners(localAttacker, localTarget));
             var missile = AddBullet(d, 1, new Vec2(54f, 50f), Vec2.Zero, hitPoints: 2f);
-            AddBullet(d, 0, new Vec2(52f, 50f), new Vec2(100f, 0f), damage: damage);
+            var bolt = AddBullet(d, 0, new Vec2(52f, 50f), new Vec2(100f, 0f), damage: damage);
             d.Step();
-            Assert.IsEmpty(d.Battle.Snapshot.OutgoingHits.ToArray());
+            // 9d: the contact counts if either owner's device sees it. A local bolt sends its damage on a remote missile;
+            // a remote bolt that stops at a local missile is told to stop.
+            var claims = d.Battle.Snapshot.OutgoingHits.ToArray();
+            if (localAttacker == localTarget) Assert.IsEmpty(claims);
+            else
+            {
+                var claim = claims.Single();
+                Assert.IsTrue(claim.TargetIsBullet);
+                Assert.AreEqual(localAttacker ? missile : bolt, claim.TargetId);
+                Assert.AreEqual(localAttacker ? bolt : missile, claim.AttackerId);
+                Assert.AreEqual(localAttacker ? HitImpactKind.Impact : HitImpactKind.Stop, claim.ImpactKind);
+                Assert.AreEqual(localAttacker ? damage : 0f, claim.Amount);
+                Assert.AreEqual(localAttacker ? 20 : 10, claim.TargetOwner);
+            }
             var hit = d.Battle.Snapshot.Events.ToArray().Single(e => e.Kind == BattleEventKind.Hit);
             Assert.AreEqual(Flag(localTarget), hit.Authority);
             if (damage >= 2f)
@@ -94,6 +107,76 @@ namespace CombatSimulation.Core.Tests
             }
         }
 
+        // 9d (owner, 2026-10-26): two missiles meet on B only. B commits its own missile's death and tells A, so A's
+        // missile dies too, although A never saw the contact.
+        [Test]
+        public void AMissileContactSeenOnOneDeviceDestroysBothMissiles()
+        {
+            var a = Start(Owners(true, false));
+            var b = Start(Owners(false, true));
+            var mineA = AddBullet(a, 0, new Vec2(52f, 80f), Vec2.Zero, hitPoints: 2f);
+            var theirsA = AddBullet(a, 1, new Vec2(54f, 50f), Vec2.Zero, hitPoints: 2f);
+            Assert.AreEqual(mineA, AddBullet(b, 0, new Vec2(52f, 50f), new Vec2(100f, 0f), hitPoints: 2f));
+            Assert.AreEqual(theirsA, AddBullet(b, 1, new Vec2(54f, 50f), Vec2.Zero, hitPoints: 2f));
+            a.Step(); b.Step();
+            Assert.IsTrue(Alive(a, mineA), "A saw no contact");
+            Assert.IsFalse(Alive(b, theirsA), "B's own missile detonated");
+            var claims = b.Battle.Snapshot.OutgoingHits.ToArray();
+            Assert.IsTrue(claims.Length > 0 && claims.All(c => c.TargetId == mineA && c.TargetIsBullet));
+            foreach (var claim in claims) Assert.IsTrue(a.Battle.Submit(new InboundHit(20, claim)));
+            a.Step();
+            Assert.IsFalse(Alive(a, mineA));
+            Assert.AreEqual(BattleEventAuthority.Committed, a.Battle.Snapshot.Events.ToArray()
+                .Single(e => e.EntityId == mineA && e.Kind == BattleEventKind.Removal).Authority);
+        }
+
+        // A bolt hits a missile on both devices: the missile's owner applies the damage once, from its own contact,
+        // and ignores the shooter's record of the same contact. Seen by the shooter only, the record deals it.
+        [TestCase(true)]
+        [TestCase(false)]
+        public void ABoltDamagesARemoteMissileOnce(bool ownerSeesIt)
+        {
+            var a = Start(Owners(true, false));
+            var b = Start(Owners(false, true));
+            var bolt = AddBullet(a, 0, new Vec2(52f, 50f), new Vec2(100f, 0f), damage: .5f);
+            var missile = AddBullet(a, 1, new Vec2(54f, 50f), Vec2.Zero, hitPoints: 2f);
+            AddBullet(b, 0, new Vec2(52f, ownerSeesIt ? 50f : 80f), new Vec2(100f, 0f), damage: .5f);
+            AddBullet(b, 1, new Vec2(54f, 50f), Vec2.Zero, hitPoints: 2f);
+            a.Step(); b.Step();
+            var claim = a.Battle.Snapshot.OutgoingHits.ToArray().Single();
+            Assert.AreEqual(bolt, claim.AttackerId);
+            Assert.IsTrue(b.Battle.Submit(new InboundHit(10, claim)));
+            b.Step();
+            Assert.AreEqual(1.5f, HitPoints(b, missile));
+            // The same record again is refused by its sequence.
+            Assert.IsFalse(b.Battle.Submit(new InboundHit(10, claim)));
+        }
+
+        [Test]
+        public void TheOwnerAppliesARemoteDisarmOnlyToALiveBullet()
+        {
+            var b = Start(Owners(false, true));
+            var missile = AddBullet(b, 1, new Vec2(54f, 80f), Vec2.Zero, hitPoints: 2f);
+            ResolvedHit Disarm(EntityId target, ulong sequence) => new ResolvedHit(b.BattleId, b.Tick - 1, b.Entity(1), 10, 0,
+                target, 20, 0, HitContactState.Start, HitImpactKind.Disarm, 0f, sequence, targetIsBullet: true);
+            Assert.IsTrue(b.Battle.Submit(new InboundHit(10, Disarm(new EntityId(4242), 1))));
+            // Disarm names bullets only; a ship target is refused.
+            Assert.IsFalse(b.Battle.Submit(new InboundHit(10, new ResolvedHit(b.BattleId, b.Tick - 1, b.Entity(1), 10, 0,
+                b.Entity(101), 20, 0, HitContactState.Start, HitImpactKind.Disarm, 0f, 2))));
+            Assert.IsTrue(b.Battle.Submit(new InboundHit(10, Disarm(missile, 2))));
+            b.Step();
+            Assert.IsFalse(Alive(b, missile));
+            var events = b.Battle.Snapshot.Events.ToArray();
+            Assert.AreEqual(1, events.Count(e => e.Kind == BattleEventKind.Disarm && e.EntityId == missile));
+            Assert.AreEqual(RemovalReason.Disposal, events.Single(e => e.EntityId == missile && e.Kind == BattleEventKind.Removal).RemovalReason);
+        }
+
+        private static bool Alive(Driver d, EntityId id) =>
+            Enumerable.Range(0, d.Battle.Bullets.Capacity).Any(i => d.Battle.Bullets.IsAlive(i) && d.Battle.Bullets[i].Id == id);
+
+        private static float HitPoints(Driver d, EntityId id) => d.Battle.Bullets[Enumerable.Range(0, d.Battle.Bullets.Capacity)
+            .Single(i => d.Battle.Bullets.IsAlive(i) && d.Battle.Bullets[i].Id == id)].HitPoints;
+
         [TestCase(true, false)]
         [TestCase(false, true)]
         public void PointDefenseDisarmUsesBulletAuthority(bool localDefender, bool localMissile)
@@ -102,10 +185,24 @@ namespace CombatSimulation.Core.Tests
             var d = Start(Owners(localDefender, localMissile), defender);
             var id = AddBullet(d, 1, new Vec2(54f, 50f), Vec2.Zero, hitPoints: 2f);
             d.Control(1, systems: 1);
-            var events = d.StepCollecting(3);
+            var events = new List<BattleEvent>(); var claims = new List<ResolvedHit>();
+            for (var i = 0; i < 3; ++i)
+            {
+                d.Step();
+                events.AddRange(d.Battle.Snapshot.Events.ToArray()); claims.AddRange(d.Battle.Snapshot.OutgoingHits.ToArray());
+            }
             Assert.AreEqual(Flag(localMissile), events.Single(e => e.Kind == BattleEventKind.Disarm).Authority);
             Assert.AreEqual(Flag(localMissile), events.Single(e => e.EntityId == id && e.Kind == BattleEventKind.Removal).Authority);
-            Assert.AreEqual(0, d.Battle.Snapshot.OutgoingHits.Length);
+            // 9d: a local point defense that disarms a remote missile tells the missile's owner.
+            if (localMissile) Assert.IsEmpty(claims);
+            else
+            {
+                var claim = claims.Single();
+                Assert.AreEqual(HitImpactKind.Disarm, claim.ImpactKind);
+                Assert.AreEqual(id, claim.TargetId);
+                Assert.AreEqual(d.Entity(1), claim.AttackerId);
+                Assert.AreEqual(0, claim.DeviceIndex);
+            }
         }
 
         [TestCase(true)]
@@ -241,7 +338,10 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(2, d.Battle.Snapshot.Events.ToArray().Count(e => e.Kind == BattleEventKind.Hit));
             var removal = d.Battle.Snapshot.Events.ToArray().Single(e => e.EntityId == id && e.Kind == BattleEventKind.Removal);
             Assert.AreEqual(Flag(localMissile), removal.Authority);
-            Assert.AreEqual(0, d.Battle.Snapshot.OutgoingHits.Length);
+            // 9d: each bolt's contact goes to the other owner: two stops for remote bolts, or two hits on a remote missile.
+            var claims = d.Battle.Snapshot.OutgoingHits.ToArray();
+            Assert.AreEqual(2, claims.Length);
+            Assert.IsTrue(claims.All(c => c.TargetIsBullet && c.ImpactKind == (localMissile ? HitImpactKind.Stop : HitImpactKind.Impact)));
         }
 
         [Test]

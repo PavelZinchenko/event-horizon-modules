@@ -90,9 +90,10 @@ namespace CombatSimulation.Runtime
     //   version (8 bits), batch tick and last operation sequence (both VarUInt), then records until only zero padding
     //   remains. The connection is bound to one battle, so no battle ID travels. The sender owns every record.
     // Record: kind (3 bits, RecordKind), record tick − batch tick (zigzag VarUInt), then by kind:
-    //   Hit: attacker kind (1 bit: control index, bullet age), attacker (VarUInt), target control index in the
-    //     receiver's stream (VarUInt), target shape (VarUInt), device index + 1 (VarUInt), contact (2), impact (2),
-    //     amount (32-bit float). The sequence is the hit's position in the stream.
+    //   Hit: attacker kind (1 bit: control index, bullet age), attacker (VarUInt), target kind (1 bit: control index,
+    //     bullet), target: control index in the receiver's stream (VarUInt) or, for a bullet, its entity ID (64; the
+    //     sender may know only a predicted copy, which no stream names), target shape (VarUInt), device index + 1
+    //     (VarUInt), contact (2), impact (3), amount (32-bit float). The sequence is the hit's position in the stream.
     //   Roster: entity (64), roster ID (32), revision (VarUInt), previous status (2), status (2), reason (3),
     //     deployment count and order (VarUInt), armor deficit, shield deficit, damage fraction (32-bit floats), pose.
     //   Drone launch: entity (64), bay roster ID (32), bay device (VarUInt), parent entity (64), pose.
@@ -112,9 +113,9 @@ namespace CombatSimulation.Runtime
     {
         internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget }
 
-        internal const byte Version = 4;
+        internal const byte Version = 5;
         internal const int MaxBatchBytes = 1 << 20;
-        private const int KindBits = 3, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 2;
+        private const int KindBits = 3, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3;
         private const int MaxVarUIntBits = 16 + 1 + 64;
         // Upper bounds for buffer sizing. The largest record, a roster change, needs about 720 bits.
         private const int HeaderBits = 8 + 2 * MaxVarUIntBits, RecordBits = 1024;
@@ -222,10 +223,13 @@ namespace CombatSimulation.Runtime
             var bullet = own.TryGetBullet(hit.AttackerId, out var attacker);
             if (!bullet && own.TryGetBody(hit.AttackerId, out var index)) attacker = index;
             else if (!bullet) throw new InvalidOperationException("A hit names an attacker the stream does not know.");
-            if (!peer.TryGetBody(hit.TargetId, out var target))
+            var target = 0U;
+            if (!hit.TargetIsBullet && !peer.TryGetBody(hit.TargetId, out target))
                 throw new InvalidOperationException("A hit names a target the peer's stream does not know.");
             Header(ref w, RecordKind.Hit, batchTick, hit.Tick);
-            w.WriteBool(bullet); w.WriteVarUInt(attacker); w.WriteVarUInt(target);
+            w.WriteBool(bullet); w.WriteVarUInt(attacker); w.WriteBool(hit.TargetIsBullet);
+            if (hit.TargetIsBullet) w.WriteBits(hit.TargetId.Value, 64);
+            else w.WriteVarUInt(target);
             w.WriteVarUInt((ulong)hit.TargetShape); w.WriteVarUInt((ulong)(hit.DeviceIndex + 1));
             w.WriteBits((ulong)hit.ContactState, ContactBits); w.WriteBits((ulong)hit.ImpactKind, ImpactBits);
             Float(ref w, hit.Amount);
@@ -264,14 +268,17 @@ namespace CombatSimulation.Runtime
                 switch (r.Kind)
                 {
                     case RecordKind.Hit:
-                        var attackerBullet = r.Bool(); var attackerName = r.VarUInt(); var targetName = r.VarUInt();
+                        var attackerBullet = r.Bool(); var attackerName = r.VarUInt(); var targetBullet = r.Bool();
+                        var targetName = targetBullet ? r.Bits(64) : r.VarUInt();
                         var shape = r.Int(); var device = r.Int() - 1;
                         var contact = r.Bits(ContactBits); var impact = r.Bits(ImpactBits); var amount = r.Float();
-                        Require(contact <= (ulong)HitContactState.End && impact <= (ulong)HitImpactKind.DamageOverTime && amount >= 0);
+                        Require(contact <= (ulong)HitContactState.End && impact <= (ulong)HitImpactKind.Stop && amount >= 0 &&
+                            (targetBullet ? targetName != 0 : impact <= (ulong)HitImpactKind.DamageOverTime));
                         if (!resolve) break;
                         var attacker = attackerBullet ? Bullet(peer, attackerName) : Body(peer, attackerName);
-                        hits.Add(new ResolvedHit(battle, r.Tick, attacker, sender, device, Body(own, targetName), receiver, shape,
-                            (HitContactState)contact, (HitImpactKind)impact, amount, ++peer.Hits));
+                        hits.Add(new ResolvedHit(battle, r.Tick, attacker, sender, device,
+                            targetBullet ? new EntityId(targetName) : Body(own, targetName), receiver, shape,
+                            (HitContactState)contact, (HitImpactKind)impact, amount, ++peer.Hits, targetBullet));
                         break;
                     case RecordKind.Roster:
                         var entity = r.Entity(); var id = new RosterId((uint)r.Bits(32)); var revision = r.Int();

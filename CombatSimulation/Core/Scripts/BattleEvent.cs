@@ -191,6 +191,11 @@ namespace CombatSimulation.Core
                 RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
                 attackerId: hit.Attacker, point: hit.Point, deviceIndex: hit.AttackerDeviceIndex, authority: authority);
 
+        internal static BattleEvent RemoteDisarm(BattleId battleId, long tick, int sequence, in ResolvedHit hit) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Disarm, hit.TargetId, default, 0, hit.TargetOwner, null,
+                RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                attackerId: hit.AttackerId, deviceIndex: hit.DeviceIndex);
+
         internal static BattleEvent RemoteHit(BattleId battleId, long tick, int sequence, in ResolvedHit hit, float damage) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Hit, hit.TargetId, default, 0,
                 hit.TargetOwner, null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f,
