@@ -275,7 +275,9 @@ namespace CombatSimulation.Core
             {
                 var ship = GetShipEntry(i);
                 if (ship == null) continue;
-                if (ship.RetreatCompletionTick == ShipEntity.NoRetreat) ShipEngine.Update(World, ship, TickDuration);
+                var input = ShipEngine.Input(ship);
+                ship.StepEngineInput = input;
+                ShipEngine.Update(World, ship.Body, input, TickDuration);
 
                 // Physics reports a touch after the solve, so ramming uses the velocity from before the step.
                 ship.PreStepVelocity = World.GetLinearVelocity(ship.Body);

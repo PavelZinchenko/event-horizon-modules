@@ -44,6 +44,23 @@ namespace CombatSimulation.Core
         }
     }
 
+    // The engine input of one tick at stage 4: no engine while retreating, else the engine its energy selects.
+    internal readonly struct EngineInput
+    {
+        public readonly EngineDefinition Engine;
+        public readonly float Throttle;
+        public readonly bool HasCourse;
+        public readonly float Course;
+
+        public EngineInput(EngineDefinition engine, float throttle, bool hasCourse, float course)
+        {
+            Engine = engine;
+            Throttle = throttle;
+            HasCourse = hasCourse;
+            Course = course;
+        }
+    }
+
     // A remote ship's received correction, held until its tick has run here. Arrays are reused across pool cycles.
     internal sealed class PendingCorrection
     {
@@ -249,10 +266,15 @@ namespace CombatSimulation.Core
             return true;
         }
 
-        // Stage 14, once per tick in increasing tick order: the state an owner correction for this tick describes.
+        // Stage 4: the engine input of this tick, kept with the body sample at stage 14.
+        internal EngineInput StepEngineInput { get; set; }
+
+        // Stage 14, once per tick in increasing tick order: the state an owner correction for this tick describes,
+        // and the engine input that produced it.
         internal void RecordBodySample(long tick, in SpawnPose state)
         {
             _bodySamples[(int)(tick % BodyHistoryLength)] = state;
+            _engineInputs[(int)(tick % BodyHistoryLength)] = StepEngineInput;
             _newestBodySample = tick;
             if (_bodySampleCount < BodyHistoryLength) ++_bodySampleCount;
         }
@@ -260,7 +282,7 @@ namespace CombatSimulation.Core
         // Only an exact tick inside the history; a correction older than it skips the movement part.
         internal bool TryGetBodySample(long tick, out SpawnPose state)
         {
-            if (_bodySampleCount == 0 || tick > _newestBodySample || tick <= _newestBodySample - _bodySampleCount)
+            if (!HasBodySample(tick))
             {
                 state = default;
                 return false;
@@ -270,25 +292,30 @@ namespace CombatSimulation.Core
             return true;
         }
 
-        // The history follows an applied correction: body states from the corrected tick on, and spawn samples taken
-        // after it, move by the same error. A later correction then measures only the error that remains.
-        internal void ShiftHistory(long tick, in Torus torus, Vec2 position, float angle, Vec2 linearVelocity,
+        private bool HasBodySample(long tick) =>
+            _bodySampleCount > 0 && tick <= _newestBodySample && tick > _newestBodySample - _bodySampleCount;
+
+        // The engine input of a tick inside the body history.
+        internal EngineInput GetEngineInput(long tick) => _engineInputs[(int)(tick % BodyHistoryLength)];
+
+        // C1: an applied correction moves each kept state by the error the re-run gives for its tick. A later
+        // correction then measures only the error that remains. Ticks outside the history are skipped.
+        internal void ShiftBodySample(long tick, in Torus torus, Vec2 position, float angle, Vec2 linearVelocity,
             float angularVelocity)
         {
-            for (var t = System.Math.Max(tick, _newestBodySample - _bodySampleCount + 1); t <= _newestBodySample; ++t)
-            {
-                ref var state = ref _bodySamples[(int)(t % BodyHistoryLength)];
-                state = new SpawnPose(torus.Wrap(state.Position + position), state.Angle + angle,
-                    state.LinearVelocity + linearVelocity, state.AngularVelocity + angularVelocity);
-            }
+            if (!HasBodySample(tick)) return;
+            ref var state = ref _bodySamples[(int)(tick % BodyHistoryLength)];
+            state = new SpawnPose(torus.Wrap(state.Position + position), state.Angle + angle,
+                state.LinearVelocity + linearVelocity, state.AngularVelocity + angularVelocity);
+        }
 
-            for (var t = System.Math.Max(tick + 1, _newestSpawnSample - _spawnSampleCount + 1); t <= _newestSpawnSample; ++t)
-            {
-                ref var sample = ref _spawnSamples[(int)(t % SpawnHistoryLength)];
-                var shifted = sample.Angle + angle;
-                sample = new SpawnSample(sample.Tick, torus.Wrap(sample.Position + position), Rot.FromAngle(shifted),
-                    shifted, sample.LinearVelocity + linearVelocity);
-            }
+        internal void ShiftSpawnSample(long tick, in Torus torus, Vec2 position, float angle, Vec2 linearVelocity)
+        {
+            if (_spawnSampleCount == 0 || tick > _newestSpawnSample || tick <= _newestSpawnSample - _spawnSampleCount) return;
+            ref var sample = ref _spawnSamples[(int)(tick % SpawnHistoryLength)];
+            var shifted = sample.Angle + angle;
+            sample = new SpawnSample(sample.Tick, torus.Wrap(sample.Position + position), Rot.FromAngle(shifted),
+                shifted, sample.LinearVelocity + linearVelocity);
         }
 
         internal void Release()
@@ -305,6 +332,8 @@ namespace CombatSimulation.Core
             PendingDamage = 0f;
             _spawnSampleCount = 0;
             _bodySampleCount = 0;
+            System.Array.Clear(_engineInputs, 0, _engineInputs.Length);
+            StepEngineInput = default;
             LastCorrectionTick = NoCorrection;
             Correction.IsSet = false;
             ShapeCount = 0;
@@ -323,6 +352,7 @@ namespace CombatSimulation.Core
         private int _spawnSampleCount;
         private long _newestSpawnSample;
         private readonly SpawnPose[] _bodySamples = new SpawnPose[BodyHistoryLength];
+        private readonly EngineInput[] _engineInputs = new EngineInput[BodyHistoryLength];
         private int _bodySampleCount;
         private long _newestBodySample;
         private readonly System.Collections.Generic.Dictionary<ShipDefinition, ShipDevice[]> _deviceSets =

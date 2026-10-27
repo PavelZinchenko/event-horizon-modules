@@ -13,26 +13,39 @@ namespace CombatSimulation.Core
         private const float MinSpin = (float)(0.01 * Math.PI / 180.0);
         private const float FullCircle = (float)(2.0 * Math.PI);
 
-        public static void Update(PhysicsWorld world, ShipEntity ship, float dt)
+        // Stage 4: the engine input of this tick. No engine while retreating (legacy ShipRetreatEffect).
+        public static EngineInput Input(ShipEntity ship) => new EngineInput(
+            ship.RetreatCompletionTick != ShipEntity.NoRetreat ? null
+                : ship.EngineHasEnergy ? ship.Definition.Engine : ship.Definition.EngineWithoutEnergy,
+            ship.Throttle, ship.HasCourse, ship.Course);
+
+        public static void Update(PhysicsWorld world, BodyId body, in EngineInput input, float dt)
         {
-            var engine = ship.EngineHasEnergy ? ship.Definition.Engine : ship.Definition.EngineWithoutEnergy;
+            if (input.Engine == null) return;
+            var velocity = world.GetLinearVelocity(body);
+            var angularVelocity = world.GetAngularVelocity(body);
+            Apply(input, world.GetRotation(body), ref velocity, ref angularVelocity, dt);
+            world.SetLinearVelocity(body, velocity);
+            world.SetAngularVelocity(body, angularVelocity);
+        }
+
+        // The same formulas on values, so a correction can re-run them (C1).
+        public static void Apply(in EngineInput input, Rot rotation, ref Vec2 velocity, ref float angularVelocity, float dt)
+        {
+            var engine = input.Engine;
             if (engine == null) return;
+            if (input.Throttle > MinThrottle) ApplyThrust(engine, input.Throttle, rotation, ref velocity, dt);
 
-            var body = ship.Body;
-            if (ship.Throttle > MinThrottle) ApplyThrust(world, body, engine, ship.Throttle, dt);
-
-            if (ship.HasCourse)
-                ApplyTurn(world, body, engine, ship.Course, dt);
-            else if (Math.Abs(world.GetAngularVelocity(body)) > MinSpin)
-                ApplySpinBrake(world, body, engine, dt);
+            if (input.HasCourse)
+                ApplyTurn(engine, input.Course, rotation.Angle, ref angularVelocity, dt);
+            else if (Math.Abs(angularVelocity) > MinSpin)
+                ApplySpinBrake(engine, ref angularVelocity, dt);
         }
 
         // Steers the velocity toward MaxVelocity along the heading. Faster forward motion is kept.
-        private static void ApplyThrust(PhysicsWorld world, BodyId body, EngineDefinition engine, float throttle, float dt)
+        private static void ApplyThrust(EngineDefinition engine, float throttle, Rot rotation, ref Vec2 velocity, float dt)
         {
-            var rotation = world.GetRotation(body);
             var forward = new Vec2(rotation.C, rotation.S);
-            var velocity = world.GetLinearVelocity(body);
             var maxVelocity = engine.MaxVelocity;
 
             var forwardVelocity = Vec2.Dot(velocity, forward);
@@ -44,17 +57,16 @@ namespace CombatSimulation.Core
 
             var propulsionVector = direction * (1f / Math.Max(0.5f * length, maxVelocity));
             var acceleration = engine.Propulsion * throttle * propulsionVector;
-            world.SetLinearVelocity(body, velocity + dt * acceleration);
+            velocity = velocity + dt * acceleration;
         }
 
-        private static void ApplyTurn(PhysicsWorld world, BodyId body, EngineDefinition engine, float course, float dt)
+        private static void ApplyTurn(EngineDefinition engine, float course, float angle, ref float angularVelocity, float dt)
         {
             var turnRate = engine.TurnRate;
             if (!(turnRate > 0f)) return;
 
-            var angularVelocity = world.GetAngularVelocity(body);
             var maxAngularVelocity = engine.MaxAngularVelocity;
-            var minDeltaAngle = DeltaAngle(world.GetAngle(body), course);
+            var minDeltaAngle = DeltaAngle(angle, course);
 
             float deltaAngle;
             if (minDeltaAngle > 0 && angularVelocity < 0)
@@ -85,14 +97,13 @@ namespace CombatSimulation.Core
                 return;
             }
 
-            world.SetAngularVelocity(body, angularVelocity + acceleration);
+            angularVelocity = angularVelocity + acceleration;
         }
 
-        private static void ApplySpinBrake(PhysicsWorld world, BodyId body, EngineDefinition engine, float dt)
+        private static void ApplySpinBrake(EngineDefinition engine, ref float angularVelocity, float dt)
         {
-            var angularVelocity = world.GetAngularVelocity(body);
             var limit = engine.TurnRate * dt;
-            world.SetAngularVelocity(body, angularVelocity + Clamp(-angularVelocity, -limit, limit));
+            angularVelocity = angularVelocity + Clamp(-angularVelocity, -limit, limit);
         }
 
         // Mathf.DeltaAngle in radians: the shortest signed angle from current to target, in [-pi, pi].

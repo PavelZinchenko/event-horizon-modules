@@ -5,7 +5,7 @@ using CombatSimulation.Physics;
 namespace CombatSimulation.Core
 {
     // Owner corrections and predicted damage (network plan, step 5 and G1). The owner writes the end-of-tick state of
-    // its ships and drones; the receiver adds the movement error to the present, and moves resources and
+    // its ships and drones; the receiver re-runs the movement from the owner's state (C1), and moves resources and
     // point-defense timers to the owner's. Damage this device sends to a remote ship is applied to the copy at once
     // and replayed after each correction until the target owner acknowledges it.
     public sealed partial class Battle
@@ -191,18 +191,14 @@ namespace CombatSimulation.Core
             var positionError = hasHistory ? World.Torus.Delta(sample.Position, body.Motion.Position) : Vec2.Zero;
             var angleError = hasHistory ? WrapAngle(body.Motion.Angle - sample.Angle) : 0f;
 
-            // Movement: the error at the owner's tick, added to the present. Outside the history, the next
-            // correction inside it repairs the movement.
+            // Movement (C1): the error at the owner's tick, carried to the present by re-running the motion from both
+            // states, then added to the present. Outside the history, the next correction inside it repairs the movement.
             if (hasHistory)
             {
-                var position = positionError;
-                var angle = angleError;
-                var linearVelocity = body.Motion.LinearVelocity - sample.LinearVelocity;
-                var angularVelocity = body.Motion.AngularVelocity - sample.AngularVelocity;
-                World.SetPose(ship.Body, World.GetPosition(ship.Body) + position, World.GetAngle(ship.Body) + angle);
-                World.SetLinearVelocity(ship.Body, World.GetLinearVelocity(ship.Body) + linearVelocity);
-                World.SetAngularVelocity(ship.Body, World.GetAngularVelocity(ship.Body) + angularVelocity);
-                ship.ShiftHistory(tick, World.Torus, position, angle, linearVelocity, angularVelocity);
+                var error = PropagateError(ship, tick, body.Motion, sample);
+                World.SetPose(ship.Body, World.GetPosition(ship.Body) + error.Position, World.GetAngle(ship.Body) + error.Angle);
+                World.SetLinearVelocity(ship.Body, World.GetLinearVelocity(ship.Body) + error.LinearVelocity);
+                World.SetAngularVelocity(ship.Body, World.GetAngularVelocity(ship.Body) + error.AngularVelocity);
             }
 
             // Gameplay (G1): each resource gets a candidate, the owner's level at its tick recharged through the last
@@ -251,6 +247,78 @@ namespace CombatSimulation.Core
         {
             if (Math.Abs(candidate.Value - local.Value) > local.Max / ResourceLevel.Steps) local.Value = candidate.Value;
             local.DelayRemaining = candidate.DelayRemaining;
+        }
+
+        // C1: an additive correction misses the error that grows between the owner's tick and the present, for
+        // example when owner and copy turn in opposite directions. Both the owner's state and this device's sample at
+        // that tick are re-run with the engine input this device applied, through free motion as the solver moves a
+        // body without contacts. The difference of the two runs is the error at each later tick. Adding it keeps the
+        // contacts and recoil of the copy, which the re-run leaves out. The history moves by the same errors, so the
+        // next correction measures only the error that remains.
+        private SpawnPose PropagateError(ShipEntity ship, long tick, in SpawnPose owner, in SpawnPose sample)
+        {
+            var torus = World.Torus;
+            var substeps = World.Settings.Substeps;
+            var localCenter = World.GetLocalCenter(ship.Body);
+            var a = new FreeMotion(owner);
+            var b = new FreeMotion(sample);
+            var error = a.Minus(b, torus);
+            ship.ShiftBodySample(tick, torus, error.Position, error.Angle, error.LinearVelocity, error.AngularVelocity);
+            for (var t = tick + 1; t < Tick; ++t)
+            {
+                var input = ship.GetEngineInput(t);
+                a.ApplyEngine(input, TickDuration);
+                b.ApplyEngine(input, TickDuration);
+                error = a.Minus(b, torus);
+                ship.ShiftSpawnSample(t, torus, error.Position, error.Angle, error.LinearVelocity);
+                a.Integrate(torus, localCenter, substeps, TickDuration);
+                b.Integrate(torus, localCenter, substeps, TickDuration);
+                error = a.Minus(b, torus);
+                ship.ShiftBodySample(t, torus, error.Position, error.Angle, error.LinearVelocity, error.AngularVelocity);
+            }
+            return error;
+        }
+
+        // One body's motion without contacts, force or damping: ContactSolver.IntegrateVelocities and
+        // IntegratePositions per substep, then PhysicsWorld.FinalizeBodies.
+        private struct FreeMotion
+        {
+            private Vec2 _origin;
+            private Rot _rotation;
+            private Vec2 _velocity;
+            private float _angularVelocity;
+
+            public FreeMotion(in SpawnPose pose)
+            {
+                _origin = pose.Position;
+                _rotation = Rot.FromAngle(pose.Angle);
+                _velocity = pose.LinearVelocity;
+                _angularVelocity = pose.AngularVelocity;
+            }
+
+            public void ApplyEngine(in EngineInput input, float dt) =>
+                ShipEngine.Apply(input, _rotation, ref _velocity, ref _angularVelocity, dt);
+
+            public void Integrate(in Torus torus, Vec2 localCenter, int substeps, float dt)
+            {
+                var h = dt / substeps;
+                var center = _origin + _rotation.Rotate(localCenter);
+                var deltaRotation = Rot.Identity;
+                var deltaPosition = Vec2.Zero;
+                for (var i = 0; i < substeps; ++i)
+                {
+                    if (_angularVelocity != 0f) deltaRotation = Rot.Integrate(deltaRotation, h * _angularVelocity);
+                    deltaPosition += h * _velocity;
+                }
+                var q = Rot.Mul(deltaRotation, _rotation);
+                _rotation = Rot.Normalize(q.C, q.S);
+                _origin = torus.Wrap(center + deltaPosition - _rotation.Rotate(localCenter));
+            }
+
+            // This state minus the other: position on the torus, angle wrapped.
+            public SpawnPose Minus(in FreeMotion other, in Torus torus) => new SpawnPose(
+                torus.Delta(other._origin, _origin), WrapAngle(_rotation.Angle - other._rotation.Angle),
+                _velocity - other._velocity, _angularVelocity - other._angularVelocity);
         }
 
         private static float WrapAngle(float angle)

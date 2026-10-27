@@ -42,6 +42,49 @@ namespace CombatSimulation.Core.Tests
             AssertSameMotion(p, 101);
         }
 
+        // C1: the course lies near the opposite heading, so the owner and the copy turn in opposite directions. The
+        // error grows while the correction waits; an additive correction would leave that growth.
+        [Test]
+        public void ADelayedCorrectionCarriesTheErrorThroughOppositeTurns()
+        {
+            var p = new NetPair();
+            p.A.Place(101, new Vec2(50f, 50f), Vec2.Zero, 0.05f);
+            p.B.Place(101, new Vec2(50f, 50f), Vec2.Zero, -0.05f);
+            p.A.Control(101, course: (float)Math.PI);
+            p.B.Control(101, course: (float)Math.PI);
+            p.Step(3);
+            var correction = Write(p.A);
+            p.Step(4);
+            var a = p.A.Battle.World.GetAngularVelocity(p.A.Ship(101).Body);
+            var b = p.B.Battle.World.GetAngularVelocity(p.B.Ship(101).Body);
+            Assert.Greater(a, 0f);
+            Assert.Less(b, 0f);
+
+            Submit(p, correction);
+            p.Step();
+            AssertSameMotion(p, 101);
+        }
+
+        // C1: a push both devices saw after the owner's tick stays; only the error at that tick is removed. The re-run
+        // has no contacts, so replacing the copy's motion would drop the push.
+        [Test]
+        public void ACorrectionKeepsMotionChangesTheReRunLeavesOut()
+        {
+            var p = new NetPair();
+            p.A.Place(101, new Vec2(50f, 50f), new Vec2(2f, 0f));
+            p.B.Place(101, new Vec2(50f, 50.5f), new Vec2(2f, 0f));
+            p.Step();
+            var correction = Write(p.A);
+            p.Step();
+            p.A.Battle.World.ApplyImpulseToCenter(p.A.Ship(101).Body, new Vec2(0f, 3f));
+            p.B.Battle.World.ApplyImpulseToCenter(p.B.Ship(101).Body, new Vec2(0f, 3f));
+            p.Step(2);
+
+            Submit(p, correction);
+            p.Step();
+            AssertSameMotion(p, 101);
+        }
+
         [Test]
         public void OnlyTheNewestCorrectionApplies()
         {
