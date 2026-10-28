@@ -141,6 +141,37 @@ namespace CombatSimulation.Physics
             normalOut = default;
         }
 
+        // True when path 'index' of a collider is a hole: a clockwise path that lies inside another path. A hull
+        // loader leaves holes out, so the outer path stays solid (docs/combat_simulation.md, inner edges).
+        public static bool IsHole(IReadOnlyList<IReadOnlyList<Vec2>> paths, int index)
+        {
+            if (paths == null) throw new ArgumentNullException(nameof(paths));
+
+            var path = paths[index];
+            if (path.Count == 0 || !(Area(path) < 0f)) return false;
+
+            for (var i = 0; i < paths.Count; ++i)
+                if (i != index && Contains(paths[i], path[0]))
+                    return true;
+
+            return false;
+        }
+
+        // Even-odd point test against a closed outline of either winding.
+        public static bool Contains(IReadOnlyList<Vec2> outline, Vec2 point)
+        {
+            var inside = false;
+            for (int i = 0, j = outline.Count - 1; i < outline.Count; j = i++)
+            {
+                var a = outline[i];
+                var b = outline[j];
+                if (a.Y > point.Y != b.Y > point.Y && point.X < (b.X - a.X) * (point.Y - a.Y) / (b.Y - a.Y) + a.X)
+                    inside = !inside;
+            }
+
+            return inside;
+        }
+
         // Area of a simple outline by the shoelace formula; positive for counter-clockwise.
         public static float Area(IReadOnlyList<Vec2> outline)
         {

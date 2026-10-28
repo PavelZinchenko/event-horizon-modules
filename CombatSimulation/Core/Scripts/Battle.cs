@@ -833,9 +833,22 @@ namespace CombatSimulation.Core
             var parts = ship.Definition.HullParts;
             for (var i = 0; i < parts.Count; ++i)
             {
-                var shape = World.AddCircle(ship.Body, parts[i], shapeDef);
+                var shape = AddHullPart(ship.Body, parts[i], shapeDef);
                 ship.AddShape(shape);
                 _shapes.Register(shape, new ShapeEntry(ship.Handle, ship.Id, ShapeHitPriority.Hull, i));
+            }
+        }
+
+        private ShapeId AddHullPart(BodyId body, in HullPart part, in ShapeDef shapeDef)
+        {
+            switch (part.Type)
+            {
+                case HullPartType.Circle:
+                    return World.AddCircle(body, part.Circle, shapeDef);
+                case HullPartType.Capsule:
+                    return World.AddCapsule(body, part.Capsule, shapeDef);
+                default:
+                    return World.AddPolygon(body, part.Polygon, shapeDef);
             }
         }
 

@@ -10,14 +10,26 @@ namespace CombatSimulation.Core
         // ControlFrame.Systems has one bit per device.
         public const int MaxDevices = 64;
 
+        // A hull of one circle at the body origin plus extra circles, for code fixtures.
         public ShipDefinition(float hullRadius, float mass, EngineDefinition engine, float armor,
             ResourceDefinition shield, ResourceDefinition energy, EngineDefinition engineWithoutEnergy = null,
             IReadOnlyList<Circle> extraHullParts = null, float rammingDamageMultiplier = 1f,
             IReadOnlyList<BarrelDefinition> barrels = null, IReadOnlyList<DeviceDefinition> devices = null,
             IReadOnlyList<DamageResistance> resistances = null)
+            : this(CircleHull(hullRadius, extraHullParts), mass, engine, armor, shield, energy, engineWithoutEnergy,
+                rammingDamageMultiplier, barrels, devices, resistances)
         {
-            if (!(hullRadius > 0f) || float.IsInfinity(hullRadius))
-                throw new ArgumentOutOfRangeException(nameof(hullRadius), "Hull radius must be finite and positive.");
+        }
+
+        // The hull shapes are in body units (the mapper applies ModelScale). Mass is set here; the centre of mass and
+        // the inertia come from the shapes (PhysicsWorld.UpdateMass).
+        public ShipDefinition(IReadOnlyList<HullShape> hull, float mass, EngineDefinition engine, float armor,
+            ResourceDefinition shield, ResourceDefinition energy, EngineDefinition engineWithoutEnergy = null,
+            float rammingDamageMultiplier = 1f, IReadOnlyList<BarrelDefinition> barrels = null,
+            IReadOnlyList<DeviceDefinition> devices = null, IReadOnlyList<DamageResistance> resistances = null)
+        {
+            if (hull == null) throw new ArgumentNullException(nameof(hull));
+            if (hull.Count == 0) throw new ArgumentException("A hull needs at least one shape.", nameof(hull));
             if (!(mass > 0f) || float.IsInfinity(mass))
                 throw new ArgumentOutOfRangeException(nameof(mass), "Mass must be finite and positive.");
             if (!(armor > 0f) || float.IsInfinity(armor))
@@ -25,14 +37,16 @@ namespace CombatSimulation.Core
             if (!(rammingDamageMultiplier >= 0f) || float.IsInfinity(rammingDamageMultiplier))
                 throw new ArgumentOutOfRangeException(nameof(rammingDamageMultiplier), "Ramming multiplier must be finite and not negative.");
 
-            var parts = new Circle[1 + (extraHullParts?.Count ?? 0)];
-            parts[0] = new Circle(Vec2.Zero, hullRadius);
-            for (var i = 1; i < parts.Length; ++i)
+            var parts = new List<HullPart>();
+            var hullRadius = 0f;
+            foreach (var shape in hull)
             {
-                var part = extraHullParts[i - 1];
-                if (!part.Center.IsFinite || float.IsInfinity(part.Radius))
-                    throw new ArgumentOutOfRangeException(nameof(extraHullParts), "Hull parts must be finite.");
-                parts[i] = part;
+                if (shape == null) throw new ArgumentNullException(nameof(hull), "Hull shapes must not be null.");
+                foreach (var part in shape.Parts)
+                {
+                    parts.Add(part);
+                    hullRadius = Math.Max(hullRadius, part.Reach);
+                }
             }
 
             var barrelArray = new BarrelDefinition[barrels?.Count ?? 0];
@@ -56,7 +70,8 @@ namespace CombatSimulation.Core
             }
 
             HullRadius = hullRadius;
-            HullParts = parts;
+            HullParts = parts.AsReadOnly();
+            HullHash = ComputeHullHash(parts);
             Mass = mass;
             Engine = engine ?? throw new ArgumentNullException(nameof(engine));
             EngineWithoutEnergy = engineWithoutEnergy;
@@ -73,12 +88,16 @@ namespace CombatSimulation.Core
                 if (device is PointDefenseDefinition) ++PointDefenseCount;
         }
 
-        // The main hull circle at the body origin. Phase 4 replaces circles with collider outlines.
+        // Distance from the body origin to the farthest hull point. For a circle hull at the origin, its radius.
         public float HullRadius { get; }
 
-        // Hull shapes in definition order: the main circle first, then the extra parts. The order is the shape
-        // order within the entity (contact ordering, key 6).
-        public IReadOnlyList<Circle> HullParts { get; }
+        // Physics parts in hull shape order, each shape's parts in its own order. The order is the shape order
+        // within the entity (contact ordering, key 6) and the target shape index of hit records.
+        public IReadOnlyList<HullPart> HullParts { get; }
+
+        // Hash of the part geometry in order (D5). Both duel peers must build the same hull; the match handshake
+        // compares this value. Every float counts bit by bit, so any difference in the built hull changes it.
+        public ulong HullHash { get; }
 
         public float Mass { get; }
 
@@ -114,5 +133,62 @@ namespace CombatSimulation.Core
         internal DamageResistance Resistance(int type) => type < _resistances.Length ? _resistances[type] : default;
 
         private readonly DamageResistance[] _resistances;
+
+        private const byte HullHashTag = 4;
+
+        private static IReadOnlyList<HullShape> CircleHull(float hullRadius, IReadOnlyList<Circle> extraHullParts)
+        {
+            if (!(hullRadius > 0f) || float.IsInfinity(hullRadius))
+                throw new ArgumentOutOfRangeException(nameof(hullRadius), "Hull radius must be finite and positive.");
+
+            var shapes = new HullShape[1 + (extraHullParts?.Count ?? 0)];
+            shapes[0] = HullShape.Circle(Vec2.Zero, hullRadius);
+            for (var i = 1; i < shapes.Length; ++i)
+            {
+                var part = extraHullParts[i - 1];
+                if (!part.Center.IsFinite || float.IsInfinity(part.Radius))
+                    throw new ArgumentOutOfRangeException(nameof(extraHullParts), "Hull parts must be finite.");
+                shapes[i] = HullShape.Circle(part.Center, part.Radius);
+            }
+
+            return shapes;
+        }
+
+        private static ulong ComputeHullHash(List<HullPart> parts)
+        {
+            var hash = StableHash.Begin(HullHashTag);
+            hash = StableHash.Append(hash, (ulong)parts.Count, 4);
+            foreach (var part in parts)
+            {
+                hash = StableHash.AppendByte(hash, (byte)part.Type);
+                switch (part.Type)
+                {
+                    case HullPartType.Circle:
+                        hash = AppendVec(hash, part.Circle.Center);
+                        hash = AppendFloat(hash, part.Circle.Radius);
+                        break;
+                    case HullPartType.Capsule:
+                        hash = AppendVec(hash, part.Capsule.Center1);
+                        hash = AppendVec(hash, part.Capsule.Center2);
+                        hash = AppendFloat(hash, part.Capsule.Radius);
+                        break;
+                    default:
+                        var polygon = part.Polygon;
+                        hash = StableHash.AppendByte(hash, (byte)polygon.Count);
+                        for (var i = 0; i < polygon.Count; ++i)
+                            hash = AppendVec(hash, polygon.Vertex(i));
+                        hash = AppendFloat(hash, polygon.Radius);
+                        hash = StableHash.Append(hash, unchecked((uint)polygon.CutEdges), 4);
+                        break;
+                }
+            }
+
+            return StableHash.Mix(hash);
+        }
+
+        private static ulong AppendVec(ulong hash, Vec2 value) => AppendFloat(AppendFloat(hash, value.X), value.Y);
+
+        private static ulong AppendFloat(ulong hash, float value) =>
+            StableHash.Append(hash, unchecked((uint)BitConverter.SingleToInt32Bits(value)), 4);
     }
 }
