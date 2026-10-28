@@ -6,7 +6,7 @@ namespace CombatSimulation.Core
     public sealed class BeamDefinition : DeviceDefinition
     {
         public BeamDefinition(int barrelIndex, float cooldown, float activationCost, float energyPerSecond,
-            float range, float damagePerSecond)
+            float range, float damagePerSecond, int damageType = 0)
         {
             if (barrelIndex < 0) throw new ArgumentOutOfRangeException(nameof(barrelIndex));
             ValidateAmount(cooldown, nameof(cooldown));
@@ -14,6 +14,7 @@ namespace CombatSimulation.Core
             ValidateAmount(energyPerSecond, nameof(energyPerSecond));
             ValidateAmount(damagePerSecond, nameof(damagePerSecond));
             if (!(range > 0f) || float.IsInfinity(range)) throw new ArgumentOutOfRangeException(nameof(range));
+            DamageTypeTable.ValidateIndex(damageType, nameof(damageType));
 
             BarrelIndex = barrelIndex;
             Cooldown = cooldown;
@@ -22,6 +23,7 @@ namespace CombatSimulation.Core
             EnergyPerSecond = energyPerSecond;
             Range = range;
             DamagePerSecond = damagePerSecond;
+            DamageType = damageType;
         }
 
         public int BarrelIndex { get; }
@@ -31,6 +33,9 @@ namespace CombatSimulation.Core
         public float EnergyPerSecond { get; }
         public float Range { get; }
         public float DamagePerSecond { get; }
+
+        // An index into the battle's damage type table (D4).
+        public int DamageType { get; }
 
         internal override void Validate(int barrelCount)
         {

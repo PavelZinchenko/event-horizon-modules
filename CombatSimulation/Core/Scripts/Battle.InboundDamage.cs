@@ -81,7 +81,7 @@ namespace CombatSimulation.Core
         {
             var ship = LocalHitTarget(hit);
             if (ship == null || !(amount > 0f)) return;
-            ship.PendingDamage = (float)Math.Min(float.MaxValue, (double)ship.PendingDamage + amount);
+            ship.AddPendingDamage(hit.DamageType, amount);
             _events.Add(BattleEvent.RemoteHit(BattleId, Tick, _events.Count, hit, amount));
         }
 

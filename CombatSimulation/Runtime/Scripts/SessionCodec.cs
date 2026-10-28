@@ -93,7 +93,8 @@ namespace CombatSimulation.Runtime
     //   Hit: attacker kind (1 bit: control index, bullet age), attacker (VarUInt), target kind (1 bit: control index,
     //     bullet), target: control index in the receiver's stream (VarUInt) or, for a bullet, its entity ID (64; the
     //     sender may know only a predicted copy, which no stream names), target shape (VarUInt), device index + 1
-    //     (VarUInt), contact (2), impact (3), amount (32-bit float). The sequence is the hit's position in the stream.
+    //     (VarUInt), contact (2), impact (3), amount (32-bit float), damage type (VarUInt, below
+    //     DamageTypeTable.MaxTypes; D4). The sequence is the hit's position in the stream.
     //   Roster: entity (64), roster ID (32), revision (VarUInt), previous status (2), status (2), reason (3),
     //     deployment count and order (VarUInt), armor deficit, shield deficit, damage fraction (32-bit floats), pose.
     //   Drone launch: entity (64), bay roster ID (32), bay device (VarUInt), parent entity (64), pose.
@@ -113,7 +114,7 @@ namespace CombatSimulation.Runtime
     {
         internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget }
 
-        internal const byte Version = 5;
+        internal const byte Version = 6;
         internal const int MaxBatchBytes = 1 << 20;
         private const int KindBits = 3, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3;
         private const int MaxVarUIntBits = 16 + 1 + 64;
@@ -232,7 +233,7 @@ namespace CombatSimulation.Runtime
             else w.WriteVarUInt(target);
             w.WriteVarUInt((ulong)hit.TargetShape); w.WriteVarUInt((ulong)(hit.DeviceIndex + 1));
             w.WriteBits((ulong)hit.ContactState, ContactBits); w.WriteBits((ulong)hit.ImpactKind, ImpactBits);
-            Float(ref w, hit.Amount);
+            Float(ref w, hit.Amount); w.WriteVarUInt(hit.DamageType);
             own.Hits = hit.Sequence;
         }
 
@@ -272,13 +273,16 @@ namespace CombatSimulation.Runtime
                         var targetName = targetBullet ? r.Bits(64) : r.VarUInt();
                         var shape = r.Int(); var device = r.Int() - 1;
                         var contact = r.Bits(ContactBits); var impact = r.Bits(ImpactBits); var amount = r.Float();
+                        var damageType = r.VarUInt();
                         Require(contact <= (ulong)HitContactState.End && impact <= (ulong)HitImpactKind.Stop && amount >= 0 &&
+                            damageType < DamageTypeTable.MaxTypes &&
                             (targetBullet ? targetName != 0 : impact <= (ulong)HitImpactKind.DamageOverTime));
                         if (!resolve) break;
                         var attacker = attackerBullet ? Bullet(peer, attackerName) : Body(peer, attackerName);
                         hits.Add(new ResolvedHit(battle, r.Tick, attacker, sender, device,
                             targetBullet ? new EntityId(targetName) : Body(own, targetName), receiver, shape,
-                            (HitContactState)contact, (HitImpactKind)impact, amount, ++peer.Hits, targetBullet));
+                            (HitContactState)contact, (HitImpactKind)impact, amount, ++peer.Hits, targetBullet,
+                            (byte)damageType));
                         break;
                     case RecordKind.Roster:
                         var entity = r.Entity(); var id = new RosterId((uint)r.Bits(32)); var revision = r.Int();

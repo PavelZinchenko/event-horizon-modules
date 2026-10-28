@@ -56,6 +56,9 @@ namespace CombatSimulation.Core
 
         public float Damage;
 
+        // An index into the battle's damage type table (D4). Ship targets only; bullet targets take damage as is.
+        public int DamageType;
+
         // Contact point in canonical torus coordinates. Zero for a body contact: physics reports none.
         public Vec2 Point;
 

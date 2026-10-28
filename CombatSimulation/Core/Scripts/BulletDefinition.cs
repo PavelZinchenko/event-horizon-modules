@@ -17,7 +17,7 @@ namespace CombatSimulation.Core
 
         public BulletDefinition(float radius, float speed, float range, float damage, float weight = 0f,
             float parentVelocityEffect = 1f, float hitPoints = 0f, bool homing = false,
-            float startingVelocityMultiplier = 1f)
+            float startingVelocityMultiplier = 1f, int damageType = 0)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -36,11 +36,13 @@ namespace CombatSimulation.Core
             if (!(startingVelocityMultiplier >= 0f) || float.IsInfinity(startingVelocityMultiplier))
                 throw new ArgumentOutOfRangeException(nameof(startingVelocityMultiplier),
                     "Starting velocity multiplier must be finite and not negative.");
+            DamageTypeTable.ValidateIndex(damageType, nameof(damageType));
 
             Radius = radius;
             Speed = speed;
             Range = range;
             Damage = damage;
+            DamageType = damageType;
             Weight = weight;
             ParentVelocityEffect = parentVelocityEffect;
             HitPoints = hitPoints;
@@ -62,8 +64,11 @@ namespace CombatSimulation.Core
 
         public float Range { get; }
 
-        // Impact damage to the first target (HitFirstTarget). Phase 2 has no damage types or resistances.
+        // Damage to the first target (HitFirstTarget), of DamageType (D4). A missile target takes it without resistance.
         public float Damage { get; }
+
+        // An index into the battle's damage type table.
+        public int DamageType { get; }
 
         public float Weight { get; }
 

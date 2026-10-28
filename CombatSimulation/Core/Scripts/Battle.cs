@@ -24,6 +24,7 @@ namespace CombatSimulation.Core
         public Battle(BattleSetup setup)
         {
             Setup = setup ?? throw new ArgumentNullException(nameof(setup));
+            _replayDamage = new float[setup.DamageTypes.Count];
             World = new PhysicsWorld(new WorldSettings
             {
                 Width = setup.Width,
@@ -330,7 +331,7 @@ namespace CombatSimulation.Core
             }
 
             var body = World.CreateBody(new BodyDef { Mass = bay.Definition.Drone.Mass });
-            ship.InitializeDrone(id, bay, body, Tick);
+            ship.InitializeDrone(id, bay, body, Tick, Setup.DamageTypes.Count);
             AddShipShapes(ship, CollisionFilters.Drone(ship.Side));
             var origin = World.GetPosition(parent.Body);
             var angle = World.GetAngle(parent.Body);
@@ -493,7 +494,7 @@ namespace CombatSimulation.Core
             _beams.Collect(_contacts);
             _pointDefense.Collect(_contacts);
             _bullets.CollectHits(World, _shapes, _ships, _contacts);
-            _ramming.Collect(World, _shapes, _ships, _contacts);
+            _ramming.Collect(World, _shapes, _ships, _contacts, Setup.DamageTypes.RammingDamageType);
 
             var duplicates = _contacts.Sort();
             if (duplicates > 0)
@@ -587,10 +588,11 @@ namespace CombatSimulation.Core
                     if (authority == BattleEventAuthority.Committed)
                     {
                         // A remote target's copy takes the same damage as a prediction (N3); it never dies of it.
-                        target.PendingDamage += hit.Damage;
+                        target.AddPendingDamage(hit.DamageType, hit.Damage);
                         if (!Setup.IsLocalOwner(target.Owner))
                             _outgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
-                                hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind, amount));
+                                hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind, amount,
+                                damageType: (byte)hit.DamageType));
                     }
                 }
 
@@ -607,11 +609,10 @@ namespace CombatSimulation.Core
             for (var i = 0; i < ShipEntryCount; ++i)
             {
                 var ship = GetShipEntry(i);
-                if (ship == null || !(ship.PendingDamage > 0f)) continue;
+                if (ship == null || !ship.HasPendingDamage) continue;
 
-                var damage = ship.PendingDamage;
-                ship.PendingDamage = 0f;
-                ApplyShieldFirst(ship, damage);
+                ApplyShieldFirst(ship);
+                ship.ClearPendingDamage();
             }
 
             _bullets.ApplyDamage(Setup);
@@ -813,7 +814,7 @@ namespace CombatSimulation.Core
 
             var definition = slot.Setup.Ship;
             var body = World.CreateBody(new BodyDef { Mass = definition.Mass });
-            ship.Initialize(id, slot, body, Tick);
+            ship.Initialize(id, slot, body, Tick, Setup.DamageTypes.Count);
 
             AddShipShapes(ship, CollisionFilters.Ship(slot.Side));
 

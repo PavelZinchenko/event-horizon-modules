@@ -11,6 +11,7 @@ namespace CombatSimulation.Core
     // The attacker is the sender's bullet or point-defense ship. Impact and Energy carry the hit's damage, DamageOverTime
     // one tick of ray damage, Disarm a point-defense zap, and Stop a target bullet that stopped at its own hit on the
     // attacker. The contact state is always Start and the shape 0.
+    // DamageType (D4) indexes the battle's damage type table; a bullet target ignores it.
     public readonly struct ResolvedHit
     {
         public readonly BattleId BattleId;
@@ -27,10 +28,11 @@ namespace CombatSimulation.Core
         public readonly float Amount;
         public readonly ulong Sequence;
         public readonly bool TargetIsBullet;
+        public readonly byte DamageType;
 
         public ResolvedHit(BattleId battleId, long tick, EntityId attackerId, int attackerOwner, int deviceIndex,
             EntityId targetId, int targetOwner, int targetShape, HitContactState contactState,
-            HitImpactKind impactKind, float amount, ulong sequence = 0, bool targetIsBullet = false)
+            HitImpactKind impactKind, float amount, ulong sequence = 0, bool targetIsBullet = false, byte damageType = 0)
         {
             BattleId = battleId;
             Tick = tick;
@@ -45,13 +47,14 @@ namespace CombatSimulation.Core
             Amount = amount;
             Sequence = sequence;
             TargetIsBullet = targetIsBullet;
+            DamageType = damageType;
         }
 
         internal ResolvedHit EndAt(long tick) => new ResolvedHit(BattleId, tick, AttackerId, AttackerOwner,
-            DeviceIndex, TargetId, TargetOwner, TargetShape, HitContactState.End, ImpactKind, Amount, 0, TargetIsBullet);
+            DeviceIndex, TargetId, TargetOwner, TargetShape, HitContactState.End, ImpactKind, Amount, 0, TargetIsBullet, DamageType);
 
         internal ResolvedHit WithSequence(ulong sequence) => new ResolvedHit(BattleId, Tick, AttackerId, AttackerOwner,
-            DeviceIndex, TargetId, TargetOwner, TargetShape, ContactState, ImpactKind, Amount, sequence, TargetIsBullet);
+            DeviceIndex, TargetId, TargetOwner, TargetShape, ContactState, ImpactKind, Amount, sequence, TargetIsBullet, DamageType);
 
         internal bool SameContact(in ResolvedHit other) => AttackerId == other.AttackerId &&
             DeviceIndex == other.DeviceIndex && TargetId == other.TargetId && TargetShape == other.TargetShape;

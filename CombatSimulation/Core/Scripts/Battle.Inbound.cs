@@ -31,7 +31,8 @@ namespace CombatSimulation.Core
                 hit.TargetId.IsNull || hit.Tick < 0 || hit.Tick > long.MaxValue - 6 ||
                 hit.DeviceIndex < -1 || hit.TargetShape < 0 || !Finite(hit.Amount) || hit.Amount < 0f ||
                 hit.ContactState < HitContactState.Start || hit.ContactState > HitContactState.End ||
-                hit.ImpactKind < HitImpactKind.Impact || hit.ImpactKind > HitImpactKind.Stop)
+                hit.ImpactKind < HitImpactKind.Impact || hit.ImpactKind > HitImpactKind.Stop ||
+                !Setup.DamageTypes.Contains(hit.DamageType))
                 return false;
             // A bullet target: one record per contact. Disarm and Stop name bullets only.
             if (hit.TargetIsBullet ? hit.TargetShape != 0 || hit.ContactState != HitContactState.Start
@@ -218,7 +219,7 @@ namespace CombatSimulation.Core
                 var body = World.CreateBody(new BodyDef { Mass = slot.Setup.Ship.Mass });
                 // Initialize with the owner's retained resources, not values inferred from a prediction.
                 slot.Import(record, null);
-                ship.Initialize(operation.EntityId, slot, body, operation.Tick);
+                ship.Initialize(operation.EntityId, slot, body, operation.Tick, Setup.DamageTypes.Count);
                 AddShipShapes(ship, CollisionFilters.Ship(slot.Side));
                 SetSpawnPose(body, operation.Pose);
                 _events.Add(BattleEvent.Spawn(BattleId, Tick, _events.Count, ship));
@@ -248,7 +249,7 @@ namespace CombatSimulation.Core
             var ship = _ships.Allocate();
             if (!TryRegister(operation.EntityId, ship.Handle)) { _ships.Release(ship); return false; }
             var body = World.CreateBody(new BodyDef { Mass = bay.Definition.Drone.Mass });
-            ship.InitializeDrone(operation.EntityId, bay, body, operation.Tick);
+            ship.InitializeDrone(operation.EntityId, bay, body, operation.Tick, Setup.DamageTypes.Count);
             AddShipShapes(ship, CollisionFilters.Drone(ship.Side));
             SetSpawnPose(body, operation.Pose);
             var index = 0;

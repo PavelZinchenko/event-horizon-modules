@@ -214,8 +214,8 @@ namespace CombatSimulation.Core
                 shield.Update(TickDuration);
                 energy.Update(TickDuration);
             }
-            var damage = ReplayPredictedDamage(ship.Id, tick, correction.AppliedHitSequence);
-            if (damage > 0f) ApplyShieldFirst(ref shield, ref armor, damage);
+            if (ReplayPredictedDamage(ship.Id, tick, correction.AppliedHitSequence))
+                ApplyShieldFirst(ref shield, ref armor, ref energy, _replayDamage, ship.Definition);
             Settle(ref ship.Armor, armor);
             Settle(ref ship.Shield, shield);
             Settle(ref ship.Energy, energy);
@@ -330,14 +330,59 @@ namespace CombatSimulation.Core
             return angle;
         }
 
-        private static void ApplyShieldFirst(ShipEntity ship, float damage) => ApplyShieldFirst(ref ship.Shield, ref ship.Armor, damage);
+        private void ApplyShieldFirst(ShipEntity ship) =>
+            ApplyShieldFirst(ref ship.Shield, ref ship.Armor, ref ship.Energy, ship.PendingDamage, ship.Definition);
 
-        // Legacy Impact.ApplyShield and ShipStats.ApplyDamage: shield first, then armor.
-        private static void ApplyShieldFirst(ref ResourcePool shield, ref ResourcePool armor, float damage)
+        // Legacy Impact.ApplyShield and ShipStats.ApplyDamage, by damage type (D4). The shield meets the types group by
+        // group in shield order; each type's load is its damage less its shield resistance. A group larger than the
+        // shield left keeps the same share of each type. Armor then takes what passed, less its armor resistance, and
+        // energy gains its share of what passed. damage holds raw amounts by type; this changes it to what passed.
+        private void ApplyShieldFirst(ref ResourcePool shield, ref ResourcePool armor, ref ResourcePool energy,
+            float[] damage, ShipDefinition definition)
         {
-            var absorbed = shield.Max > 0f && shield.Value > 0f ? Math.Min(damage, shield.Value) : 0f;
+            var types = Setup.DamageTypes;
+            var walk = types.ShieldWalk;
+            var left = shield.Max > 0f && shield.Value > 0f ? shield.Value : 0f;
+            var absorbed = 0f;
+            for (var start = 0; start < walk.Length && left > 0f;)
+            {
+                var order = types[walk[start]].ShieldOrder;
+                var end = start;
+                var load = 0f;
+                for (; end < walk.Length && types[walk[end]].ShieldOrder == order; ++end)
+                    load += damage[walk[end]] * (1f - definition.Resistance(walk[end]).Shield);
+
+                if (load > 0f)
+                {
+                    if (load <= left)
+                    {
+                        for (var i = start; i < end; ++i) damage[walk[i]] = 0f;
+                        absorbed += load;
+                        left -= load;
+                    }
+                    else
+                    {
+                        for (var i = start; i < end; ++i) damage[walk[i]] -= left * damage[walk[i]] / load;
+                        absorbed += left;
+                        left = 0f;
+                    }
+                }
+                start = end;
+            }
             if (absorbed > 0f) shield.Consume(absorbed);
-            armor.Consume(damage - absorbed);
+
+            var armorDamage = 0f;
+            var energyGain = 0f;
+            for (var type = 0; type < damage.Length; ++type)
+            {
+                if (!(damage[type] > 0f)) continue;
+                var resistance = definition.Resistance(type);
+                armorDamage += damage[type] * (1f - resistance.Armor);
+                energyGain += damage[type] * resistance.EnergyGain;
+            }
+            armor.Consume(armorDamage);
+            // A gain does not restart the energy delay (legacy Energy.Get with a negative amount).
+            if (energyGain > 0f) energy.Consume(-energyGain);
         }
 
         // Stage 14, before the snapshot: the end-of-tick state a correction for this tick describes.
@@ -385,12 +430,14 @@ namespace CombatSimulation.Core
             }
         }
 
-        // The damage to replay on the target after a correction for the owner's tick with acknowledgement ack.
+        // The damage to replay on the target after a correction for the owner's tick with acknowledgement ack, by
+        // damage type in _replayDamage. False: nothing to replay.
         // A discrete hit replays until acknowledged. A beam replays the ticks shown here, [start, end), minus
         // the ticks the owner had applied by its tick, [start + D, end + D), where D is the shooter's delay.
-        private float ReplayPredictedDamage(EntityId target, long tick, ulong ack)
+        private bool ReplayPredictedDamage(EntityId target, long tick, ulong ack)
         {
-            var total = 0.0;
+            Array.Clear(_replayDamage, 0, _replayDamage.Length);
+            var any = false;
             var kept = 0;
             for (var i = 0; i < _predictedHits.Count; ++i)
             {
@@ -400,7 +447,7 @@ namespace CombatSimulation.Core
                 {
                     if (entry.Hit.ImpactKind != HitImpactKind.DamageOverTime)
                     {
-                        if (entry.Hit.Sequence > ack) total += entry.Hit.Amount;
+                        if (entry.Hit.Sequence > ack) any |= AddReplayDamage(entry.Hit.DamageType, entry.Hit.Amount);
                         else keep = false;
                     }
                     else
@@ -415,14 +462,22 @@ namespace CombatSimulation.Core
                             var ownerEnd = endKnown ? entry.EndTick + delay : long.MaxValue;
                             applied = Math.Max(0L, Math.Min(tick + 1, ownerEnd) - (start + delay));
                         }
-                        if (shown > applied) total += (double)(shown - applied) * entry.Hit.Amount * TickDuration;
+                        if (shown > applied)
+                            any |= AddReplayDamage(entry.Hit.DamageType, (double)(shown - applied) * entry.Hit.Amount * TickDuration);
                         keep = !(endKnown && tick + 1 >= entry.EndTick + delay);
                     }
                 }
                 if (keep) _predictedHits[kept++] = entry;
             }
             _predictedHits.RemoveRange(kept, _predictedHits.Count - kept);
-            return (float)Math.Min(float.MaxValue, total);
+            return any;
+        }
+
+        private bool AddReplayDamage(int type, double amount)
+        {
+            if (!(amount > 0.0)) return false;
+            _replayDamage[type] = (float)Math.Min(float.MaxValue, _replayDamage[type] + amount);
+            return true;
         }
 
         // A removed target needs no replay.
@@ -452,5 +507,6 @@ namespace CombatSimulation.Core
         }
 
         private readonly List<PredictedHit> _predictedHits = new List<PredictedHit>();
+        private readonly float[] _replayDamage;
     }
 }

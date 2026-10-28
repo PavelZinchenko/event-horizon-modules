@@ -13,7 +13,8 @@ namespace CombatSimulation.Core
         public ShipDefinition(float hullRadius, float mass, EngineDefinition engine, float armor,
             ResourceDefinition shield, ResourceDefinition energy, EngineDefinition engineWithoutEnergy = null,
             IReadOnlyList<Circle> extraHullParts = null, float rammingDamageMultiplier = 1f,
-            IReadOnlyList<BarrelDefinition> barrels = null, IReadOnlyList<DeviceDefinition> devices = null)
+            IReadOnlyList<BarrelDefinition> barrels = null, IReadOnlyList<DeviceDefinition> devices = null,
+            IReadOnlyList<DamageResistance> resistances = null)
         {
             if (!(hullRadius > 0f) || float.IsInfinity(hullRadius))
                 throw new ArgumentOutOfRangeException(nameof(hullRadius), "Hull radius must be finite and positive.");
@@ -47,6 +48,13 @@ namespace CombatSimulation.Core
                 deviceArray[i].Validate(barrelArray.Length);
             }
 
+            var resistanceArray = new DamageResistance[resistances?.Count ?? 0];
+            for (var i = 0; i < resistanceArray.Length; ++i)
+            {
+                resistances[i].Validate(nameof(resistances));
+                resistanceArray[i] = resistances[i];
+            }
+
             HullRadius = hullRadius;
             HullParts = parts;
             Mass = mass;
@@ -59,6 +67,8 @@ namespace CombatSimulation.Core
             RammingDamageMultiplier = rammingDamageMultiplier;
             Barrels = barrelArray;
             Devices = deviceArray;
+            _resistances = resistanceArray;
+            Resistances = Array.AsReadOnly(resistanceArray);
             foreach (var device in deviceArray)
                 if (device is PointDefenseDefinition) ++PointDefenseCount;
         }
@@ -97,5 +107,12 @@ namespace CombatSimulation.Core
 
         // A correction carries timers for these devices only (network plan, G1).
         internal int PointDefenseCount { get; }
+
+        // By damage type (D4). Empty: every type takes full damage. Otherwise one entry per battle damage type.
+        public IReadOnlyList<DamageResistance> Resistances { get; }
+
+        internal DamageResistance Resistance(int type) => type < _resistances.Length ? _resistances[type] : default;
+
+        private readonly DamageResistance[] _resistances;
     }
 }

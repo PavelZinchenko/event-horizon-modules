@@ -53,6 +53,7 @@ namespace CombatSimulation.Core
                                 TargetHandle = drone.Handle,
                                 TargetPriority = ShapeHitPriority.Hull,
                                 Damage = device.Definition.DroneDamage,
+                                DamageType = device.Definition.DamageType,
                                 Point = battle.World.GetPosition(drone.Body),
                             });
                             continue;

@@ -17,7 +17,8 @@ namespace CombatSimulation.Core
             long timeLimitTicks = 0,
             int maxActiveShipsPerSide = 1,
             IReadOnlyCollection<int> localOwners = null,
-            IReadOnlyDictionary<int, int> ownerDelays = null)
+            IReadOnlyDictionary<int, int> ownerDelays = null,
+            DamageTypeTable damageTypes = null)
         {
             if (roster == null) throw new ArgumentNullException(nameof(roster));
             if (!(width > 0f) || float.IsInfinity(width))
@@ -44,6 +45,10 @@ namespace CombatSimulation.Core
             for (var side = 0; side < SideCount; ++side)
                 if (slotsPerSide[side] == 0)
                     throw new ArgumentException($"Side {side} has no roster slot.", nameof(roster));
+
+            DamageTypes = damageTypes ?? LegacyDamageModel.Types;
+            var checkedShips = new HashSet<ShipDefinition>();
+            foreach (var slot in slots) ValidateDamageTypes(slot.Ship, checkedShips);
 
             BattleId = battleId;
             MatchSeed = matchSeed;
@@ -93,10 +98,35 @@ namespace CombatSimulation.Core
 
         public int MaxActiveShipsPerSide { get; }
 
+        // D4. The legacy table by default.
+        public DamageTypeTable DamageTypes { get; }
+
         public bool IsLocalOwner(int owner) => _localOwners.Contains(owner);
         public bool HasRemoteOwners { get; }
         public bool HasOwner(int owner) => _owners.Contains(owner);
         public int OwnerDelay(int owner) => _ownerDelays.TryGetValue(owner, out var delay) ? delay : 0;
+
+        // Every damage type a ship, its devices or its drones name must exist in the table.
+        private void ValidateDamageTypes(ShipDefinition ship, HashSet<ShipDefinition> checkedShips)
+        {
+            if (!checkedShips.Add(ship)) return;
+            if (ship.Resistances.Count != 0 && ship.Resistances.Count != DamageTypes.Count)
+                throw new ArgumentException(
+                    $"A ship has {ship.Resistances.Count} resistances; the battle has {DamageTypes.Count} damage types.");
+            foreach (var device in ship.Devices)
+            {
+                var type = device switch
+                {
+                    CannonDefinition cannon => cannon.Bullet.DamageType,
+                    BeamDefinition beam => beam.DamageType,
+                    PointDefenseDefinition pointDefense => pointDefense.DamageType,
+                    _ => 0,
+                };
+                if (!DamageTypes.Contains(type))
+                    throw new ArgumentException($"Damage type {type} does not exist in the battle's table.");
+                if (device is DroneBayDefinition bay) ValidateDamageTypes(bay.Drone, checkedShips);
+            }
+        }
 
         private readonly HashSet<int> _localOwners;
         private readonly HashSet<int> _owners = new HashSet<int>();

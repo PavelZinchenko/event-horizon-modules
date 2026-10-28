@@ -51,6 +51,7 @@ namespace CombatSimulation.Core
                         AttackerPassThrough = false,
                         OncePerTargetEntity = true,
                         Damage = definition.DamagePerSecond * Battle.TickDuration,
+                        DamageType = definition.DamageType,
                         Point = hit.Point,
                     };
 

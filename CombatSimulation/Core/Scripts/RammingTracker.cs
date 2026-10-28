@@ -20,7 +20,7 @@ namespace CombatSimulation.Core
 
         // Stage 8. Begin events first, then end events: a pair that swaps one touching shape pair for another in
         // the same step stays touching. Adds one candidate per direction for each touch that started.
-        public void Collect(PhysicsWorld world, ShapeTable shapes, ShipStore ships, ContactResolver resolver)
+        public void Collect(PhysicsWorld world, ShapeTable shapes, ShipStore ships, ContactResolver resolver, int damageType)
         {
             _started.Clear();
 
@@ -64,8 +64,8 @@ namespace CombatSimulation.Core
 
                 var relativeSpeed = (first.PreStepVelocity - second.PreStepVelocity).Length;
                 var mass = Math.Min(world.GetMass(first.Body), world.GetMass(second.Body));
-                AddCandidate(resolver, first, second, touch.SecondShape, relativeSpeed, mass);
-                AddCandidate(resolver, second, first, touch.FirstShape, relativeSpeed, mass);
+                AddCandidate(resolver, first, second, touch.SecondShape, relativeSpeed, mass, damageType);
+                AddCandidate(resolver, second, first, touch.FirstShape, relativeSpeed, mass, damageType);
             }
         }
 
@@ -82,7 +82,7 @@ namespace CombatSimulation.Core
         }
 
         private static void AddCandidate(ContactResolver resolver, ShipEntity attacker, ShipEntity target,
-            in ShapeEntry targetShape, float relativeSpeed, float mass)
+            in ShapeEntry targetShape, float relativeSpeed, float mass, int damageType)
         {
             var damage = DamageFactor * relativeSpeed * mass * attacker.Definition.RammingDamageMultiplier;
             if (!(damage > MinDamage)) return;
@@ -99,6 +99,7 @@ namespace CombatSimulation.Core
                 AttackerHandle = attacker.Handle,
                 TargetHandle = target.Handle,
                 Damage = damage,
+                DamageType = damageType,
             });
         }
 

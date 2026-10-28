@@ -38,8 +38,10 @@ namespace CombatSimulation.Runtime.Tests
             // A removed bullet can still attack in its own batch. An end record is one tick ahead.
             var hits = new[]
             {
-                new ResolvedHit(batch, 125, shot, 20, 7, link.Target, 10, 3, HitContactState.Start, HitImpactKind.Energy, 8.125f, 1),
-                new ResolvedHit(batch, 126, ship, 20, -1, link.Target, 10, 0, HitContactState.End, HitImpactKind.DamageOverTime, 40, 2),
+                new ResolvedHit(batch, 125, shot, 20, 7, link.Target, 10, 3, HitContactState.Start, HitImpactKind.Energy, 8.125f, 1,
+                    damageType: LegacyDamageModel.Corrosive),
+                new ResolvedHit(batch, 126, ship, 20, -1, link.Target, 10, 0, HitContactState.End, HitImpactKind.DamageOverTime, 40, 2,
+                    damageType: 127),
                 new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 1, HitContactState.Start, HitImpactKind.Impact, 0, 3),
             };
             var bytes = link.Write(125, operations, hits);
@@ -105,6 +107,11 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, false, HitImpactKind.Disarm)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, true, HitImpactKind.Stop)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 77, 0, true, (HitImpactKind)5)), out _, out _));
+            // D4: a damage type outside every possible table.
+            Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 1, damageType: DamageTypeTable.MaxTypes - 1), 1), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 1, damageType: DamageTypeTable.MaxTypes)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 4, 0, (ref BitWriter w) =>
             { w.WriteBool(true); w.WriteBits((ulong)RemovalReason.Expiry, 3); w.WriteVarUInt(0); }, 2), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 4, 0, (ref BitWriter w) =>
@@ -141,12 +148,14 @@ namespace CombatSimulation.Runtime.Tests
                 return deployed;
             }
 
-            void Hit(ref BitWriter w, ulong target, float amount, bool bullet = false, HitImpactKind impact = HitImpactKind.Impact)
+            void Hit(ref BitWriter w, ulong target, float amount, bool bullet = false, HitImpactKind impact = HitImpactKind.Impact,
+                ulong damageType = 0)
             {
                 w.WriteBool(false); w.WriteVarUInt(0); w.WriteBool(bullet);
                 if (bullet) w.WriteBits(target, 64); else w.WriteVarUInt(target);
                 w.WriteVarUInt(0); w.WriteVarUInt(0); w.WriteBits(0, 2); w.WriteBits((ulong)impact, 3);
                 w.WriteBits(unchecked((uint)BitConverter.SingleToInt32Bits(amount)), 32);
+                w.WriteVarUInt(damageType);
             }
         }
 

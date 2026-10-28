@@ -18,7 +18,7 @@ namespace CombatSimulation.Runtime
         public int MissileCorrectionBytes { get; }
 
         public NetworkSessionOptions(int localOwner, int remoteOwner, bool isClockReference,
-            int correctionIntervalMilliseconds = 100, int maxDatagramSize = PeerConnection.DefaultDatagramSize,
+            int correctionIntervalMilliseconds = 150, int maxDatagramSize = PeerConnection.DefaultDatagramSize,
             int maxCorrectionBytes = 1024 * 1024, int missileCorrectionBytes = DefaultMissileCorrectionBytes)
         {
             if (localOwner < 0 || remoteOwner < 0 || localOwner == remoteOwner) throw new ArgumentOutOfRangeException(nameof(localOwner));

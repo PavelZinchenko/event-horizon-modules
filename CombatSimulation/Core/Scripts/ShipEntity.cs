@@ -145,8 +145,23 @@ namespace CombatSimulation.Core
         // Linear velocity at the end of stage 4, before the physics step (ramming speed).
         public Vec2 PreStepVelocity { get; set; }
 
-        // Damage accumulated at stage 9; stage 10 applies it in one pass.
-        public float PendingDamage { get; set; }
+        // Damage accumulated at stage 9, by damage type (D4); stage 10 applies it in one pass.
+        public float[] PendingDamage => _pendingDamage;
+        public bool HasPendingDamage { get; private set; }
+
+        public void AddPendingDamage(int type, float amount)
+        {
+            if (!(amount > 0f)) return;
+            _pendingDamage[type] = (float)System.Math.Min(float.MaxValue, (double)_pendingDamage[type] + amount);
+            HasPendingDamage = true;
+        }
+
+        public void ClearPendingDamage()
+        {
+            if (!HasPendingDamage) return;
+            System.Array.Clear(_pendingDamage, 0, _pendingDamage.Length);
+            HasPendingDamage = false;
+        }
 
         // The owner tick of the last applied correction, or NoCorrection.
         public long LastCorrectionTick { get; set; }
@@ -169,14 +184,14 @@ namespace CombatSimulation.Core
         }
 
         // A deployment starts with empty controls and full resources, minus the deficits the slot retained (B4).
-        internal void Initialize(EntityId id, RosterSlot slot, BodyId body, long tick)
-            => Initialize(id, slot, null, slot.Setup.Ship, slot.Side, slot.Owner, body, tick);
+        internal void Initialize(EntityId id, RosterSlot slot, BodyId body, long tick, int damageTypes)
+            => Initialize(id, slot, null, slot.Setup.Ship, slot.Side, slot.Owner, body, tick, damageTypes);
 
-        internal void InitializeDrone(EntityId id, DroneBayInventory bay, BodyId body, long tick)
-            => Initialize(id, null, bay, bay.Definition.Drone, bay.Slot.Side, bay.Slot.Owner, body, tick);
+        internal void InitializeDrone(EntityId id, DroneBayInventory bay, BodyId body, long tick, int damageTypes)
+            => Initialize(id, null, bay, bay.Definition.Drone, bay.Slot.Side, bay.Slot.Owner, body, tick, damageTypes);
 
         private void Initialize(EntityId id, RosterSlot slot, DroneBayInventory bay, ShipDefinition definition,
-            int side, int owner, BodyId body, long tick)
+            int side, int owner, BodyId body, long tick, int damageTypes)
         {
             Id = id;
             Slot = slot;
@@ -189,7 +204,9 @@ namespace CombatSimulation.Core
             RetreatCompletionTick = NoRetreat;
             PendingDeath = false;
             PreStepVelocity = Vec2.Zero;
-            PendingDamage = 0f;
+            if (_pendingDamage.Length != damageTypes) _pendingDamage = new float[damageTypes];
+            else System.Array.Clear(_pendingDamage, 0, damageTypes);
+            HasPendingDamage = false;
             _spawnSampleCount = 0;
             _bodySampleCount = 0;
             LastCorrectionTick = NoCorrection;
@@ -329,7 +346,7 @@ namespace CombatSimulation.Core
             RetreatCompletionTick = NoRetreat;
             PendingDeath = false;
             PreStepVelocity = Vec2.Zero;
-            PendingDamage = 0f;
+            ClearPendingDamage();
             _spawnSampleCount = 0;
             _bodySampleCount = 0;
             System.Array.Clear(_engineInputs, 0, _engineInputs.Length);
@@ -346,6 +363,7 @@ namespace CombatSimulation.Core
         }
 
         private ShapeId[] _shapes = new ShapeId[1];
+        private float[] _pendingDamage = System.Array.Empty<float>();
         private long[] _barrelShotTicks = System.Array.Empty<long>();
         private ShipDevice[] _devices = System.Array.Empty<ShipDevice>();
         private readonly SpawnSample[] _spawnSamples = new SpawnSample[SpawnHistoryLength];

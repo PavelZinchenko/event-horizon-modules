@@ -562,7 +562,7 @@ namespace CombatSimulation.Core.Tests
             var ship = Field<ShipStore>(battle, "_ships").Allocate();
             var id = new EntityId(9000UL + rosterId);
             var body = battle.World.CreateBody(new BodyDef { Mass = bay.Definition.Drone.Mass });
-            ship.InitializeDrone(id, bay, body, battle.Tick);
+            ship.InitializeDrone(id, bay, body, battle.Tick, battle.Setup.DamageTypes.Count);
             Assert.IsTrue(battle.TryRegister(id, ship.Handle));
             var shapeDef = ShapeDef.Default;
             shapeDef.Filter = CollisionFilters.Drone(ship.Side);

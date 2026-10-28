@@ -159,6 +159,7 @@ namespace CombatSimulation.Core
                     // Q1 and Q2b: a bolt and a missile both stop at their first valid contact.
                     AttackerPassThrough = false,
                     Damage = bullet.Definition.Damage,
+                    DamageType = bullet.Definition.DamageType,
                     Point = hit.Point,
                 };
 

@@ -5,7 +5,8 @@ namespace CombatSimulation.Core
     // Q4: disarm enemy projectiles and apply energy damage to enemy drones.
     public sealed class PointDefenseDefinition : DeviceDefinition
     {
-        public PointDefenseDefinition(float radius, float cooldown, float energyCost, float droneDamage = 0f)
+        public PointDefenseDefinition(float radius, float cooldown, float energyCost, float droneDamage = 0f,
+            int damageType = LegacyDamageModel.Energy)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius));
@@ -15,11 +16,13 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(energyCost));
             if (!(droneDamage >= 0f) || float.IsInfinity(droneDamage))
                 throw new ArgumentOutOfRangeException(nameof(droneDamage));
+            DamageTypeTable.ValidateIndex(damageType, nameof(damageType));
 
             Radius = radius;
             Cooldown = cooldown;
             EnergyCost = energyCost;
             DroneDamage = droneDamage;
+            DamageType = damageType;
             QueryCooldownTicks = TickTime.After(cooldown);
             ActivationCooldownTicks = TickTime.AtLeast(cooldown);
         }
@@ -28,8 +31,11 @@ namespace CombatSimulation.Core
         public float Cooldown { get; }
         // Paid once on activation and once for each accepted zap.
         public float EnergyCost { get; }
-        // Energy damage reduces shield, then armor. It does not drain the target's energy resource.
+        // Damage of DamageType: shield, then armor. It does not drain the target's energy resource.
         public float DroneDamage { get; }
+
+        // An index into the battle's damage type table (D4). Legacy PointDefenseCollisionAction deals energy damage.
+        public int DamageType { get; }
         public int QueryCooldownTicks { get; }
         public int ActivationCooldownTicks { get; }
 
