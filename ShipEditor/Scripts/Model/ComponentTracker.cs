@@ -29,13 +29,15 @@ namespace ShipEditor.Model
 		private const int _actionKeyCount = 6;
 
 		private readonly IShip _ship;
+        private readonly ShipSettings _settings;
         private readonly Inventory<Component> _components = new();
 		private readonly Inventory<ComponentGroupTag> _tags = new();
 		private readonly Dictionary<Component, int> _keyBindings = new();
 
-		public ComponentTracker(IShip ship)
+		public ComponentTracker(IShip ship, ShipSettings settings)
 		{
 			_ship = ship;
+			_settings = settings;
 		}
 
 		public bool ComponentLimitReached(Component component)
@@ -51,7 +53,7 @@ namespace ShipEditor.Model
 
 		public bool IsCompatible(Satellite satellite)
 		{
-			return _ship.IsSuitableSatelliteSize(satellite);
+			return _ship.IsSuitableSatelliteSize(satellite, _settings);
 		}
 
 		public bool IsCompatible(Component component)
