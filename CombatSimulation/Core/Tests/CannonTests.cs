@@ -167,6 +167,26 @@ namespace CombatSimulation.Core.Tests
             Assert.Greater(driver.Battle.World.GetAngularVelocity(body), 0f, "A push behind the left side turns the ship left.");
         }
 
+        [Test]
+        public void AnInertDeviceIgnoresItsBitAndKeepsTheNextIndex()
+        {
+            // D1: device 0 is inert, the cannon is device 1. 5 energy and no recharge.
+            var ship = Fixtures.ShipWith(energy: new ResourceDefinition(5f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[] { new InertDeviceDefinition(), new CannonDefinition(0, 0.1f, 2f, 0f, Fixtures.Bolt) });
+
+            var inertOnly = Duel(ship);
+            inertOnly.Control(1, systems: 1);
+            Assert.IsEmpty(ShotTicks(inertOnly.StepCollecting(10)));
+            Assert.AreEqual(5f, inertOnly.Ship(1).Energy.Value);
+
+            var both = Duel(ship);
+            both.Control(1, systems: 3);
+            var spawns = BulletSpawns(both.StepCollecting(10));
+            Assert.AreEqual(new long[] { 2, 7 }, spawns.Select(e => e.Tick).ToArray());
+            Assert.AreEqual(1f, both.Ship(1).Energy.Value, Tolerance);
+        }
+
         // Slot 1 flies the given ship, slot 101 a plain enemy far away. Steps tick 0 (the deployment).
         internal static Driver Duel(ShipDefinition shooter, ShipDefinition enemy = null, ulong matchSeed = 7)
         {

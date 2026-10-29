@@ -55,6 +55,13 @@ namespace CombatSimulation.Core
         }
     }
 
+    // InertDeviceDefinition: ignores its control bit.
+    internal sealed class InertDevice : ShipDevice
+    {
+        public InertDevice(int index) : base(index) { }
+        public override void Update(Battle battle, ShipEntity ship) { }
+    }
+
     // A projectile, beam or drone requested at stage 2. Stage 5 creates it at the weapon or bay pose.
     internal readonly struct SpawnRequest
     {

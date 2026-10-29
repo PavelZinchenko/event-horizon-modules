@@ -79,4 +79,12 @@ namespace CombatSimulation.Core
 
         internal override ShipDevice CreateDevice(int index) => new CannonDevice(this, index);
     }
+
+    // A device the core cannot run yet (phase 4, D1). It keeps its index and control bit and does nothing: it spends
+    // no energy and spawns nothing. Its weight and passive energy use are already in the ship stats.
+    public sealed class InertDeviceDefinition : DeviceDefinition
+    {
+        internal override void Validate(int barrelCount) { }
+        internal override ShipDevice CreateDevice(int index) => new InertDevice(index);
+    }
 }
