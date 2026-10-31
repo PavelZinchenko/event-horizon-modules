@@ -140,8 +140,8 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void RecoilPushesTheShipBackAlongTheShot()
         {
-            // Recoil = weight × speed × ParentVelocityEffect = 0.5 × 20 × 1 = 10; the ship mass is 10.
-            var bullet = new BulletDefinition(0.25f, 20f, 10f, 5f, weight: 0.5f);
+            // Recoil × relative bullet speed = 0.5 × 20 = 10 (phase 4 E1); the ship mass is 10.
+            var bullet = new BulletDefinition(0.25f, 20f, 10f, 5f, recoil: 0.5f);
             var driver = Duel(Fixtures.CannonShip(bullet, mass: 10f));
             driver.Place(1, Shooter, Vec2.Zero);
             driver.Control(1, systems: 1);
@@ -156,7 +156,7 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void RecoilFromAnOffCentreBarrelSpinsTheShip()
         {
-            var bullet = new BulletDefinition(0.25f, 20f, 10f, 5f, weight: 0.5f);
+            var bullet = new BulletDefinition(0.25f, 20f, 10f, 5f, recoil: 0.5f);
             var driver = Duel(Fixtures.CannonShip(bullet, mass: 10f, muzzle: new Vec2(1f, 0.5f)));
             driver.Place(1, Shooter, Vec2.Zero);
             driver.Control(1, systems: 1);

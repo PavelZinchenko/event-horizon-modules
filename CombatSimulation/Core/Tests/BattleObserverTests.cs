@@ -106,7 +106,7 @@ namespace CombatSimulation.Core.Tests
             while (!run.IsCompleted && run.Runner.Tick < ScriptedBattle.MaxTicks) run.Step();
             using var sha = System.Security.Cryptography.SHA256.Create();
             var digest = BitConverter.ToString(sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(string.Join("\n", run.Log)))).Replace("-", "");
-            Assert.AreEqual("518251C30445EA37B539A066AE26D06AB4EBCAC868D8A5AF6B2B09E685231DC9", digest);
+            Assert.AreEqual("40CD8981E393D76A25275938E4D4E0C193F9900D28DAFC141632C405F64BB6FB", digest);
             Assert.Greater(observer.Contacts, 0); Assert.Greater(observer.Projectiles, 0);
             Assert.Greater(observer.Disarms, 0); Assert.Greater(observer.HomingHits, 0);
         }

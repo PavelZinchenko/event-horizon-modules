@@ -347,16 +347,23 @@ namespace CombatSimulation.Core
             CaptureDroneSpawn(ship, parent.Id);
         }
 
-        // Legacy BulletFactory.ConfigureBody at the muzzle pose, plus the Q1 recoil (owner, 2026-10-20).
+        // Legacy BulletFactory.ConfigureBody at the muzzle pose, plus the Q1 recoil (owner, 2026-10-20; phase 4 E1):
+        // Recoil x the bullet velocity relative to the ship (legacy BulletFactory.ApplyRecoil), at the muzzle.
         private void SpawnBullet(in SpawnRequest request, uint sequence)
         {
             var ship = request.Ship;
+            var sample = ReadSpawnSample(ship);
             var index = CreateBullet(ship, request.DeviceIndex, request.BarrelIndex, sequence, request.Bullet,
-                request.Spread, Tick, ReadSpawnSample(ship), out var muzzle, out var direction, out var angle);
+                request.Spread, Tick, sample, out var muzzle, out var direction, out var angle);
             if (index < 0) return;
 
             var definition = request.Bullet;
-            if (definition.Recoil > 0f) World.ApplyImpulse(ship.Body, -definition.Recoil * direction, muzzle);
+            if (definition.Recoil > 0f)
+            {
+                var relative = definition.Speed * definition.StartingVelocityMultiplier * direction +
+                               (definition.ParentVelocityEffect - 1f) * sample.LinearVelocity;
+                World.ApplyImpulse(ship.Body, -definition.Recoil * relative, muzzle);
+            }
 
             ref readonly var bullet = ref _bullets[index];
             _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, bullet, Authority(bullet.Owner)));
@@ -567,6 +574,10 @@ namespace CombatSimulation.Core
                     int owner, deviceIndex;
                     HitImpactKind kind;
                     var amount = hit.Damage;
+                    var damage = hit.Damage;
+                    var damageType = hit.DamageType;
+                    BulletDefinition projectile = null;
+                    var impulse = Vec2.Zero;
                     if (_bullets.TryGet(hit.AttackerHandle, out var index))
                     {
                         ref readonly var attacker = ref _bullets[index];
@@ -574,7 +585,18 @@ namespace CombatSimulation.Core
                         deviceIndex = attacker.DeviceIndex;
                         kind = attacker.IsBeam ? HitImpactKind.DamageOverTime :
                             attacker.Definition.IsMissile ? HitImpactKind.Impact : HitImpactKind.Energy;
-                        if (attacker.IsBeam) amount = attacker.BeamDefinition.DamagePerSecond;
+                        if (attacker.IsBeam)
+                        {
+                            amount = attacker.BeamDefinition.DamagePerSecond;
+                        }
+                        else
+                        {
+                            // The candidate holds the total; a ship takes each damage effect with its own type.
+                            projectile = attacker.Definition;
+                            amount = damage = projectile.Damage;
+                            damageType = projectile.DamageType;
+                            if (projectile.Push != 0f) impulse = projectile.Push * World.GetBulletVelocity(attacker.Body);
+                        }
                     }
                     else
                     {
@@ -587,12 +609,27 @@ namespace CombatSimulation.Core
                     authority = Authority(owner);
                     if (authority == BattleEventAuthority.Committed)
                     {
-                        // A remote target's copy takes the same damage as a prediction (N3); it never dies of it.
-                        target.AddPendingDamage(hit.DamageType, hit.Damage);
-                        if (!Setup.IsLocalOwner(target.Owner))
+                        // A remote target's copy takes the same damage and push as a prediction (N3); it never dies of
+                        // it. The push on a remote target travels in the first record (phase 4 E4).
+                        var remote = !Setup.IsLocalOwner(target.Owner);
+                        target.AddPendingDamage(damageType, damage);
+                        if (remote)
                             _outgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                 hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind, amount,
-                                damageType: (byte)hit.DamageType));
+                                damageType: (byte)damageType, impulse: impulse));
+                        if (projectile != null)
+                        {
+                            var extra = projectile.ExtraDamage;
+                            for (var e = 0; e < extra.Count; ++e)
+                            {
+                                target.AddPendingDamage(extra[e].DamageType, extra[e].Amount);
+                                if (remote)
+                                    _outgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
+                                        hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind,
+                                        extra[e].Amount, damageType: (byte)extra[e].DamageType));
+                            }
+                            if (projectile.Push != 0f) ApplyPush(target, impulse);
+                        }
                     }
                 }
 
@@ -600,6 +637,10 @@ namespace CombatSimulation.Core
             }
             _outgoingHits.CompleteContacts(Tick);
         }
+
+        // Legacy PushAction: the impulse acts at the target's origin, so it never turns the target.
+        private void ApplyPush(ShipEntity target, Vec2 impulse) =>
+            World.ApplyImpulse(target.Body, impulse, World.GetPosition(target.Body));
 
         // Stage 10. One pass, shield first, then armor (legacy Impact.ApplyShield and ShipStats.ApplyDamage).
         // Received hits add to a local target's pending damage. A remote target's pending damage is only the damage

@@ -31,8 +31,10 @@ namespace CombatSimulation.Core.Tests
 
         // Legacy MissileLauncher_L_1 (ammunition 37): size 0.4, velocity 15, range 30, damage 8, 2 hit points, impulse
         // 0.1 as the weight. Homing conversion: starting velocity 0.1. Turn 300°/s, thrust 18.75 u/s², 101 ticks.
+        // Recoil 0.1 is not legacy (record 37 has none): it keeps the pre-E1 impulse 0.1 x 1.5 per launch, so the
+        // scripted battle keeps its retreats and still covers recoil.
         public static readonly BulletDefinition Missile = new BulletDefinition(0.2f, 15f, 30f, 8f, weight: 0.1f,
-            hitPoints: 2f, homing: true, startingVelocityMultiplier: 0.1f);
+            hitPoints: 2f, homing: true, startingVelocityMultiplier: 0.1f, recoil: 0.1f);
 
         // One cannon (device 0) on one barrel at the given muzzle point; by default 1 u ahead of the hull centre.
         public static ShipDefinition CannonShip(BulletDefinition bullet = null, float cooldown = 0.1f,

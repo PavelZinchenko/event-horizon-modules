@@ -39,7 +39,7 @@ namespace CombatSimulation.Runtime.Tests
             var hits = new[]
             {
                 new ResolvedHit(batch, 125, shot, 20, 7, link.Target, 10, 3, HitContactState.Start, HitImpactKind.Energy, 8.125f, 1,
-                    damageType: LegacyDamageModel.Corrosive),
+                    damageType: LegacyDamageModel.Corrosive, impulse: new Vec2(-1.5f, 0.25f)),
                 new ResolvedHit(batch, 126, ship, 20, -1, link.Target, 10, 0, HitContactState.End, HitImpactKind.DamageOverTime, 40, 2,
                     damageType: 127),
                 new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 1, HitContactState.Start, HitImpactKind.Impact, 0, 3),
@@ -64,7 +64,9 @@ namespace CombatSimulation.Runtime.Tests
                 SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.MissileTarget,
                 SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit,
                 SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
-            Assert.LessOrEqual(scan[3].Bits, 41); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 32); Assert.LessOrEqual(scan[9].Bits, 88);
+            // A push (phase 4 E4) adds 64 bits to its hit; every hit has the 1-bit flag.
+            Assert.LessOrEqual(scan[3].Bits, 41); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 32); Assert.LessOrEqual(scan[9].Bits, 89 + 64);
+            Assert.LessOrEqual(scan[11].Bits, 89);
             // A missile target is about 3 bytes in the plan: here 2 bytes, with tick offsets +1 and +2 (0 in a real batch).
             Assert.AreEqual(16, scan[7].Bits); Assert.AreEqual(11, scan[8].Bits);
             Assert.AreEqual(RemovalReason.Expiry, scan[6].RemovalReason);
@@ -107,6 +109,10 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, false, HitImpactKind.Disarm)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, true, HitImpactKind.Stop)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 77, 0, true, (HitImpactKind)5)), out _, out _));
+            // Phase 4 E4: a push must be finite.
+            Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 1, impulseX: 2f), 1), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 1, impulseX: float.NaN)), out _, out _));
             // D4: a damage type outside every possible table.
             Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 1, damageType: DamageTypeTable.MaxTypes - 1), 1), out _, out _));
@@ -149,13 +155,19 @@ namespace CombatSimulation.Runtime.Tests
             }
 
             void Hit(ref BitWriter w, ulong target, float amount, bool bullet = false, HitImpactKind impact = HitImpactKind.Impact,
-                ulong damageType = 0)
+                ulong damageType = 0, float impulseX = 0f)
             {
                 w.WriteBool(false); w.WriteVarUInt(0); w.WriteBool(bullet);
                 if (bullet) w.WriteBits(target, 64); else w.WriteVarUInt(target);
                 w.WriteVarUInt(0); w.WriteVarUInt(0); w.WriteBits(0, 2); w.WriteBits((ulong)impact, 3);
                 w.WriteBits(unchecked((uint)BitConverter.SingleToInt32Bits(amount)), 32);
                 w.WriteVarUInt(damageType);
+                w.WriteBool(impulseX != 0f);
+                if (impulseX != 0f)
+                {
+                    w.WriteBits(unchecked((uint)BitConverter.SingleToInt32Bits(impulseX)), 32);
+                    w.WriteBits(0, 32);
+                }
             }
         }
 

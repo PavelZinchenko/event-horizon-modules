@@ -24,6 +24,12 @@ namespace CombatSimulation.Core
                 if (hit.ImpactKind != HitImpactKind.DamageOverTime)
                 {
                     if (hit.ContactState != HitContactState.End) AddRemoteDamage(hit, hit.Amount);
+                    // The owner applies the push when the record arrives, late by the link delay (phase 4 E4).
+                    if (hit.Impulse.X != 0f || hit.Impulse.Y != 0f)
+                    {
+                        var target = LocalHitTarget(hit);
+                        if (target != null) ApplyPush(target, hit.Impulse);
+                    }
                     continue;
                 }
 

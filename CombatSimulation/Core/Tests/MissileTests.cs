@@ -32,7 +32,7 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(18.75f, missile.Acceleration, 1e-5f);
             Assert.AreEqual(101, missile.LifetimeTicks);
             Assert.AreEqual(101, HomingSteering.SearchTicks);
-            Assert.AreEqual(0.15f, missile.Recoil, 1e-6f, "Weight x speed x starting velocity x parent velocity effect.");
+            Assert.AreEqual(0.1f, missile.Recoil, "Phase 4 E1: recoil comes from the recoil field, not the weight.");
             Assert.IsTrue(missile.IsMissile);
         }
 

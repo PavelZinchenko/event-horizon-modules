@@ -1,3 +1,5 @@
+using CombatSimulation.Physics;
+
 namespace CombatSimulation.Core
 {
     public enum HitContactState : byte { Start, Stay, End }
@@ -12,6 +14,9 @@ namespace CombatSimulation.Core
     // one tick of ray damage, Disarm a point-defense zap, and Stop a target bullet that stopped at its own hit on the
     // attacker. The contact state is always Start and the shape 0.
     // DamageType (D4) indexes the battle's damage type table; a bullet target ignores it.
+    // Impulse (phase 4 E4, owner 2026-10-31): the push on a ship target, applied at its origin by the target owner when
+    // the record arrives. Impact and Energy records on a ship only; zero otherwise. A bullet with several damage effects
+    // sends one record per effect, and only the first carries the impulse.
     public readonly struct ResolvedHit
     {
         public readonly BattleId BattleId;
@@ -29,10 +34,12 @@ namespace CombatSimulation.Core
         public readonly ulong Sequence;
         public readonly bool TargetIsBullet;
         public readonly byte DamageType;
+        public readonly Vec2 Impulse;
 
         public ResolvedHit(BattleId battleId, long tick, EntityId attackerId, int attackerOwner, int deviceIndex,
             EntityId targetId, int targetOwner, int targetShape, HitContactState contactState,
-            HitImpactKind impactKind, float amount, ulong sequence = 0, bool targetIsBullet = false, byte damageType = 0)
+            HitImpactKind impactKind, float amount, ulong sequence = 0, bool targetIsBullet = false, byte damageType = 0,
+            Vec2 impulse = default)
         {
             BattleId = battleId;
             Tick = tick;
@@ -48,13 +55,14 @@ namespace CombatSimulation.Core
             Sequence = sequence;
             TargetIsBullet = targetIsBullet;
             DamageType = damageType;
+            Impulse = impulse;
         }
 
         internal ResolvedHit EndAt(long tick) => new ResolvedHit(BattleId, tick, AttackerId, AttackerOwner,
-            DeviceIndex, TargetId, TargetOwner, TargetShape, HitContactState.End, ImpactKind, Amount, 0, TargetIsBullet, DamageType);
+            DeviceIndex, TargetId, TargetOwner, TargetShape, HitContactState.End, ImpactKind, Amount, 0, TargetIsBullet, DamageType, Impulse);
 
         internal ResolvedHit WithSequence(ulong sequence) => new ResolvedHit(BattleId, Tick, AttackerId, AttackerOwner,
-            DeviceIndex, TargetId, TargetOwner, TargetShape, ContactState, ImpactKind, Amount, sequence, TargetIsBullet, DamageType);
+            DeviceIndex, TargetId, TargetOwner, TargetShape, ContactState, ImpactKind, Amount, sequence, TargetIsBullet, DamageType, Impulse);
 
         internal bool SameContact(in ResolvedHit other) => AttackerId == other.AttackerId &&
             DeviceIndex == other.DeviceIndex && TargetId == other.TargetId && TargetShape == other.TargetShape;

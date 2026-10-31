@@ -37,6 +37,11 @@ namespace CombatSimulation.Core
             // A bullet target: one record per contact. Disarm and Stop name bullets only.
             if (hit.TargetIsBullet ? hit.TargetShape != 0 || hit.ContactState != HitContactState.Start
                 : hit.ImpactKind > HitImpactKind.DamageOverTime) return false;
+            // A push travels only with the impact of a projectile on a ship (phase 4 E4).
+            if (!Finite(hit.Impulse.X) || !Finite(hit.Impulse.Y) ||
+                ((hit.Impulse.X != 0f || hit.Impulse.Y != 0f) && (hit.TargetIsBullet ||
+                    hit.ImpactKind == HitImpactKind.DamageOverTime || hit.ContactState != HitContactState.Start)))
+                return false;
             // The attacker may already be gone. A live copy, when present, must agree with the sender.
             if (_entities.TryGet(hit.AttackerId, out var handle) && EntityOwner(handle) != record.SenderOwner)
                 return false;
