@@ -1,0 +1,21 @@
+{
+    "name": "CombatSimulation.Ai",
+    "rootNamespace": "CombatSimulation.Ai",
+    "references": [
+        "CombatSimulation.Core",
+        "CombatSimulation.Runtime",
+        "CombatSimulation.Physics",
+        "Database",
+        "Utilites",
+        "Diagnostics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

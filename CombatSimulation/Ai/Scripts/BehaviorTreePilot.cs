@@ -1,0 +1,89 @@
+using System.Collections.Generic;
+using CombatSimulation.Core;
+using CombatSimulation.Runtime;
+using GameDatabase.DataModel;
+using GameDatabase.Enums;
+using Utilites;
+
+namespace CombatSimulation.Ai
+{
+    // Runs one ship's behavior tree on each snapshot it thinks on (legacy ShipBehaviorTree). A result other than Failure
+    // submits the controls the nodes set. Failure submits zero controls once, then keeps them (T7).
+    public sealed class BehaviorTreePilot : IPilot
+    {
+        internal BehaviorTreePilot(INode root, AiContext context, IReadOnlyDictionary<BehaviorNodeType, int> stubs)
+        {
+            _root = root;
+            Context = context;
+            Stubs = stubs;
+        }
+
+        public AiContext Context { get; }
+
+        // Node types built as stubs, with their counts (phase 4, step 6).
+        public IReadOnlyDictionary<BehaviorNodeType, int> Stubs { get; }
+
+        public bool Think(BattleSnapshot snapshot, in ShipState self, out PilotControls controls)
+        {
+            Context.Update(snapshot, self);
+            var result = _root.Evaluate(Context) != NodeState.Failure;
+            if (!result) Context.Controls.Reset();
+
+            controls = Context.Controls.ToPilotControls();
+            Context.Controls.Reset();
+
+            var submit = result || _lastResult;
+            _lastResult = result;
+            return submit;
+        }
+
+        private readonly INode _root;
+        private bool _lastResult;
+    }
+
+    // Builds the tree pilots of one battle; they share its message hub (T5).
+    public sealed class BehaviorTreeFactory
+    {
+        public BehaviorTreeFactory(ulong matchSeed) => _matchSeed = matchSeed;
+
+        // A null model gives a pilot whose root is Failure: the ship idles (T6).
+        public BehaviorTreePilot Create(BehaviorTreeModel model, AiShipProfile profile, AiSettings settings,
+            EntityId ship, PilotSchedule schedule)
+        {
+            var context = new AiContext(profile, settings, schedule.Period * Battle.TickDuration, CreateRandom(ship));
+            var builder = new NodeBuilder(context, _messageHub);
+            var root = builder.Build(model?.RootNode);
+            return new BehaviorTreePilot(root, context, builder.Stubs);
+        }
+
+        // One stream per pilot from the match seed and the entity ID (T4). Entity IDs are already mixed (fmix64).
+        private RandomState CreateRandom(EntityId ship) =>
+            new RandomState { Value = PcgRandomAlgorithm.InitializeState(_matchSeed ^ ship.Value) };
+
+        private readonly ulong _matchSeed;
+        private readonly MessageHub _messageHub = new MessageHub();
+    }
+
+    // Legacy ControllerFactory: which tree a ship runs (T6). Null means no tree; legacy then used a hard-coded controller.
+    public static class BehaviorTreeSelection
+    {
+        public static BehaviorTreeModel ForEnemy(CombatSettings settings, BehaviorTreeModel customAi) => customAi ?? settings?.EnemyAI;
+
+        public static BehaviorTreeModel ForStarbase(CombatSettings settings, BehaviorTreeModel customAi) => customAi ?? settings?.StarbaseAI;
+
+        public static BehaviorTreeModel ForClone(CombatSettings settings, BehaviorTreeModel customAi) => customAi ?? settings?.CloneAI;
+
+        public static BehaviorTreeModel ForAutopilot(CombatSettings settings) => settings?.AutopilotAI;
+
+        // Legacy DroneBay picks the bay tree of the bay behaviour, else the drone's own; ControllerFactory then falls
+        // back to the CombatSettings tree of that behaviour unless the bay has ImprovedAi.
+        public static BehaviorTreeModel ForDrone(CombatSettings settings, in DroneBayStats bay, BehaviorTreeModel droneCustomAi, bool defensive)
+        {
+            var tree = (defensive ? bay.DefensiveDroneAI : bay.OffensiveDroneAI) ?? droneCustomAi;
+            if (tree != null || bay.ImprovedAi)
+                return tree;
+
+            return defensive ? settings?.DefensiveDroneAI : settings?.OffensiveDroneAI;
+        }
+    }
+}
