@@ -31,14 +31,24 @@ namespace CombatSimulation.Core
 
         public override void Update(Battle battle, ShipEntity ship)
         {
-            if (!battle.Setup.IsLocalOwner(ship.Owner)) return;
-            var bay = ship.Slot.GetBay(Index);
-            if (!IsControlOn(ship) || bay.InHangar == 0 ||
-                battle.Tick - ship.LastDroneLaunchTick < LaunchCooldownTicks ||
-                !ship.Energy.TryConsume(Definition.EnergyCost)) return;
+            IsActive = IsControlOn(ship) && IsReady(ship, battle.Tick);
+            if (!IsActive || !battle.Setup.IsLocalOwner(ship.Owner) || !ship.Energy.TryConsume(Definition.EnergyCost))
+                return;
 
             ship.LastDroneLaunchTick = battle.Tick;
             battle.RequestSpawn(new SpawnRequest(ship, this));
         }
+
+        // Legacy DroneBay: CanBeActivated needs a drone in the hangar, the launch timer and the cost.
+        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick)
+        {
+            var bay = ship.Slot.GetBay(Index);
+            return new DeviceState(IsReady(ship, tick + 1), IsActive,
+                DeviceState.Remaining(tick + 1 - ship.LastDroneLaunchTick, LaunchCooldownTicks),
+                bay.InHangar, bay.ActiveCount);
+        }
+
+        private bool IsReady(ShipEntity ship, long tick) => ship.Slot.GetBay(Index).InHangar > 0 &&
+            tick - ship.LastDroneLaunchTick >= LaunchCooldownTicks && ship.Energy.CanConsume(Definition.EnergyCost);
     }
 }

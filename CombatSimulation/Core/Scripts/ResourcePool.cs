@@ -38,10 +38,13 @@ namespace CombatSimulation.Core
             DelayRemaining = 0f;
         }
 
+        // True when TryConsume would spend the amount.
+        public readonly bool CanConsume(float amount) => Value > 0f && Value >= amount && Max > 0f;
+
         // Spends the amount only if it is available. A failed attempt does not touch the delay.
         public bool TryConsume(float amount)
         {
-            if (!(Value > 0f && Value >= amount && Max > 0f)) return false;
+            if (!CanConsume(amount)) return false;
 
             Value -= amount;
             RestartDelay(amount);

@@ -361,12 +361,21 @@ namespace CombatSimulation.Core.Tests
         public static readonly int Event = ElementSize<BattleEvent>();
         public static readonly int Hit = ElementSize<ResolvedHit>();
         public static readonly int Operation = ElementSize<OwnerOperation>();
+        public static readonly int Device = ElementSize<DeviceState>();
 
         public static long Of(BattleSnapshot snapshot) =>
             (long)snapshot.Ships.Length * Ship + (long)snapshot.Bullets.Length * Bullet +
             (long)snapshot.Roster.Length * RosterSlot + (long)snapshot.Events.Length * Event +
             (long)snapshot.OutgoingHits.Length * Hit +
-            ((long)snapshot.OutgoingOperations.Length + snapshot.AppliedOperations.Length) * Operation;
+            ((long)snapshot.OutgoingOperations.Length + snapshot.AppliedOperations.Length) * Operation +
+            Devices(snapshot) * Device;
+
+        private static long Devices(BattleSnapshot snapshot)
+        {
+            var count = 0L;
+            foreach (var ship in snapshot.Ships) count += ship.Definition.Devices.Count;
+            return count;
+        }
 
         private static int ElementSize<T>()
         {

@@ -46,6 +46,10 @@ namespace CombatSimulation.Core
         // Received commits applied this step, retaining original owner ticks for Runtime's later result agreement.
         public ReadOnlySpan<OwnerOperation> AppliedOperations => new ReadOnlySpan<OwnerOperation>(_appliedOperations, 0, _appliedOperationCount);
 
+        // The ship's devices in control-bit order. Valid only for a ShipState read from this snapshot.
+        public ReadOnlySpan<DeviceState> GetDevices(in ShipState ship) =>
+            new ReadOnlySpan<DeviceState>(_devices, ship.DeviceStart, ship.Definition.Devices.Count);
+
         public bool TryGetShip(EntityId id, out ShipState ship)
         {
             for (var i = 0; i < _shipCount; ++i)
@@ -76,10 +80,19 @@ namespace CombatSimulation.Core
 
             if (_ships.Length < battle.ShipEntryCount)
                 Array.Resize(ref _ships, Math.Max(battle.ShipEntryCount, _ships.Length * 2));
+            var deviceCount = 0;
             for (var i = 0; i < battle.ShipEntryCount; ++i)
             {
                 var ship = battle.GetShipEntry(i);
-                if (ship != null) _ships[_shipCount++] = new ShipState(ship, world);
+                if (ship == null) continue;
+
+                var devices = ship.DeviceCount;
+                if (_devices.Length < deviceCount + devices)
+                    Array.Resize(ref _devices, Math.Max(deviceCount + devices, _devices.Length * 2));
+                for (var d = 0; d < devices; ++d)
+                    _devices[deviceCount + d] = ship.GetDevice(d).GetState(battle, ship, tick);
+                _ships[_shipCount++] = new ShipState(ship, world, deviceCount);
+                deviceCount += devices;
             }
 
             var bullets = battle.Bullets;
@@ -113,6 +126,7 @@ namespace CombatSimulation.Core
         private readonly RosterSlotState[] _roster;
         private ShipState[] _ships;
         private int _shipCount;
+        private DeviceState[] _devices = new DeviceState[16];
         private BulletState[] _bullets = new BulletState[16];
         private int _bulletCount;
         private BattleEvent[] _events = new BattleEvent[16];

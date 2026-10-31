@@ -1,3 +1,5 @@
+using System;
+
 namespace CombatSimulation.Core
 {
     internal sealed class BeamDevice : ShipDevice
@@ -9,28 +11,43 @@ namespace CombatSimulation.Core
 
         public override void Reset()
         {
+            base.Reset();
             _handle = default;
             _active = false;
             _stoppedTick = long.MinValue / 2;
         }
 
+        // Legacy ContinuousCannon: Active is the held bit while the beam is attached, even in the tick the energy runs out.
         public override void Update(Battle battle, ShipEntity ship)
         {
             if (_active)
             {
-                if (!IsControlOn(ship) || !ship.Energy.TryConsume(Definition.EnergyPerSecond * Battle.TickDuration))
+                IsActive = IsControlOn(ship);
+                if (!IsActive || !ship.Energy.TryConsume(Definition.EnergyPerSecond * Battle.TickDuration))
                     Deactivate(battle);
                 return;
             }
 
-            if (!IsControlOn(ship) || battle.Tick - _stoppedTick < Definition.CooldownTicks ||
-                !ship.IsBarrelReady(Definition.BarrelIndex, battle.Tick) ||
-                !ship.Energy.TryConsume(Definition.ActivationCost))
+            IsActive = IsControlOn(ship) && IsReady(ship, battle.Tick);
+            if (!IsActive || !ship.Energy.TryConsume(Definition.ActivationCost))
                 return;
 
             ship.RecordBarrelShot(Definition.BarrelIndex, battle.Tick);
             battle.RequestSpawn(new SpawnRequest(ship, this));
         }
+
+        // Legacy ContinuousCannon.CanBeActivated has no energy check.
+        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick)
+        {
+            var weapon = _active ? 0f : DeviceState.Remaining(tick + 1 - _stoppedTick, Definition.CooldownTicks);
+            var barrel = DeviceState.Remaining(tick + 1 - ship.GetBarrelShotTick(Definition.BarrelIndex),
+                ShipEntity.BarrelCooldownTicks);
+            var beam = _active && battle.Bullets.TryGet(_handle, out var index) ? battle.Bullets[index].Id : default;
+            return new DeviceState(_active || IsReady(ship, tick + 1), IsActive, Math.Max(weapon, barrel), beam: beam);
+        }
+
+        private bool IsReady(ShipEntity ship, long tick) =>
+            tick - _stoppedTick >= Definition.CooldownTicks && ship.IsBarrelReady(Definition.BarrelIndex, tick);
 
         public void Attach(EntityHandle handle)
         {

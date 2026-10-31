@@ -13,6 +13,7 @@ namespace CombatSimulation.Core
 
         public override void Reset()
         {
+            base.Reset();
             Enabled = false;
             NextQueryTick = 0;
             _started = false;
@@ -25,12 +26,13 @@ namespace CombatSimulation.Core
         {
             if (!IsControlOn(ship))
             {
+                IsActive = false;
                 Deactivate(battle);
                 return;
             }
 
-            if (Enabled || battle.Tick - _stoppedTick < Definition.ActivationCooldownTicks ||
-                !ship.Energy.TryConsume(Definition.EnergyCost)) return;
+            IsActive = IsReady(ship, battle.Tick);
+            if (Enabled || !IsActive || !ship.Energy.TryConsume(Definition.EnergyCost)) return;
 
             Enabled = true;
             if (!_started)
@@ -41,6 +43,15 @@ namespace CombatSimulation.Core
         }
 
         public override void Deactivate(Battle battle) => Disable(battle.Tick);
+
+        // Legacy PointDefenseSystem.CanBeActivated: the activation cooldown, and enabled or the cost available.
+        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick) =>
+            new DeviceState(IsReady(ship, tick + 1), IsActive,
+                DeviceState.Remaining(tick + 1 - _stoppedTick, Definition.ActivationCooldownTicks));
+
+        // Enabled implies that the activation cooldown has passed.
+        private bool IsReady(ShipEntity ship, long tick) => Enabled ||
+            tick - _stoppedTick >= Definition.ActivationCooldownTicks && ship.Energy.CanConsume(Definition.EnergyCost);
 
         // The timers at the end of tick t (network plan, G1). Enabled and started are not sent: the copy derives
         // them from the owner's controls and its corrected energy.

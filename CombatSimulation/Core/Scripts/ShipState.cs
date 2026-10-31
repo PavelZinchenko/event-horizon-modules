@@ -50,7 +50,10 @@ namespace CombatSimulation.Core
         // The absolute tick at which the retreat completes, or -1 without a retreat.
         public readonly long RetreatCompletionTick;
 
-        internal ShipState(ShipEntity ship, PhysicsWorld world)
+        // The first of this ship's Definition.Devices.Count entries in the snapshot's device buffer.
+        internal readonly int DeviceStart;
+
+        internal ShipState(ShipEntity ship, PhysicsWorld world, int deviceStart)
         {
             Id = ship.Id;
             RosterId = ship.Slot?.RosterId ?? default;
@@ -71,6 +74,7 @@ namespace CombatSimulation.Core
             Course = ship.Course;
             Systems = ship.Systems;
             RetreatCompletionTick = ship.RetreatCompletionTick;
+            DeviceStart = deviceStart;
         }
 
         public bool IsRetreating => RetreatCompletionTick != ShipEntity.NoRetreat;

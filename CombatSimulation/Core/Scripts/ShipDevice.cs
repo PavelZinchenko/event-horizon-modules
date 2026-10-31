@@ -1,3 +1,5 @@
+using System;
+
 namespace CombatSimulation.Core
 {
     // The runtime state of one device on a ship, built at deployment from its DeviceDefinition.
@@ -10,14 +12,27 @@ namespace CombatSimulation.Core
 
         public bool IsControlOn(ShipEntity ship) => (ship.Systems & (1UL << Index)) != 0;
 
+        // Legacy SystemBase.Active, recorded by Update (DeviceState.Active).
+        public bool IsActive { get; protected set; }
+
         // Stage 2, after the resources recharge. Not called while the ship retreats.
         public abstract void Update(Battle battle, ShipEntity ship);
 
         // Restores a pooled device for a new entity; persistent bay inventory is stored on the roster.
-        public virtual void Reset() { }
+        public virtual void Reset() => IsActive = false;
 
         // Stops persistent devices before retreat queries or before the parent is released.
         public virtual void Deactivate(Battle battle) { }
+
+        // Stage 2 for a retreating ship, and before the parent is released: no system is active.
+        internal void Stop(Battle battle)
+        {
+            IsActive = false;
+            Deactivate(battle);
+        }
+
+        // Stage 14, at the end of the tick.
+        internal virtual DeviceState GetState(Battle battle, ShipEntity ship, long tick) => DeviceState.Inert;
     }
 
     // Legacy CommonCannon on a FixedPlatform (Q1). A shot needs the held bit, the weapon cooldown, the barrel
@@ -31,7 +46,12 @@ namespace CombatSimulation.Core
 
         public CannonDefinition Definition { get; }
         public long LastShotTick { get; private set; } = NeverFired;
-        public override void Reset() => LastShotTick = NeverFired;
+
+        public override void Reset()
+        {
+            base.Reset();
+            LastShotTick = NeverFired;
+        }
 
         // A confirmed shot at tick T re-syncs the copy's cooldown phase (network plan, G1), unless the copy already
         // fired a later predicted shot at or after T + cooldown.
@@ -42,6 +62,7 @@ namespace CombatSimulation.Core
 
         public override void Update(Battle battle, ShipEntity ship)
         {
+            IsActive = false;
             if (!IsControlOn(ship)) return;
 
             var tick = battle.Tick;
@@ -49,9 +70,20 @@ namespace CombatSimulation.Core
             if (!ship.IsBarrelReady(Definition.BarrelIndex, tick)) return;
             if (!ship.Energy.TryConsume(Definition.EnergyCost)) return;
 
+            IsActive = true;
             LastShotTick = tick;
             ship.RecordBarrelShot(Definition.BarrelIndex, tick);
             battle.RequestSpawn(new SpawnRequest(ship, Index, Definition.BarrelIndex, Definition.Spread, Definition.Bullet));
+        }
+
+        // Legacy CommonCannon: CanBeActivated adds the barrel and the energy cost; Cooldown is the larger timer.
+        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick)
+        {
+            var weapon = DeviceState.Remaining(tick + 1 - LastShotTick, Definition.CooldownTicks);
+            var barrel = DeviceState.Remaining(tick + 1 - ship.GetBarrelShotTick(Definition.BarrelIndex),
+                ShipEntity.BarrelCooldownTicks);
+            var ready = weapon == 0f && barrel == 0f && ship.Energy.CanConsume(Definition.EnergyCost);
+            return new DeviceState(ready, IsActive, Math.Max(weapon, barrel));
         }
     }
 

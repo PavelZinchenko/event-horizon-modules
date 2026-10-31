@@ -252,7 +252,7 @@ namespace CombatSimulation.Core
                 // Legacy ShipRetreatEffect.CanActivateSystem: a retreating ship activates no system.
                 for (var d = 0; d < ship.DeviceCount; ++d)
                 {
-                    if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) ship.GetDevice(d).Deactivate(this);
+                    if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) ship.GetDevice(d).Stop(this);
                     else ship.GetDevice(d).Update(this, ship);
                 }
             }
@@ -906,7 +906,7 @@ namespace CombatSimulation.Core
 
         private void RemoveShip(ShipEntity ship, RemovalReason reason)
         {
-            for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Deactivate(this);
+            for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Stop(this);
             _events.Add(BattleEvent.Removal(BattleId, Tick, _events.Count, ship, reason));
             if (ship.IsDrone) CaptureRemoval(ship.Id, ship.Owner, reason, ship.Bay.Key);
             for (var i = 0; i < ship.ShapeCount; ++i)
