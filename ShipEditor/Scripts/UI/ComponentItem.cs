@@ -323,7 +323,7 @@ namespace ShipEditor.UI
 		{
 			while (true)
 			{
-				var effect = ammunition.Effects.FirstOrDefault(item => item.Type == ImpactEffectType.Damage || item.Type == ImpactEffectType.SiphonHitPoints);
+				var effect = ammunition.Effects.FirstOrDefault(item => item.Type == ImpactEffectType.Damage || item.Type == ImpactEffectType.DamageWithFalloff || item.Type == ImpactEffectType.SiphonHitPoints);
 				if (effect?.Power > 0)
 				{
 					yield return new KeyValuePair<string, string>("$DamageType", localization.GetString(effect.DamageType.Name()));
