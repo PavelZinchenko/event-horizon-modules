@@ -14,6 +14,9 @@ namespace CombatSimulation.Core
         // Legacy ShipRetreatEffect(7.0f): 7 s at 50 Hz.
         public const long RetreatTicks = 350;
 
+        // Legacy CombatManager: the 3 s cooldown before IsPlayerDefeated ends an OnlyOneShip battle.
+        public const long ShipLostTicks = 150;
+
         // Legacy Scene.FindFreePlace: up to 100 random candidates, at least 40 units from every enemy ship.
         internal const int SpawnAttempts = 100;
         internal const float SpawnMinEnemyDistance = 40f;
@@ -899,6 +902,8 @@ namespace CombatSimulation.Core
             if (!Setup.IsLocalOwner(slot.Owner)) { Reject(command, "remote owner"); return; }
             if (slot.Status != RosterStatus.Ready) { Reject(command, $"slot is {slot.Status}"); return; }
             if (Roster.CountActive(slot.Side) >= Setup.MaxActiveShips(slot.Side)) { Reject(command, "side limit"); return; }
+            if (Setup.OnlyOneShip && slot.Side == Setup.PlayerSide && Roster.HasDestroyed(slot.Side))
+            { Reject(command, "only one ship"); return; }
 
             if (!DeploySlot(slot)) Reject(command, "entity ID collision");
         }

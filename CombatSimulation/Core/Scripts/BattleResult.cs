@@ -16,6 +16,9 @@ namespace CombatSimulation.Core
 
         // The time limit ran out.
         Timeout,
+
+        // OnlyOneShip: a player roster ship died, and its reserves may not deploy (phase 4, step 9).
+        ShipLost,
     }
 
     public readonly struct BattleResult

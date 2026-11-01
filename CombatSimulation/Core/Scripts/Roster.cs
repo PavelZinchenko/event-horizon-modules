@@ -32,6 +32,14 @@ namespace CombatSimulation.Core
             return count;
         }
 
+        public bool HasDestroyed(int side)
+        {
+            foreach (var slot in _slots)
+                if (slot.Side == side && slot.Status == RosterStatus.Destroyed)
+                    return true;
+            return false;
+        }
+
         // A side is alive while any slot is not destroyed; a ready reserve counts.
         public bool HasAlive(int side)
         {

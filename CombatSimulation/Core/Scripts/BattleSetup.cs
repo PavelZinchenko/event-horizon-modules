@@ -38,7 +38,8 @@ namespace CombatSimulation.Core
             DamageTypeTable damageTypes = null,
             TimerMode timerMode = TimerMode.Draw,
             int playerSide = 0,
-            IReadOnlyList<int> maxActiveShipsBySide = null)
+            IReadOnlyList<int> maxActiveShipsBySide = null,
+            bool onlyOneShip = false)
         {
             if (roster == null) throw new ArgumentNullException(nameof(roster));
             if (!(width > 0f) || float.IsInfinity(width))
@@ -97,6 +98,7 @@ namespace CombatSimulation.Core
             MaxActiveShipsPerSide = maxActiveShipsPerSide;
             TimerMode = timerMode;
             PlayerSide = playerSide;
+            OnlyOneShip = onlyOneShip;
             _localOwners = new HashSet<int>();
             if (localOwners == null)
             {
@@ -145,6 +147,10 @@ namespace CombatSimulation.Core
         // The side the legacy timer rules call the player; the other side is the enemy. Draw ignores it.
         public int PlayerSide { get; }
         public int EnemySide => 1 - PlayerSide;
+
+        // Legacy PlayerShipSelectionMode.OnlyOneShip: the first death of a player roster ship ends the battle
+        // Battle.ShipLostTicks later, unless an elimination comes first; the player reserves stay ready.
+        public bool OnlyOneShip { get; }
 
         // D4. The legacy table by default.
         public DamageTypeTable DamageTypes { get; }

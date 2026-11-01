@@ -11,9 +11,11 @@ namespace CombatSimulation.Core
             _timeLimit = setup.TimeLimitTicks;
             _mode = setup.TimerMode;
             _playerSide = setup.PlayerSide;
+            _onlyOneShip = setup.OnlyOneShip;
             foreach (var slot in setup.Roster)
                 if (slot.Side == 0) ++_confirmed.Alive0; else ++_confirmed.Alive1;
             _confirmed.Tick = -1;
+            _confirmed.LossDeadline = long.MaxValue;
         }
 
         internal void Add(long tick, int side, RosterStatus before, RosterStatus after)
@@ -43,7 +45,7 @@ namespace CombatSimulation.Core
             while (state.Tick < end)
             {
                 var next = index < _pending.Count ? _pending[index].Tick : long.MaxValue;
-                var gapEnd = Math.Min(end, next - 1);
+                var gapEnd = Math.Min(Math.Min(end, next - 1), state.LossDeadline);
                 if (gapEnd > state.Tick)
                 {
                     var count = gapEnd - state.Tick;
@@ -60,6 +62,7 @@ namespace CombatSimulation.Core
                     }
                     state.Tick = gapEnd;
                 }
+                if (state.Tick == state.LossDeadline) return ShipLost(state.Tick);
                 if (state.Tick == end) break;
                 state.Tick = next;
                 var resets = Resets.None;
@@ -73,6 +76,9 @@ namespace CombatSimulation.Core
                     if (change.Side == 0) { state.Alive0 += alive; state.Active0 += active; }
                     else { state.Alive1 += alive; state.Active1 += active; }
                     resets |= Classify(change);
+                    if (_onlyOneShip && change.Side == _playerSide && change.Before == RosterStatus.Active &&
+                        change.After == RosterStatus.Destroyed && state.LossDeadline == long.MaxValue)
+                        state.LossDeadline = next + Battle.ShipLostTicks;
                 }
                 if (ShouldReset(resets, state)) state.Elapsed = 0;
                 if (state.Alive0 == 0 || state.Alive1 == 0)
@@ -85,9 +91,14 @@ namespace CombatSimulation.Core
                     if (limit > 0 && state.Elapsed >= limit)
                         return new BattleResult(BattleOutcome.Draw, 0, BattleEndReason.Timeout, next);
                 }
+                if (next == state.LossDeadline) return ShipLost(next);
             }
             return default;
         }
+
+        // OnlyOneShip: the enemy side wins; the player reserves stay ready (legacy IsPlayerDefeated).
+        private BattleResult ShipLost(long tick) =>
+            new BattleResult(BattleOutcome.Victory, 1 - _playerSide, BattleEndReason.ShipLost, tick);
 
         // The elapsed ticks that end the battle in a draw; 0: the timer never draws (it holds, or drains).
         private long DrawLimit(in State state)
@@ -131,6 +142,8 @@ namespace CombatSimulation.Core
         private struct State
         {
             internal long Tick, Elapsed;
+            // OnlyOneShip: the tick that ends the battle after a player death; long.MaxValue while none.
+            internal long LossDeadline;
             internal int Alive0, Alive1, Active0, Active1;
             internal readonly int Ready(int side) => side == 0 ? Alive0 - Active0 : Alive1 - Active1;
         }
@@ -146,6 +159,7 @@ namespace CombatSimulation.Core
         private readonly long _timeLimit;
         private readonly TimerMode _mode;
         private readonly int _playerSide;
+        private readonly bool _onlyOneShip;
         private readonly List<Transition> _pending = new List<Transition>();
     }
 }
