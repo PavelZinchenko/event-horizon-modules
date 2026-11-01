@@ -83,9 +83,22 @@ namespace CombatSimulation.Ai
             ModelScale = modelScale;
             TargetPriority = targetPriority;
             ChanceToAvoidDrone = chanceToAvoidDrone;
+
+            foreach (var weapon in Weapons)
+            {
+                if (weapon.Range > AttackRangeMax) AttackRangeMax = weapon.Range;
+                if (weapon.Capability != AiWeaponCapability.None && weapon.Range > CapableAttackRange)
+                    CapableAttackRange = weapon.Range;
+            }
         }
 
         public IReadOnlyList<AiWeapon> Weapons { get; }
+
+        // Legacy Context.AttackRangeMax: the longest range among all weapons.
+        public float AttackRangeMax { get; }
+
+        // Legacy CalculateAttackRange: the longest range among weapons with a capability. Other ships read it.
+        public float CapableAttackRange { get; }
 
         // The classes of the working devices, in device order.
         public IReadOnlyList<DeviceClass> Devices { get; }

@@ -237,14 +237,14 @@ namespace CombatSimulation.Ai.Tests
             var asked = new List<ShipDefinition>();
             var drone = Drone;
             var context = new AiContext(ArmedShip, AiSettings.Default, 0.02f, Utilites.RandomState.FromSeed(1),
-                definition => { asked.Add(definition); return drone; });
+                BattleData(definition => { asked.Add(definition); return drone; }));
             context.Update(snapshot, snapshot.Ships[0]);
 
             Assert.AreSame(drone, context.ProfileOf(snapshot.Ships[1]));
             Assert.AreEqual(new[] { AiFixtures.Ship }, asked.ToArray());
             Assert.AreEqual(AiTargetPriority.Low, context.ProfileOf(snapshot.Ships[1]).TargetPriority);
 
-            var withoutTable = new AiContext(ArmedShip, AiSettings.Default, 0.02f, default, null);
+            var withoutTable = new AiContext(ArmedShip, AiSettings.Default, 0.02f, default, new AiBattle(Arena, null, BulletScale));
             withoutTable.Update(snapshot, snapshot.Ships[0]);
             Assert.Throws<InvalidOperationException>(() => withoutTable.ProfileOf(snapshot.Ships[1]));
         }
@@ -258,7 +258,7 @@ namespace CombatSimulation.Ai.Tests
             var snapshot = runner.Snapshot;
             AiContext ContextOf(int ship)
             {
-                var context = new AiContext(ArmedShip, AiSettings.Default, 0.02f, Utilites.RandomState.FromSeed(1), Profiles);
+                var context = new AiContext(ArmedShip, AiSettings.Default, 0.02f, Utilites.RandomState.FromSeed(1), BattleData());
                 context.Update(snapshot, snapshot.Ships[ship]);
                 return context;
             }
@@ -388,11 +388,11 @@ namespace CombatSimulation.Ai.Tests
         public void NodesWithoutPortAreCountedStubs()
         {
             var builder = Builder(Context(out _));
-            var node = builder.Build(Node(Composite(BehaviorNodeType.Selector, Leaf(BehaviorNodeType.FindEnemy),
-                Leaf(BehaviorNodeType.FindEnemy), Leaf(BehaviorNodeType.Chase))));
+            var node = builder.Build(Node(Composite(BehaviorNodeType.Selector, Leaf(BehaviorNodeType.AttackMainTarget),
+                Leaf(BehaviorNodeType.AttackMainTarget), Leaf(BehaviorNodeType.Chase))));
 
             Assert.AreSame(EmptyNode.Failure, node);
-            Assert.AreEqual(2, builder.Stubs[BehaviorNodeType.FindEnemy]);
+            Assert.AreEqual(2, builder.Stubs[BehaviorNodeType.AttackMainTarget]);
             Assert.AreEqual(1, builder.Stubs[BehaviorNodeType.Chase]);
         }
     }

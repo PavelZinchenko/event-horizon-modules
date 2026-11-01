@@ -60,16 +60,7 @@ namespace CombatSimulation.Ai
             return false;
         }
 
-        // Legacy CalculateAttackRange: the longest range among weapons with a capability.
-        public bool Create(BehaviorNodeRequirement_HasLongRangeWeapon content)
-        {
-            var max = 0f;
-            foreach (var weapon in _profile.Weapons)
-                if (weapon.Capability != AiWeaponCapability.None && weapon.Range > max)
-                    max = weapon.Range;
-
-            return max >= content.Range;
-        }
+        public bool Create(BehaviorNodeRequirement_HasLongRangeWeapon content) => _profile.CapableAttackRange >= content.Range;
 
         public bool Create(BehaviorNodeRequirement_HasEngine content) => _profile.HasEngine;
         public bool Create(BehaviorNodeRequirement_HasAnyWeapon content) => _profile.Weapons.Count > 0;

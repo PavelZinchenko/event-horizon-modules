@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CombatSimulation.Core;
+using CombatSimulation.Physics;
 using CombatSimulation.Runtime;
 using GameDatabase.DataModel;
 using GameDatabase.Enums;
@@ -42,6 +43,17 @@ namespace CombatSimulation.Ai.Tests
         // Every fixture ship shares one definition, so every ship in a fixture battle is an armed ship.
         public static AiShipProfile Profiles(ShipDefinition definition) => ArmedShip;
 
+        // The arena of BattleSetup's default size.
+        public static readonly Torus Arena = new Torus(200f, 200f);
+
+        // Legacy projectile prefabs have a collider of radius 0.25 at body size 1.
+        public static float BulletScale(BulletDefinition definition) => 4f * definition.Radius;
+
+        public static AiBattle BattleData(Func<ShipDefinition, AiShipProfile> profiles = null) =>
+            new AiBattle(Arena, profiles ?? Profiles, BulletScale);
+
+        public static BehaviorTreeFactory Factory(ulong matchSeed = 7) => new BehaviorTreeFactory(matchSeed, Arena, Profiles, BulletScale);
+
         // Slot 1 on side 0 and slot 101 on side 1 (2 ships per side with extraSlots), deployed at the first tick.
         public static BattleRunner Battle(IPilotProvider pilots, ulong matchSeed = 7, bool extraSlots = false)
         {
@@ -70,7 +82,7 @@ namespace CombatSimulation.Ai.Tests
             runner = Battle(new NoPilots());
             runner.Step();
             var context = new AiContext(profile ?? ArmedShip, settings ?? AiSettings.Default, deltaTime,
-                Utilites.RandomState.FromSeed(1), Profiles);
+                Utilites.RandomState.FromSeed(1), BattleData());
             context.Update(runner.Snapshot, runner.Snapshot.Ships[0]);
             return context;
         }

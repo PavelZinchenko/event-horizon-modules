@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CombatSimulation.Core;
+using CombatSimulation.Physics;
 using CombatSimulation.Runtime;
 using GameDatabase.DataModel;
 using GameDatabase.Enums;
@@ -42,21 +43,25 @@ namespace CombatSimulation.Ai
         private bool _lastResult;
     }
 
-    // Builds the tree pilots of one battle; they share its message hub (T5) and the side table of every ship, which
-    // profiles returns by ship definition (step 7b).
+    // Builds the tree pilots of one battle; they share its message hub (T5), the arena and the side tables: profiles
+    // returns the AI facts of every ship by its definition (step 7b), bulletScales the legacy body scale of every
+    // bullet definition (step 7c).
     public sealed class BehaviorTreeFactory
     {
-        public BehaviorTreeFactory(ulong matchSeed, Func<ShipDefinition, AiShipProfile> profiles)
+        public BehaviorTreeFactory(ulong matchSeed, Torus arena, Func<ShipDefinition, AiShipProfile> profiles,
+            Func<BulletDefinition, float> bulletScales)
         {
             _matchSeed = matchSeed;
-            _profiles = profiles ?? throw new ArgumentNullException(nameof(profiles));
+            _battle = new AiBattle(arena, profiles ?? throw new ArgumentNullException(nameof(profiles)),
+                bulletScales ?? throw new ArgumentNullException(nameof(bulletScales)));
         }
 
         // A null model gives a pilot whose root is Failure: the ship idles (T6).
         public BehaviorTreePilot Create(BehaviorTreeModel model, AiShipProfile profile, AiSettings settings,
             EntityId ship, PilotSchedule schedule)
         {
-            var context = new AiContext(profile, settings, schedule.Period * Battle.TickDuration, CreateRandom(ship), _profiles);
+            _battle.Register(ship);
+            var context = new AiContext(profile, settings, schedule.Period * Battle.TickDuration, CreateRandom(ship), _battle);
             var builder = new NodeBuilder(context, _messageHub);
             var root = builder.BuildTree(model);
             return new BehaviorTreePilot(root, context, builder.Stubs);
@@ -67,6 +72,7 @@ namespace CombatSimulation.Ai
         public static IReadOnlyDictionary<int, HashSet<BehaviorNodeType>> CountStubs(BehaviorTreeModel model,
             AiShipProfile profile, AiSettings settings)
         {
+            // The count builds a tree and never evaluates it, so the context needs no battle.
             var context = new AiContext(profile, settings, Battle.TickDuration, default, null);
             var builder = new NodeBuilder(context, new MessageHub(), foldStubs: false);
             builder.BuildTree(model);
@@ -78,7 +84,7 @@ namespace CombatSimulation.Ai
             new RandomState { Value = PcgRandomAlgorithm.InitializeState(_matchSeed ^ ship.Value) };
 
         private readonly ulong _matchSeed;
-        private readonly Func<ShipDefinition, AiShipProfile> _profiles;
+        private readonly AiBattle _battle;
         private readonly MessageHub _messageHub = new MessageHub();
     }
 

@@ -160,20 +160,38 @@ namespace CombatSimulation.Ai
 
         // Step 7 ports these. A condition before Stub is the legacy Create that gives Failure when the ship lacks the
         // weapon or device.
-        public INode Create(BehaviorTreeNode_HasEnoughEnergy content) => Stub(content);
-        public INode Create(BehaviorTreeNode_IsLowOnHp content) => Stub(content);
+        public INode Create(BehaviorTreeNode_HasEnoughEnergy content) => new HasEnoughEnergyNode(content.FailIfLess);
+        public INode Create(BehaviorTreeNode_IsLowOnHp content) => new IsLowOnHpNode(content.MinValue);
         public INode Create(BehaviorTreeNode_IsNotControledByPlayer content) => Stub(content);
-        public INode Create(BehaviorTreeNode_HasIncomingThreat content) => Stub(content);
-        public INode Create(BehaviorTreeNode_HasAdditionalTargets content) => Stub(content);
-        public INode Create(BehaviorTreeNode_IsFasterThanTarget content) => Stub(content);
+        public INode Create(BehaviorTreeNode_HasIncomingThreat content) => new HasIncomingThreatNode(content.TimeToCollision);
+        public INode Create(BehaviorTreeNode_HasAdditionalTargets content) => new HasAdditionalTargetsNode();
+        public INode Create(BehaviorTreeNode_IsFasterThanTarget content) => new IsFasterThanTargetNode(content.Multiplier);
         public INode Create(BehaviorTreeNode_MainTargetIsAlly content) => Stub(content);
-        public INode Create(BehaviorTreeNode_MainTargetIsEnemy content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MainTargetIsEnemy content) => new MainTargetIsEnemyNode();
         public INode Create(BehaviorTreeNode_MainTargetLowHp content) => Stub(content);
         public INode Create(BehaviorTreeNode_MainTargetWithinAttackRange content) => Stub(content);
         public INode Create(BehaviorTreeNode_HasMothership content) => Stub(content);
         public INode Create(BehaviorTreeNode_TargetDistance content) => Stub(content);
-        public INode Create(BehaviorTreeNode_HasLongerAttackRange content) => Stub(content);
-        public INode Create(BehaviorTreeNode_FindEnemy content) => Stub(content);
+        public INode Create(BehaviorTreeNode_HasLongerAttackRange content) => new HasLongerAttackRangeNode(content.Multiplier);
+        // Legacy NodeFactory: a drone with a range searches near its mothership; a defensive drone (InAttackRange) uses
+        // a quarter of the range.
+        public INode Create(BehaviorTreeNode_FindEnemy content)
+        {
+            var isDrone = _profile.IsDrone && _settings.LimitedRange > 0;
+            var isDefensiveDrone = isDrone && content.InAttackRange;
+
+            if (content.InAttackRange && !isDrone)
+                return new FindEnemyInAttackRangeNode(content.MinCooldown, content.MaxCooldown, content.IgnoreDrones);
+
+            if (_settings.LimitedRange > 0)
+            {
+                var range = isDefensiveDrone ? _settings.LimitedRange / 4 : _settings.LimitedRange;
+                return new FindEnemyNearMothershipNode(content.MinCooldown, content.MaxCooldown, range, content.IgnoreDrones);
+            }
+
+            return new FindNearestEnemyNode(content.MinCooldown, content.MaxCooldown, content.IgnoreDrones);
+        }
+
         public INode Create(BehaviorTreeNode_MoveToAttackRange content) => Stub(content);
         public INode Create(BehaviorTreeNode_AttackMainTarget content) => Stub(content);
         public INode Create(BehaviorTreeNode_SelectWeapon content) =>
@@ -184,8 +202,8 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_Vanish content) => Stub(content);
         public INode Create(BehaviorTreeNode_MaintainAttackRange content) => Stub(content);
         public INode Create(BehaviorTreeNode_LookAtTarget content) => Stub(content);
-        public INode Create(BehaviorTreeNode_LookForAdditionalTargets content) => Stub(content);
-        public INode Create(BehaviorTreeNode_LookForThreats content) => Stub(content);
+        public INode Create(BehaviorTreeNode_LookForAdditionalTargets content) => new LookForAdditionalTargetsNode(content.Cooldown);
+        public INode Create(BehaviorTreeNode_LookForThreats content) => new LookForThreatsNode(content.Cooldown);
         public INode Create(BehaviorTreeNode_MatchVelocityWithTarget content) => Stub(content);
         public INode Create(BehaviorTreeNode_ActivateDevice content) =>
             HasDevice(content.DeviceClass) ? Stub(content) : EmptyNode.Failure;
@@ -213,14 +231,17 @@ namespace CombatSimulation.Ai
             HasWeapon(weapon => weapon.BulletBehavior == AiBulletBehavior.Harpoon) ? Stub(content) : EmptyNode.Failure;
         public INode Create(BehaviorTreeNode_FindDamagedAlly content) => Stub(content);
         public INode Create(BehaviorTreeNode_EnginePropulsionForce content) => Stub(content);
-        public INode Create(BehaviorTreeNode_MotherShipRetreated content) => Stub(content);
-        public INode Create(BehaviorTreeNode_MotherShipDestroyed content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MotherShipRetreated content) => new MothershipRetreatedNode();
+        public INode Create(BehaviorTreeNode_MotherShipDestroyed content) => new MothershipDestroyedNode();
         public INode Create(BehaviorTreeNode_FlyAroundMothership content) => Stub(content);
         public INode Create(BehaviorTreeNode_GoBerserk content) => Stub(content);
-        public INode Create(BehaviorTreeNode_TargetMothership content) => Stub(content);
+        public INode Create(BehaviorTreeNode_TargetMothership content) => new TargetMothershipNode();
         public INode Create(BehaviorTreeNode_MothershipLowHp content) => Stub(content);
-        public INode Create(BehaviorTreeNode_MothershipDistanceExceeded content) =>
-            (content.MaxDistance > 0 ? content.MaxDistance : _settings.LimitedRange) > 0 ? Stub(content) : EmptyNode.Failure;
+        public INode Create(BehaviorTreeNode_MothershipDistanceExceeded content)
+        {
+            var maxRange = content.MaxDistance > 0 ? content.MaxDistance : _settings.LimitedRange;
+            return maxRange > 0 ? new MothershipDistanceExceededNode(maxRange) : EmptyNode.Failure;
+        }
         public INode Create(BehaviorTreeNode_MakeTargetMothership content) => Stub(content);
         public INode Create(BehaviorTreeNode_MothershipLowEnergy content) => Stub(content);
         public INode Create(BehaviorTreeNode_MothershipLowShield content) => Stub(content);
