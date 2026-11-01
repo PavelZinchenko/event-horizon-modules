@@ -34,7 +34,7 @@ namespace CombatSimulation.Core
                 var translation = range * direction;
                 beam.BeamEndPoint = world.Torus.Wrap(beam.BeamOrigin + translation);
                 beam.TargetId = default;
-                var count = world.RayCast(beam.BeamOrigin, translation, CollisionFilters.Energy(beam.Side),
+                var count = world.RayCast(beam.BeamOrigin, translation, CollisionFilters.Energy(beam.Allegiance),
                     ship.Body, true, _hits, out beam.RayOverflow);
 
                 for (var h = 0; h < count; ++h)

@@ -114,7 +114,7 @@ namespace CombatSimulation.Ai
             deltaAngle = float.MaxValue;
             timeToHit = float.MaxValue;
             if (!context.TryGetShip(enemyId, out var enemy)) return Status.NoTarget;
-            if (enemy.Side != context.Ship.Side && AimAndAttack.IsHidden(context, enemy)) return Status.NoTarget;
+            if (context.IsEnemy(enemy) && AimAndAttack.IsHidden(context, enemy)) return Status.NoTarget;
 
             var controls = context.Controls;
             if (controls.MovementLocked) return Status.Chasing;

@@ -372,7 +372,7 @@ namespace CombatSimulation.Ai.Tests
             context.Update(runner.Snapshot, runner.Snapshot.Ships[index]);
         }
 
-        private static void Think(BattleRunner runner, AiContext context, EntityId ship)
+        internal static void Think(BattleRunner runner, AiContext context, EntityId ship)
         {
             runner.Step();
             Assert.IsTrue(runner.Snapshot.TryGetShip(ship, out var state), "the drone is still in the battle");
@@ -396,7 +396,7 @@ namespace CombatSimulation.Ai.Tests
             new ResourceDefinition(0f), new ResourceDefinition(0f));
 
         // Slot 1 is a carrier that holds its bay key, so it launches one drone; slot 101 is an enemy and slot 2 a reserve.
-        private static BattleRunner CarrierBattle(out EntityId carrier, out EntityId drone, ShipDefinition carrierShip = null)
+        internal static BattleRunner CarrierBattle(out EntityId carrier, out EntityId drone, ShipDefinition carrierShip = null)
         {
             var roster = new List<RosterSlotSetup>
             {
@@ -418,7 +418,7 @@ namespace CombatSimulation.Ai.Tests
             return runner;
         }
 
-        private static AiContext DroneContext(BattleRunner runner, EntityId drone)
+        internal static AiContext DroneContext(BattleRunner runner, EntityId drone)
         {
             var context = new AiContext(Drone, AiSettings.ForDrone(30f), 0.02f, default,
                 BattleData(definition => definition == DroneShip ? Drone : ArmedShip));

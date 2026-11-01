@@ -3,9 +3,9 @@ using CombatSimulation.Core;
 
 namespace CombatSimulation.Ai
 {
-    // One hub per battle (T5). A sender reaches every listener of the message that is still in the snapshot, on the
-    // sender's side and not the sender. Listeners subscribe at their first evaluation, so delivery follows the pilot
-    // registration order.
+    // One hub per battle (T5). A sender reaches every listener of the message that is still in the snapshot, not
+    // hostile to the sender (legacy IsAlly on the current allegiances, D13) and not the sender. Listeners subscribe at
+    // their first evaluation, so delivery follows the pilot registration order.
     public sealed class MessageHub
     {
         public int GetMessageId(string name) => _messageIds.GetId(name);
@@ -30,7 +30,7 @@ namespace CombatSimulation.Ai
             while (i < listeners.Count)
             {
                 var listener = listeners[i];
-                if (!listener.IsAlive(snapshot))
+                if (!listener.TryGetShip(snapshot, out var ship))
                 {
                     // Legacy MessageHub.RemoveListener: the last listener takes the free place.
                     var last = listeners.Count - 1;
@@ -39,7 +39,7 @@ namespace CombatSimulation.Ai
                     continue;
                 }
 
-                if (listener.IsSuitableSender(sender))
+                if (sender.Id != ship.Id && !Allegiances.IsHostile(sender.Allegiance, ship.Allegiance))
                 {
                     listener.OnMessageReceived(sender.Id);
                     result = true;
@@ -79,9 +79,7 @@ namespace CombatSimulation.Ai
             _id = hub.GetMessageId(message);
         }
 
-        public bool IsAlive(BattleSnapshot snapshot) => snapshot.TryGetShip(_ship, out _);
-
-        public bool IsSuitableSender(in ShipState sender) => sender.Id != _ship && sender.Side == _side;
+        public bool TryGetShip(BattleSnapshot snapshot, out ShipState ship) => snapshot.TryGetShip(_ship, out ship);
 
         public void OnMessageReceived(EntityId sender) => _sender = sender;
 
@@ -90,7 +88,6 @@ namespace CombatSimulation.Ai
             if (_ship.IsNull)
             {
                 _ship = context.Ship.Id;
-                _side = context.Ship.Side;
                 _hub.Subscribe(_id, this);
             }
 
@@ -105,7 +102,6 @@ namespace CombatSimulation.Ai
         private readonly MessageHub _hub;
         private readonly int _id;
         private EntityId _ship;
-        private int _side;
         private EntityId _sender;
     }
 }

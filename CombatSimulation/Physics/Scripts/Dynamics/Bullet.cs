@@ -182,6 +182,13 @@ namespace CombatSimulation.Physics
         // An attached bullet takes the velocity of its parent's point at each step; this value lasts until then.
         public void SetBulletVelocity(BulletId id, Vec2 velocity) => _bullets[ResolveBullet(id)].V = velocity;
 
+        // A change of allegiance or similar rules. Hits follow at the next step.
+        public void SetBulletFilter(BulletId id, in Filter filter)
+        {
+            _bullets[ResolveBullet(id)].Shape.Filter = filter;
+            _queryDirty = true;
+        }
+
         public void SetBulletPose(BulletId id, Vec2 position, float angle)
         {
             ref var bullet = ref _bullets[ResolveBullet(id)];

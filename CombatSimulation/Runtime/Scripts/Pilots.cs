@@ -12,18 +12,30 @@ namespace CombatSimulation.Runtime
         public readonly ulong Systems;
         public readonly bool SelfDestruct;
 
-        private PilotControls(bool hasCourse, float course, float throttle, ulong systems, bool selfDestruct)
+        // One-shot ship commands (phase 4, step 7e). The runner submits them for the pilot's own ship; their effects
+        // reach a peer as owner operations, never through the input stream.
+        public readonly bool Vanish;
+        public readonly bool ChangesAllegiance;
+        public readonly Allegiance Allegiance;
+
+        private PilotControls(bool hasCourse, float course, float throttle, ulong systems, bool selfDestruct, bool vanish,
+            bool changesAllegiance, Allegiance allegiance)
         {
             HasCourse = hasCourse;
             Course = course;
             Throttle = throttle;
             Systems = systems;
             SelfDestruct = selfDestruct;
+            Vanish = vanish;
+            ChangesAllegiance = changesAllegiance;
+            Allegiance = allegiance;
         }
 
-        // A null course means none.
-        public static PilotControls Create(float? course, float throttle, ulong systems, bool selfDestruct = false) =>
-            new PilotControls(course.HasValue, course ?? 0f, throttle, systems, selfDestruct);
+        // A null course means none; a null allegiance keeps the current one.
+        public static PilotControls Create(float? course, float throttle, ulong systems, bool selfDestruct = false,
+            bool vanish = false, Allegiance? allegiance = null) =>
+            new PilotControls(course.HasValue, course ?? 0f, throttle, systems, selfDestruct, vanish, allegiance.HasValue,
+                allegiance ?? default);
     }
 
     // Reads a snapshot and decides the controls of one ship. Scripted pilots, behavior trees and the

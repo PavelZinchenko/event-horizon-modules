@@ -239,7 +239,7 @@ namespace CombatSimulation.Core.Tests
             var ship = driver.Ship(101);
             // Separate collision unit on the same body, as a shield. The hull was defined first.
             var shape = driver.Battle.World.AddCircle(ship.Body, new Circle(Vec2.Zero, 1f),
-                new ShapeDef { Filter = new Filter(CollisionFilters.ShipCategory(1) | (1UL << 16), 0) });
+                new ShapeDef { Filter = new Filter(CollisionFilters.ShipCategory(Allegiances.OfSide(1)) | (1UL << 16), 0) });
             ship.AddShape(shape);
             driver.Battle.Shapes.Register(shape, new ShapeEntry(ship.Handle, ship.Id, ShapeHitPriority.Shield, 1));
             Fire(driver);
@@ -447,6 +447,7 @@ namespace CombatSimulation.Core.Tests
             ref var bullet = ref bullets[index];
             bullet.Id = id;
             bullet.Side = side;
+            bullet.Allegiance = Allegiances.OfSide(side);
             bullet.Definition = definition;
             bullet.HitPoints = hitPoints;
             bullet.ExpiryTick = 10000;
@@ -454,7 +455,7 @@ namespace CombatSimulation.Core.Tests
             var body = driver.Battle.World.CreateBullet(new BulletDef
             {
                 Position = position,
-                Filter = CollisionFilters.Bullet(definition, side),
+                Filter = CollisionFilters.Bullet(definition, Allegiances.OfSide(side)),
                 PassThrough = true,
             }, new Circle(Vec2.Zero, definition.Radius));
             bullets.SetBody(index, body);

@@ -189,7 +189,29 @@ namespace CombatSimulation.Core
             return true;
         }
 
-        // Stage 1. Roster commands, self-destruct requests, then control frames; each group in command ID order.
+        public bool Submit(in ShipCommand command)
+        {
+            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
+            if (command.BattleId != BattleId) return Reject(command, "wrong battle");
+            if (command.TargetTick < Tick) return Reject(command, "past tick");
+            if (command.EntityId.IsNull) return Reject(command, "no entity");
+            if (command.Kind != ShipCommandKind.Vanish && command.Kind != ShipCommandKind.ChangeAllegiance)
+                return Reject(command, "unknown kind");
+            if (command.Kind == ShipCommandKind.ChangeAllegiance && !Allegiances.IsValid(command.Allegiance))
+                return Reject(command, "invalid allegiance");
+            if (!_pendingCommandIds.Add(command.CommandId)) return Reject(command, "duplicate command ID");
+
+            var index = 0;
+            while (index < _shipCommands.Count &&
+                (_shipCommands[index].TargetTick < command.TargetTick ||
+                 (_shipCommands[index].TargetTick == command.TargetTick && _shipCommands[index].CommandId < command.CommandId)))
+                ++index;
+            _shipCommands.Insert(index, command);
+            return true;
+        }
+
+        // Stage 1. Roster commands, self-destruct requests, ship commands, then control frames; each group in command
+        // ID order.
         private void ApplyCommands()
         {
             var count = 0;
@@ -213,6 +235,19 @@ namespace CombatSimulation.Core
                 else QueueDeath(ship.Id);
             }
             if (count > 0) _selfDestructs.RemoveRange(0, count);
+
+            count = 0;
+            while (count < _shipCommands.Count && _shipCommands[count].TargetTick == Tick)
+            {
+                var command = _shipCommands[count++];
+                _pendingCommandIds.Remove(command.CommandId);
+                var ship = FindShip(command.EntityId);
+                if (ship == null) Reject(command, "unknown entity");
+                else if (!Setup.IsLocalOwner(ship.Owner)) Reject(command, "remote owner");
+                else if (command.Kind == ShipCommandKind.Vanish) ship.PendingVanish = true;
+                else ChangeAllegiance(ship, command.Allegiance);
+            }
+            if (count > 0) _shipCommands.RemoveRange(0, count);
 
             for (var i = 0; i < ShipEntryCount; ++i)
                 GetShipEntry(i)?.BeginControlTick();
@@ -269,7 +304,7 @@ namespace CombatSimulation.Core
             {
                 var ship = GetShipEntry(i);
                 if (ship != null)
-                    _targets.Add(ship.Id, ship.Side, World.GetPosition(ship.Body), ship.Definition.HullRadius);
+                    _targets.Add(ship.Id, ship.Allegiance, World.GetPosition(ship.Body), ship.Definition.HullRadius);
             }
 
             for (var i = 0; i < ShipEntryCount; ++i)
@@ -332,7 +367,7 @@ namespace CombatSimulation.Core
 
             var body = World.CreateBody(new BodyDef { Mass = bay.Definition.Drone.Mass });
             ship.InitializeDrone(id, bay, body, Tick, Setup.DamageTypes.Count);
-            AddShipShapes(ship, CollisionFilters.Drone(ship.Side));
+            AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));
             var origin = World.GetPosition(parent.Body);
             var angle = World.GetAngle(parent.Body);
             World.SetPose(body, origin, angle);
@@ -399,13 +434,14 @@ namespace CombatSimulation.Core
 
                 // The core selects the first valid hit, so physics reports every target (contact ordering, rule 1).
                 PassThrough = true,
-                Filter = CollisionFilters.Bullet(definition, ship.Side),
+                Filter = CollisionFilters.Bullet(definition, ship.Allegiance),
             }, new Circle(Vec2.Zero, definition.Radius));
 
             ref var bullet = ref _bullets[index];
             bullet.Id = id;
             bullet.ParentId = ship.Id;
             bullet.Side = ship.Side;
+            bullet.Allegiance = ship.Allegiance;
             bullet.Owner = ship.Owner;
             bullet.DeviceIndex = deviceIndex;
             bullet.Definition = definition;
@@ -477,6 +513,7 @@ namespace CombatSimulation.Core
             beam.Id = id;
             beam.ParentId = ship.Id;
             beam.Side = ship.Side;
+            beam.Allegiance = ship.Allegiance;
             beam.Owner = ship.Owner;
             beam.DeviceIndex = device.Index;
             beam.BeamDefinition = device.Definition;
@@ -699,11 +736,12 @@ namespace CombatSimulation.Core
                     slot.Destroy();
                     AddTransition(slot, RosterStatus.Active, RosterTransitionReason.Killed, id);
                 }
-                else if (ship.RetreatCompletionTick == Tick)
+                // A vanished ship retreats at once (D12) and keeps its damage for a redeployment.
+                else if (ship.PendingVanish || ship.RetreatCompletionTick == Tick)
                 {
                     var armorDeficit = ship.Armor.Deficit;
                     var shieldDeficit = ship.Shield.Deficit;
-                    RemoveShip(ship, RemovalReason.Retreat);
+                    RemoveShip(ship, ship.PendingVanish ? RemovalReason.Vanish : RemovalReason.Retreat);
                     slot.CompleteRetreat(armorDeficit, shieldDeficit);
                     AddTransition(slot, RosterStatus.Active, RosterTransitionReason.Retreated, id);
                 }
@@ -735,8 +773,8 @@ namespace CombatSimulation.Core
             for (var i = 0; i < _drones.Count;)
             {
                 var drone = _drones[i];
-                if (!drone.PendingDeath || !Setup.IsLocalOwner(drone.Owner)) { ++i; continue; }
-                RemoveShip(drone, RemovalReason.Death);
+                if (!(drone.PendingDeath || drone.PendingVanish) || !Setup.IsLocalOwner(drone.Owner)) { ++i; continue; }
+                RemoveShip(drone, drone.PendingDeath ? RemovalReason.Death : RemovalReason.Vanish);
                 _drones.RemoveAt(i);
             }
 
@@ -857,7 +895,7 @@ namespace CombatSimulation.Core
             var body = World.CreateBody(new BodyDef { Mass = definition.Mass });
             ship.Initialize(id, slot, body, Tick, Setup.DamageTypes.Count);
 
-            AddShipShapes(ship, CollisionFilters.Ship(slot.Side));
+            AddShipShapes(ship, CollisionFilters.Ship(ship.Allegiance));
 
             PlaceSpawn(body, id, slot.Side);
             slot.Activate(ship, ++_deploymentOrder);
@@ -960,6 +998,34 @@ namespace CombatSimulation.Core
             _ships.Release(ship);
         }
 
+        // D13: the ship, its hull filters and its live bullets and beams take the new allegiance. Legacy bullets read
+        // their owner's side, so they change with it. Phase 5 friendly fire must keep its own allegiance here.
+        private void ChangeAllegiance(ShipEntity ship, Allegiance allegiance)
+        {
+            if (ship.Allegiance == allegiance) return;
+            SetAllegiance(ship, allegiance);
+            if (ShouldCapture(ship.Owner))
+                _outgoingOperations.Add(OwnerOperation.AllegianceChanged(BattleId, ship.Owner,
+                    NextOperationSequence(ship.Owner), Tick, ship.Id, allegiance));
+        }
+
+        private void SetAllegiance(ShipEntity ship, Allegiance allegiance)
+        {
+            ship.Allegiance = allegiance;
+            var filter = ship.IsDrone ? CollisionFilters.Drone(allegiance) : CollisionFilters.Ship(allegiance);
+            for (var i = 0; i < ship.ShapeCount; ++i)
+                World.SetShapeFilter(ship.GetShape(i), filter);
+
+            for (var i = 0; i < _bullets.Capacity; ++i)
+            {
+                if (!_bullets.IsAlive(i)) continue;
+                ref var bullet = ref _bullets[i];
+                if (bullet.ParentId != ship.Id) continue;
+                bullet.Allegiance = allegiance;
+                if (!bullet.IsBeam) World.SetBulletFilter(bullet.Body, CollisionFilters.Bullet(bullet.Definition, allegiance));
+            }
+        }
+
         private void AddTransition(RosterSlot slot, RosterStatus previousStatus, RosterTransitionReason reason, EntityId id)
         {
             _events.Add(BattleEvent.Transition(BattleId, Tick, _events.Count, slot, previousStatus, reason, id,
@@ -1020,6 +1086,13 @@ namespace CombatSimulation.Core
             return false;
         }
 
+        private bool Reject(in ShipCommand command, string reason)
+        {
+            ++RejectedCommandCount;
+            Trace.LogWarning($"Battle {BattleId}, tick {Tick}: rejected {command}: {reason}.");
+            return false;
+        }
+
         private bool Reject(in SelfDestructCommand command, string reason)
         {
             ++RejectedCommandCount;
@@ -1034,6 +1107,7 @@ namespace CombatSimulation.Core
         private readonly ShipStore _ships = new ShipStore();
         private readonly List<ShipEntity> _drones = new List<ShipEntity>();
         private readonly List<SelfDestructCommand> _selfDestructs = new List<SelfDestructCommand>();
+        private readonly List<ShipCommand> _shipCommands = new List<ShipCommand>();
         private readonly BulletStore _bullets = new BulletStore();
         private readonly BeamQueries _beams = new BeamQueries();
         private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();

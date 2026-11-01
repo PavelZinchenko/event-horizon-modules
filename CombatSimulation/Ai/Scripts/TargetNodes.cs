@@ -57,7 +57,7 @@ namespace CombatSimulation.Ai
         private bool IsValidEnemy(EntityId id, AiContext context)
         {
             if (!context.TryGetShip(id, out var enemy)) return false;
-            if (enemy.Side == context.Ship.Side) return false;
+            if (!context.IsEnemy(enemy)) return false;
             if (IgnoreDrones && enemy.IsDrone) return false;
             return IsInRange(enemy, context);
         }
@@ -190,7 +190,7 @@ namespace CombatSimulation.Ai
     internal sealed class MainTargetIsEnemyNode : INode
     {
         public NodeState Evaluate(AiContext context) =>
-            context.TryGetShip(context.TargetShip, out var target) && target.Side != context.Ship.Side
+            context.TryGetShip(context.TargetShip, out var target) && context.IsEnemy(target)
                 ? NodeState.Success
                 : NodeState.Failure;
     }
@@ -364,7 +364,7 @@ namespace CombatSimulation.Ai
             var enemyStats = TargetStats.None;
             foreach (var ship in context.Snapshot.Ships)
             {
-                if (ship.Side == self.Side) continue;
+                if (!context.IsEnemy(ship)) continue;
                 var profile = context.ProfileOf(ship);
                 if (profile.TargetPriority == AiTargetPriority.None) continue;
                 if (options.IgnoreDrones && ship.IsDrone) continue;
@@ -452,7 +452,7 @@ namespace CombatSimulation.Ai
             foreach (var ship in context.Snapshot.Ships)
             {
                 if (ship.Id == self.Id || ship.Id == context.TargetShip) continue;
-                if (ship.Side == self.Side) continue;
+                if (!context.IsEnemy(ship)) continue;
 
                 enemies.Add(ship.Id);
                 distances.Add(context.Delta(self.Position, ship.Position).LengthSquared);
@@ -488,7 +488,7 @@ namespace CombatSimulation.Ai
 
             foreach (var bullet in context.Snapshot.Bullets)
             {
-                if (bullet.IsBeam || bullet.Side == self.Side) continue;
+                if (bullet.IsBeam || !context.IsEnemy(bullet)) continue;
 
                 var itemPosition = context.Delta(self.Position, bullet.Position);
                 if (itemPosition.LengthSquared >= ThreatSearchRadius * ThreatSearchRadius) continue;

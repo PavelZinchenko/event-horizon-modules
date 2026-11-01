@@ -30,6 +30,9 @@ namespace CombatSimulation.Core
 
         // A remote bullet that its owner's fire confirmations do not list. Never sent by an owner.
         Unconfirmed,
+
+        // A ship left without a death (vanish command, D12). The roster records a retreat.
+        Vanish,
     }
 
     // The same set as the application's roster change reasons (phase 3a).

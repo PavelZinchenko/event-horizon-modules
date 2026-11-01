@@ -49,7 +49,7 @@ namespace CombatSimulation.Core
         }
     }
 
-    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn, Retreat, MissileTarget }
+    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance }
 
     // One logical commit. A roster operation includes its entity spawn/removal, never a second message.
     // Sequence starts at 1 per owner and covers this batch only (hits have their own sequence).
@@ -79,12 +79,16 @@ namespace CombatSimulation.Core
         // Missile target changes only (network plan, P3): the new homing target, or null.
         public readonly EntityId TargetId;
 
+        // Allegiance changes only (D13).
+        public readonly Allegiance Allegiance;
+
         private OwnerOperation(BattleId battleId, int owner, ulong sequence, long tick, OwnerOperationKind kind,
             EntityId entityId, RosterRecord roster = default, DroneBayKey? bayKey = null, EntityId parentId = default,
             SpawnPose pose = default, RemovalReason removalReason = RemovalReason.None,
             int deviceIndex = 0, int barrelIndex = 0, uint spawnSequence = 0, bool hasLaunchPose = false,
-            EntityId targetId = default)
+            EntityId targetId = default, Allegiance allegiance = default)
         {
+            Allegiance = allegiance;
             HasLaunchPose = hasLaunchPose;
             TargetId = targetId;
             DeviceIndex = deviceIndex;
@@ -143,6 +147,11 @@ namespace CombatSimulation.Core
         public static OwnerOperation MissileTargetChanged(BattleId battleId, int owner, ulong sequence, long tick,
             EntityId entityId, EntityId targetId) =>
             new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.MissileTarget, entityId, targetId: targetId);
+
+        // A ship took another allegiance at stage 1 of tick (D13); its bullets and beams take it too.
+        public static OwnerOperation AllegianceChanged(BattleId battleId, int owner, ulong sequence, long tick,
+            EntityId entityId, Allegiance allegiance) =>
+            new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.Allegiance, entityId, allegiance: allegiance);
     }
 
     // "All my operations through tick Tick are sent; the last one has sequence OperationSequence" (0: none yet).

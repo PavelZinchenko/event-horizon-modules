@@ -312,7 +312,7 @@ namespace CombatSimulation.Ai
         {
             target = Vec2.Zero;
             var ship = context.Ship;
-            if (enemy.Side != ship.Side && IsHidden(context, enemy))
+            if (context.IsEnemy(enemy) && IsHidden(context, enemy))
                 return false;
 
             var enemyPosition = mount.Position + context.Delta(mount.Position, enemy.Position);

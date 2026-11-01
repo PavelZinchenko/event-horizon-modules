@@ -6,6 +6,7 @@
         "CombatSimulation.Runtime",
         "CombatSimulation.Physics",
         "Database",
+        "CommonComponents",
         "Utilites",
         "Diagnostics"
     ],

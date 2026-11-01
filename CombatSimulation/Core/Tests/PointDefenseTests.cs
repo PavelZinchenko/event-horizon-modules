@@ -534,6 +534,7 @@ namespace CombatSimulation.Core.Tests
             ref var bullet = ref bullets[index];
             bullet.Id = new EntityId(id);
             bullet.Side = side;
+            bullet.Allegiance = Allegiances.OfSide(side);
             bullet.Definition = definition;
             bullet.HitPoints = definition.HitPoints;
             bullet.ExpiryTick = 100000;
@@ -543,7 +544,7 @@ namespace CombatSimulation.Core.Tests
             {
                 Position = position,
                 LinearVelocity = velocity,
-                Filter = CollisionFilters.Bullet(definition, side),
+                Filter = CollisionFilters.Bullet(definition, Allegiances.OfSide(side)),
                 PassThrough = true,
             }, new Circle(Vec2.Zero, definition.Radius));
             bullets.SetBody(index, body);

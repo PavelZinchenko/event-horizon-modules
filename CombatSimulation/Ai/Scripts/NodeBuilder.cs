@@ -163,7 +163,7 @@ namespace CombatSimulation.Ai
         // weapon or device.
         public INode Create(BehaviorTreeNode_HasEnoughEnergy content) => new HasEnoughEnergyNode(content.FailIfLess);
         public INode Create(BehaviorTreeNode_IsLowOnHp content) => new IsLowOnHpNode(content.MinValue);
-        public INode Create(BehaviorTreeNode_IsNotControledByPlayer content) => Stub(content);
+        public INode Create(BehaviorTreeNode_IsNotControledByPlayer content) => new IsNotPlayerControlledNode(content.Cooldown);
         public INode Create(BehaviorTreeNode_HasIncomingThreat content) => new HasIncomingThreatNode(content.TimeToCollision);
         public INode Create(BehaviorTreeNode_HasAdditionalTargets content) => new HasAdditionalTargetsNode();
         public INode Create(BehaviorTreeNode_IsFasterThanTarget content) => new IsFasterThanTargetNode(content.Multiplier);
@@ -224,7 +224,7 @@ namespace CombatSimulation.Ai
 
         public INode Create(BehaviorTreeNode_Ram content) => new RamNode();
         public INode Create(BehaviorTreeNode_DetonateShip content) => Stub(content);
-        public INode Create(BehaviorTreeNode_Vanish content) => Stub(content);
+        public INode Create(BehaviorTreeNode_Vanish content) => new VanishNode();
         public INode Create(BehaviorTreeNode_MaintainAttackRange content) => Stub(content);
         public INode Create(BehaviorTreeNode_LookAtTarget content) => new LookAtTargetNode();
         public INode Create(BehaviorTreeNode_LookForAdditionalTargets content) => new LookForAdditionalTargetsNode(content.Cooldown);
@@ -281,7 +281,7 @@ namespace CombatSimulation.Ai
         // Legacy draws the distance once per ship at build time; the pilot stream draws it here (7b).
         public INode Create(BehaviorTreeNode_FlyAroundMothership content) =>
             new FlyAroundMothershipNode(_context.NextRange(content.MinDistance, content.MaxDistance));
-        public INode Create(BehaviorTreeNode_GoBerserk content) => Stub(content);
+        public INode Create(BehaviorTreeNode_GoBerserk content) => new GoBerserkNode();
         public INode Create(BehaviorTreeNode_TargetMothership content) => new TargetMothershipNode();
         public INode Create(BehaviorTreeNode_MothershipLowHp content) => Stub(content);
         public INode Create(BehaviorTreeNode_MothershipDistanceExceeded content)
@@ -292,7 +292,7 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_MakeTargetMothership content) => Stub(content);
         public INode Create(BehaviorTreeNode_MothershipLowEnergy content) => Stub(content);
         public INode Create(BehaviorTreeNode_MothershipLowShield content) => Stub(content);
-        public INode Create(BehaviorTreeNode_ShowMessage content) => Stub(content);
+        public INode Create(BehaviorTreeNode_ShowMessage content) => new ShowMessageNode(content.Text, content.Color);
 
         private INode Stub(BehaviorTreeNode content)
         {

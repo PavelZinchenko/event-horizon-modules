@@ -6,6 +6,7 @@
         "CombatSimulation.Physics",
         "CombatSimulation.Runtime",
         "Database",
+        "CommonComponents",
         "Utilites"
     ],
     "optionalUnityReferences": [

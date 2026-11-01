@@ -28,6 +28,8 @@ namespace CombatSimulation.Core
         public readonly EntityId MothershipId;
         public bool IsDrone => BayKey.HasValue;
         public readonly int Side;
+        // Hostility (D13). A side's ships start with Allegiances.OfSide; a drone can change it.
+        public readonly Allegiance Allegiance;
         public readonly int Owner;
         public readonly ShipDefinition Definition;
 
@@ -60,6 +62,7 @@ namespace CombatSimulation.Core
             BayKey = ship.Bay?.Key;
             MothershipId = ship.MothershipId;
             Side = ship.Side;
+            Allegiance = ship.Allegiance;
             Owner = ship.Owner;
             Definition = ship.Definition;
             Position = world.GetPosition(ship.Body);
@@ -86,6 +89,7 @@ namespace CombatSimulation.Core
         public readonly EntityId Id;
         public readonly EntityId ParentId;
         public readonly int Side;
+        public readonly Allegiance Allegiance;
         public readonly int Owner;
         // Exactly one definition is set: Definition for a projectile, BeamDefinition for a beam.
         public readonly BulletDefinition Definition;
@@ -109,6 +113,7 @@ namespace CombatSimulation.Core
             Id = bullet.Id;
             ParentId = bullet.ParentId;
             Side = bullet.Side;
+            Allegiance = bullet.Allegiance;
             Owner = bullet.Owner;
             Definition = bullet.Definition;
             BeamDefinition = bullet.BeamDefinition;

@@ -113,6 +113,9 @@ namespace CombatSimulation.Core
         public EntityId MothershipId => Bay?.Slot.ActiveShip?.Id ?? default;
         public long LastDroneLaunchTick { get; set; }
         public int Side { get; private set; }
+
+        // Hostility and collision (D13); the side stays the team.
+        public Allegiance Allegiance { get; set; }
         public int Owner { get; private set; }
         public BodyId Body { get; private set; }
         public ShipDefinition Definition { get; private set; }
@@ -141,6 +144,9 @@ namespace CombatSimulation.Core
 
         // Set at stage 11; stage 12 applies it.
         public bool PendingDeath { get; set; }
+
+        // Set at stage 1 by a vanish command (D12); stage 12 removes the ship without a death.
+        public bool PendingVanish { get; set; }
 
         // Linear velocity at the end of stage 4, before the physics step (ramming speed).
         public Vec2 PreStepVelocity { get; set; }
@@ -197,12 +203,14 @@ namespace CombatSimulation.Core
             Slot = slot;
             Bay = bay;
             Side = side;
+            Allegiance = Allegiances.OfSide(side);
             Owner = owner;
             Body = body;
             Definition = definition;
             LastDroneLaunchTick = tick - 1;
             RetreatCompletionTick = NoRetreat;
             PendingDeath = false;
+            PendingVanish = false;
             PreStepVelocity = Vec2.Zero;
             if (_pendingDamage.Length != damageTypes) _pendingDamage = new float[damageTypes];
             else System.Array.Clear(_pendingDamage, 0, damageTypes);

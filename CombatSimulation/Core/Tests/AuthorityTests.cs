@@ -541,6 +541,7 @@ namespace CombatSimulation.Core.Tests
             ref var bullet = ref bullets[index];
             bullet.Id = new EntityId((ulong)(10000 + index));
             bullet.Side = side;
+            bullet.Allegiance = Allegiances.OfSide(side);
             bullet.Owner = side == 0 ? 10 : 20;
             bullet.DeviceIndex = 3;
             bullet.Definition = definition;
@@ -550,7 +551,7 @@ namespace CombatSimulation.Core.Tests
             var body = d.Battle.World.CreateBullet(new BulletDef
             {
                 Position = position, LinearVelocity = velocity, PassThrough = true,
-                Filter = CollisionFilters.Bullet(definition, side),
+                Filter = CollisionFilters.Bullet(definition, Allegiances.OfSide(side)),
             }, new Circle(Vec2.Zero, definition.Radius));
             bullets.SetBody(index, body);
             return bullet.Id;
@@ -565,7 +566,7 @@ namespace CombatSimulation.Core.Tests
             ship.InitializeDrone(id, bay, body, battle.Tick, battle.Setup.DamageTypes.Count);
             Assert.IsTrue(battle.TryRegister(id, ship.Handle));
             var shapeDef = ShapeDef.Default;
-            shapeDef.Filter = CollisionFilters.Drone(ship.Side);
+            shapeDef.Filter = CollisionFilters.Drone(ship.Allegiance);
             var shape = battle.World.AddCircle(body, new Circle(Vec2.Zero, ship.Definition.HullRadius), shapeDef);
             ship.AddShape(shape);
             battle.Shapes.Register(shape, new ShapeEntry(ship.Handle, id, ShapeHitPriority.Hull, 0));

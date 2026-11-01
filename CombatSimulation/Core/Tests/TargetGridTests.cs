@@ -16,9 +16,9 @@ namespace CombatSimulation.Core.Tests
         public void TheNearestEnemyInTheConeWinsOverANearerOneOutside()
         {
             var grid = Grid();
-            grid.Add(new EntityId(1), 1, Origin + new Vec2(5f, 5f), 1f);
-            grid.Add(new EntityId(2), 1, Origin + new Vec2(10f, 1f), 1f);
-            grid.Add(new EntityId(3), 1, Origin + new Vec2(20f, 0f), 1f);
+            grid.Add(new EntityId(1), Allegiances.OfSide(1), Origin + new Vec2(5f, 5f), 1f);
+            grid.Add(new EntityId(2), Allegiances.OfSide(1), Origin + new Vec2(10f, 1f), 1f);
+            grid.Add(new EntityId(3), Allegiances.OfSide(1), Origin + new Vec2(20f, 0f), 1f);
 
             Assert.AreEqual(new EntityId(2), Find(grid));
         }
@@ -27,9 +27,9 @@ namespace CombatSimulation.Core.Tests
         public void WithoutAnEnemyInTheConeTheSmallestDeviationWins()
         {
             var grid = Grid();
-            grid.Add(new EntityId(1), 1, Origin + new Vec2(0f, 5f), 1f);
-            grid.Add(new EntityId(2), 1, Origin + new Vec2(3f, 4f), 1f);
-            grid.Add(new EntityId(3), 1, Origin + new Vec2(-2f, 0f), 1f);
+            grid.Add(new EntityId(1), Allegiances.OfSide(1), Origin + new Vec2(0f, 5f), 1f);
+            grid.Add(new EntityId(2), Allegiances.OfSide(1), Origin + new Vec2(3f, 4f), 1f);
+            grid.Add(new EntityId(3), Allegiances.OfSide(1), Origin + new Vec2(-2f, 0f), 1f);
 
             Assert.AreEqual(new EntityId(2), Find(grid));
         }
@@ -39,10 +39,10 @@ namespace CombatSimulation.Core.Tests
         {
             // Range is the centre distance minus both radii: 40 - 0.2 - 1 = 38.8 is in, 41 - 1.2 = 39.8 is out.
             var grid = Grid();
-            grid.Add(new EntityId(1), 1, Origin + new Vec2(41f, 0f), 1f);
+            grid.Add(new EntityId(1), Allegiances.OfSide(1), Origin + new Vec2(41f, 0f), 1f);
             Assert.IsTrue(Find(grid).IsNull);
 
-            grid.Add(new EntityId(2), 1, Origin + new Vec2(0f, -40f), 1f);
+            grid.Add(new EntityId(2), Allegiances.OfSide(1), Origin + new Vec2(0f, -40f), 1f);
             Assert.AreEqual(new EntityId(2), Find(grid));
         }
 
@@ -50,9 +50,9 @@ namespace CombatSimulation.Core.Tests
         public void ATargetAcrossTheWrapIsFound()
         {
             var grid = Grid();
-            grid.Add(new EntityId(1), 1, new Vec2(5f, 100f), 1f);
+            grid.Add(new EntityId(1), Allegiances.OfSide(1), new Vec2(5f, 100f), 1f);
 
-            Assert.IsTrue(grid.FindMissileTarget(new Vec2(195f, 100f), Ahead, 0, MaxRange, SelfRadius, out var target));
+            Assert.IsTrue(grid.FindMissileTarget(new Vec2(195f, 100f), Ahead, Allegiances.OfSide(0), MaxRange, SelfRadius, out var target));
             Assert.AreEqual(new EntityId(1), target);
         }
 
@@ -65,13 +65,13 @@ namespace CombatSimulation.Core.Tests
             var second = new EntityId(9);
             if (reverse)
             {
-                grid.Add(second, 1, Origin + new Vec2(10f, -1f), 1f);
-                grid.Add(first, 1, Origin + new Vec2(10f, 1f), 1f);
+                grid.Add(second, Allegiances.OfSide(1), Origin + new Vec2(10f, -1f), 1f);
+                grid.Add(first, Allegiances.OfSide(1), Origin + new Vec2(10f, 1f), 1f);
             }
             else
             {
-                grid.Add(first, 1, Origin + new Vec2(10f, 1f), 1f);
-                grid.Add(second, 1, Origin + new Vec2(10f, -1f), 1f);
+                grid.Add(first, Allegiances.OfSide(1), Origin + new Vec2(10f, 1f), 1f);
+                grid.Add(second, Allegiances.OfSide(1), Origin + new Vec2(10f, -1f), 1f);
             }
 
             Assert.AreEqual(first, Find(grid));
@@ -81,10 +81,10 @@ namespace CombatSimulation.Core.Tests
         public void AnAllyIsNeverATarget()
         {
             var grid = Grid();
-            grid.Add(new EntityId(1), 0, Origin + new Vec2(5f, 0f), 1f);
+            grid.Add(new EntityId(1), Allegiances.OfSide(0), Origin + new Vec2(5f, 0f), 1f);
             Assert.IsTrue(Find(grid).IsNull);
 
-            grid.Add(new EntityId(2), 1, Origin + new Vec2(20f, 0f), 1f);
+            grid.Add(new EntityId(2), Allegiances.OfSide(1), Origin + new Vec2(20f, 0f), 1f);
             Assert.AreEqual(new EntityId(2), Find(grid));
         }
 
@@ -92,7 +92,7 @@ namespace CombatSimulation.Core.Tests
         public void ClearEmptiesTheGrid()
         {
             var grid = Grid();
-            grid.Add(new EntityId(1), 1, Origin + new Vec2(5f, 0f), 1f);
+            grid.Add(new EntityId(1), Allegiances.OfSide(1), Origin + new Vec2(5f, 0f), 1f);
             grid.Clear();
 
             Assert.AreEqual(0, grid.Count);
@@ -103,7 +103,7 @@ namespace CombatSimulation.Core.Tests
 
         private static EntityId Find(TargetGrid grid)
         {
-            grid.FindMissileTarget(Origin, Ahead, 0, MaxRange, SelfRadius, out var target);
+            grid.FindMissileTarget(Origin, Ahead, Allegiances.OfSide(0), MaxRange, SelfRadius, out var target);
             return target;
         }
     }

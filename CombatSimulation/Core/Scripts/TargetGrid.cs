@@ -34,7 +34,7 @@ namespace CombatSimulation.Core
             _maxRadius = 0f;
         }
 
-        public void Add(EntityId id, int side, Vec2 position, float radius)
+        public void Add(EntityId id, Allegiance allegiance, Vec2 position, float radius)
         {
             if (_count == _entries.Length) Array.Resize(ref _entries, _entries.Length * 2);
 
@@ -46,7 +46,7 @@ namespace CombatSimulation.Core
                 _usedCells[_usedCellCount++] = cell;
             }
 
-            _entries[_count] = new Entry(id, side, position, radius, _cellHead[cell]);
+            _entries[_count] = new Entry(id, allegiance, position, radius, _cellHead[cell]);
             _cellHead[cell] = _count++;
             if (radius > _maxRadius) _maxRadius = radius;
         }
@@ -55,7 +55,7 @@ namespace CombatSimulation.Core
         // radii, at the nearest torus image. Within maxRange: the nearest enemy within the search cone of the heading;
         // without one, the enemy with the smallest deviation. Equal keys go to the lower EntityId, so the result does
         // not depend on the order of cells or entries. Beyond maxRange there is no target.
-        public bool FindMissileTarget(Vec2 position, Vec2 heading, int side, float maxRange, float selfRadius,
+        public bool FindMissileTarget(Vec2 position, Vec2 heading, Allegiance allegiance, float maxRange, float selfRadius,
             out EntityId target)
         {
             target = default;
@@ -76,7 +76,7 @@ namespace CombatSimulation.Core
             for (var e = _cellHead[CellIndex(x, y)]; e >= 0; e = _entries[e].Next)
             {
                 ref readonly var entry = ref _entries[e];
-                if (entry.Side == side) continue;
+                if (!Allegiances.IsHostile(entry.Allegiance, allegiance)) continue;
 
                 var delta = _torus.Delta(position, entry.Position);
                 var distance = delta.Length;
@@ -117,15 +117,15 @@ namespace CombatSimulation.Core
         private readonly struct Entry
         {
             public readonly EntityId Id;
-            public readonly int Side;
+            public readonly Allegiance Allegiance;
             public readonly Vec2 Position;
             public readonly float Radius;
             public readonly int Next;
 
-            public Entry(EntityId id, int side, Vec2 position, float radius, int next)
+            public Entry(EntityId id, Allegiance allegiance, Vec2 position, float radius, int next)
             {
                 Id = id;
-                Side = side;
+                Allegiance = allegiance;
                 Position = position;
                 Radius = radius;
                 Next = next;

@@ -13,6 +13,7 @@ namespace CombatSimulation.Core
         public EntityId Id;
         public EntityId ParentId;
         public int Side;
+        public Allegiance Allegiance;
         public int Owner;
         public int DeviceIndex;
         public BulletDefinition Definition;

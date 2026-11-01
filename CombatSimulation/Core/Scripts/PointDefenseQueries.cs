@@ -20,7 +20,7 @@ namespace CombatSimulation.Core
                         continue;
 
                     var center = battle.World.GetPosition(ship.Body);
-                    var filter = CollisionFilters.PointDefense(ship.Side);
+                    var filter = CollisionFilters.PointDefense(ship.Allegiance);
                     int count;
                     while (true)
                     {
@@ -38,7 +38,7 @@ namespace CombatSimulation.Core
                         {
                             if (!battle.Shapes.TryGet(target.Shape, out var shape)) continue;
                             var drone = battle.FindShip(shape.OwnerId);
-                            if (drone == null || !drone.IsDrone || drone.Side == ship.Side ||
+                            if (drone == null || !drone.IsDrone || !Allegiances.IsHostile(drone.Allegiance, ship.Allegiance) ||
                                 !_droneTargets.Add(drone.Id)) continue;
                             _candidates.Add(new ContactCandidate
                             {
@@ -60,7 +60,7 @@ namespace CombatSimulation.Core
                         }
                         if (!battle.Bullets.TryGetByBody(target.Bullet, out var index)) continue;
                         ref readonly var bullet = ref battle.Bullets[index];
-                        if (bullet.IsBeam || bullet.Side == ship.Side || bullet.PendingRemoval != RemovalReason.None) continue;
+                        if (bullet.IsBeam || !Allegiances.IsHostile(bullet.Allegiance, ship.Allegiance) || bullet.PendingRemoval != RemovalReason.None) continue;
                         _candidates.Add(new ContactCandidate
                         {
                             Time = 0f,

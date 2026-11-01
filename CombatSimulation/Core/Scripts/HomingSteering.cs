@@ -29,7 +29,7 @@ namespace CombatSimulation.Core
             var target = bullet.TargetId.IsNull ? null : battle.FindShip(bullet.TargetId);
             if (battle.Tick >= bullet.NextSearchTick || (target == null && !bullet.TargetId.IsNull))
             {
-                battle.Targets.FindMissileTarget(position, heading, bullet.Side,
+                battle.Targets.FindMissileTarget(position, heading, bullet.Allegiance,
                     definition.Range * BulletDefinition.SearchRangeFactor, definition.Radius, out var id);
                 if (id != bullet.TargetId) battle.CaptureMissileTarget(bullet, id);
                 bullet.TargetId = id;

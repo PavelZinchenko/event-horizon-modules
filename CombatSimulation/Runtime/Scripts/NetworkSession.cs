@@ -74,6 +74,8 @@ namespace CombatSimulation.Runtime
         public bool Deploy(RosterId roster, long tick) => _runner.Deploy(roster, tick);
         public bool Retreat(EntityId entity, long tick) => _runner.Retreat(entity, tick);
         public bool SelfDestruct(EntityId entity, long tick) => _runner.SelfDestruct(entity, tick);
+        public bool Vanish(EntityId entity, long tick) => _runner.Vanish(entity, tick);
+        public bool ChangeAllegiance(EntityId entity, Allegiance allegiance, long tick) => _runner.ChangeAllegiance(entity, allegiance, tick);
         public bool Surrender(int side, long tick) => _runner.Surrender(side, tick);
         public bool KillAll(int requestingSide, long tick) => _runner.KillAll(requestingSide, tick);
 

@@ -103,7 +103,7 @@ namespace CombatSimulation.Core
             });
         }
 
-        // Both shapes belong to live enemy ships.
+        // Both shapes belong to live hostile ships.
         private static bool TryResolve(in ContactEvent contact, ShapeTable shapes, ShipStore ships,
             out ShipEntity a, out ShapeEntry entryA, out ShipEntity b, out ShapeEntry entryB)
         {
@@ -112,7 +112,7 @@ namespace CombatSimulation.Core
 
             a = ships.Get(entryA.Owner);
             b = ships.Get(entryB.Owner);
-            return a != null && b != null && a != b && a.Side != b.Side;
+            return a != null && b != null && a != b && Allegiances.IsHostile(a.Allegiance, b.Allegiance);
         }
 
         // Keeps the target shape with the smallest (priority, order) among the pair's begin events in this step.

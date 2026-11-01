@@ -29,11 +29,13 @@ namespace CombatSimulation.Runtime.Tests
                 OwnerOperation.BulletFired(batch, 20, 3, 127, shot, ship, 7, 3, 0, new Vec2(12.5f, 187.25f), GridAngle(1000)),
                 OwnerOperation.BulletFired(batch, 20, 4, 125, child, shot, 2, 0, 1),
                 OwnerOperation.RetreatStarted(batch, 20, 5, 125, ship),
-                OwnerOperation.Remove(batch, 20, 6, 125, drone, RemovalReason.Death, bay),
+                OwnerOperation.Remove(batch, 20, 6, 125, drone, RemovalReason.Vanish, bay),
                 OwnerOperation.Remove(batch, 20, 7, 126, shot, RemovalReason.Expiry),
                 // P3: the child missile's target, then no target.
                 OwnerOperation.MissileTargetChanged(batch, 20, 8, 126, child, link.Target),
                 OwnerOperation.MissileTargetChanged(batch, 20, 9, 127, child, default),
+                // D13: the ship takes another allegiance.
+                OwnerOperation.AllegianceChanged(batch, 20, 10, 125, ship, Allegiance.Undefined),
             };
             // A removed bullet can still attack in its own batch. An end record is one tick ahead.
             var hits = new[]
@@ -47,7 +49,7 @@ namespace CombatSimulation.Runtime.Tests
             var bytes = link.Write(125, operations, hits);
             var scan = new List<SessionCodec.ScannedRecord>();
             var watermark = link.Read(bytes, out var actualOperations, out var actualHits, scan);
-            Assert.AreEqual(125, watermark.Tick); Assert.AreEqual(9UL, watermark.OperationSequence);
+            Assert.AreEqual(125, watermark.Tick); Assert.AreEqual(10UL, watermark.OperationSequence);
             Assert.AreEqual(20, watermark.Owner); Assert.AreEqual(batch, watermark.BattleId);
             CollectionAssert.AreEqual(operations, actualOperations);
             CollectionAssert.AreEqual(hits, actualHits);
@@ -62,13 +64,16 @@ namespace CombatSimulation.Runtime.Tests
             CollectionAssert.AreEqual(new[] { SessionCodec.RecordKind.Roster, SessionCodec.RecordKind.DroneLaunch,
                 SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.Retreat,
                 SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.MissileTarget,
-                SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit,
-                SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
+                SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Allegiance, SessionCodec.RecordKind.Hit,
+                SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
             // A push (phase 4 E4) adds 64 bits to its hit; every hit has the 1-bit flag.
-            Assert.LessOrEqual(scan[3].Bits, 41); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 32); Assert.LessOrEqual(scan[9].Bits, 89 + 64);
-            Assert.LessOrEqual(scan[11].Bits, 89);
+            // Version 8 widens every record kind to 4 bits (D13).
+            Assert.LessOrEqual(scan[3].Bits, 42); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 33); Assert.LessOrEqual(scan[10].Bits, 90 + 64);
+            Assert.LessOrEqual(scan[12].Bits, 90);
             // A missile target is about 3 bytes in the plan: here 2 bytes, with tick offsets +1 and +2 (0 in a real batch).
-            Assert.AreEqual(16, scan[7].Bits); Assert.AreEqual(11, scan[8].Bits);
+            Assert.AreEqual(17, scan[7].Bits); Assert.AreEqual(12, scan[8].Bits);
+            // An allegiance change: kind, tick offset 0, control index 0 and allegiance in about 1 byte.
+            Assert.AreEqual(9, scan[9].Bits); Assert.AreEqual(RemovalReason.Vanish, scan[5].RemovalReason);
             Assert.AreEqual(RemovalReason.Expiry, scan[6].RemovalReason);
 
             // A later hit cannot name the removed bullet.
@@ -98,6 +103,14 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 4, Zigzag(-3)), out _, out _));
             Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 0, 0), out _, out _));
             Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 7, 0), out _, out _));
+            // D13: an allegiance change (kind 8) that names no known ship, one with an unknown allegiance, kind 9.
+            Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 8, 0, (ref BitWriter w) =>
+            { w.WriteVarUInt(0); w.WriteBits((ulong)Allegiance.Undefined, 3); }), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 8, 0, (ref BitWriter w) =>
+            { w.WriteVarUInt(0); w.WriteBits(5, 3); }, 2), out _, out _));
+            Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 8, 0, (ref BitWriter w) =>
+            { w.WriteVarUInt(0); w.WriteBits((ulong)Allegiance.Undefined, 3); }, 2), out _, out _));
+            Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 9, 0), out _, out _));
 
             // With ship 0 named: a hit on an unknown target index, a NaN amount, a removal of an unknown bullet age,
             // the never-sent reason Unconfirmed, an unknown retreat ship.
@@ -264,7 +277,7 @@ namespace CombatSimulation.Runtime.Tests
         {
             var bytes = new byte[64]; var w = new BitWriter(bytes);
             w.WriteBits(SessionCodec.Version, 8); w.WriteVarUInt((ulong)tick); w.WriteVarUInt(lastOperation);
-            w.WriteBits(kind, 3); w.WriteVarUInt(offset);
+            w.WriteBits(kind, 4); w.WriteVarUInt(offset);
             fields?.Invoke(ref w);
             return bytes.AsSpan(0, w.Finish()).ToArray();
         }

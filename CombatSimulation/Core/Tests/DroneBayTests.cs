@@ -281,7 +281,7 @@ namespace CombatSimulation.Core.Tests
             Assert.Less(drone.Energy.Value, 100f);
             Assert.IsTrue(driver.Battle.Snapshot.Bullets.ToArray().Any(b => b.ParentId == drone.Id));
             Assert.AreEqual(3, driver.Battle.Targets.Count);
-            Assert.IsTrue(driver.Battle.Targets.FindMissileTarget(new Vec2(75f, 50f), new Vec2(-1f, 0f), 1, 10f, 0f, out var target));
+            Assert.IsTrue(driver.Battle.Targets.FindMissileTarget(new Vec2(75f, 50f), new Vec2(-1f, 0f), Allegiances.OfSide(1), 10f, 0f, out var target));
             Assert.AreEqual(drone.Id, target);
             Assert.AreEqual(0UL, drone.PressedSystems, "Held controls must not create repeated edges.");
         }

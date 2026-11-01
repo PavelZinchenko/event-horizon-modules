@@ -89,7 +89,7 @@ namespace CombatSimulation.Runtime
     // Reliable tick batch, a bit stream (BitWriter), network plan G2:
     //   version (8 bits), batch tick and last operation sequence (both VarUInt), then records until only zero padding
     //   remains. The connection is bound to one battle, so no battle ID travels. The sender owns every record.
-    // Record: kind (3 bits, RecordKind), record tick − batch tick (zigzag VarUInt), then by kind:
+    // Record: kind (4 bits, RecordKind; 3 bits before version 8), record tick − batch tick (zigzag VarUInt), then by kind:
     //   Hit: attacker kind (1 bit: control index, bullet age), attacker (VarUInt), target kind (1 bit: control index,
     //     bullet), target: control index in the receiver's stream (VarUInt) or, for a bullet, its entity ID (64; the
     //     sender may know only a predicted copy, which no stream names), target shape (VarUInt), device index + 1
@@ -99,8 +99,8 @@ namespace CombatSimulation.Runtime
     //   Roster: entity (64), roster ID (32), revision (VarUInt), previous status (2), status (2), reason (3),
     //     deployment count and order (VarUInt), armor deficit, shield deficit, damage fraction (32-bit floats), pose.
     //   Drone launch: entity (64), bay roster ID (32), bay device (VarUInt), parent entity (64), pose.
-    //   Removal: entity kind (1 bit), reason (3), control index or bullet age (VarUInt). A drone's bay is known from
-    //     its launch.
+    //   Removal: entity kind (1 bit), reason (3; Vanish since version 8), control index or bullet age (VarUInt). A
+    //     drone's bay is known from its launch.
     //   Bullet spawn: parent kind (1 bit), parent control index or bullet age (VarUInt), device, barrel and spawn
     //     sequence (VarUInt), launch flag (1 bit); with the flag, the muzzle position per axis on the correction grid
     //     (CorrectionCodec.Arena) and the launch angle (14 bits), network plan P1. The receiver derives the entity ID
@@ -108,16 +108,17 @@ namespace CombatSimulation.Runtime
     //   Retreat: ship control index (VarUInt).
     //   Missile target (P3): missile bullet age (VarUInt), target control index + 1 in the receiver's stream (VarUInt;
     //     0: no target).
+    //   Allegiance (phase 4, D13; version 8): ship control index (VarUInt), allegiance (3).
     //   Pose: position, angle, linear velocity, angular velocity (six 32-bit floats).
     // Operation sequences are consecutive inside a batch and end at the header's value. Operations come before hits,
     // so a hit names only bullets already counted.
     internal static class SessionCodec
     {
-        internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget }
+        internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance }
 
-        internal const byte Version = 7;
+        internal const byte Version = 8;
         internal const int MaxBatchBytes = 1 << 20;
-        private const int KindBits = 3, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3;
+        private const int KindBits = 4, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3, AllegianceBits = 3;
         private const int MaxVarUIntBits = 16 + 1 + 64;
         // Upper bounds for buffer sizing. The largest record, a roster change, needs about 720 bits.
         private const int HeaderBits = 8 + 2 * MaxVarUIntBits, RecordBits = 1024;
@@ -214,6 +215,12 @@ namespace CombatSimulation.Runtime
                     }
                     Header(ref w, RecordKind.MissileTarget, batchTick, op.Tick);
                     w.WriteVarUInt(missile); w.WriteVarUInt(target);
+                    break;
+                case OwnerOperationKind.Allegiance:
+                    if (!own.TryGetBody(op.EntityId, out var changed))
+                        throw new InvalidOperationException("An allegiance change names a ship the stream does not know.");
+                    Header(ref w, RecordKind.Allegiance, batchTick, op.Tick);
+                    w.WriteVarUInt(changed); w.WriteBits((ulong)op.Allegiance, AllegianceBits);
                     break;
                 default: throw new InvalidOperationException("Unknown owner operation.");
             }
@@ -315,7 +322,7 @@ namespace CombatSimulation.Runtime
                         break;
                     case RecordKind.Removal:
                         var bullet = r.Bool(); reason = (RemovalReason)r.Bits(ReasonBits); var name = r.VarUInt();
-                        Require(reason >= RemovalReason.Death && reason <= RemovalReason.Disposal);
+                        Require(Battle.IsSentRemovalReason(reason));
                         if (!resolve) break;
                         entity = bullet ? Bullet(peer, name) : Body(peer, name);
                         var removalBay = bullet ? null : peer.Bodies[(int)name].Bay;
@@ -356,6 +363,13 @@ namespace CombatSimulation.Runtime
                         if (!resolve) break;
                         operations.Add(OwnerOperation.MissileTargetChanged(battle, sender, ++peer.LastOperation, r.Tick,
                             Bullet(peer, name), targetIndex == 0 ? default : Body(own, targetIndex - 1)));
+                        break;
+                    case RecordKind.Allegiance:
+                        name = r.VarUInt(); var allegiance = (Allegiance)r.Bits(AllegianceBits);
+                        Require(Allegiances.IsValid(allegiance));
+                        if (!resolve) break;
+                        operations.Add(OwnerOperation.AllegianceChanged(battle, sender, ++peer.LastOperation, r.Tick,
+                            Body(peer, name), allegiance));
                         break;
                 }
                 scan?.Add(new ScannedRecord(r.Kind, r.BitPosition - start, reason));
@@ -418,7 +432,7 @@ namespace CombatSimulation.Runtime
             {
                 if (_reader.AtPadding()) return false;
                 var kind = Bits(KindBits);
-                Require(kind >= (ulong)RecordKind.Hit && kind <= (ulong)RecordKind.MissileTarget);
+                Require(kind >= (ulong)RecordKind.Hit && kind <= (ulong)RecordKind.Allegiance);
                 Kind = (RecordKind)kind;
                 var code = VarUInt();
                 var offset = (long)(code >> 1) ^ -(long)(code & 1);

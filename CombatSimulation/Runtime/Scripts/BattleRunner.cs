@@ -42,6 +42,12 @@ namespace CombatSimulation.Runtime
         public bool SelfDestruct(EntityId entityId, long targetTick) =>
             _battle.Submit(new SelfDestructCommand(BattleId, _nextCommandId++, targetTick, entityId));
 
+        public bool Vanish(EntityId entityId, long targetTick) =>
+            _battle.Submit(ShipCommand.Vanish(BattleId, _nextCommandId++, targetTick, entityId));
+
+        public bool ChangeAllegiance(EntityId entityId, Allegiance allegiance, long targetTick) =>
+            _battle.Submit(ShipCommand.ChangeAllegiance(BattleId, _nextCommandId++, targetTick, entityId, allegiance));
+
         public bool Surrender(int side, long targetTick) =>
             _battle.Submit(RosterCommand.Surrender(BattleId, _nextCommandId++, targetTick, side));
 
@@ -70,6 +76,10 @@ namespace CombatSimulation.Runtime
                     ApplyControls(registration.EntityId, target, controls);
                     if (controls.SelfDestruct) SelfDestruct(registration.EntityId, target);
                 }
+
+                // Ship commands of the local owner, in the input stream's tick; a network session sends their effects.
+                if (controls.ChangesAllegiance) ChangeAllegiance(registration.EntityId, controls.Allegiance, target);
+                if (controls.Vanish) Vanish(registration.EntityId, target);
             }
         }
 

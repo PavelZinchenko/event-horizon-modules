@@ -130,8 +130,7 @@ namespace CombatSimulation.Core
                     return bay != null && bay.Slot.Owner == operation.Owner && !operation.EntityId.IsNull &&
                         !operation.ParentId.IsNull && ValidPose(operation.Pose);
                 case OwnerOperationKind.Removal:
-                    if (operation.EntityId.IsNull || operation.RemovalReason < RemovalReason.Death ||
-                        operation.RemovalReason > RemovalReason.Disposal) return false;
+                    if (operation.EntityId.IsNull || !IsSentRemovalReason(operation.RemovalReason)) return false;
                     if (operation.BayKey.HasValue)
                     {
                         var removalBay = FindBay(operation.BayKey.Value);
@@ -148,6 +147,11 @@ namespace CombatSimulation.Core
                     return !_entities.TryGet(operation.EntityId, out handle) ||
                         (_bullets.TryGet(handle, out var missile) && _bullets[missile].Owner == operation.Owner &&
                          !_bullets[missile].IsBeam && _bullets[missile].Definition.IsHoming);
+                // The ship may be gone; a live ship must be the owner's.
+                case OwnerOperationKind.Allegiance:
+                    return !operation.EntityId.IsNull && Allegiances.IsValid(operation.Allegiance) &&
+                        (!_entities.TryGet(operation.EntityId, out handle) ||
+                         (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner));
                 case OwnerOperationKind.Retreat:
                     return !operation.EntityId.IsNull && (!_entities.TryGet(operation.EntityId, out handle) ||
                         (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner && _ships.Get(handle)?.Slot != null));
@@ -201,6 +205,11 @@ namespace CombatSimulation.Core
                             ApplyRemoteMissileTarget(operation);
                             _appliedOperations.Add(operation);
                         }
+                        else if (operation.Kind == OwnerOperationKind.Allegiance)
+                        {
+                            ApplyRemoteAllegiance(operation);
+                            _appliedOperations.Add(operation);
+                        }
                         else if (ApplyRemoteRemoval(operation)) _appliedOperations.Add(operation);
                         _remoteOperations.RemoveAt(i);
                         progressed = true;
@@ -225,7 +234,7 @@ namespace CombatSimulation.Core
                 // Initialize with the owner's retained resources, not values inferred from a prediction.
                 slot.Import(record, null);
                 ship.Initialize(operation.EntityId, slot, body, operation.Tick, Setup.DamageTypes.Count);
-                AddShipShapes(ship, CollisionFilters.Ship(slot.Side));
+                AddShipShapes(ship, CollisionFilters.Ship(ship.Allegiance));
                 SetSpawnPose(body, operation.Pose);
                 _events.Add(BattleEvent.Spawn(BattleId, Tick, _events.Count, ship));
             }
@@ -255,7 +264,7 @@ namespace CombatSimulation.Core
             if (!TryRegister(operation.EntityId, ship.Handle)) { _ships.Release(ship); return false; }
             var body = World.CreateBody(new BodyDef { Mass = bay.Definition.Drone.Mass });
             ship.InitializeDrone(operation.EntityId, bay, body, operation.Tick, Setup.DamageTypes.Count);
-            AddShipShapes(ship, CollisionFilters.Drone(ship.Side));
+            AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));
             SetSpawnPose(body, operation.Pose);
             var index = 0;
             while (index < _drones.Count && _drones[index].Id.Value < ship.Id.Value) ++index;
@@ -285,6 +294,20 @@ namespace CombatSimulation.Core
             bullet.TargetId = operation.TargetId;
             bullet.NextSearchTick = operation.Tick + HomingSteering.SearchTicks;
         }
+
+        // D13: the copy and its bullets take the owner's allegiance, including copies predicted before the record
+        // arrived; later spawns read it from the ship. A ship that is already gone needs nothing; the record still
+        // commits. Until the record arrives, the copy collides with its old allegiance.
+        private void ApplyRemoteAllegiance(in OwnerOperation operation)
+        {
+            var ship = FindShip(operation.EntityId);
+            if (ship != null && ship.Owner == operation.Owner && ship.Allegiance != operation.Allegiance)
+                SetAllegiance(ship, operation.Allegiance);
+        }
+
+        // The reasons an owner sends: Unconfirmed is local to a receiver.
+        internal static bool IsSentRemovalReason(RemovalReason reason) =>
+            reason >= RemovalReason.Death && reason <= RemovalReason.Disposal || reason == RemovalReason.Vanish;
 
         private bool ApplyRemoteRemoval(in OwnerOperation operation)
         {
@@ -402,7 +425,7 @@ namespace CombatSimulation.Core
             operation.Kind == OwnerOperationKind.MissileTarget ? 4 :
             operation.Kind == OwnerOperationKind.DroneSpawn ? 5 :
             operation.Kind == OwnerOperationKind.BulletSpawn ? 6 :
-            operation.Kind == OwnerOperationKind.Retreat ? 1 :
+            operation.Kind == OwnerOperationKind.Retreat || operation.Kind == OwnerOperationKind.Allegiance ? 1 :
             operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed ? 1 : 12;
 
         private static int CompareHits(in InboundHit a, in InboundHit b)

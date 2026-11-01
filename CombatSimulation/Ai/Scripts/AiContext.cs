@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using CombatSimulation.Core;
 using CombatSimulation.Physics;
 using CombatSimulation.Runtime;
+using GameDatabase.Model;
 using Utilites;
 
 namespace CombatSimulation.Ai
@@ -62,15 +63,36 @@ namespace CombatSimulation.Ai
 
         // Legacy Context.Mothership of a drone: the ship that launched it (Type.Owner). The core points a drone at the
         // active ship of its bay slot, which a redeployment replaces, so the context keeps the first one. Other ships
-        // have none. The ID can name a ship that left the battle.
+        // and a drone that went berserk have none. The ID can name a ship that left the battle.
         public EntityId Mothership => _mothership;
 
         // Legacy UnitState.Destroyed of the mothership: its slot was destroyed in the deployment that launched the drone.
-        public bool IsMothershipDestroyed => _ship.IsDrone && !IsActive(_mothership) && TryGetBaySlot(out var slot) &&
-            slot.Status == RosterStatus.Destroyed && slot.DeploymentCount == _mothershipDeployment;
+        public bool IsMothershipDestroyed => _ship.IsDrone && !_ownerRemoved && !IsActive(_mothership) &&
+            TryGetBaySlot(out var slot) && slot.Status == RosterStatus.Destroyed && slot.DeploymentCount == _mothershipDeployment;
 
         // Legacy UnitState.Inactive of the mothership: it left the battle without being destroyed (retreat or vanish, D12).
-        public bool IsMothershipRetreated => _ship.IsDrone && !IsActive(_mothership) && !IsMothershipDestroyed;
+        public bool IsMothershipRetreated => _ship.IsDrone && !_ownerRemoved && !IsActive(_mothership) && !IsMothershipDestroyed;
+
+        // Legacy GoBerserkNode sets Type.Owner to null: the drone has no mothership and takes the Undefined side, so it
+        // attacks everybody (D13). The allegiance changes when the core applies the command; the mothership is gone now.
+        public bool HasOwner => _ship.IsDrone && !_ownerRemoved;
+
+        public void RemoveOwner()
+        {
+            _ownerRemoved = true;
+            _mothership = default;
+            Controls.ChangeAllegiance(Allegiance.Undefined);
+        }
+
+        // Legacy UnitSideExtensions.IsEnemy on the current allegiances (D13).
+        public bool IsEnemy(in ShipState ship) => Allegiances.IsHostile(ship.Allegiance, _ship.Allegiance);
+        public bool IsEnemy(in BulletState bullet) => Allegiances.IsHostile(bullet.Allegiance, _ship.Allegiance);
+
+        // Legacy AiManager.TimeSinceLastPlayerInput: one clock for the battle, from its start or the last player input.
+        public float TimeSinceLastPlayerInput => _battle.TimeSinceLastPlayerInput(Snapshot.Tick);
+
+        // Legacy Ship.Broadcast (ShowMessage): a text above the ship. Local only (D6): a duel peer does not see it.
+        public void Broadcast(string text, ColorData color) => _battle.Broadcast?.Invoke(_ship.Id, text, color);
 
         // Legacy EnemyList: up to five enemies other than the main target. The list keeps ships that left the battle
         // until the next update, as legacy does.
@@ -266,6 +288,7 @@ namespace CombatSimulation.Ai
         private bool _threatsDisabled;
         private EntityId _mothership;
         private uint _mothershipDeployment;
+        private bool _ownerRemoved;
         private BitArray64 _flags;
         private RandomState _random;
         private ShipState _ship;
@@ -279,16 +302,27 @@ namespace CombatSimulation.Ai
         // Legacy AiManager._maxControllersBeforeOptimization.
         public const int MaxPilotsWithThreats = 30;
 
-        public AiBattle(Torus arena, Func<ShipDefinition, AiShipProfile> profiles, Func<BulletDefinition, float> bulletScales)
+        public AiBattle(Torus arena, Func<ShipDefinition, AiShipProfile> profiles, Func<BulletDefinition, float> bulletScales,
+            Action<EntityId, string, ColorData> broadcast = null)
         {
             Arena = arena;
             Profiles = profiles;
             BulletScales = bulletScales;
+            Broadcast = broadcast;
         }
 
         public Torus Arena { get; }
         public Func<ShipDefinition, AiShipProfile> Profiles { get; }
         public Func<BulletDefinition, float> BulletScales { get; }
+        public Action<EntityId, string, ColorData> Broadcast { get; }
+
+        // Legacy AiManager starts the clock at zero with the battle; tick 0 stands for the start.
+        public void OnPlayerInput(long tick)
+        {
+            if (tick > _lastPlayerInputTick) _lastPlayerInputTick = tick;
+        }
+
+        public float TimeSinceLastPlayerInput(long tick) => (tick - _lastPlayerInputTick) * Battle.TickDuration;
 
         public void Register(EntityId ship) => _pilots.Add(ship);
 
@@ -305,6 +339,7 @@ namespace CombatSimulation.Ai
         }
 
         private readonly List<EntityId> _pilots = new List<EntityId>();
+        private long _lastPlayerInputTick;
         private long _countTick = long.MinValue;
         private bool _threatsDisabled;
     }
@@ -353,10 +388,26 @@ namespace CombatSimulation.Ai
 
         public void DisableSystems() => _systems = 0;
 
+        // One-shot ship commands (step 7e). Legacy acts on the ship at once, whatever the tree result, so a failed
+        // think keeps them; the pilot submits them with the frame of this think.
+        public bool HasCommands => _vanish || _allegiance.HasValue;
+
+        public void Vanish() => _vanish = true;
+
+        public void ChangeAllegiance(Allegiance allegiance) => _allegiance = allegiance;
+
         // Legacy CommonControls clamps the throttle to [0, 1]; a NaN throttle gives no thrust there, so it becomes 0.
         internal PilotControls ToPilotControls() =>
-            PilotControls.Create(_course, _thrust > 0f ? _thrust < 1f ? _thrust : 1f : 0f, _systems);
+            PilotControls.Create(_course, _thrust > 0f ? _thrust < 1f ? _thrust : 1f : 0f, _systems, vanish: _vanish,
+                allegiance: _allegiance);
 
+        internal void ClearCommands()
+        {
+            _vanish = false;
+            _allegiance = null;
+        }
+
+        // Movement and devices only; commands stay until ClearCommands.
         internal void Reset()
         {
             _course = null;
@@ -369,5 +420,7 @@ namespace CombatSimulation.Ai
         private float? _course;
         private float _thrust;
         private ulong _systems;
+        private bool _vanish;
+        private Allegiance? _allegiance;
     }
 }
