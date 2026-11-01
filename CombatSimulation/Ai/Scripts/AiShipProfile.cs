@@ -24,6 +24,15 @@ namespace CombatSimulation.Ai
         RechargeAlly = 8,
     }
 
+    // Legacy Combat.Component.Features.TargetPriority, in legacy order: the enemy search scores the difference.
+    public enum AiTargetPriority
+    {
+        None,
+        Low,
+        Normal,
+        High,
+    }
+
     // What the AI knows about one working weapon (legacy WeaponInfo). The mapper fills it from the database; the core
     // never reads it (AI data, gap 2).
     public sealed class AiWeapon
@@ -51,13 +60,14 @@ namespace CombatSimulation.Ai
         public float Recoil { get; }
     }
 
-    // The ship facts of the AI side table (AI data, gaps 2 and 3). Step 6 holds what the requirement check reads; step 7
-    // adds what the action nodes read. Inert devices are absent (D6).
+    // The ship facts of the AI side table (AI data, gaps 2 and 3). Step 6 holds what the requirement check reads; step 7b
+    // adds what other ships' nodes read about this ship as a target. Inert devices are absent (D6).
     public sealed class AiShipProfile
     {
         public AiShipProfile(IReadOnlyList<AiWeapon> weapons, IReadOnlyList<DeviceClass> devices, bool hasDroneBays,
             bool isDrone, bool isStarbase, SizeClass sizeClass, float enginePower, float turnRate, float propulsion,
-            float kineticResistance, float rammingDamageMultiplier)
+            float kineticResistance, float rammingDamageMultiplier, float modelScale, AiTargetPriority targetPriority,
+            float chanceToAvoidDrone)
         {
             Weapons = weapons ?? Array.Empty<AiWeapon>();
             Devices = devices ?? Array.Empty<DeviceClass>();
@@ -70,6 +80,9 @@ namespace CombatSimulation.Ai
             Propulsion = propulsion;
             KineticResistance = kineticResistance;
             RammingDamageMultiplier = rammingDamageMultiplier;
+            ModelScale = modelScale;
+            TargetPriority = targetPriority;
+            ChanceToAvoidDrone = chanceToAvoidDrone;
         }
 
         public IReadOnlyList<AiWeapon> Weapons { get; }
@@ -93,6 +106,16 @@ namespace CombatSimulation.Ai
         public float KineticResistance { get; }
 
         public float RammingDamageMultiplier { get; }
+
+        // Legacy Body.Scale: the enemy search measures distance and size with it, not with the hull radius.
+        public float ModelScale { get; }
+
+        // Legacy Features.TargetPriority before device modifications: Low for a drone, else Normal. The jammer (High)
+        // and stealth (None while active) are inert in phase 4.
+        public AiTargetPriority TargetPriority { get; }
+
+        // Legacy Features.ChanceToAvoidDrone, a fraction. 0 while the drone camouflage device is inert.
+        public float ChanceToAvoidDrone { get; }
 
         // Legacy RequirementChecker HasEngine and NodeBuilder.CanMove.
         public bool HasEngine => !IsStarbase && EnginePower > MinEnginePower && TurnRate > MinEnginePower;

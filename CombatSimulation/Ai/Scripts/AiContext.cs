@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CombatSimulation.Core;
 using CombatSimulation.Runtime;
@@ -12,9 +13,11 @@ namespace CombatSimulation.Ai
         // Legacy Context._initialTime: list updates are due at the first think.
         public const float InitialTime = -60f;
 
-        internal AiContext(AiShipProfile profile, AiSettings settings, float deltaTime, RandomState random)
+        internal AiContext(AiShipProfile profile, AiSettings settings, float deltaTime, RandomState random,
+            Func<ShipDefinition, AiShipProfile> profiles)
         {
             Profile = profile;
+            _profiles = profiles;
             Settings = settings;
             DeltaTime = deltaTime;
             _random = random;
@@ -41,6 +44,11 @@ namespace CombatSimulation.Ai
         public float Time { get; private set; }
 
         public bool IsActive(EntityId id) => !id.IsNull && Snapshot.TryGetShip(id, out _);
+
+        // The side table of any ship in the snapshot, by its definition (AI data, gap 3): target facts such as
+        // TargetPriority belong to the other ship.
+        public AiShipProfile ProfileOf(in ShipState ship) =>
+            _profiles?.Invoke(ship.Definition) ?? throw new InvalidOperationException($"No AI profile for ship {ship.Id}");
 
         public bool TrySetValue(int id, bool value)
         {
@@ -78,6 +86,22 @@ namespace CombatSimulation.Ai
         // Uniform float in [min, max].
         public float NextRange(float min, float max) => min + (max - min) * _random.NextFloat();
 
+        // Legacy RandomExtensions.Percentage(int): a draw only for a value in [0, 100].
+        public bool Percentage(int value)
+        {
+            if (value < 0) return false;
+            if (value > 100) return true;
+            return NextInt(100) < value;
+        }
+
+        // Legacy RandomExtensions.Percentage(float), value a fraction: a draw only for a value in [0, 1).
+        public bool Percentage(float value)
+        {
+            if (value < 0f) return false;
+            if (value >= 1f) return true;
+            return NextInt(10000) < 10000f * value;
+        }
+
         internal void Update(BattleSnapshot snapshot, in ShipState ship)
         {
             if (FrameId == 0) _firstTick = snapshot.Tick;
@@ -87,6 +111,7 @@ namespace CombatSimulation.Ai
             Time = (snapshot.Tick - _firstTick) * Battle.TickDuration + DeltaTime;
         }
 
+        private readonly Func<ShipDefinition, AiShipProfile> _profiles;
         private readonly List<EntityId> _savedTargets = new List<EntityId>();
         private BitArray64 _flags;
         private RandomState _random;

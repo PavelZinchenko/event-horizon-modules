@@ -19,21 +19,28 @@ namespace CombatSimulation.Ai.Tests
         public static AiShipProfile ArmedShip => new AiShipProfile(
             new[] { new AiWeapon(0, AiWeaponClass.Common, AiBulletBehavior.Projectile, AiWeaponCapability.DamageEnemy, 30f, 0f) },
             new[] { DeviceClass.PointDefense }, hasDroneBays: true, isDrone: false, isStarbase: false, SizeClass.Frigate,
-            enginePower: 10f, turnRate: 10f, propulsion: 20f, kineticResistance: 0.2f, rammingDamageMultiplier: 1f);
+            enginePower: 10f, turnRate: 10f, propulsion: 20f, kineticResistance: 0.2f, rammingDamageMultiplier: 1f,
+            modelScale: 2f, AiTargetPriority.Normal, chanceToAvoidDrone: 0f);
 
         public static AiShipProfile Drone => new AiShipProfile(
             new[] { new AiWeapon(0, AiWeaponClass.Common, AiBulletBehavior.Projectile, AiWeaponCapability.DamageEnemy, 10f, 0f) },
             null, hasDroneBays: false, isDrone: true, isStarbase: false, SizeClass.Undefined,
-            enginePower: 20f, turnRate: 20f, propulsion: 40f, kineticResistance: 0f, rammingDamageMultiplier: 1f);
+            enginePower: 20f, turnRate: 20f, propulsion: 40f, kineticResistance: 0f, rammingDamageMultiplier: 1f,
+            modelScale: 0.5f, AiTargetPriority.Low, chanceToAvoidDrone: 0f);
 
         public static AiShipProfile Starbase => new AiShipProfile(
             new[] { new AiWeapon(0, AiWeaponClass.Continuous, AiBulletBehavior.Beam, AiWeaponCapability.DamageEnemy, 40f, 0f) },
             null, hasDroneBays: true, isDrone: false, isStarbase: true, SizeClass.Starbase,
-            enginePower: 0f, turnRate: 0f, propulsion: 0f, kineticResistance: 0.5f, rammingDamageMultiplier: 1f);
+            enginePower: 0f, turnRate: 0f, propulsion: 0f, kineticResistance: 0.5f, rammingDamageMultiplier: 1f,
+            modelScale: 10f, AiTargetPriority.Normal, chanceToAvoidDrone: 0f);
 
         public static AiShipProfile Unarmed => new AiShipProfile(null, null, hasDroneBays: false, isDrone: false,
             isStarbase: false, SizeClass.Destroyer, enginePower: 10f, turnRate: 10f, propulsion: 20f,
-            kineticResistance: 0f, rammingDamageMultiplier: 1f);
+            kineticResistance: 0f, rammingDamageMultiplier: 1f, modelScale: 2f, AiTargetPriority.Normal,
+            chanceToAvoidDrone: 0f);
+
+        // Every fixture ship shares one definition, so every ship in a fixture battle is an armed ship.
+        public static AiShipProfile Profiles(ShipDefinition definition) => ArmedShip;
 
         // Slot 1 on side 0 and slot 101 on side 1 (2 ships per side with extraSlots), deployed at the first tick.
         public static BattleRunner Battle(IPilotProvider pilots, ulong matchSeed = 7, bool extraSlots = false)
@@ -63,7 +70,7 @@ namespace CombatSimulation.Ai.Tests
             runner = Battle(new NoPilots());
             runner.Step();
             var context = new AiContext(profile ?? ArmedShip, settings ?? AiSettings.Default, deltaTime,
-                Utilites.RandomState.FromSeed(1));
+                Utilites.RandomState.FromSeed(1), Profiles);
             context.Update(runner.Snapshot, runner.Snapshot.Ships[0]);
             return context;
         }

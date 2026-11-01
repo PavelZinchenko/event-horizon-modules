@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CombatSimulation.Core;
 using CombatSimulation.Runtime;
@@ -41,16 +42,21 @@ namespace CombatSimulation.Ai
         private bool _lastResult;
     }
 
-    // Builds the tree pilots of one battle; they share its message hub (T5).
+    // Builds the tree pilots of one battle; they share its message hub (T5) and the side table of every ship, which
+    // profiles returns by ship definition (step 7b).
     public sealed class BehaviorTreeFactory
     {
-        public BehaviorTreeFactory(ulong matchSeed) => _matchSeed = matchSeed;
+        public BehaviorTreeFactory(ulong matchSeed, Func<ShipDefinition, AiShipProfile> profiles)
+        {
+            _matchSeed = matchSeed;
+            _profiles = profiles ?? throw new ArgumentNullException(nameof(profiles));
+        }
 
         // A null model gives a pilot whose root is Failure: the ship idles (T6).
         public BehaviorTreePilot Create(BehaviorTreeModel model, AiShipProfile profile, AiSettings settings,
             EntityId ship, PilotSchedule schedule)
         {
-            var context = new AiContext(profile, settings, schedule.Period * Battle.TickDuration, CreateRandom(ship));
+            var context = new AiContext(profile, settings, schedule.Period * Battle.TickDuration, CreateRandom(ship), _profiles);
             var builder = new NodeBuilder(context, _messageHub);
             var root = builder.BuildTree(model);
             return new BehaviorTreePilot(root, context, builder.Stubs);
@@ -61,7 +67,7 @@ namespace CombatSimulation.Ai
         public static IReadOnlyDictionary<int, HashSet<BehaviorNodeType>> CountStubs(BehaviorTreeModel model,
             AiShipProfile profile, AiSettings settings)
         {
-            var context = new AiContext(profile, settings, Battle.TickDuration, default);
+            var context = new AiContext(profile, settings, Battle.TickDuration, default, null);
             var builder = new NodeBuilder(context, new MessageHub(), foldStubs: false);
             builder.BuildTree(model);
             return builder.StubsByTree;
@@ -72,6 +78,7 @@ namespace CombatSimulation.Ai
             new RandomState { Value = PcgRandomAlgorithm.InitializeState(_matchSeed ^ ship.Value) };
 
         private readonly ulong _matchSeed;
+        private readonly Func<ShipDefinition, AiShipProfile> _profiles;
         private readonly MessageHub _messageHub = new MessageHub();
     }
 

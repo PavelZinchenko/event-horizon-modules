@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using CombatSimulation.Core;
 using GameDatabase.Enums;
 using GameDatabase.Serializable;
 using NUnit.Framework;
@@ -187,6 +189,66 @@ namespace CombatSimulation.Ai.Tests
             Assert.AreEqual(F, new LoadTargetNode(0).Evaluate(context));
         }
 
+        // Legacy Percentage: out-of-range values decide without a draw, so they leave the stream unchanged (step 7b).
+        [Test]
+        public void PercentageDrawsOnlyInsideTheLegacyRange()
+        {
+            int FirstDrawAfter(Action<AiContext> action)
+            {
+                var context = Context(out _);
+                action(context);
+                return context.NextInt(1000000);
+            }
+
+            var fresh = FirstDrawAfter(_ => { });
+            Assert.AreEqual(fresh, FirstDrawAfter(context => Assert.IsFalse(context.Percentage(-1))));
+            Assert.AreEqual(fresh, FirstDrawAfter(context => Assert.IsTrue(context.Percentage(101))));
+            Assert.AreEqual(fresh, FirstDrawAfter(context => Assert.IsFalse(context.Percentage(-0.1f))));
+            Assert.AreEqual(fresh, FirstDrawAfter(context => Assert.IsTrue(context.Percentage(1f))));
+            Assert.AreNotEqual(fresh, FirstDrawAfter(context => context.Percentage(100)));
+            Assert.AreNotEqual(fresh, FirstDrawAfter(context => context.Percentage(0f)));
+        }
+
+        [Test]
+        public void PercentageMatchesItsChance()
+        {
+            var context = Context(out _);
+            int intHits = 0, floatHits = 0;
+            const int draws = 20000;
+            for (var i = 0; i < draws; ++i)
+            {
+                if (context.Percentage(30)) intHits++;
+                if (context.Percentage(0.25f)) floatHits++;
+            }
+
+            Assert.AreEqual(0.30, intHits / (double)draws, 0.015);
+            Assert.AreEqual(0.25, floatHits / (double)draws, 0.015);
+            Assert.IsFalse(context.Percentage(0));
+            Assert.IsFalse(context.Percentage(0f));
+        }
+
+        // Target facts belong to the other ship: the context asks the table by that ship's definition (AI data, gap 3).
+        [Test]
+        public void ProfileOfLooksUpTheShipDefinition()
+        {
+            var runner = Battle(new NoPilots());
+            runner.Step();
+            var snapshot = runner.Snapshot;
+            var asked = new List<ShipDefinition>();
+            var drone = Drone;
+            var context = new AiContext(ArmedShip, AiSettings.Default, 0.02f, Utilites.RandomState.FromSeed(1),
+                definition => { asked.Add(definition); return drone; });
+            context.Update(snapshot, snapshot.Ships[0]);
+
+            Assert.AreSame(drone, context.ProfileOf(snapshot.Ships[1]));
+            Assert.AreEqual(new[] { AiFixtures.Ship }, asked.ToArray());
+            Assert.AreEqual(AiTargetPriority.Low, context.ProfileOf(snapshot.Ships[1]).TargetPriority);
+
+            var withoutTable = new AiContext(ArmedShip, AiSettings.Default, 0.02f, default, null);
+            withoutTable.Update(snapshot, snapshot.Ships[0]);
+            Assert.Throws<InvalidOperationException>(() => withoutTable.ProfileOf(snapshot.Ships[1]));
+        }
+
         // An ally listener receives each message once; an enemy listener never does.
         [Test]
         public void MessagesReachAlliesOnly()
@@ -196,7 +258,7 @@ namespace CombatSimulation.Ai.Tests
             var snapshot = runner.Snapshot;
             AiContext ContextOf(int ship)
             {
-                var context = new AiContext(ArmedShip, AiSettings.Default, 0.02f, Utilites.RandomState.FromSeed(1));
+                var context = new AiContext(ArmedShip, AiSettings.Default, 0.02f, Utilites.RandomState.FromSeed(1), Profiles);
                 context.Update(snapshot, snapshot.Ships[ship]);
                 return context;
             }
@@ -346,7 +408,7 @@ namespace CombatSimulation.Ai.Tests
         }
 
         private static AiShipProfile WithWeapons(params AiWeapon[] weapons) => new AiShipProfile(weapons, null, false, false,
-            false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f);
+            false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, AiTargetPriority.Normal, 0f);
 
         // Legacy CalculateAttackRange skips weapons without a capability.
         [Test]

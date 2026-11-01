@@ -81,7 +81,7 @@ namespace CombatSimulation.Ai.Tests
                         types.UnionWith(item.Value.Select(type => type.ToString()));
                     }
 
-                    var pilot = new BehaviorTreeFactory(7).Create(tree, profile, settings, default, PilotSchedule.Ship);
+                    var pilot = new BehaviorTreeFactory(7, AiFixtures.Profiles).Create(tree, profile, settings, default, PilotSchedule.Ship);
                     if (!folded.TryGetValue(tree.Id.Value, out var foldedTypes))
                         folded.Add(tree.Id.Value, foldedTypes = new HashSet<string>());
                     foldedTypes.UnionWith(pilot.Stubs.Keys.Select(type => type.ToString()));
@@ -212,7 +212,7 @@ namespace CombatSimulation.Ai.Tests
             private readonly BehaviorTreeModel _tree;
             private readonly AiShipProfile _profile;
             private readonly AiSettings _settings;
-            private readonly BehaviorTreeFactory _factory = new BehaviorTreeFactory(7);
+            private readonly BehaviorTreeFactory _factory = new BehaviorTreeFactory(7, AiFixtures.Profiles);
         }
     }
 }
