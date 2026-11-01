@@ -52,8 +52,19 @@ namespace CombatSimulation.Ai
         {
             var context = new AiContext(profile, settings, schedule.Period * Battle.TickDuration, CreateRandom(ship));
             var builder = new NodeBuilder(context, _messageHub);
-            var root = builder.Build(model?.RootNode);
+            var root = builder.BuildTree(model);
             return new BehaviorTreePilot(root, context, builder.Stubs);
+        }
+
+        // The stub types a ship reaches, by the tree that holds them (step 7a). Stubs do not fold, so the count is not cut
+        // at the first stub of a sequence; legacy folding of requirements and constants stays.
+        public static IReadOnlyDictionary<int, HashSet<BehaviorNodeType>> CountStubs(BehaviorTreeModel model,
+            AiShipProfile profile, AiSettings settings)
+        {
+            var context = new AiContext(profile, settings, Battle.TickDuration, default);
+            var builder = new NodeBuilder(context, new MessageHub(), foldStubs: false);
+            builder.BuildTree(model);
+            return builder.StubsByTree;
         }
 
         // One stream per pilot from the match seed and the entity ID (T4). Entity IDs are already mixed (fmix64).

@@ -7,16 +7,35 @@ namespace CombatSimulation.Ai
 {
     // Builds the nodes of one ship's tree (legacy Combat.Ai.BehaviorTree.NodeBuilder). A node whose requirement fails
     // becomes Failure, and parents fold constant children as legacy does. Node types without a port yet build a stub
-    // that is Failure (phase 4, step 6); Stubs counts them by type.
+    // that is Failure (phase 4, step 6); Stubs counts them by type. With foldStubs off, a stub is not constant, so its
+    // parent keeps the siblings after it, as with the real node (step 7a count). StubsByTree lists the stub types by
+    // the tree that holds them.
     internal sealed class NodeBuilder : IBehaviorTreeNodeFactory<INode>
     {
-        public NodeBuilder(AiContext context, MessageHub messageHub)
+        public NodeBuilder(AiContext context, MessageHub messageHub, bool foldStubs = true)
         {
             _messageHub = messageHub;
+            _profile = context.Profile;
+            _settings = context.Settings;
+            _foldStubs = foldStubs;
             _requirementChecker = new RequirementChecker(context.Profile, context.Settings);
         }
 
         public IReadOnlyDictionary<BehaviorNodeType, int> Stubs => _stubs;
+
+        // Tree ID → stub types built in that tree.
+        public IReadOnlyDictionary<int, HashSet<BehaviorNodeType>> StubsByTree => _stubsByTree;
+
+        public INode BuildTree(BehaviorTreeModel tree)
+        {
+            if (tree == null)
+                return EmptyNode.Failure;
+
+            _trees.Push(tree.Id.Value);
+            var node = Build(tree.RootNode);
+            _trees.Pop();
+            return node;
+        }
 
         public INode Build(BehaviorTreeNode model)
         {
@@ -28,7 +47,7 @@ namespace CombatSimulation.Ai
 
         public INode Create(BehaviorTreeNode_Success content) => EmptyNode.Success;
         public INode Create(BehaviorTreeNode_Failure content) => EmptyNode.Failure;
-        public INode Create(BehaviorTreeNode_SubTree content) => Build(content.BehaviourTree?.RootNode);
+        public INode Create(BehaviorTreeNode_SubTree content) => BuildTree(content.BehaviourTree);
         public INode Create(BehaviorTreeNode_Invertor content) => InvertorNode.Create(Build(content.Node));
         public INode Create(BehaviorTreeNode_Cooldown content) => CooldownNode.Create(Build(content.Node),
             content.ExecutionMode, content.Cooldown, content.Result ? NodeState.Success : NodeState.Failure);
@@ -139,7 +158,8 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_ForgetMainTarget content) => new ForgetTargetNode();
         public INode Create(BehaviorTreeNode_HasMainTarget content) => new HasTargetNode();
 
-        // Step 7 ports these.
+        // Step 7 ports these. A condition before Stub is the legacy Create that gives Failure when the ship lacks the
+        // weapon or device.
         public INode Create(BehaviorTreeNode_HasEnoughEnergy content) => Stub(content);
         public INode Create(BehaviorTreeNode_IsLowOnHp content) => Stub(content);
         public INode Create(BehaviorTreeNode_IsNotControledByPlayer content) => Stub(content);
@@ -156,7 +176,8 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_FindEnemy content) => Stub(content);
         public INode Create(BehaviorTreeNode_MoveToAttackRange content) => Stub(content);
         public INode Create(BehaviorTreeNode_AttackMainTarget content) => Stub(content);
-        public INode Create(BehaviorTreeNode_SelectWeapon content) => Stub(content);
+        public INode Create(BehaviorTreeNode_SelectWeapon content) =>
+            content.WeaponType == AiWeaponCategory.All || HasWeapon(weapon => IsInCategory(weapon, content.WeaponType)) ? Stub(content) : EmptyNode.Failure;
         public INode Create(BehaviorTreeNode_SpawnDrones content) => Stub(content);
         public INode Create(BehaviorTreeNode_Ram content) => Stub(content);
         public INode Create(BehaviorTreeNode_DetonateShip content) => Stub(content);
@@ -166,16 +187,21 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_LookForAdditionalTargets content) => Stub(content);
         public INode Create(BehaviorTreeNode_LookForThreats content) => Stub(content);
         public INode Create(BehaviorTreeNode_MatchVelocityWithTarget content) => Stub(content);
-        public INode Create(BehaviorTreeNode_ActivateDevice content) => Stub(content);
+        public INode Create(BehaviorTreeNode_ActivateDevice content) =>
+            HasDevice(content.DeviceClass) ? Stub(content) : EmptyNode.Failure;
         public INode Create(BehaviorTreeNode_RechargeEnergy content) => Stub(content);
         public INode Create(BehaviorTreeNode_SustainAim content) => Stub(content);
-        public INode Create(BehaviorTreeNode_ChargeWeapons content) => Stub(content);
+        public INode Create(BehaviorTreeNode_ChargeWeapons content) =>
+            HasWeapon(weapon => weapon.WeaponClass == AiWeaponClass.RequiredCharging) ? Stub(content) : EmptyNode.Failure;
         public INode Create(BehaviorTreeNode_Chase content) => Stub(content);
         public INode Create(BehaviorTreeNode_AvoidThreats content) => Stub(content);
         public INode Create(BehaviorTreeNode_SlowDown content) => Stub(content);
-        public INode Create(BehaviorTreeNode_UseRecoil content) => Stub(content);
-        public INode Create(BehaviorTreeNode_DefendWithFronalShield content) => Stub(content);
-        public INode Create(BehaviorTreeNode_TrackControllableAmmo content) => Stub(content);
+        public INode Create(BehaviorTreeNode_UseRecoil content) =>
+            HasWeapon(weapon => weapon.Recoil > HighRecoil) ? Stub(content) : EmptyNode.Failure;
+        public INode Create(BehaviorTreeNode_DefendWithFronalShield content) =>
+            HasDevice(DeviceClass.PartialShield) ? Stub(content) : EmptyNode.Failure;
+        public INode Create(BehaviorTreeNode_TrackControllableAmmo content) =>
+            HasWeapon(IsControllable) ? Stub(content) : EmptyNode.Failure;
         public INode Create(BehaviorTreeNode_KeepDistance content) => Stub(content);
         public INode Create(BehaviorTreeNode_EscapeTargetAttackRadius content) => Stub(content);
         public INode Create(BehaviorTreeNode_AttackAdditionalTargets content) => Stub(content);
@@ -183,7 +209,8 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_TargetEnemyStarbase content) => Stub(content);
         public INode Create(BehaviorTreeNode_BypassObstacles content) => Stub(content);
         public INode Create(BehaviorTreeNode_AttackTurretTargets content) => Stub(content);
-        public INode Create(BehaviorTreeNode_HoldHarpoon content) => Stub(content);
+        public INode Create(BehaviorTreeNode_HoldHarpoon content) =>
+            HasWeapon(weapon => weapon.BulletBehavior == AiBulletBehavior.Harpoon) ? Stub(content) : EmptyNode.Failure;
         public INode Create(BehaviorTreeNode_FindDamagedAlly content) => Stub(content);
         public INode Create(BehaviorTreeNode_EnginePropulsionForce content) => Stub(content);
         public INode Create(BehaviorTreeNode_MotherShipRetreated content) => Stub(content);
@@ -192,7 +219,8 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_GoBerserk content) => Stub(content);
         public INode Create(BehaviorTreeNode_TargetMothership content) => Stub(content);
         public INode Create(BehaviorTreeNode_MothershipLowHp content) => Stub(content);
-        public INode Create(BehaviorTreeNode_MothershipDistanceExceeded content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MothershipDistanceExceeded content) =>
+            (content.MaxDistance > 0 ? content.MaxDistance : _settings.LimitedRange) > 0 ? Stub(content) : EmptyNode.Failure;
         public INode Create(BehaviorTreeNode_MakeTargetMothership content) => Stub(content);
         public INode Create(BehaviorTreeNode_MothershipLowEnergy content) => Stub(content);
         public INode Create(BehaviorTreeNode_MothershipLowShield content) => Stub(content);
@@ -202,12 +230,66 @@ namespace CombatSimulation.Ai
         {
             _stubs.TryGetValue(content.Type, out var count);
             _stubs[content.Type] = count + 1;
-            return EmptyNode.Failure;
+
+            var tree = _trees.Count > 0 ? _trees.Peek() : 0;
+            if (!_stubsByTree.TryGetValue(tree, out var types))
+                _stubsByTree.Add(tree, types = new HashSet<BehaviorNodeType>());
+            types.Add(content.Type);
+
+            return _foldStubs ? EmptyNode.Failure : new StubNode();
         }
+
+        // Legacy RecoilNode: "weapon.Info.Recoil > 0.1f".
+        private const float HighRecoil = 0.1f;
+
+        private bool HasDevice(DeviceClass deviceClass)
+        {
+            foreach (var item in _profile.Devices)
+                if (item == deviceClass) return true;
+
+            return false;
+        }
+
+        private bool HasWeapon(Func<AiWeapon, bool> predicate)
+        {
+            foreach (var weapon in _profile.Weapons)
+                if (predicate(weapon)) return true;
+
+            return false;
+        }
+
+        // Legacy SelectWeaponNode.IsBelongToCategory.
+        private static bool IsInCategory(AiWeapon weapon, AiWeaponCategory category)
+        {
+            switch (category)
+            {
+                case AiWeaponCategory.Repair: return (weapon.Capability & AiWeaponCapability.RepairAlly) != 0;
+                case AiWeaponCategory.Recharge: return (weapon.Capability & AiWeaponCapability.RechargeAlly) != 0;
+                case AiWeaponCategory.Damage: return (weapon.Capability & AiWeaponCapability.DamageEnemy) != 0;
+                case AiWeaponCategory.CaptureDrone: return (weapon.Capability & AiWeaponCapability.CaptureDrone) != 0;
+                default: return true;
+            }
+        }
+
+        // Legacy TrackControllableAmmo.FindSuitableWeapons.
+        private static bool IsControllable(AiWeapon weapon) =>
+            (weapon.WeaponClass == AiWeaponClass.Manageable || weapon.WeaponClass == AiWeaponClass.Continuous) &&
+            weapon.BulletBehavior != AiBulletBehavior.Beam && weapon.BulletBehavior != AiBulletBehavior.AreaOfEffect;
 
         private int NameToId(string name) => _names.GetId(name);
 
+        // A stub that is not constant (step 7a count).
+        private sealed class StubNode : INode
+        {
+            public NodeState Evaluate(AiContext context) => NodeState.Failure;
+        }
+
         private readonly MessageHub _messageHub;
+        private readonly AiShipProfile _profile;
+        private readonly AiSettings _settings;
+        private readonly bool _foldStubs;
+        private readonly Stack<int> _trees = new Stack<int>();
+        private readonly Dictionary<int, HashSet<BehaviorNodeType>> _stubsByTree = new Dictionary<int, HashSet<BehaviorNodeType>>();
         private readonly RequirementChecker _requirementChecker;
         private readonly IdentifiersMap _names = new IdentifiersMap();
         private readonly Dictionary<BehaviorNodeType, int> _stubs = new Dictionary<BehaviorNodeType, int>();

@@ -60,6 +60,57 @@ namespace CombatSimulation.Ai.Tests
             TestContext.WriteLine(report.ToString());
         }
 
+        // Step 7a: the stubs each tree holds when stubs do not fold, over the fixture profiles, and the stub types ranked
+        // by tree count. The folded run reaches a subset.
+        [Test]
+        public void StubCountWithoutFolding()
+        {
+            var database = LoadBuiltInDatabase();
+            var trees = database.BehaviorTreeList.OrderBy(tree => tree.Id.Value).ToList();
+            var stubsByTree = new SortedDictionary<int, SortedSet<string>>();
+            var folded = new SortedDictionary<int, HashSet<string>>();
+
+            foreach (var tree in trees)
+            {
+                foreach (var (_, profile, settings) in Profiles)
+                {
+                    foreach (var item in BehaviorTreeFactory.CountStubs(tree, profile, settings))
+                    {
+                        if (!stubsByTree.TryGetValue(item.Key, out var types))
+                            stubsByTree.Add(item.Key, types = new SortedSet<string>());
+                        types.UnionWith(item.Value.Select(type => type.ToString()));
+                    }
+
+                    var pilot = new BehaviorTreeFactory(7).Create(tree, profile, settings, default, PilotSchedule.Ship);
+                    if (!folded.TryGetValue(tree.Id.Value, out var foldedTypes))
+                        folded.Add(tree.Id.Value, foldedTypes = new HashSet<string>());
+                    foldedTypes.UnionWith(pilot.Stubs.Keys.Select(type => type.ToString()));
+                }
+            }
+
+            // A root tree reaches the stubs of its subtrees too; the folded run counts them under the root.
+            var reached = new Dictionary<int, HashSet<string>>();
+            foreach (var tree in trees)
+                reached[tree.Id.Value] = new HashSet<string>(SubTrees(tree).SelectMany(id =>
+                    stubsByTree.TryGetValue(id, out var types) ? types : Enumerable.Empty<string>()));
+            foreach (var item in folded)
+                Assert.IsTrue(item.Value.IsSubsetOf(reached[item.Key]), $"tree {item.Key}");
+
+            var report = new StringBuilder();
+            report.AppendLine($"Trees with stubs: {stubsByTree.Count} of {trees.Count}");
+            foreach (var item in stubsByTree)
+                report.AppendLine($"tree {item.Key}: {string.Join(", ", item.Value)}");
+
+            report.AppendLine("Stub types by tree count:");
+            var ranking = stubsByTree.SelectMany(item => item.Value.Select(type => (type, tree: item.Key)))
+                .GroupBy(item => item.type)
+                .OrderByDescending(group => group.Count()).ThenBy(group => group.Key);
+            foreach (var group in ranking)
+                report.AppendLine($"  {group.Count(),3}  {group.Key}: {string.Join(", ", group.Select(item => item.tree))}");
+
+            TestContext.WriteLine(report.ToString());
+        }
+
         // Selection follows legacy ControllerFactory (T6).
         [Test]
         public void TreeSelectionFollowsControllerFactory()
@@ -92,6 +143,47 @@ namespace CombatSimulation.Ai.Tests
             var database = new GameDatabase.Database(new FolderDatabaseStorage(DatabasePath()), new NewtonJsonSerializer(), string.Empty);
             database.LoadDefault();
             return database;
+        }
+
+        // The tree and the trees its SubTree nodes reach.
+        private static HashSet<int> SubTrees(BehaviorTreeModel root)
+        {
+            var result = new HashSet<int>();
+            var trees = new Stack<BehaviorTreeModel>();
+            trees.Push(root);
+            while (trees.Count > 0)
+            {
+                var tree = trees.Pop();
+                if (tree == null || !result.Add(tree.Id.Value)) continue;
+
+                var nodes = new Stack<BehaviorTreeNode>();
+                nodes.Push(tree.RootNode);
+                while (nodes.Count > 0)
+                {
+                    switch (nodes.Pop())
+                    {
+                        case BehaviorTreeNode_SubTree item: trees.Push(item.BehaviourTree); break;
+                        case BehaviorTreeNode_Selector item: Push(nodes, item.Nodes); break;
+                        case BehaviorTreeNode_Sequence item: Push(nodes, item.Nodes); break;
+                        case BehaviorTreeNode_Parallel item: Push(nodes, item.Nodes); break;
+                        case BehaviorTreeNode_RandomSelector item: Push(nodes, item.Nodes); break;
+                        case BehaviorTreeNode_ParallelSequence item: Push(nodes, item.Nodes); break;
+                        case BehaviorTreeNode_IfThenElse item: Push(nodes, item.Nodes); break;
+                        case BehaviorTreeNode_Invertor item: nodes.Push(item.Node); break;
+                        case BehaviorTreeNode_Cooldown item: nodes.Push(item.Node); break;
+                        case BehaviorTreeNode_Execute item: nodes.Push(item.Node); break;
+                        case BehaviorTreeNode_PreserveTarget item: nodes.Push(item.Node); break;
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private static void Push(Stack<BehaviorTreeNode> stack, IEnumerable<BehaviorTreeNode> nodes)
+        {
+            foreach (var node in nodes)
+                if (node != null) stack.Push(node);
         }
 
         private static string DatabasePath([CallerFilePath] string path = "") =>
