@@ -3,6 +3,23 @@ using System.Collections.Generic;
 
 namespace CombatSimulation.Core
 {
+    // What the timer does (phase 4, step 8). Draw is the symmetric rule; the others copy legacy TimeOutMode
+    // with its player and enemy reset rules ("Result and timer" in docs/combat_simulation.md).
+    public enum TimerMode : byte
+    {
+        // Any deployment or removal resets; the limit is a draw.
+        Draw,
+
+        // The limit holds the timer; the adapter calls the next enemy. Never a draw.
+        CallNextEnemy,
+
+        // As CallNextEnemy while the enemy side has a ready slot; without one, 3 × the limit is a draw.
+        CallNextEnemyOrDraw,
+
+        // After the limit, the active player ships lose armor and shield.
+        DrainPlayerHp,
+    }
+
     // Immutable setup shared by battle instances. It contains no mutable physics settings.
     public sealed class BattleSetup
     {
@@ -18,7 +35,10 @@ namespace CombatSimulation.Core
             int maxActiveShipsPerSide = 1,
             IReadOnlyCollection<int> localOwners = null,
             IReadOnlyDictionary<int, int> ownerDelays = null,
-            DamageTypeTable damageTypes = null)
+            DamageTypeTable damageTypes = null,
+            TimerMode timerMode = TimerMode.Draw,
+            int playerSide = 0,
+            IReadOnlyList<int> maxActiveShipsBySide = null)
         {
             if (roster == null) throw new ArgumentNullException(nameof(roster));
             if (!(width > 0f) || float.IsInfinity(width))
@@ -29,6 +49,24 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(timeLimitTicks), "Time limit must be zero (none) or positive.");
             if (maxActiveShipsPerSide < 1)
                 throw new ArgumentOutOfRangeException(nameof(maxActiveShipsPerSide), "A side must allow at least one active ship.");
+            if (timerMode > TimerMode.DrainPlayerHp)
+                throw new ArgumentOutOfRangeException(nameof(timerMode));
+            if (playerSide < 0 || playerSide >= SideCount)
+                throw new ArgumentOutOfRangeException(nameof(playerSide));
+            _maxActiveShips = new int[SideCount];
+            for (var side = 0; side < SideCount; ++side)
+                _maxActiveShips[side] = maxActiveShipsPerSide;
+            if (maxActiveShipsBySide != null)
+            {
+                if (maxActiveShipsBySide.Count != SideCount)
+                    throw new ArgumentException("One limit per side is required.", nameof(maxActiveShipsBySide));
+                for (var side = 0; side < SideCount; ++side)
+                {
+                    if (maxActiveShipsBySide[side] < 1)
+                        throw new ArgumentOutOfRangeException(nameof(maxActiveShipsBySide), "A side must allow at least one active ship.");
+                    _maxActiveShips[side] = maxActiveShipsBySide[side];
+                }
+            }
 
             var slots = new RosterSlotSetup[roster.Count];
             var rosterIds = new HashSet<RosterId>();
@@ -57,6 +95,8 @@ namespace CombatSimulation.Core
             Height = height;
             TimeLimitTicks = timeLimitTicks;
             MaxActiveShipsPerSide = maxActiveShipsPerSide;
+            TimerMode = timerMode;
+            PlayerSide = playerSide;
             _localOwners = new HashSet<int>();
             if (localOwners == null)
             {
@@ -93,10 +133,18 @@ namespace CombatSimulation.Core
         public float Width { get; }
         public float Height { get; }
 
-        // Ticks both sides must have an active ship before the battle ends in a draw. Zero means no limit.
+        // Ticks both sides must have an active ship before the timer expires (TimerMode). Zero means no timer.
         public long TimeLimitTicks { get; }
 
+        // The limit of both sides unless maxActiveShipsBySide replaces it; MaxActiveShips gives the one in force.
         public int MaxActiveShipsPerSide { get; }
+        public int MaxActiveShips(int side) => _maxActiveShips[side];
+
+        public TimerMode TimerMode { get; }
+
+        // The side the legacy timer rules call the player; the other side is the enemy. Draw ignores it.
+        public int PlayerSide { get; }
+        public int EnemySide => 1 - PlayerSide;
 
         // D4. The legacy table by default.
         public DamageTypeTable DamageTypes { get; }
@@ -128,6 +176,7 @@ namespace CombatSimulation.Core
             }
         }
 
+        private readonly int[] _maxActiveShips;
         private readonly HashSet<int> _localOwners;
         private readonly HashSet<int> _owners = new HashSet<int>();
         private readonly Dictionary<int, int> _ownerDelays = new Dictionary<int, int>();

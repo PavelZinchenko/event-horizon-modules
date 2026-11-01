@@ -693,8 +693,31 @@ namespace CombatSimulation.Core
                 ship.ClearPendingDamage();
             }
 
+            DrainPlayerShips();
             _bullets.ApplyDamage(Setup);
         }
+
+        // Legacy CombatTimer, DrainPlayerHp (TM3): after the limit, each active player roster ship loses k % of its
+        // maximum armor and of its maximum shield per second, k being the whole overtime seconds already passed.
+        // No resistances; both restart their delay. It reads the timer of the previous tick. Only the owner drains;
+        // a remote copy follows through corrections. Drones are not drained.
+        private void DrainPlayerShips()
+        {
+            if (Setup.TimerMode != TimerMode.DrainPlayerHp || Setup.TimeLimitTicks <= 0) return;
+            var overtime = TimerElapsedTicks - Setup.TimeLimitTicks;
+            if (overtime < DrainTicksPerSecond) return;
+
+            var fraction = overtime / DrainTicksPerSecond * 0.01f * TickDuration;
+            foreach (var slot in Roster.Slots)
+            {
+                var ship = slot.ActiveShip;
+                if (slot.Side != Setup.PlayerSide || ship == null || !Setup.IsLocalOwner(ship.Owner)) continue;
+                ship.Armor.Consume(fraction * ship.Armor.Max);
+                ship.Shield.Consume(fraction * ship.Shield.Max);
+            }
+        }
+
+        private const long DrainTicksPerSecond = 50;
 
         // Stage 11. Marks deaths and bullet expiry; stage 12 applies them. Armor 0 is a death; so are missile hit points 0.
         private void MarkDeaths()
@@ -875,7 +898,7 @@ namespace CombatSimulation.Core
             if (slot == null) { Reject(command, "unknown roster ID"); return; }
             if (!Setup.IsLocalOwner(slot.Owner)) { Reject(command, "remote owner"); return; }
             if (slot.Status != RosterStatus.Ready) { Reject(command, $"slot is {slot.Status}"); return; }
-            if (Roster.CountActive(slot.Side) >= Setup.MaxActiveShipsPerSide) { Reject(command, "side limit"); return; }
+            if (Roster.CountActive(slot.Side) >= Setup.MaxActiveShips(slot.Side)) { Reject(command, "side limit"); return; }
 
             if (!DeploySlot(slot)) Reject(command, "entity ID collision");
         }

@@ -9,6 +9,8 @@ namespace CombatSimulation.Core
         internal CommittedBattleFlow(BattleSetup setup)
         {
             _timeLimit = setup.TimeLimitTicks;
+            _mode = setup.TimerMode;
+            _playerSide = setup.PlayerSide;
             foreach (var slot in setup.Roster)
                 if (slot.Side == 0) ++_confirmed.Alive0; else ++_confirmed.Alive1;
             _confirmed.Tick = -1;
@@ -47,10 +49,11 @@ namespace CombatSimulation.Core
                     var count = gapEnd - state.Tick;
                     if (state.Active0 > 0 && state.Active1 > 0)
                     {
-                        if (_timeLimit > 0 && _timeLimit - state.Elapsed <= count)
+                        var limit = DrawLimit(state);
+                        if (limit > 0 && limit - state.Elapsed <= count)
                         {
-                            state.Tick += _timeLimit - state.Elapsed;
-                            state.Elapsed = _timeLimit;
+                            state.Tick += limit - state.Elapsed;
+                            state.Elapsed = limit;
                             return new BattleResult(BattleOutcome.Draw, 0, BattleEndReason.Timeout, state.Tick);
                         }
                         state.Elapsed += count;
@@ -59,6 +62,7 @@ namespace CombatSimulation.Core
                 }
                 if (state.Tick == end) break;
                 state.Tick = next;
+                var resets = Resets.None;
                 while (index < _pending.Count && _pending[index].Tick == next)
                 {
                     var change = _pending[index++];
@@ -68,22 +72,68 @@ namespace CombatSimulation.Core
                         (change.Before == RosterStatus.Active ? 1 : 0);
                     if (change.Side == 0) { state.Alive0 += alive; state.Active0 += active; }
                     else { state.Alive1 += alive; state.Active1 += active; }
-                    if (change.Before == RosterStatus.Active || change.After == RosterStatus.Active) state.Elapsed = 0;
+                    resets |= Classify(change);
                 }
+                if (ShouldReset(resets, state)) state.Elapsed = 0;
                 if (state.Alive0 == 0 || state.Alive1 == 0)
                     return new BattleResult(state.Alive0 == state.Alive1 ? BattleOutcome.Draw : BattleOutcome.Victory,
                         state.Alive0 == state.Alive1 || state.Alive0 > 0 ? 0 : 1, BattleEndReason.Elimination, next);
                 if (state.Active0 > 0 && state.Active1 > 0)
                 {
                     ++state.Elapsed;
-                    if (_timeLimit > 0 && state.Elapsed >= _timeLimit)
+                    var limit = DrawLimit(state);
+                    if (limit > 0 && state.Elapsed >= limit)
                         return new BattleResult(BattleOutcome.Draw, 0, BattleEndReason.Timeout, next);
                 }
             }
             return default;
         }
 
-        private struct State { internal long Tick, Elapsed; internal int Alive0, Alive1, Active0, Active1; }
+        // The elapsed ticks that end the battle in a draw; 0: the timer never draws (it holds, or drains).
+        private long DrawLimit(in State state)
+        {
+            if (_timeLimit <= 0) return 0;
+            switch (_mode)
+            {
+                case TimerMode.Draw: return _timeLimit;
+                case TimerMode.CallNextEnemyOrDraw: return state.Ready(1 - _playerSide) == 0 ? 3 * _timeLimit : 0;
+                default: return 0;
+            }
+        }
+
+        [Flags]
+        private enum Resets : byte { None = 0, PlayerDeployed = 1, PlayerRemoved = 2, EnemyDeployed = 4, EnemyRemoved = 8 }
+
+        // A deployment enters Active; a removal leaves it (death, retreat, vanish). A reserve destroyed without an
+        // entity is neither.
+        private Resets Classify(in Transition change)
+        {
+            var player = change.Side == _playerSide;
+            if (change.After == RosterStatus.Active && change.Before != RosterStatus.Active)
+                return player ? Resets.PlayerDeployed : Resets.EnemyDeployed;
+            if (change.Before == RosterStatus.Active && change.After != RosterStatus.Active)
+                return player ? Resets.PlayerRemoved : Resets.EnemyRemoved;
+            return Resets.None;
+        }
+
+        // Legacy CombatTimer, read after every transition of the tick. Draw: any deployment or removal resets.
+        private bool ShouldReset(Resets resets, in State state)
+        {
+            if (resets == Resets.None) return false;
+            if (_mode == TimerMode.Draw) return true;
+            if ((resets & Resets.EnemyDeployed) != 0) return true;
+            if ((resets & Resets.PlayerRemoved) != 0 && _mode == TimerMode.DrainPlayerHp) return true;
+            if ((resets & Resets.EnemyRemoved) != 0)
+                return _mode != TimerMode.CallNextEnemyOrDraw || state.Ready(1 - _playerSide) > 0;
+            return false;
+        }
+
+        private struct State
+        {
+            internal long Tick, Elapsed;
+            internal int Alive0, Alive1, Active0, Active1;
+            internal readonly int Ready(int side) => side == 0 ? Alive0 - Active0 : Alive1 - Active1;
+        }
         private readonly struct Transition
         {
             internal readonly long Tick;
@@ -94,6 +144,8 @@ namespace CombatSimulation.Core
         }
         private State _confirmed;
         private readonly long _timeLimit;
+        private readonly TimerMode _mode;
+        private readonly int _playerSide;
         private readonly List<Transition> _pending = new List<Transition>();
     }
 }
