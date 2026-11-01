@@ -14,6 +14,7 @@ namespace CombatSimulation.Ai
     {
         public NodeBuilder(AiContext context, MessageHub messageHub, bool foldStubs = true)
         {
+            _context = context;
             _messageHub = messageHub;
             _profile = context.Profile;
             _settings = context.Settings;
@@ -158,7 +159,7 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_ForgetMainTarget content) => new ForgetTargetNode();
         public INode Create(BehaviorTreeNode_HasMainTarget content) => new HasTargetNode();
 
-        // Step 7 ports these. A condition before Stub is the legacy Create that gives Failure when the ship lacks the
+        // Step 7e and phase 5 port these. A condition before Stub is the legacy Create that gives Failure when the ship lacks the
         // weapon or device.
         public INode Create(BehaviorTreeNode_HasEnoughEnergy content) => new HasEnoughEnergyNode(content.FailIfLess);
         public INode Create(BehaviorTreeNode_IsLowOnHp content) => new IsLowOnHpNode(content.MinValue);
@@ -192,48 +193,94 @@ namespace CombatSimulation.Ai
             return new FindNearestEnemyNode(content.MinCooldown, content.MaxCooldown, content.IgnoreDrones);
         }
 
-        public INode Create(BehaviorTreeNode_MoveToAttackRange content) => Stub(content);
-        public INode Create(BehaviorTreeNode_AttackMainTarget content) => Stub(content);
-        public INode Create(BehaviorTreeNode_SelectWeapon content) =>
-            content.WeaponType == AiWeaponCategory.All || HasWeapon(weapon => IsInCategory(weapon, content.WeaponType)) ? Stub(content) : EmptyNode.Failure;
-        public INode Create(BehaviorTreeNode_SpawnDrones content) => Stub(content);
-        public INode Create(BehaviorTreeNode_Ram content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MoveToAttackRange content) =>
+            new MoveToAttackRangeNode(content.MinMaxLerp, content.Multiplier > 0 ? content.Multiplier : 1.0f);
+        public INode Create(BehaviorTreeNode_AttackMainTarget content) => new AttackMainTargetNode(_profile.HasEngine && !content.NotMoving);
+
+        // Legacy SelectWeaponNode.Create: All selects every weapon at run time; a category without a weapon is Failure.
+        public INode Create(BehaviorTreeNode_SelectWeapon content)
+        {
+            if (content.WeaponType == AiWeaponCategory.All)
+                return new SelectWeaponNode(null);
+
+            var weapons = new List<AiWeapon>();
+            foreach (var weapon in _profile.Weapons)
+                if (IsInCategory(weapon, content.WeaponType))
+                    weapons.Add(weapon);
+
+            return weapons.Count > 0 ? new SelectWeaponNode(new AiWeaponList(weapons)) : EmptyNode.Failure;
+        }
+
+        // Legacy SpawnDronesNode skips automatic bays and is a node even without a bay.
+        public INode Create(BehaviorTreeNode_SpawnDrones content)
+        {
+            var bays = new List<int>();
+            foreach (var bay in _profile.DroneBays)
+                if (!bay.IsAutomatic)
+                    bays.Add(bay.DeviceIndex);
+
+            return new SpawnDronesNode(bays);
+        }
+
+        public INode Create(BehaviorTreeNode_Ram content) => new RamNode();
         public INode Create(BehaviorTreeNode_DetonateShip content) => Stub(content);
         public INode Create(BehaviorTreeNode_Vanish content) => Stub(content);
         public INode Create(BehaviorTreeNode_MaintainAttackRange content) => Stub(content);
-        public INode Create(BehaviorTreeNode_LookAtTarget content) => Stub(content);
+        public INode Create(BehaviorTreeNode_LookAtTarget content) => new LookAtTargetNode();
         public INode Create(BehaviorTreeNode_LookForAdditionalTargets content) => new LookForAdditionalTargetsNode(content.Cooldown);
         public INode Create(BehaviorTreeNode_LookForThreats content) => new LookForThreatsNode(content.Cooldown);
-        public INode Create(BehaviorTreeNode_MatchVelocityWithTarget content) => Stub(content);
-        public INode Create(BehaviorTreeNode_ActivateDevice content) =>
-            HasDevice(content.DeviceClass) ? Stub(content) : EmptyNode.Failure;
-        public INode Create(BehaviorTreeNode_RechargeEnergy content) => Stub(content);
-        public INode Create(BehaviorTreeNode_SustainAim content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MatchVelocityWithTarget content) => new MatchVelocityNode(content.Tolerance);
+
+        // Legacy ActivateDeviceNode.Create: the devices of the class that are not automatic; none gives Failure.
+        public INode Create(BehaviorTreeNode_ActivateDevice content)
+        {
+            var devices = new List<int>();
+            foreach (var device in _profile.Devices)
+                if (device.DeviceClass == content.DeviceClass && !device.IsAutomatic)
+                    devices.Add(device.DeviceIndex);
+
+            return devices.Count > 0 ? new ActivateDeviceNode(devices) : EmptyNode.Failure;
+        }
+
+        public INode Create(BehaviorTreeNode_RechargeEnergy content) => new RechargeEnergyNode(content.FailIfLess, content.RestoreUntil);
+        public INode Create(BehaviorTreeNode_SustainAim content) => new SustainAimNode(false);
         public INode Create(BehaviorTreeNode_ChargeWeapons content) =>
             HasWeapon(weapon => weapon.WeaponClass == AiWeaponClass.RequiredCharging) ? Stub(content) : EmptyNode.Failure;
-        public INode Create(BehaviorTreeNode_Chase content) => Stub(content);
-        public INode Create(BehaviorTreeNode_AvoidThreats content) => Stub(content);
+        public INode Create(BehaviorTreeNode_Chase content) => new ChaseNode();
+        public INode Create(BehaviorTreeNode_AvoidThreats content) => new AvoidThreatsNode();
         public INode Create(BehaviorTreeNode_SlowDown content) => Stub(content);
-        public INode Create(BehaviorTreeNode_UseRecoil content) =>
-            HasWeapon(weapon => weapon.Recoil > HighRecoil) ? Stub(content) : EmptyNode.Failure;
+        // Legacy RecoilNode.Create: the weapons with high recoil; none gives Failure.
+        public INode Create(BehaviorTreeNode_UseRecoil content)
+        {
+            var devices = new List<int>();
+            foreach (var weapon in _profile.Weapons)
+                if (weapon.Recoil > HighRecoil)
+                    devices.Add(weapon.DeviceIndex);
+
+            return devices.Count > 0 ? new UseRecoilNode(devices) : EmptyNode.Failure;
+        }
+
         public INode Create(BehaviorTreeNode_DefendWithFronalShield content) =>
             HasDevice(DeviceClass.PartialShield) ? Stub(content) : EmptyNode.Failure;
         public INode Create(BehaviorTreeNode_TrackControllableAmmo content) =>
             HasWeapon(IsControllable) ? Stub(content) : EmptyNode.Failure;
         public INode Create(BehaviorTreeNode_KeepDistance content) => Stub(content);
-        public INode Create(BehaviorTreeNode_EscapeTargetAttackRadius content) => Stub(content);
-        public INode Create(BehaviorTreeNode_AttackAdditionalTargets content) => Stub(content);
+        public INode Create(BehaviorTreeNode_EscapeTargetAttackRadius content) => new EscapeTargetAttackRadiusNode();
+        public INode Create(BehaviorTreeNode_AttackAdditionalTargets content) =>
+            new AttackAdditionalTargetsNode(_profile.HasEngine && !content.NotMoving);
         public INode Create(BehaviorTreeNode_TargetAllyStarbase content) => Stub(content);
         public INode Create(BehaviorTreeNode_TargetEnemyStarbase content) => Stub(content);
         public INode Create(BehaviorTreeNode_BypassObstacles content) => Stub(content);
-        public INode Create(BehaviorTreeNode_AttackTurretTargets content) => Stub(content);
+        public INode Create(BehaviorTreeNode_AttackTurretTargets content) => new AttackTurretTargetsNode();
         public INode Create(BehaviorTreeNode_HoldHarpoon content) =>
             HasWeapon(weapon => weapon.BulletBehavior == AiBulletBehavior.Harpoon) ? Stub(content) : EmptyNode.Failure;
         public INode Create(BehaviorTreeNode_FindDamagedAlly content) => Stub(content);
         public INode Create(BehaviorTreeNode_EnginePropulsionForce content) => Stub(content);
         public INode Create(BehaviorTreeNode_MotherShipRetreated content) => new MothershipRetreatedNode();
         public INode Create(BehaviorTreeNode_MotherShipDestroyed content) => new MothershipDestroyedNode();
-        public INode Create(BehaviorTreeNode_FlyAroundMothership content) => Stub(content);
+        // Legacy draws the distance once per ship at build time; the pilot stream draws it here (7b).
+        public INode Create(BehaviorTreeNode_FlyAroundMothership content) =>
+            new FlyAroundMothershipNode(_context.NextRange(content.MinDistance, content.MaxDistance));
         public INode Create(BehaviorTreeNode_GoBerserk content) => Stub(content);
         public INode Create(BehaviorTreeNode_TargetMothership content) => new TargetMothershipNode();
         public INode Create(BehaviorTreeNode_MothershipLowHp content) => Stub(content);
@@ -266,7 +313,7 @@ namespace CombatSimulation.Ai
         private bool HasDevice(DeviceClass deviceClass)
         {
             foreach (var item in _profile.Devices)
-                if (item == deviceClass) return true;
+                if (item.DeviceClass == deviceClass) return true;
 
             return false;
         }
@@ -305,6 +352,7 @@ namespace CombatSimulation.Ai
             public NodeState Evaluate(AiContext context) => NodeState.Failure;
         }
 
+        private readonly AiContext _context;
         private readonly MessageHub _messageHub;
         private readonly AiShipProfile _profile;
         private readonly AiSettings _settings;

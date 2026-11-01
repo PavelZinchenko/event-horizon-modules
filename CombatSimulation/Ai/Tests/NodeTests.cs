@@ -388,12 +388,12 @@ namespace CombatSimulation.Ai.Tests
         public void NodesWithoutPortAreCountedStubs()
         {
             var builder = Builder(Context(out _));
-            var node = builder.Build(Node(Composite(BehaviorNodeType.Selector, Leaf(BehaviorNodeType.AttackMainTarget),
-                Leaf(BehaviorNodeType.AttackMainTarget), Leaf(BehaviorNodeType.Chase))));
+            var node = builder.Build(Node(Composite(BehaviorNodeType.Selector, Leaf(BehaviorNodeType.Vanish),
+                Leaf(BehaviorNodeType.Vanish), Leaf(BehaviorNodeType.ShowMessage))));
 
             Assert.AreSame(EmptyNode.Failure, node);
-            Assert.AreEqual(2, builder.Stubs[BehaviorNodeType.AttackMainTarget]);
-            Assert.AreEqual(1, builder.Stubs[BehaviorNodeType.Chase]);
+            Assert.AreEqual(2, builder.Stubs[BehaviorNodeType.Vanish]);
+            Assert.AreEqual(1, builder.Stubs[BehaviorNodeType.ShowMessage]);
         }
     }
 
@@ -407,7 +407,7 @@ namespace CombatSimulation.Ai.Tests
             return requirement.Create(new RequirementChecker(profile, AiSettings.FromAiLevel(AiDifficultyLevel.Medium)));
         }
 
-        private static AiShipProfile WithWeapons(params AiWeapon[] weapons) => new AiShipProfile(weapons, null, false, false,
+        private static AiShipProfile WithWeapons(params AiWeapon[] weapons) => new AiShipProfile(weapons, null, null, false,
             false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, AiTargetPriority.Normal, 0f);
 
         // Legacy CalculateAttackRange skips weapons without a capability.

@@ -38,7 +38,7 @@ namespace CombatSimulation.Ai
     public sealed class AiWeapon
     {
         public AiWeapon(int deviceIndex, AiWeaponClass weaponClass, AiBulletBehavior bulletBehavior,
-            AiWeaponCapability capability, float range, float recoil)
+            AiWeaponCapability capability, float range, float recoil, float spread = 0f)
         {
             DeviceIndex = deviceIndex;
             WeaponClass = weaponClass;
@@ -46,6 +46,7 @@ namespace CombatSimulation.Ai
             Capability = capability;
             Range = range;
             Recoil = recoil;
+            Spread = spread;
         }
 
         public int DeviceIndex { get; }
@@ -58,20 +59,52 @@ namespace CombatSimulation.Ai
 
         // Legacy WeaponInfo.Recoil: ammunition recoil ÷ ship weight for common weapons, else 0.
         public float Recoil { get; }
+
+        // Legacy WeaponInfo.Spread in radians: the full spread angle. The core beam has none, so the side table keeps it.
+        public float Spread { get; }
+    }
+
+    // A working device the AI can press (legacy IDevice in ShipSystems): its control bit, class and whether its key
+    // binding makes it automatic (legacy ISystem.IsAutomatic, key below 0).
+    public sealed class AiDevice
+    {
+        public AiDevice(int deviceIndex, DeviceClass deviceClass, bool isAutomatic)
+        {
+            DeviceIndex = deviceIndex;
+            DeviceClass = deviceClass;
+            IsAutomatic = isAutomatic;
+        }
+
+        public int DeviceIndex { get; }
+        public DeviceClass DeviceClass { get; }
+        public bool IsAutomatic { get; }
+    }
+
+    // A drone bay (legacy IDroneBay): its control bit and whether its key binding makes it automatic.
+    public sealed class AiDroneBay
+    {
+        public AiDroneBay(int deviceIndex, bool isAutomatic)
+        {
+            DeviceIndex = deviceIndex;
+            IsAutomatic = isAutomatic;
+        }
+
+        public int DeviceIndex { get; }
+        public bool IsAutomatic { get; }
     }
 
     // The ship facts of the AI side table (AI data, gaps 2 and 3). Step 6 holds what the requirement check reads; step 7b
     // adds what other ships' nodes read about this ship as a target. Inert devices are absent (D6).
     public sealed class AiShipProfile
     {
-        public AiShipProfile(IReadOnlyList<AiWeapon> weapons, IReadOnlyList<DeviceClass> devices, bool hasDroneBays,
-            bool isDrone, bool isStarbase, SizeClass sizeClass, float enginePower, float turnRate, float propulsion,
+        public AiShipProfile(IReadOnlyList<AiWeapon> weapons, IReadOnlyList<AiDevice> devices,
+            IReadOnlyList<AiDroneBay> droneBays, bool isDrone, bool isStarbase, SizeClass sizeClass, float enginePower, float turnRate, float propulsion,
             float kineticResistance, float rammingDamageMultiplier, float modelScale, AiTargetPriority targetPriority,
             float chanceToAvoidDrone)
         {
             Weapons = weapons ?? Array.Empty<AiWeapon>();
-            Devices = devices ?? Array.Empty<DeviceClass>();
-            HasDroneBays = hasDroneBays;
+            Devices = devices ?? Array.Empty<AiDevice>();
+            DroneBays = droneBays ?? Array.Empty<AiDroneBay>();
             IsDrone = isDrone;
             IsStarbase = isStarbase;
             SizeClass = sizeClass;
@@ -100,10 +133,13 @@ namespace CombatSimulation.Ai
         // Legacy CalculateAttackRange: the longest range among weapons with a capability. Other ships read it.
         public float CapableAttackRange { get; }
 
-        // The classes of the working devices, in device order.
-        public IReadOnlyList<DeviceClass> Devices { get; }
+        // The working devices, in device order.
+        public IReadOnlyList<AiDevice> Devices { get; }
 
-        public bool HasDroneBays { get; }
+        // The drone bays, in device order. Drones have none.
+        public IReadOnlyList<AiDroneBay> DroneBays { get; }
+
+        public bool HasDroneBays => DroneBays.Count > 0;
         public bool IsDrone { get; }
         public bool IsStarbase { get; }
         public SizeClass SizeClass { get; }

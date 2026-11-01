@@ -21,6 +21,7 @@ namespace CombatSimulation.Ai
             Settings = settings;
             DeltaTime = deltaTime;
             _random = random;
+            _allWeapons = new AiWeaponList(profile.Weapons);
         }
 
         public BattleSnapshot Snapshot { get; private set; }
@@ -36,6 +37,16 @@ namespace CombatSimulation.Ai
 
         // Energy that nodes reserve in this think; every think starts at zero.
         public float LockedEnergy { get; set; }
+
+        // Legacy Context.RestoringEnergy: the RechargeEnergy node waits for the energy to come back.
+        public bool RestoringEnergy { get; set; }
+
+        // Legacy Context.SelectedWeapons: the last SelectWeapon choice; null gives every weapon.
+        public AiWeaponList SelectedWeapons
+        {
+            get => _selectedWeapons ?? _allWeapons;
+            set => _selectedWeapons = value;
+        }
 
         // Legacy Mathf.Clamp01 keeps NaN, so a ship without energy reads NaN and passes every "less than" check.
         public float EnergyLevelPercentage
@@ -89,6 +100,25 @@ namespace CombatSimulation.Ai
             ship = default;
             return false;
         }
+
+        public bool TryGetBullet(EntityId id, out BulletState bullet)
+        {
+            if (!id.IsNull)
+            {
+                foreach (var item in Snapshot.Bullets)
+                {
+                    if (item.Id != id) continue;
+                    bullet = item;
+                    return true;
+                }
+            }
+
+            bullet = default;
+            return false;
+        }
+
+        // The state of one of the own ship's devices at the end of the last tick (step 3b).
+        public DeviceState DeviceOf(int deviceIndex) => Snapshot.GetDevices(_ship)[deviceIndex];
 
         // The side table of any ship in the snapshot, by its definition (AI data, gap 3): target facts such as
         // TargetPriority belong to the other ship. The own ship reads its own profile.
@@ -224,6 +254,8 @@ namespace CombatSimulation.Ai
         }
 
         private readonly AiBattle _battle;
+        private readonly AiWeaponList _allWeapons;
+        private AiWeaponList _selectedWeapons;
         private readonly List<EntityId> _savedTargets = new List<EntityId>();
         private readonly List<float> _targetDistances = new List<float>();
         private List<EntityId> _targetList;
@@ -321,7 +353,9 @@ namespace CombatSimulation.Ai
 
         public void DisableSystems() => _systems = 0;
 
-        internal PilotControls ToPilotControls() => PilotControls.Create(_course, _thrust, _systems);
+        // Legacy CommonControls clamps the throttle to [0, 1]; a NaN throttle gives no thrust there, so it becomes 0.
+        internal PilotControls ToPilotControls() =>
+            PilotControls.Create(_course, _thrust > 0f ? _thrust < 1f ? _thrust : 1f : 0f, _systems);
 
         internal void Reset()
         {

@@ -201,9 +201,11 @@ namespace CombatSimulation.Ai.Tests
 
             public List<BehaviorTreePilot> Pilots { get; } = new List<BehaviorTreePilot>();
 
+            // Drones launched by the fixture bay get no pilot: the fixture profiles describe the fixture ship.
             public IPilot CreatePilot(BattleSnapshot snapshot, in ShipState ship, out PilotSchedule schedule)
             {
                 schedule = _profile.IsDrone ? PilotSchedule.Drone : PilotSchedule.Ship;
+                if (ship.IsDrone) return null;
                 var pilot = _factory.Create(_tree, _profile, _settings, ship.Id, schedule);
                 Pilots.Add(pilot);
                 return pilot;

@@ -13,29 +13,44 @@ namespace CombatSimulation.Ai.Tests
     {
         private const float Degrees = (float)(Math.PI / 180.0);
 
-        public static readonly ShipDefinition Ship = new ShipDefinition(1f, 1f,
-            new EngineDefinition(20f, 10f, 300f * Degrees, 120f * Degrees), 1000f,
-            new ResourceDefinition(500f, 10f, 1f), new ResourceDefinition(300f, 20f, 0.5f));
+        public static readonly EngineDefinition Engine = new EngineDefinition(20f, 10f, 300f * Degrees, 120f * Degrees);
+
+        // A drone without devices. Fixture battles give drones no pilot.
+        public static readonly ShipDefinition DroneShip = new ShipDefinition(0.5f, 1f, Engine, 100f,
+            new ResourceDefinition(0f), new ResourceDefinition(100f));
+
+        // The devices of the ArmedShip profile: a cannon on a forward barrel (device 0), point defense (1) and a drone
+        // bay (2).
+        public static readonly ShipDefinition Ship = new ShipDefinition(1f, 1f, Engine, 1000f,
+            new ResourceDefinition(500f, 10f, 1f), new ResourceDefinition(300f, 20f, 0.5f),
+            barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+            devices: new DeviceDefinition[]
+            {
+                new CannonDefinition(0, 0.25f, 5f, 0f, new BulletDefinition(0.25f, 30f, 30f, 10f)),
+                new PointDefenseDefinition(3f, 0.3f, 1f),
+                new DroneBayDefinition(1, 5f, DroneShip),
+            });
 
         public static AiShipProfile ArmedShip => new AiShipProfile(
             new[] { new AiWeapon(0, AiWeaponClass.Common, AiBulletBehavior.Projectile, AiWeaponCapability.DamageEnemy, 30f, 0f) },
-            new[] { DeviceClass.PointDefense }, hasDroneBays: true, isDrone: false, isStarbase: false, SizeClass.Frigate,
+            new[] { new AiDevice(1, DeviceClass.PointDefense, isAutomatic: false) }, new[] { new AiDroneBay(2, isAutomatic: false) },
+            isDrone: false, isStarbase: false, SizeClass.Frigate,
             enginePower: 10f, turnRate: 10f, propulsion: 20f, kineticResistance: 0.2f, rammingDamageMultiplier: 1f,
             modelScale: 2f, AiTargetPriority.Normal, chanceToAvoidDrone: 0f);
 
         public static AiShipProfile Drone => new AiShipProfile(
             new[] { new AiWeapon(0, AiWeaponClass.Common, AiBulletBehavior.Projectile, AiWeaponCapability.DamageEnemy, 10f, 0f) },
-            null, hasDroneBays: false, isDrone: true, isStarbase: false, SizeClass.Undefined,
+            null, null, isDrone: true, isStarbase: false, SizeClass.Undefined,
             enginePower: 20f, turnRate: 20f, propulsion: 40f, kineticResistance: 0f, rammingDamageMultiplier: 1f,
             modelScale: 0.5f, AiTargetPriority.Low, chanceToAvoidDrone: 0f);
 
         public static AiShipProfile Starbase => new AiShipProfile(
             new[] { new AiWeapon(0, AiWeaponClass.Continuous, AiBulletBehavior.Beam, AiWeaponCapability.DamageEnemy, 40f, 0f) },
-            null, hasDroneBays: true, isDrone: false, isStarbase: true, SizeClass.Starbase,
+            null, new[] { new AiDroneBay(2, isAutomatic: false) }, isDrone: false, isStarbase: true, SizeClass.Starbase,
             enginePower: 0f, turnRate: 0f, propulsion: 0f, kineticResistance: 0.5f, rammingDamageMultiplier: 1f,
             modelScale: 10f, AiTargetPriority.Normal, chanceToAvoidDrone: 0f);
 
-        public static AiShipProfile Unarmed => new AiShipProfile(null, null, hasDroneBays: false, isDrone: false,
+        public static AiShipProfile Unarmed => new AiShipProfile(null, null, null, isDrone: false,
             isStarbase: false, SizeClass.Destroyer, enginePower: 10f, turnRate: 10f, propulsion: 20f,
             kineticResistance: 0f, rammingDamageMultiplier: 1f, modelScale: 2f, AiTargetPriority.Normal,
             chanceToAvoidDrone: 0f);

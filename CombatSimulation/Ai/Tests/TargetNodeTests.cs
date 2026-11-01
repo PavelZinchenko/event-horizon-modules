@@ -317,11 +317,11 @@ namespace CombatSimulation.Ai.Tests
         }
 
         private static AiShipProfile WithPriority(AiTargetPriority priority) => new AiShipProfile(ArmedShip.Weapons,
-            ArmedShip.Devices, true, false, false, SizeClass.Frigate, 10f, 10f, 20f, 0.2f, 1f, 2f, priority, 0f);
+            ArmedShip.Devices, ArmedShip.DroneBays, false, false, SizeClass.Frigate, 10f, 10f, 20f, 0.2f, 1f, 2f, priority, 0f);
 
         private static AiShipProfile WithWeaponRange(float range) => new AiShipProfile(
             new[] { new AiWeapon(0, AiWeaponClass.Common, AiBulletBehavior.Projectile, AiWeaponCapability.DamageEnemy, range, 0f) },
-            null, false, false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, AiTargetPriority.Normal, 0f);
+            null, null, false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, AiTargetPriority.Normal, 0f);
 
         // Slots 1 and 2 on side 0, 101 and 102 on side 1; snapshot order 1, 101, 2, 102.
         private static BattleRunner Battle2V2(ShipDefinition secondEnemy = null)

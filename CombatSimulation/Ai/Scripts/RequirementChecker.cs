@@ -43,8 +43,8 @@ namespace CombatSimulation.Ai
 
         public bool Create(BehaviorNodeRequirement_HasDevice content)
         {
-            foreach (var deviceClass in _profile.Devices)
-                if (deviceClass == content.DeviceClass) return true;
+            foreach (var device in _profile.Devices)
+                if (device.DeviceClass == content.DeviceClass) return true;
 
             return false;
         }
