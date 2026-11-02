@@ -11,6 +11,9 @@ namespace CombatSimulation.Core
 
         // A child bullet (phase 5, step 2): pattern rotation, offset X, offset Y, speed, lifetime, in this order.
         ChildSpawn = 3,
+
+        // A clone (phase 5, step 7c): its direction from the mothership, in whole degrees.
+        CloneSpawn = 4,
     }
 
     // Counter-based random (investigation 6.7): a draw is a function of match seed, entity, tick and purpose.

@@ -16,8 +16,13 @@ namespace CombatSimulation.Core
             Setup = setup;
             _bays = new DroneBayInventory[setup.Ship.Devices.Count];
             for (var i = 0; i < _bays.Length; ++i)
-                if (setup.Ship.Devices[i] is DroneBayDefinition definition)
-                    _bays[i] = new DroneBayInventory(this, i, definition);
+            {
+                var device = setup.Ship.Devices[i];
+                if (device is DroneBayDefinition bay)
+                    _bays[i] = new DroneBayInventory(this, i, bay.Drone, bay.Capacity);
+                else if (device is ClonningCenterDefinition center)
+                    _bays[i] = new DroneBayInventory(this, i, center.Clone, DroneBayInventory.NoCapacity);
+            }
         }
 
         internal DroneBayInventory GetBay(int index) => _bays[index];

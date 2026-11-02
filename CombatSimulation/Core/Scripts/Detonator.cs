@@ -49,9 +49,9 @@ namespace CombatSimulation.Core
 
         public DetonatorDefinition Definition { get; }
 
-        public override void Reset()
+        public override void Reset(long tick)
         {
-            base.Reset();
+            base.Reset(tick);
             _use.Reset();
         }
 

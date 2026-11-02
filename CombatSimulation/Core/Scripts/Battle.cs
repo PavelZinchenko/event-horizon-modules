@@ -365,7 +365,7 @@ namespace CombatSimulation.Core
                 var request = _spawnRequests[i];
                 var sequence = 0u;
                 for (var j = i - 1; j >= 0 && _spawnRequests[j].HasSameSlot(request); --j) ++sequence;
-                if (request.DroneBay != null) SpawnDrone(request, sequence);
+                if (request.LaunchesShip) SpawnDrone(request, sequence);
                 else if (request.Beam != null) SpawnBeam(request, sequence);
                 else SpawnBullet(request, sequence);
             }
@@ -376,6 +376,7 @@ namespace CombatSimulation.Core
             PruneTriggerParents();
         }
 
+        // A ship of the parent's bay inventory: a drone, or a clone (phase 5, step 7c).
         private void SpawnDrone(in SpawnRequest request, uint sequence)
         {
             var parent = request.Ship;
@@ -390,14 +391,18 @@ namespace CombatSimulation.Core
                 return;
             }
 
-            var body = World.CreateBody(new BodyDef { Mass = bay.Definition.Drone.Mass });
+            var body = World.CreateBody(new BodyDef { Mass = bay.Drone.Mass });
             ship.InitializeDrone(id, bay, body, Tick, Setup.DamageTypes.Count);
             AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));
-            var origin = World.GetPosition(parent.Body);
-            var angle = World.GetAngle(parent.Body);
-            World.SetPose(body, origin, angle);
-            World.TryFindFreePosition(body, origin, SpawnSearchDistance, out var position);
-            World.SetPose(body, position, angle);
+            if (parent.Definition.Devices[request.DeviceIndex] is ClonningCenterDefinition) PlaceClone(parent, ship);
+            else
+            {
+                var origin = World.GetPosition(parent.Body);
+                var angle = World.GetAngle(parent.Body);
+                World.SetPose(body, origin, angle);
+                World.TryFindFreePosition(body, origin, SpawnSearchDistance, out var position);
+                World.SetPose(body, position, angle);
+            }
 
             var index = 0;
             while (index < _drones.Count && _drones[index].Id.Value < id.Value) ++index;
@@ -405,6 +410,20 @@ namespace CombatSimulation.Core
             bay.RecordLaunch();
             _events.Add(BattleEvent.Spawn(BattleId, Tick, _events.Count, ship, Authority(ship.Owner)));
             CaptureDroneSpawn(ship, parent.Id);
+            parent.GetDevice(request.DeviceIndex).OnShipLaunched(this, parent, id, Tick);
+        }
+
+        // Legacy ClonningDevice.SpawnShip: the mothership position plus its scale in a random direction of whole
+        // degrees, that direction as the rotation, and the mothership velocity. Legacy seeds System.Random from a hash
+        // code; the core draws the direction counter-based, so it is new, not a copy (approved).
+        private void PlaceClone(ShipEntity mothership, ShipEntity clone)
+        {
+            var random = CounterRandom.Create(Setup.MatchSeed, clone.Id, Tick, RandomPurpose.CloneSpawn);
+            var angle = random.NextUint() % 360 * (float)(Math.PI / 180.0);
+            var direction = Rot.FromAngle(angle);
+            var position = World.GetPosition(mothership.Body) + mothership.Definition.Scale * new Vec2(direction.C, direction.S);
+            World.SetPose(clone.Body, World.Torus.Wrap(position), angle);
+            World.SetLinearVelocity(clone.Body, World.GetLinearVelocity(mothership.Body));
         }
 
         // Legacy BulletFactory.ConfigureBody at the muzzle pose, plus the Q1 recoil (owner, 2026-10-20; phase 4 E1):
@@ -1141,7 +1160,12 @@ namespace CombatSimulation.Core
             if (!Setup.IsLocalOwner(ship.Owner)) ForgetPredictedHits(ship.Id);
             World.DestroyBody(ship.Body);
             _entities.Remove(ship.Id);
-            if (ship.IsDrone) ship.Bay.RecordLoss();
+            if (ship.IsDrone)
+            {
+                ship.Bay.RecordLoss();
+                var mothership = ship.Bay.Slot.ActiveShip;
+                mothership?.GetDevice(ship.Bay.Key.DeviceIndex).OnShipLost(this, mothership, ship.Id, Tick);
+            }
             _ships.Release(ship);
         }
 

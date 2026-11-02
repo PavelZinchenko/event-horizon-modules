@@ -6,9 +6,9 @@ using NUnit.Framework;
 
 namespace CombatSimulation.Core.Tests
 {
-    // Phase 5, steps 7a and 7b: the gate examples of InfinityStone, WarpDrive and Detonator
-    // (TODO/battle_simulator_phase5.md, "Data-model gate (7)"), the stage 3 status and the owner records of device uses
-    // and explosions (H8).
+    // Phase 5, steps 7a to 7c: the gate examples of InfinityStone, WarpDrive, Detonator and the clonning center
+    // (TODO/battle_simulator_phase5.md, "Data-model gate (7)"), the stage 3 status and the owner records of device uses,
+    // explosions and clones (H8).
     public class GateDeviceTests
     {
         private const float Tolerance = 1e-3f;
@@ -439,6 +439,179 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(16, explosion.LifetimeTicks);
         }
 
+        // Records 22, 26, 25 (S, M, L): no energy cost, cooldown 30, 45, 60 s. The mapper builds the clone of a
+        // mothership with armor 1,000 and shield 200: armor 900, shield 180.
+        private static readonly ShipDefinition Clone =
+            Fixtures.ShipWith(armor: 900f, shield: new ResourceDefinition(180f), energy: new ResourceDefinition(100f));
+
+        private static ShipDefinition Mothership(float cooldown = 30f) =>
+            Fixtures.ShipWith(armor: 1000f, shield: new ResourceDefinition(200f), energy: new ResourceDefinition(100f),
+                devices: new DeviceDefinition[] { new ClonningCenterDefinition(0f, cooldown, Clone) });
+
+        private static ShipState[] Clones(Driver driver) => DroneBayTests.Drones(driver);
+
+        private static ShipEntity CloneOf(Driver driver) => driver.Battle.FindShip(Clones(driver).Single().Id);
+
+        // The mothership deploys at tick 0 and holds the key from tick 1.
+        private static Driver CloneDuel(float cooldown = 30f, bool reserve = false)
+        {
+            var driver = DetonatorDuel(Mothership(cooldown), reserve);
+            driver.Control(1, systems: 1);
+            return driver;
+        }
+
+        [Test]
+        public void ADefinitionRejectsACloneThatLaunchesShips()
+        {
+            Assert.Throws<ArgumentNullException>(() => new ClonningCenterDefinition(0f, 30f, null));
+            Assert.Throws<ArgumentException>(() => new ClonningCenterDefinition(0f, 30f, Mothership()));
+            Assert.Throws<ArgumentException>(() => new ClonningCenterDefinition(0f, 30f, DroneBayTests.Carrier()));
+            Assert.Throws<ArgumentException>(() => new DroneBayDefinition(1, 0f, Mothership()));
+            Assert.AreSame(Clone, Mothership().Devices[0].ChildShip);
+        }
+
+        // Clonning center, row 1: the timer starts 80% elapsed.
+        [TestCase(30f, 300)]
+        [TestCase(45f, 450)]
+        [TestCase(60f, 600)]
+        public void TheFirstCloneIsReadyAfterAFifthOfTheCooldown(float cooldown, long readyTick)
+        {
+            var driver = CloneDuel(cooldown);
+            driver.StepUntil(readyTick - 1);
+            var state = Device(driver, 1, 0);
+            Assert.IsFalse(state.Ready);
+            Assert.AreEqual(1f / (cooldown * 50f), state.Cooldown, 1e-6f);
+            Assert.AreEqual(1, state.InHangar);
+            Assert.AreEqual(0, state.ActiveDrones);
+
+            driver.Step();
+            Assert.IsEmpty(Clones(driver));
+            Assert.IsTrue(Device(driver, 1, 0).Ready, "ready at the next tick");
+            driver.Step();
+            Assert.AreEqual(1, Clones(driver).Length);
+        }
+
+        // Rows 2 and 3: the clone spawns one mothership scale away in a random whole-degree direction, faces it and takes
+        // the mothership velocity. It is a drone of the slot with the clone definition and the mothership's side.
+        [Test]
+        public void ACloneSpawnsBesideTheMothershipWithItsVelocity()
+        {
+            var driver = CloneDuel();
+            driver.StepUntil(300);
+            driver.Place(1, new Vec2(50f, 50f), new Vec2(3f, -2f));
+            driver.Step();
+
+            var state = Clones(driver).Single();
+            var clone = driver.Battle.FindShip(state.Id);
+            var mothership = driver.Ship(1);
+            var world = driver.Battle.World;
+            Assert.AreSame(Clone, clone.Definition);
+            Assert.AreEqual(new DroneBayKey(new RosterId(1), 0), state.BayKey);
+            Assert.AreEqual(mothership.Id, state.MothershipId);
+            Assert.AreEqual(0, state.Side);
+            Assert.AreEqual(900f, clone.Armor.Value, Tolerance);
+            Assert.AreEqual(180f, clone.Shield.Value, Tolerance);
+            Assert.AreEqual(SpawnIdentity.CreateChild(mothership.Id, 300, 0, 0, 0), clone.Id);
+
+            var angle = world.GetAngle(clone.Body);
+            var degrees = angle * 180.0 / Math.PI;
+            Assert.AreEqual(Math.Round(degrees), degrees, 1e-3);
+            var offset = world.Torus.Delta(world.GetPosition(mothership.Body), world.GetPosition(clone.Body));
+            Assert.AreEqual(2f, offset.Length, Tolerance, "the fixture scale");
+            Assert.AreEqual(0f, LegacyAngleDelta(angle, (float)Math.Atan2(offset.Y, offset.X)), Tolerance);
+            Assert.AreEqual(3f, world.GetLinearVelocity(clone.Body).X, Tolerance);
+            Assert.AreEqual(-2f, world.GetLinearVelocity(clone.Body).Y, Tolerance);
+
+            // Counter-based: the same match gives the same direction.
+            var again = CloneDuel();
+            again.StepUntil(301);
+            Assert.AreEqual(angle, again.Battle.World.GetAngle(CloneOf(again).Body), 1e-6f);
+        }
+
+        private static float LegacyAngleDelta(float a, float b)
+        {
+            var delta = (a - b) % (2f * (float)Math.PI);
+            if (delta > Math.PI) delta -= 2f * (float)Math.PI;
+            if (delta < -Math.PI) delta += 2f * (float)Math.PI;
+            return delta;
+        }
+
+        // Rows 4 and 5: while the clone lives the center is not ready and shows cooldown 1; the clone's loss starts the
+        // full cooldown.
+        [Test]
+        public void TheCloneBlocksTheCenterAndItsLossStartsTheFullCooldown()
+        {
+            var driver = CloneDuel();
+            driver.StepUntil(301);
+            var first = CloneOf(driver).Id;
+            var state = Device(driver, 1, 0);
+            Assert.IsFalse(state.Ready);
+            Assert.AreEqual(1f, state.Cooldown);
+            Assert.AreEqual(0, state.InHangar);
+            Assert.AreEqual(1, state.ActiveDrones);
+
+            driver.Step(100);
+            Assert.AreEqual(first, Clones(driver).Single().Id, "the held key makes no second clone");
+
+            driver.Battle.QueueDeath(first);
+            var lossTick = driver.Tick;
+            driver.Step();
+            Assert.IsEmpty(Clones(driver));
+            state = Device(driver, 1, 0);
+            Assert.IsFalse(state.Ready);
+            Assert.AreEqual(1499f / 1500f, state.Cooldown, 1e-5f);
+            Assert.AreEqual(1, state.InHangar);
+
+            driver.StepUntil(lossTick + 1500);
+            Assert.IsEmpty(Clones(driver));
+            driver.Step();
+            Assert.AreNotEqual(first, Clones(driver).Single().Id);
+        }
+
+        // Rows 6 and 7: the clone stays when its mothership dies, as a drone does, and does not keep its side alive.
+        [TestCase(false)]
+        [TestCase(true)]
+        public void TheCloneOutlivesItsMothershipButNotTheBattle(bool reserve)
+        {
+            var driver = CloneDuel(reserve: reserve);
+            driver.StepUntil(301);
+            var clone = CloneOf(driver);
+            driver.Kill(1);
+            driver.Step();
+
+            Assert.AreSame(clone, driver.Battle.FindShip(clone.Id));
+            Assert.IsTrue(Clones(driver).Single().MothershipId.IsNull);
+            Assert.AreEqual(!reserve, driver.Battle.IsCompleted);
+        }
+
+        // Row 6: a retreat leaves the clone. A redeployed ship's center starts its own timer and ignores the old clone.
+        [Test]
+        public void ARedeployedMothershipIgnoresTheCloneOfItsFormerDeployment()
+        {
+            var driver = CloneDuel();
+            driver.StepUntil(301);
+            var clone = CloneOf(driver).Id;
+            Assert.IsTrue(driver.Retreat(driver.Entity(1)));
+            driver.StepUntil(driver.Tick + Battle.RetreatTicks + 1);
+            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            Assert.IsNotNull(driver.Battle.FindShip(clone));
+
+            var redeployed = driver.Tick;
+            Assert.IsTrue(driver.Deploy(1));
+            driver.Step();
+            driver.Control(1, systems: 1);
+            driver.Battle.QueueDeath(clone);
+            driver.Step();
+            Assert.IsNull(driver.Battle.FindShip(clone));
+            Assert.AreEqual(1, Device(driver, 1, 0).InHangar);
+
+            // The old clone's loss does not restart the new timer: the new clone comes 6 s after the redeployment.
+            driver.StepUntil(redeployed + 300);
+            Assert.IsEmpty(Clones(driver));
+            driver.Step();
+            Assert.AreEqual(1, Clones(driver).Length);
+        }
+
         // H8: the owner sends the start and the end; the copy follows them and never starts a warp itself.
 
         private const int RemoteOwner = 20;
@@ -598,6 +771,38 @@ namespace CombatSimulation.Core.Tests
                 OwnerOperation.DeviceUsed(remote.BattleId, RemoteOwner, 2, remote.Tick, ship, 1, true)));
             Assert.IsTrue(remote.Battle.Submit(RemoteOwner,
                 OwnerOperation.DeviceUsed(remote.BattleId, RemoteOwner, 2, remote.Tick, ship, 0, true)));
+        }
+
+        // Clonning center (H8): the copy adds the clone from the owner's launch record, links it to its center, and
+        // starts the cooldown at the owner's removal record.
+        [Test]
+        public void TheCopyLinksTheOwnersCloneAndHearsItsLoss()
+        {
+            var (owner, remote, link) = Pair(Mothership());
+            owner.Control(101, systems: 1);
+            while (Clones(owner).Length == 0) Tick(owner, remote, link);
+
+            var clone = Clones(owner).Single().Id;
+            Assert.AreEqual(clone, Clones(remote).Single().Id);
+            Assert.AreEqual(1, Device(remote, 101, 0).ActiveDrones);
+            Assert.AreEqual(1f, Device(remote, 101, 0).Cooldown);
+
+            owner.Battle.QueueDeath(clone);
+            Tick(owner, remote, link);
+            Assert.IsEmpty(Clones(remote));
+            Assert.AreEqual(1, Device(remote, 101, 0).InHangar);
+            Assert.AreEqual(Device(owner, 101, 0).Cooldown, Device(remote, 101, 0).Cooldown, 1e-6f);
+        }
+
+        [Test]
+        public void TheCopyDoesNotCloneFromItsOwnControls()
+        {
+            var (_, remote, _) = Pair(Mothership());
+            remote.Control(101, systems: 1);
+            remote.Step(400);
+
+            Assert.IsEmpty(Clones(remote));
+            Assert.AreEqual(1, Device(remote, 101, 0).InHangar);
         }
 
         private sealed class Link

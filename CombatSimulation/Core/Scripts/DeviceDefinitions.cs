@@ -31,6 +31,10 @@ namespace CombatSimulation.Core
     {
         private protected DeviceDefinition() { }
 
+        // The ship this device launches: a drone, or a clone (phase 5, step 7c); null for other devices. A launched
+        // ship launches none.
+        public virtual ShipDefinition ChildShip => null;
+
         internal abstract void Validate(int barrelCount);
         internal abstract ShipDevice CreateDevice(int index);
     }

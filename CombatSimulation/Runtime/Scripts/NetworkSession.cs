@@ -188,7 +188,7 @@ namespace CombatSimulation.Runtime
                 return _runner.Battle.Roster.Find(operation.Roster.RosterId)?.Setup.Ship;
             var bay = operation.BayKey.Value;
             var devices = _runner.Battle.Roster.Find(bay.RosterId)?.Setup.Ship.Devices;
-            return devices != null && bay.DeviceIndex < devices.Count ? (devices[bay.DeviceIndex] as DroneBayDefinition)?.Drone : null;
+            return devices != null && bay.DeviceIndex < devices.Count ? devices[bay.DeviceIndex].ChildShip : null;
         }
 
         // Bodies go in control index order. Normally one datagram holds the batch; a larger batch continues in more

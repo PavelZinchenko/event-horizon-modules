@@ -19,8 +19,9 @@ namespace CombatSimulation.Core
         // Stage 2, after the resources recharge. Not called while the ship retreats.
         public abstract void Update(Battle battle, ShipEntity ship);
 
-        // Restores a pooled device for a new entity; persistent bay inventory is stored on the roster.
-        public virtual void Reset() => IsActive = false;
+        // Restores a pooled device for a new entity that enters the battle at the tick; persistent bay inventory is
+        // stored on the roster.
+        public virtual void Reset(long tick) => IsActive = false;
 
         // Stops persistent devices before retreat queries or before the parent is released.
         public virtual void Deactivate(Battle battle) { }
@@ -46,6 +47,13 @@ namespace CombatSimulation.Core
         // A remote copy follows its owner's record of a use that started or ended at the tick (H8).
         internal virtual void ApplyRemoteUse(Battle battle, ShipEntity ship, long tick, bool started) { }
 
+        // Phase 5, step 7c: this device launched the child ship at the tick, locally or by its owner's record.
+        internal virtual void OnShipLaunched(Battle battle, ShipEntity ship, EntityId child, long tick) { }
+
+        // A ship that this device index of the slot launched left the battle at the tick. The device of the slot's
+        // active ship hears it, though a former deployment may have launched it.
+        internal virtual void OnShipLost(Battle battle, ShipEntity ship, EntityId child, long tick) { }
+
         // Legacy WeaponType other than Continuous and RequiredCharging: a warp blocks it.
         internal virtual bool IsShotWeapon => false;
 
@@ -67,9 +75,9 @@ namespace CombatSimulation.Core
 
         internal override bool IsShotWeapon => true;
 
-        public override void Reset()
+        public override void Reset(long tick)
         {
-            base.Reset();
+            base.Reset(tick);
             LastShotTick = NeverFired;
         }
 
@@ -114,8 +122,8 @@ namespace CombatSimulation.Core
         public override void Update(Battle battle, ShipEntity ship) { }
     }
 
-    // A projectile, beam or drone requested at stage 2. Stage 5 creates it at the weapon or bay pose, or at the ship
-    // centre.
+    // A projectile, beam or launched ship (drone or clone) requested at stage 2. Stage 5 creates it at the weapon or bay
+    // pose, or at the ship centre.
     internal readonly struct SpawnRequest
     {
         // A bullet at the ship centre, without a barrel (phase 5, step 7b); its spawn slot is 0.
@@ -123,12 +131,12 @@ namespace CombatSimulation.Core
 
         public readonly ShipEntity Ship;
         public readonly int DeviceIndex;
-        // Weapon barrel, the bay's lifetime launch slot for a drone request, or ShipCentre.
+        // Weapon barrel, the bay's lifetime launch slot for a launched ship, or ShipCentre.
         public readonly int BarrelIndex;
         public readonly float Spread;
         public readonly BulletDefinition Bullet;
         public readonly BeamDevice Beam;
-        public readonly DroneBayDevice DroneBay;
+        public readonly bool LaunchesShip;
 
         public SpawnRequest(ShipEntity ship, int deviceIndex, int barrelIndex, float spread, BulletDefinition bullet)
         {
@@ -138,7 +146,7 @@ namespace CombatSimulation.Core
             Spread = spread;
             Bullet = bullet;
             Beam = null;
-            DroneBay = null;
+            LaunchesShip = false;
         }
 
         // A device's bullet at the ship centre, at rotation 0, without spread (legacy SpaceObjectFactory.CreateArea).
@@ -153,19 +161,22 @@ namespace CombatSimulation.Core
             Spread = 0f;
             Bullet = null;
             Beam = beam;
-            DroneBay = null;
+            LaunchesShip = false;
         }
 
-        public SpawnRequest(ShipEntity ship, DroneBayDevice bay)
+        private SpawnRequest(ShipEntity ship, int deviceIndex)
         {
             Ship = ship;
-            DeviceIndex = bay.Index;
-            BarrelIndex = ship.Slot.GetBay(bay.Index).Launched;
+            DeviceIndex = deviceIndex;
+            BarrelIndex = ship.Slot.GetBay(deviceIndex).Launched;
             Spread = 0f;
             Bullet = null;
             Beam = null;
-            DroneBay = bay;
+            LaunchesShip = true;
         }
+
+        // The ship of the device's bay inventory: a drone, or a clone.
+        public static SpawnRequest Launch(ShipEntity ship, int deviceIndex) => new SpawnRequest(ship, deviceIndex);
 
         // Spawns from one spawn slot in one tick; the sequence counts them (Identity, item 3).
         public bool HasSameSlot(in SpawnRequest other) =>

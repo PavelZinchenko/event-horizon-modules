@@ -111,6 +111,7 @@ namespace CombatSimulation.Ai.Tests
             Assert.AreEqual(S, new EscapeTargetAttackRadiusNode().Evaluate(context));
             Assert.AreEqual(S, new AvoidThreatsNode().Evaluate(context), "no threats");
             Assert.AreEqual(F, new FlyAroundMothershipNode(5f).Evaluate(context), "not a drone");
+            Assert.AreEqual(F, new KeepDistanceNode(0f, 10f).Evaluate(context));
             Assert.IsFalse(context.Controls.RotationLocked);
             Assert.IsFalse(context.Controls.MovementLocked);
         }
@@ -263,6 +264,27 @@ namespace CombatSimulation.Ai.Tests
 
             context.TargetShip = default;
             Assert.AreEqual(F, Builder(context).Build(Node(inRange)).Evaluate(context), "no target");
+        }
+
+        // Phase 5, step 7c: legacy KeepDistance succeeds between the distances plus a third of both model scales; it
+        // flies toward a target that is too far and away from one that is too near. It swaps reversed bounds.
+        [Test]
+        public void KeepDistanceHoldsTheTargetBetweenItsBounds()
+        {
+            var context = TargetContext(out var target);
+            var distance = context.Delta(context.Ship.Position, target.Position).Length;
+            var heading = LegacyMath.Angle(context.Delta(context.Ship.Position, target.Position));
+
+            Assert.AreEqual(S, new KeepDistanceNode(0f, distance).Evaluate(context));
+            Assert.AreEqual(S, new KeepDistanceNode(distance, 0f).Evaluate(context), "reversed bounds");
+            Assert.IsFalse(context.Controls.Course.HasValue);
+
+            Assert.AreEqual(R, new KeepDistanceNode(0f, 1f).Evaluate(context), "too far");
+            Assert.AreEqual(heading, context.Controls.Course.Value, 1e-5f);
+
+            context.Controls.Reset();
+            Assert.AreEqual(R, new KeepDistanceNode(distance + 10f, distance + 20f).Evaluate(context), "too near");
+            Assert.AreEqual(0f, LegacyMath.DeltaAngle(heading + (float)System.Math.PI, context.Controls.Course.Value), 1e-4f);
         }
 
         // Legacy CommonControls clamps the throttle.

@@ -23,9 +23,9 @@ namespace CombatSimulation.Core
 
         public InfinityStoneDefinition Definition { get; }
 
-        public override void Reset()
+        public override void Reset(long tick)
         {
-            base.Reset();
+            base.Reset(tick);
             _use.Reset();
         }
 

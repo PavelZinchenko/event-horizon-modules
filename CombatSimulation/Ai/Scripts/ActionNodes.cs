@@ -405,6 +405,27 @@ namespace CombatSimulation.Ai
         private readonly float _distance;
     }
 
+    // Legacy KeepDistanceNode: keeps the main target between the two distances, the smaller first (phase 5, step 7c).
+    internal sealed class KeepDistanceNode : INode
+    {
+        public KeepDistanceNode(float min, float max)
+        {
+            _min = min < max ? min : max;
+            _max = max > min ? max : min;
+        }
+
+        public NodeState Evaluate(AiContext context)
+        {
+            if (!context.TryGetShip(context.TargetShip, out var target))
+                return NodeState.Failure;
+
+            return Navigation.KeepDistance(context, target, _min, _max) ? NodeState.Success : NodeState.Running;
+        }
+
+        private readonly float _min;
+        private readonly float _max;
+    }
+
     // Legacy RecoilNode: holds every weapon with high recoil. The builder gives Failure without one.
     internal sealed class UseRecoilNode : INode
     {
@@ -443,8 +464,9 @@ namespace CombatSimulation.Ai
         private readonly IReadOnlyList<int> _devices;
     }
 
-    // Legacy SpawnDronesNode: presses every drone bay that is not automatic; runs while drones are left in a hangar.
-    // Clonning centers are inert (D1), so they count as absent.
+    // Legacy SpawnDronesNode: presses every drone bay and clonning center that is not automatic; runs while drones are
+    // left in a hangar or a center has no clone. A center counts as one clone in the hangar or one active clone
+    // (phase 5, step 7c).
     internal sealed class SpawnDronesNode : INode
     {
         public SpawnDronesNode(IReadOnlyList<int> droneBays) => _droneBays = droneBays;

@@ -65,6 +65,15 @@ namespace CombatSimulation.Core
             IsRunning = false;
         }
 
+        // Legacy TimeFromLastUse set at creation to a share of the cooldown (clonning center: 80%): the rest of the
+        // cooldown runs from the deployment tick.
+        public void Reset(in ActivationPolicy policy, long tick, float elapsedShare)
+        {
+            Reset();
+            var remaining = policy.Cooldown * (1f - elapsedShare);
+            if (remaining > 0f) LastUseTick = tick - policy.CooldownTicks + TickTime.AtLeast(remaining);
+        }
+
         public readonly bool IsCooledDown(in ActivationPolicy policy, long tick) => tick - LastUseTick >= policy.CooldownTicks;
 
         // Legacy CanBeActivated: the cooldown, and the cost when it has one (a free use needs no energy).

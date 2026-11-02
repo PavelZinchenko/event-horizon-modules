@@ -89,7 +89,8 @@ namespace CombatSimulation.Ai
         public float ActivationTime { get; }
     }
 
-    // A drone bay (legacy IDroneBay): its control bit and whether its key binding makes it automatic.
+    // A drone bay (legacy IDroneBay) or a clonning center (phase 5, step 7c): its control bit and whether its key binding
+    // makes it automatic.
     public sealed class AiDroneBay
     {
         public AiDroneBay(int deviceIndex, bool isAutomatic)
@@ -145,7 +146,7 @@ namespace CombatSimulation.Ai
         // The working devices, in device order.
         public IReadOnlyList<AiDevice> Devices { get; }
 
-        // The drone bays, in device order. Drones have none.
+        // The drone bays and clonning centers, in device order (legacy HasDrones counts both). Drones have none.
         public IReadOnlyList<AiDroneBay> DroneBays { get; }
 
         public bool HasDroneBays => DroneBays.Count > 0;

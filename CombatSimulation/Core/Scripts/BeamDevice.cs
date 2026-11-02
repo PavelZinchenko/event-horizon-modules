@@ -9,9 +9,9 @@ namespace CombatSimulation.Core
         public BeamDefinition Definition { get; }
         internal long StoppedTick => _stoppedTick;
 
-        public override void Reset()
+        public override void Reset(long tick)
         {
-            base.Reset();
+            base.Reset(tick);
             _handle = default;
             _active = false;
             _stoppedTick = long.MinValue / 2;

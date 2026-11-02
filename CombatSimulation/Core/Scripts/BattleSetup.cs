@@ -178,7 +178,7 @@ namespace CombatSimulation.Core
                 };
                 if (!DamageTypes.Contains(type))
                     throw new ArgumentException($"Damage type {type} does not exist in the battle's table.");
-                if (device is DroneBayDefinition bay) ValidateDamageTypes(bay.Drone, checkedShips);
+                if (device.ChildShip != null) ValidateDamageTypes(device.ChildShip, checkedShips);
             }
         }
 

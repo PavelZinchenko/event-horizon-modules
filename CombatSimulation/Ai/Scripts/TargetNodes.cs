@@ -297,6 +297,23 @@ namespace CombatSimulation.Ai
         public NodeState Evaluate(AiContext context) => context.IsMothershipRetreated ? NodeState.Success : NodeState.Failure;
     }
 
+    // Legacy MothershipLowHpNode: the mothership's armor is below the fraction (phase 5, step 7c).
+    internal sealed class MothershipLowHpNode : INode
+    {
+        public MothershipLowHpNode(float minValue) => _minValue = minValue;
+
+        public NodeState Evaluate(AiContext context)
+        {
+            if (!context.TryGetShip(context.Mothership, out var mothership))
+                return NodeState.Failure;
+
+            var armor = mothership.Armor;
+            return armor.Value / armor.Max < _minValue ? NodeState.Success : NodeState.Failure;
+        }
+
+        private readonly float _minValue;
+    }
+
     // Legacy MothershipRangeExceeded. The builder gives Failure for a range that is not positive.
     internal sealed class MothershipDistanceExceededNode : INode
     {

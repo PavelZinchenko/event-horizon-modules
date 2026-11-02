@@ -11,9 +11,9 @@ namespace CombatSimulation.Core
         public bool Enabled { get; private set; }
         public long NextQueryTick { get; private set; }
 
-        public override void Reset()
+        public override void Reset(long tick)
         {
-            base.Reset();
+            base.Reset(tick);
             Enabled = false;
             NextQueryTick = 0;
             _started = false;

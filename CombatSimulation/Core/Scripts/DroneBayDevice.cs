@@ -1,21 +1,26 @@
 namespace CombatSimulation.Core
 {
-    // Persistent inventory. A destroyed drone never returns to the hangar (Q5).
+    // Persistent inventory of a device that launches ships: a drone bay, or a clonning center without a capacity
+    // (phase 5, step 7c). A destroyed drone never returns to the hangar (Q5).
     internal sealed class DroneBayInventory
     {
-        public DroneBayInventory(RosterSlot slot, int index, DroneBayDefinition definition)
+        public const int NoCapacity = int.MaxValue;
+
+        public DroneBayInventory(RosterSlot slot, int index, ShipDefinition drone, int capacity)
         {
             Slot = slot;
             Key = new DroneBayKey(slot.RosterId, index);
-            Definition = definition;
+            Drone = drone;
+            Capacity = capacity;
         }
 
         public RosterSlot Slot { get; }
         public DroneBayKey Key { get; }
-        public DroneBayDefinition Definition { get; }
+        public ShipDefinition Drone { get; }
+        public int Capacity { get; }
         public int Launched { get; private set; }
         public int ActiveCount { get; private set; }
-        public int InHangar => Definition.Capacity - Launched;
+        public int InHangar => Capacity - Launched;
         public void RecordLaunch() { ++Launched; ++ActiveCount; }
         public void RecordLoss() => --ActiveCount;
     }
@@ -36,7 +41,7 @@ namespace CombatSimulation.Core
                 return;
 
             ship.LastDroneLaunchTick = battle.Tick;
-            battle.RequestSpawn(new SpawnRequest(ship, this));
+            battle.RequestSpawn(SpawnRequest.Launch(ship, Index));
         }
 
         // Legacy DroneBay: CanBeActivated needs a drone in the hangar, the launch timer and the cost.

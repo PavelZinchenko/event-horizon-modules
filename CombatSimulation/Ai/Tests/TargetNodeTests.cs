@@ -296,6 +296,25 @@ namespace CombatSimulation.Ai.Tests
             Assert.AreEqual(F, new TargetMothershipNode().Evaluate(context));
         }
 
+        // Phase 5, step 7c: legacy MothershipLowHp compares the armor fraction of the mothership; without one it fails.
+        [Test]
+        public void MothershipLowHpReadsTheMothershipArmor()
+        {
+            var runner = CarrierBattle(out var carrier, out var drone);
+            var context = DroneContext(runner, drone);
+            Assert.IsTrue(runner.Snapshot.TryGetShip(carrier, out var mothership));
+            var fraction = mothership.Armor.Value / mothership.Armor.Max;
+
+            Assert.AreEqual(F, new MothershipLowHpNode(fraction).Evaluate(context));
+            Assert.AreEqual(S, new MothershipLowHpNode(fraction + 0.01f).Evaluate(context));
+            Assert.AreEqual(F, new MothershipLowHpNode(2f).Evaluate(Context(out _)), "not a drone");
+
+            Assert.IsTrue(runner.Retreat(carrier, runner.Tick));
+            StepUntilGone(runner, carrier);
+            Think(runner, context, drone);
+            Assert.AreEqual(F, new MothershipLowHpNode(2f).Evaluate(context), "the mothership left");
+        }
+
         [Test]
         public void ShipsWithoutBayHaveNoMothership()
         {

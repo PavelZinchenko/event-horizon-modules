@@ -82,7 +82,7 @@ namespace CombatSimulation.Core
         }
     }
 
-    // A pooled ship. Drones have a persistent bay instead of a roster slot.
+    // A pooled ship. Drones and clones have a persistent bay instead of a roster slot.
     internal sealed class ShipEntity
     {
         public const long NoRetreat = -1;
@@ -203,7 +203,7 @@ namespace CombatSimulation.Core
             => Initialize(id, slot, null, slot.Setup.Ship, slot.Side, slot.Owner, body, tick, damageTypes);
 
         internal void InitializeDrone(EntityId id, DroneBayInventory bay, BodyId body, long tick, int damageTypes)
-            => Initialize(id, null, bay, bay.Definition.Drone, bay.Slot.Side, bay.Slot.Owner, body, tick, damageTypes);
+            => Initialize(id, null, bay, bay.Drone, bay.Slot.Side, bay.Slot.Owner, body, tick, damageTypes);
 
         private void Initialize(EntityId id, RosterSlot slot, DroneBayInventory bay, ShipDefinition definition,
             int side, int owner, BodyId body, long tick, int damageTypes)
@@ -256,7 +256,7 @@ namespace CombatSimulation.Core
                 for (var i = 0; i < _devices.Length; ++i) _devices[i] = devices[i].CreateDevice(i);
                 _deviceSets.Add(definition, _devices);
             }
-            for (var i = 0; i < _devices.Length; ++i) _devices[i].Reset();
+            for (var i = 0; i < _devices.Length; ++i) _devices[i].Reset(tick);
         }
 
         // In control-bit order. Deployment creates or resets the cached devices for its definition.

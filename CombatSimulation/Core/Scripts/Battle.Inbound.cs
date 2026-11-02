@@ -273,7 +273,7 @@ namespace CombatSimulation.Core
                 operation.Tick, (uint)bay.Key.DeviceIndex, (uint)bay.Launched, 0)) return false;
             var ship = _ships.Allocate();
             if (!TryRegister(operation.EntityId, ship.Handle)) { _ships.Release(ship); return false; }
-            var body = World.CreateBody(new BodyDef { Mass = bay.Definition.Drone.Mass });
+            var body = World.CreateBody(new BodyDef { Mass = bay.Drone.Mass });
             ship.InitializeDrone(operation.EntityId, bay, body, operation.Tick, Setup.DamageTypes.Count);
             AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));
             SetSpawnPose(body, operation.Pose);
@@ -282,6 +282,11 @@ namespace CombatSimulation.Core
             _drones.Insert(index, ship);
             bay.RecordLaunch();
             _events.Add(BattleEvent.Spawn(BattleId, Tick, _events.Count, ship));
+
+            // The copy of the parent links its clone (phase 5, step 7c); a parent that already left needs nothing.
+            var parent = FindShip(operation.ParentId);
+            if (parent != null && parent.Slot == bay.Slot)
+                parent.GetDevice(bay.Key.DeviceIndex).OnShipLaunched(this, parent, ship.Id, operation.Tick);
             return true;
         }
 

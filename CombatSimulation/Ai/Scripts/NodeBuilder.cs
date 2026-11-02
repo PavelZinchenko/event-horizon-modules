@@ -211,7 +211,7 @@ namespace CombatSimulation.Ai
             return weapons.Count > 0 ? new SelectWeaponNode(new AiWeaponList(weapons)) : EmptyNode.Failure;
         }
 
-        // Legacy SpawnDronesNode skips automatic bays and is a node even without a bay.
+        // Legacy SpawnDronesNode skips automatic bays and clonning centers and is a node even without one.
         public INode Create(BehaviorTreeNode_SpawnDrones content)
         {
             var bays = new List<int>();
@@ -277,7 +277,7 @@ namespace CombatSimulation.Ai
             HasDevice(DeviceClass.PartialShield) ? Stub(content) : EmptyNode.Failure;
         public INode Create(BehaviorTreeNode_TrackControllableAmmo content) =>
             HasWeapon(IsControllable) ? Stub(content) : EmptyNode.Failure;
-        public INode Create(BehaviorTreeNode_KeepDistance content) => Stub(content);
+        public INode Create(BehaviorTreeNode_KeepDistance content) => new KeepDistanceNode(content.MinDistance, content.MaxDistance);
         public INode Create(BehaviorTreeNode_EscapeTargetAttackRadius content) => new EscapeTargetAttackRadiusNode();
         public INode Create(BehaviorTreeNode_AttackAdditionalTargets content) =>
             new AttackAdditionalTargetsNode(_profile.HasEngine && !content.NotMoving);
@@ -296,7 +296,7 @@ namespace CombatSimulation.Ai
             new FlyAroundMothershipNode(_context.NextRange(content.MinDistance, content.MaxDistance));
         public INode Create(BehaviorTreeNode_GoBerserk content) => new GoBerserkNode();
         public INode Create(BehaviorTreeNode_TargetMothership content) => new TargetMothershipNode();
-        public INode Create(BehaviorTreeNode_MothershipLowHp content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MothershipLowHp content) => new MothershipLowHpNode(content.MinValue);
         public INode Create(BehaviorTreeNode_MothershipDistanceExceeded content)
         {
             var maxRange = content.MaxDistance > 0 ? content.MaxDistance : _settings.LimitedRange;

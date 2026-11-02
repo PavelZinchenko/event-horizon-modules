@@ -30,9 +30,7 @@ namespace CombatSimulation.Core
             if (!(energyCost >= 0f) || float.IsInfinity(energyCost))
                 throw new ArgumentOutOfRangeException(nameof(energyCost));
             Drone = drone ?? throw new ArgumentNullException(nameof(drone));
-            foreach (var device in drone.Devices)
-                if (device is DroneBayDefinition)
-                    throw new ArgumentException("Drones cannot carry drone bays.", nameof(drone));
+            ValidateChild(drone, nameof(drone));
             Capacity = capacity;
             EnergyCost = energyCost;
         }
@@ -40,6 +38,16 @@ namespace CombatSimulation.Core
         public int Capacity { get; }
         public float EnergyCost { get; }
         public ShipDefinition Drone { get; }
+        public override ShipDefinition ChildShip => Drone;
+
+        // A launched ship carries no drone bay and no clonning center (legacy ShipFactory: CreateDroneBays only for a
+        // ship without a mothership).
+        internal static void ValidateChild(ShipDefinition child, string parameter)
+        {
+            foreach (var device in child.Devices)
+                if (device.ChildShip != null)
+                    throw new ArgumentException("A launched ship cannot launch ships.", parameter);
+        }
 
         internal override void Validate(int barrelCount) { }
         internal override ShipDevice CreateDevice(int index) => new DroneBayDevice(this, index);
