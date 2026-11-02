@@ -120,6 +120,20 @@ namespace CombatSimulation.Physics.Tests
         }
 
         [Test]
+        public void OnlyAClockwisePathInsideAnotherPathIsAHole()
+        {
+            var outer = new[] { new Vec2(0f, 0f), new Vec2(4f, 0f), new Vec2(4f, 4f), new Vec2(0f, 4f) };
+            var hole = new[] { new Vec2(1f, 1f), new Vec2(1f, 3f), new Vec2(3f, 3f), new Vec2(3f, 1f) };
+            var island = new[] { new Vec2(1f, 1f), new Vec2(3f, 1f), new Vec2(3f, 3f), new Vec2(1f, 3f) };
+            var apart = new[] { new Vec2(6f, 1f), new Vec2(6f, 3f), new Vec2(8f, 3f), new Vec2(8f, 1f) };
+
+            Assert.IsTrue(ConvexDecomposition.IsHole(new[] { outer, hole }, 1));
+            Assert.IsFalse(ConvexDecomposition.IsHole(new[] { outer, hole }, 0));
+            Assert.IsFalse(ConvexDecomposition.IsHole(new[] { outer, island }, 1), "Counter-clockwise: a solid path.");
+            Assert.IsFalse(ConvexDecomposition.IsHole(new[] { outer, apart }, 1), "Clockwise but outside.");
+        }
+
+        [Test]
         public void CompoundBodyMassMatchesTheConcaveOutline()
         {
             var outline = Star(7, 0.8f, 2f, new Vec2(0.3f, -0.2f));

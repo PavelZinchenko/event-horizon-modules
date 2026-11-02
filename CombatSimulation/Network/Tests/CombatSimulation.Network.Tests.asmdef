@@ -1,0 +1,13 @@
+{
+    "name": "CombatSimulation.Network.Tests",
+    "references": ["CombatSimulation.Network", "Utilites"],
+    "optionalUnityReferences": ["TestAssemblies"],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": []
+}

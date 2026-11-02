@@ -32,7 +32,7 @@ namespace Services.Localization
 			{
 				try
 				{
-					LoadFromXml(serializer, resource.text, keys);
+					LoadFromXml(serializer, resource.text, keys, resource.name);
 				}
 				catch (Exception e)
 				{
@@ -55,7 +55,7 @@ namespace Services.Localization
 					return false;
 
 				var serializer = new XmlSerializer(typeof(XmlLocalization));
-				LoadFromXml(serializer, data, keys);
+				LoadFromXml(serializer, data, keys, "database");
 				return true;
 			}
 			catch (Exception e)
@@ -65,7 +65,7 @@ namespace Services.Localization
 			}
 		}
 
-		private static void LoadFromXml(XmlSerializer serializer, string data, Dictionary<string, string> keys)
+		private static void LoadFromXml(XmlSerializer serializer, string data, Dictionary<string, string> keys, string source)
 		{
 			XmlLocalization localization;
 			using (var reader = new System.IO.StringReader(data))
@@ -75,7 +75,8 @@ namespace Services.Localization
 			{
 				if (keys.ContainsKey(item.name))
 				{
-					UnityEngine.Debug.Log("LocalizationManager: duplicate name - " + item.name);
+					// The first source wins, so a mod cannot override a built-in string.
+					GameDiagnostics.Trace.LogWarning($"LocalizationManager: duplicate name '{item.name}' in {source}, keeping the existing one");
 					continue;
 				}
 

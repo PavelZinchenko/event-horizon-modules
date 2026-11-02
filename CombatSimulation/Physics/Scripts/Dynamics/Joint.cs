@@ -105,7 +105,7 @@ namespace CombatSimulation.Physics
             }
             else
             {
-                if (_jointCount == _joints.Length) Array.Resize(ref _joints, _joints.Length * 2);
+                if (_jointCount == _joints.Length) GrowPool(ref _joints, ref _freeJoints);
                 index = _jointCount++;
             }
 

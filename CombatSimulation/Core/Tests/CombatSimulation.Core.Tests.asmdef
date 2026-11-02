@@ -1,0 +1,22 @@
+{
+    "name": "CombatSimulation.Core.Tests",
+    "references": [
+        "CombatSimulation.Core",
+        "CombatSimulation.Physics",
+        "CombatSimulation.Runtime",
+        "Utilites"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": []
+}
