@@ -58,6 +58,9 @@ namespace CombatSimulation.Core
         // The share from 0 to 1 by which the view moves the ship colour to its device colour (phase 5, step 7b).
         public readonly float Tint;
 
+        // The resistance share of the tick's device statuses (ShipStatus.ResistanceShare; phase 5, step 7d), for the HUD.
+        public readonly float ResistanceShare;
+
         // The first of this ship's Definition.Devices.Count entries in the snapshot's device buffer.
         internal readonly int DeviceStart;
 
@@ -85,6 +88,7 @@ namespace CombatSimulation.Core
             RetreatCompletionTick = ship.RetreatCompletionTick;
             Status = ship.Status;
             Tint = ship.Tint;
+            ResistanceShare = ship.ResistanceShare;
             DeviceStart = deviceStart;
         }
 

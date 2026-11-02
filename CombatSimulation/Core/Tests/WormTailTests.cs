@@ -103,6 +103,7 @@ namespace CombatSimulation.Core.Tests
             ship.AddPendingDamage(LegacyDamageModel.Impact, 100f);
             driver.Step();
             Assert.AreEqual(0.6f, ship.ResistanceShare, Tolerance, "6 segments");
+            Assert.AreEqual(0.6f, driver.Battle.Snapshot.Ships[0].ResistanceShare, Tolerance, "for the HUD");
             Assert.AreEqual(1000f - 100f * (1f - 0.68f), ship.Armor.Value, Tolerance);
 
             driver.StepUntil(30);
@@ -231,21 +232,47 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(1000f - 100f * (1f - resistance), driver.Ship(1).Armor.Value, Tolerance);
         }
 
-        // Row 7: the attached segments leave with their ship; detached ones run out their timers.
-        [TestCase(true)]
-        [TestCase(false)]
-        public void TheTailLeavesWithItsShip(bool dies)
+        // Row 7 (owner, 2026-11-02): a ship that dies takes the head of its tail; the rest detach and destroy themselves
+        // after 5 s. Detached segments keep their own timers.
+        [Test]
+        public void TheTailDetachesWhenItsShipDies()
+        {
+            var driver = WormDuel();
+            driver.StepUntil(30);
+            var tearTick = driver.Tick;
+            Hit(driver, 8, 350f);
+            driver.Step();
+            Assert.AreEqual(2, Count(driver, detached: true));
+
+            driver.StepUntil(tearTick + 100);
+            var deathTick = driver.Tick;
+            driver.Kill(1);
+            driver.Step();
+            Assert.AreEqual(0, Count(driver));
+            Assert.AreEqual(8, Count(driver, detached: true), "segments 2 to 7, and 9 and 10 from the tear");
+            Assert.IsNull(Segment(driver, 1, detached: true));
+            Assert.IsFalse(driver.Battle.World.IsAlive(Segment(driver, 2, detached: true).Joint));
+            Assert.IsTrue(driver.Battle.World.IsAlive(Segment(driver, 3, detached: true).Joint), "the rest stay joined");
+
+            driver.StepUntil(tearTick + 251);
+            Assert.AreEqual(6, Count(driver, detached: true));
+            driver.StepUntil(deathTick + 250);
+            Assert.AreEqual(6, Count(driver, detached: true));
+            driver.Step();
+            Assert.AreEqual(0, driver.Battle.Snapshot.Segments.Length);
+        }
+
+        // Row 7: a ship that retreats or vanishes takes every attached segment (legacy Vanish detaches nothing).
+        [Test]
+        public void TheTailVanishesWithItsShip()
         {
             var driver = WormDuel();
             driver.StepUntil(30);
             Hit(driver, 8, 350f);
             driver.Step();
-            Assert.AreEqual(2, Count(driver, detached: true));
 
-            if (dies) driver.Kill(1);
-            else driver.Battle.Submit(ShipCommand.Vanish(driver.BattleId, 900, driver.Tick, driver.Entity(1)));
+            driver.Battle.Submit(ShipCommand.Vanish(driver.BattleId, 900, driver.Tick, driver.Entity(1)));
             driver.Step();
-
             Assert.AreEqual(0, Count(driver));
             Assert.AreEqual(2, Count(driver, detached: true));
             driver.Step(250);
@@ -373,6 +400,7 @@ namespace CombatSimulation.Core.Tests
             {
                 new RosterSlotSetup(new RosterId(1), 0, Fixtures.CannonShip(), 10),
                 new RosterSlotSetup(new RosterId(101), 1, Worm(), RemoteOwner),
+                new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship, RemoteOwner),
             }, localOwners: new[] { localOwner });
 
         private static (Driver owner, Driver remote, Link link) Pair()
@@ -446,6 +474,27 @@ namespace CombatSimulation.Core.Tests
             Assert.IsEmpty(Ids(owner, detached: true));
             Assert.IsEmpty(Ids(remote, detached: true));
             Assert.AreEqual(4, Ids(remote).Length, "the regrown segment 4");
+        }
+
+        // Row 7 on the copy: the owner's death record detaches the same segments; they leave by the owner's records.
+        [Test]
+        public void TheCopyDetachesTheTailOfADeadShip()
+        {
+            var (owner, remote, link) = Pair();
+            for (var i = 0; i < 30; ++i) Tick(owner, remote, link);
+            owner.Kill(101);
+            Tick(owner, remote, link);
+
+            Assert.IsNull(remote.Ship(101));
+            Assert.IsEmpty(Ids(remote));
+            Assert.AreEqual(9, Ids(remote, detached: true).Length);
+            CollectionAssert.AreEqual(Ids(owner, detached: true), Ids(remote, detached: true));
+
+            for (var i = 0; i < 249; ++i) Tick(owner, remote, link);
+            Assert.AreEqual(9, Ids(remote, detached: true).Length);
+            Tick(owner, remote, link);
+            Assert.IsEmpty(Ids(owner, detached: true));
+            Assert.IsEmpty(Ids(remote, detached: true));
         }
 
         // 9d: a contact on a segment counts once, whether the attacker's or the owner's device saw it. A ram (device -1)

@@ -388,14 +388,22 @@ namespace CombatSimulation.Core
             _segments.Release(segment);
         }
 
-        // A ship that leaves takes its attached segments with it, head first (plan, WormTailV2 row 7); detached ones
-        // run out their timers.
+        // Plan, WormTailV2 row 7 (owner, 2026-11-02). A ship that dies takes the head of its tail with it; the segments
+        // behind it detach and destroy themselves after 5 s, as after a tear (legacy: the head finds its ship destroyed
+        // first and calls Destroy). On a copy they wait for the owner's removal records. A ship that retreats or
+        // vanishes takes every attached segment (legacy Vanish detaches nothing). Detached segments run out their timers.
         private void RemoveShipSegments(ShipEntity ship, RemovalReason reason)
         {
             for (var d = 0; d < ship.DeviceCount; ++d)
             {
                 if (!(ship.GetDevice(d) is WormTailDevice device)) continue;
-                for (var segment = _segments.Get(device.Head); segment != null;)
+                var head = _segments.Get(device.Head);
+                if (head != null && reason == RemovalReason.Death)
+                {
+                    DetachNext(head, Setup.IsLocalOwner(head.Owner)
+                        ? Tick + WormTailDefinition.SelfDestructTicks : TailSegment.NoTimer);
+                }
+                for (var segment = head; segment != null;)
                 {
                     var next = _segments.Get(segment.Next);
                     CaptureRemoval(segment.Id, segment.Owner, reason);
