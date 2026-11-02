@@ -12,7 +12,9 @@ namespace CombatSimulation.Core
     // TargetIsBullet (network plan, 9d; owner, 2026-10-26): a contact on a remote bullet that the sender's device saw.
     // The attacker is the sender's bullet or point-defense ship. Impact and Energy carry the hit's damage, DamageOverTime
     // one tick of ray damage, Disarm a point-defense zap, and Stop a target bullet that stopped at its own hit on the
-    // attacker. The contact state is always Start and the shape 0.
+    // attacker. The contact state is always Start and the shape 0. A worm tail segment (phase 5, step 7d) is a contact
+    // target too: Impact, Energy and DamageOverTime carry the hit's total damage of all types; device index -1 marks a
+    // ram, which counts once per tick as DamageOverTime does.
     // DamageType (D4) indexes the battle's damage type table; a bullet target ignores it.
     // Impulse (phase 4 E4, owner 2026-10-31): the push on a ship target, applied at its origin by the target owner when
     // the record arrives. Impact and Energy records on a ship only; zero otherwise. A bullet with several damage effects

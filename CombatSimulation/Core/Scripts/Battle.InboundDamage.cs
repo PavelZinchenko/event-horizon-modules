@@ -105,7 +105,13 @@ namespace CombatSimulation.Core
         // damage once: this device's own contact with the same attacker (and tick, for a ray) already dealt it.
         private void ApplyBulletContact(in ResolvedHit hit)
         {
-            if (!_entities.TryGet(hit.TargetId, out var handle) || !_bullets.TryGet(handle, out var index)) return;
+            if (!_entities.TryGet(hit.TargetId, out var handle)) return;
+            if (handle.Kind == EntityKind.Segment)
+            {
+                ApplySegmentContact(hit, _segments.Get(handle));
+                return;
+            }
+            if (!_bullets.TryGet(handle, out var index)) return;
             ref readonly var bullet = ref _bullets[index];
             if (bullet.Owner != hit.TargetOwner || !Setup.IsLocalOwner(bullet.Owner)) return;
             // A contact that stops the bullet counts once for its Hit triggers, even if this device saw it too.

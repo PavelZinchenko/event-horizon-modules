@@ -6,13 +6,20 @@ namespace CombatSimulation.Core
     // One damage type (D4). Its behaviour is data; the damage stage has no per-type branch.
     public sealed class DamageTypeDefinition
     {
-        public DamageTypeDefinition(int shieldOrder)
+        public DamageTypeDefinition(int shieldOrder, float resistanceCeiling = 1f)
         {
+            if (!(resistanceCeiling <= 1f) || float.IsInfinity(resistanceCeiling))
+                throw new ArgumentOutOfRangeException(nameof(resistanceCeiling), "Resistance ceiling must be finite and at most 1.");
+
             ShieldOrder = shieldOrder;
+            ResistanceCeiling = resistanceCeiling;
         }
 
         // Types with a lower order meet the shield first; types with the same order share it in proportion.
         public int ShieldOrder { get; }
+
+        // The armor resistance a resistance share of 1 gives (ShipStatus.ResistanceShare).
+        public float ResistanceCeiling { get; }
     }
 
     // The damage types of a battle. A damage type is an index into this table.

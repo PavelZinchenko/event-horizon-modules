@@ -75,6 +75,7 @@ namespace CombatSimulation.Core
             if (ship.Owner != operation.Owner || operation.DeviceIndex >= ship.DeviceCount) return false;
             var device = ship.GetDevice(operation.DeviceIndex);
             if (device is DetonatorDevice detonator) return ApplyRemoteExplosion(ship, detonator, operation);
+            if (device is WormTailDevice tail) return ApplyRemoteSegment(ship, tail, operation);
             var cannon = device as CannonDevice;
             var beamDevice = device as BeamDevice;
             if (cannon != null ? cannon.Definition.BarrelIndex != operation.BarrelIndex :

@@ -33,6 +33,9 @@ namespace CombatSimulation.Core
         // Live bullets in storage order; the order has no meaning.
         public ReadOnlySpan<BulletState> Bullets => new ReadOnlySpan<BulletState>(_bullets, 0, _bulletCount);
 
+        // Live worm tail segments in storage order; the order has no meaning (phase 5, step 7d).
+        public ReadOnlySpan<TailSegmentState> Segments => new ReadOnlySpan<TailSegmentState>(_segments, 0, _segmentCount);
+
         // Every slot in setup order.
         public ReadOnlySpan<RosterSlotState> Roster => new ReadOnlySpan<RosterSlotState>(_roster, 0, _roster.Length);
 
@@ -102,6 +105,13 @@ namespace CombatSimulation.Core
             for (var i = 0; i < bullets.Capacity; ++i)
                 if (bullets.IsAlive(i)) _bullets[_bulletCount++] = new BulletState(bullets[i], world);
 
+            var segments = battle.Segments;
+            if (_segments.Length < segments.AliveCount)
+                _segments = new TailSegmentState[Math.Max(segments.AliveCount, _segments.Length * 2)];
+            _segmentCount = 0;
+            for (var i = 0; i < segments.Capacity; ++i)
+                if (segments[i].IsAlive) _segments[_segmentCount++] = new TailSegmentState(segments[i], world);
+
             if (_events.Length < events.Count)
                 _events = new BattleEvent[Math.Max(events.Count, _events.Length * 2)];
             events.CopyTo(_events);
@@ -129,6 +139,8 @@ namespace CombatSimulation.Core
         private DeviceState[] _devices = new DeviceState[16];
         private BulletState[] _bullets = new BulletState[16];
         private int _bulletCount;
+        private TailSegmentState[] _segments = new TailSegmentState[16];
+        private int _segmentCount;
         private BattleEvent[] _events = new BattleEvent[16];
         private int _eventCount;
         private ResolvedHit[] _outgoingHits = new ResolvedHit[16];

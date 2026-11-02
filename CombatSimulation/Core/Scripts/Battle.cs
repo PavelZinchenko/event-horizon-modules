@@ -294,6 +294,8 @@ namespace CombatSimulation.Core
                     else ship.GetDevice(d).Update(this, ship);
                 }
             }
+
+            UpdateDetachedSegments();
         }
 
         // Stage 3 (phase 5, step 7). Collects the status of each ship's running device uses. A change of NoContacts
@@ -313,6 +315,7 @@ namespace CombatSimulation.Core
                 ship.Status = status.Flags;
                 ship.BlockedDevices = status.BlockedDevices;
                 ship.Tint = status.Tint;
+                ship.ResistanceShare = status.ResistanceShare;
                 if (contactsChanged) SetHullFilters(ship);
             }
         }
@@ -340,6 +343,7 @@ namespace CombatSimulation.Core
                 // Physics reports a touch after the solve, so ramming uses the velocity from before the step.
                 ship.PreStepVelocity = World.GetLinearVelocity(ship.Body);
             }
+            UpdateSegmentMotion();
 
             // Each missile reads only its own state and the grid, so the storage order has no effect. Owner target
             // records of this tick apply first (P3).
@@ -608,8 +612,8 @@ namespace CombatSimulation.Core
             _contacts.BeginStep();
             _beams.Collect(_contacts);
             _pointDefense.Collect(_contacts);
-            _bullets.CollectHits(World, _shapes, _ships, _contacts);
-            _ramming.Collect(World, _shapes, _ships, _contacts, Setup.DamageTypes.RammingDamageType);
+            _bullets.CollectHits(World, _shapes, _ships, _segments, _contacts);
+            _ramming.Collect(World, _shapes, _ships, _segments, _contacts, Setup.DamageTypes.RammingDamageType);
 
             var duplicates = _contacts.Sort();
             if (duplicates > 0)
@@ -694,6 +698,13 @@ namespace CombatSimulation.Core
                                 perTick ? HitImpactKind.DamageOverTime : HitImpactKind.Impact, hit.Damage);
                     }
                 }
+                else if (hit.TargetHandle.Kind == EntityKind.Segment)
+                {
+                    var segment = _segments.Get(hit.TargetHandle);
+                    if (segment == null) continue;
+                    authority = Authority(segment.Owner);
+                    ResolveSegmentHit(hit, segment);
+                }
                 else
                 {
                     var target = _ships.Get(hit.TargetHandle);
@@ -736,7 +747,7 @@ namespace CombatSimulation.Core
                             amount = damage = BulletStore.EffectDamage(projectile, projectile.Damage,
                                 projectile.DamageFalloff, falloff);
                             damageType = projectile.DamageType;
-                            impulse = PushImpulse(attacker, target, falloff);
+                            impulse = PushImpulse(attacker, World.GetPosition(target.Body), falloff);
                         }
                     }
                     else
@@ -788,23 +799,24 @@ namespace CombatSimulation.Core
         // Legacy PushAction (Push x the bullet velocity) plus RadialPushAction (phase 5, step 3): away from the bullet
         // centre toward the target's origin. Legacy applies the radial impulse at the bullet centre; that point lies on
         // the same line through the origin, so the torque is the same.
-        private Vec2 PushImpulse(in BulletEntity bullet, ShipEntity target, float falloff)
+        private Vec2 PushImpulse(in BulletEntity bullet, Vec2 target, float falloff)
         {
             var definition = bullet.Definition;
             var impulse = Vec2.Zero;
             if (definition.Push != 0f) impulse = definition.Push * World.GetBulletVelocity(bullet.Body);
             var radial = definition.RadialPush + definition.RadialPushWithFalloff * falloff;
             if (radial != 0f)
-                impulse += radial * World.Torus.Delta(World.GetBulletPosition(bullet.Body),
-                    World.GetPosition(target.Body)).Normalized;
+                impulse += radial * World.Torus.Delta(World.GetBulletPosition(bullet.Body), target).Normalized;
             return impulse;
         }
 
-        // Stage 10. One pass, shield first, then armor (legacy Impact.ApplyShield and ShipStats.ApplyDamage).
+        // Stage 10. Tail segments first: the damage a tail cannot take passes to its ship (phase 5, step 7d). Then one
+        // pass, shield first, then armor (legacy Impact.ApplyShield and ShipStats.ApplyDamage).
         // Received hits add to a local target's pending damage. A remote target's pending damage is only the damage
         // this device sent it (N3): a prediction that corrections replace.
         private void ApplyDamage()
         {
+            ApplySegmentHits();
             for (var i = 0; i < ShipEntryCount; ++i)
             {
                 var ship = GetShipEntry(i);
@@ -875,7 +887,8 @@ namespace CombatSimulation.Core
         }
 
         // Stage 12. One batch, in roster order: deaths, then retreat completions, then surrender and kill-all.
-        // Drone deaths follow the roster batch. Bullets leave last, by ID. Attached beams die with their ship.
+        // Drone deaths follow the roster batch, then tail segments. Bullets leave last, by ID. Attached beams die with
+        // their ship.
         private void ApplyStructureChanges()
         {
             ApplyRemoteOperations(12);
@@ -936,6 +949,7 @@ namespace CombatSimulation.Core
                 _drones.RemoveAt(i);
             }
 
+            RemoveDeadSegments();
             RemoveBullets();
         }
 
@@ -1150,6 +1164,7 @@ namespace CombatSimulation.Core
 
         private void RemoveShip(ShipEntity ship, RemovalReason reason)
         {
+            RemoveShipSegments(ship, reason);
             for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Stop(this);
             RemoveAttachedBullets(ship);
             _events.Add(BattleEvent.Removal(BattleId, Tick, _events.Count, ship, reason));
@@ -1198,6 +1213,7 @@ namespace CombatSimulation.Core
         {
             ship.Allegiance = allegiance;
             SetHullFilters(ship);
+            SetSegmentAllegiance(ship);
 
             for (var i = 0; i < _bullets.Capacity; ++i)
             {

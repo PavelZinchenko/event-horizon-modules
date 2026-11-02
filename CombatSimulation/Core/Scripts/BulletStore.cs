@@ -160,7 +160,8 @@ namespace CombatSimulation.Core
         // pass-through, so physics reports the first hit on each target unit; the resolver keeps the first valid one
         // (contact ordering). Phase 5, step 3: an AllTargets bullet takes a unit only when it enters (physics Begin);
         // an OverTime bullet takes every touching unit, with one tick of its damage. Neither stops at a hit.
-        public void CollectHits(PhysicsWorld world, ShapeTable shapes, ShipStore ships, ContactResolver resolver)
+        public void CollectHits(PhysicsWorld world, ShapeTable shapes, ShipStore ships, TailSegmentStore segments,
+            ContactResolver resolver)
         {
             var hits = world.BulletHits;
             for (var i = 0; i < hits.Length; ++i)
@@ -208,14 +209,15 @@ namespace CombatSimulation.Core
                 {
                     if (!shapes.TryGet(hit.Target.Shape, out var target)) continue;
                     var ship = ships.Get(target.Owner);
-                    if (ship == null) continue;
+                    var segment = ship == null ? segments.Get(target.Owner) : null;
+                    if (ship == null && segment == null) continue;
 
                     candidate.TargetPriority = target.Priority;
                     candidate.Target = target.OwnerId;
                     candidate.TargetShapeOrder = target.Order;
                     candidate.TargetHandle = target.Owner;
-                    targetPosition = world.GetPosition(ship.Body);
-                    targetScale = ship.Definition.Scale;
+                    targetPosition = world.GetPosition(ship?.Body ?? segment.Body);
+                    targetScale = ship?.Definition.Scale ?? segment.Scale;
                 }
 
                 // The total: a missile target sums every type; stage 9 splits it again for a ship target.

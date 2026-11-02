@@ -46,7 +46,7 @@ namespace CombatSimulation.Core
             if (_entities.TryGet(hit.AttackerId, out var handle) && EntityOwner(handle) != record.SenderOwner)
                 return false;
             if (_entities.TryGet(hit.TargetId, out handle) &&
-                ((handle.Kind == EntityKind.Bullet) != hit.TargetIsBullet || EntityOwner(handle) != hit.TargetOwner)) return false;
+                (IsContactTarget(handle.Kind) != hit.TargetIsBullet || EntityOwner(handle) != hit.TargetOwner)) return false;
             if (!AcceptSequence(_hitSequences, record.SenderOwner, record.Sequence)) return false;
             var index = _remoteHits.Count;
             while (index > 0 && CompareHits(record, _remoteHits[index - 1]) < 0) --index;
@@ -89,7 +89,11 @@ namespace CombatSimulation.Core
 
         private int EntityOwner(EntityHandle handle) => handle.Kind == EntityKind.Bullet
             ? (_bullets.TryGet(handle, out var index) ? _bullets[index].Owner : -1)
+            : handle.Kind == EntityKind.Segment ? _segments.Get(handle)?.Owner ?? -1
             : (_ships.Get(handle)?.Owner ?? -1);
+
+        // A hit record on a bullet or a tail segment names one contact (ResolvedHit.TargetIsBullet; network plan 9d).
+        private static bool IsContactTarget(EntityKind kind) => kind == EntityKind.Bullet || kind == EntityKind.Segment;
 
         private DroneBayInventory FindBay(DroneBayKey key)
         {
@@ -138,7 +142,7 @@ namespace CombatSimulation.Core
                     }
                     return !_entities.TryGet(operation.EntityId, out var handle) ||
                         (EntityOwner(handle) == operation.Owner &&
-                         (handle.Kind == EntityKind.Bullet ? !operation.BayKey.HasValue :
+                         (IsContactTarget(handle.Kind) ? !operation.BayKey.HasValue :
                           _ships.Get(handle)?.Bay?.Key == operation.BayKey && operation.BayKey.HasValue));
                 // The missile or its target may be gone; a live missile must be the owner's homing projectile.
                 case OwnerOperationKind.MissileTarget:
@@ -345,7 +349,12 @@ namespace CombatSimulation.Core
                 return true;
             }
             if (EntityOwner(handle) != operation.Owner) return false;
-            if (handle.Kind == EntityKind.Bullet)
+            if (handle.Kind == EntityKind.Segment)
+            {
+                if (operation.BayKey.HasValue) return false;
+                RemoveSegment(_segments.Get(handle), operation.RemovalReason);
+            }
+            else if (handle.Kind == EntityKind.Bullet)
             {
                 if (operation.BayKey.HasValue || !_bullets.TryGet(handle, out var index)) return false;
                 ref var bullet = ref _bullets[index];

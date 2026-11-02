@@ -34,6 +34,16 @@ namespace CombatSimulation.Core
         // The share from 0 to 1 by which the view moves the ship colour to its device colour (legacy Detonator
         // FeaturesData.Color); the view only.
         public float Tint;
+
+        // From 0 to 1: each armor resistance r of the ship becomes r + share x (ceiling - r), the ceiling of its damage
+        // type (legacy IStatsModification on Resistance: worm tail, step 7d).
+        public float ResistanceShare;
+
+        // Legacy applies each modification in turn, so two shares p and q give 1 - (1 - p)(1 - q).
+        public void AddResistanceShare(float share)
+        {
+            if (share > 0f) ResistanceShare = 1f - (1f - ResistanceShare) * (1f - Math.Min(share, 1f));
+        }
     }
 
     internal static class ShipStatusRules

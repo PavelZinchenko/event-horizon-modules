@@ -68,7 +68,7 @@ namespace CombatSimulation.Core
                     else
                     {
                         if (!battle.Shapes.TryGet(hit.Target.Shape, out var target) ||
-                            battle.FindShip(target.OwnerId) == null) continue;
+                            (battle.FindShip(target.OwnerId) == null && battle.FindSegment(target.OwnerId) == null)) continue;
                         candidate.Target = target.OwnerId;
                         candidate.TargetHandle = target.Owner;
                         candidate.TargetPriority = target.Priority;

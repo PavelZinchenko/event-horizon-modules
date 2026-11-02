@@ -77,8 +77,10 @@ namespace CombatSimulation.Core
             HullParts = parts.AsReadOnly();
             HullHash = ComputeHullHash(parts);
             Mass = mass;
-            Engine = engine ?? throw new ArgumentNullException(nameof(engine));
-            EngineWithoutEnergy = engineWithoutEnergy;
+            if (engine == null) throw new ArgumentNullException(nameof(engine));
+            var hasTail = Array.Exists(deviceArray, device => device is WormTailDefinition);
+            Engine = hasTail ? WormTailDefinition.CapEngine(engine) : engine;
+            EngineWithoutEnergy = hasTail ? WormTailDefinition.CapEngine(engineWithoutEnergy) : engineWithoutEnergy;
             Armor = armor;
             ArmorResource = new ResourceDefinition(armor);
             Shield = shield;
@@ -109,6 +111,7 @@ namespace CombatSimulation.Core
 
         public float Mass { get; }
 
+        // A ship with a worm tail turns no faster than the tail cap (WormTailDefinition.CapEngine).
         public EngineDefinition Engine { get; }
 
         // The engine while energy is zero. Null: the ship neither thrusts nor turns without energy.

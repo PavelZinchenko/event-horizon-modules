@@ -12,13 +12,14 @@ namespace CombatSimulation.Core
         public const int Heat = 2;
         public const int Corrosive = 3;
 
-        // Legacy Impact.ApplyShield: corrosive damage meets the shield before the other types.
+        // Legacy Impact.ApplyShield: corrosive damage meets the shield before the other types. Legacy derives corrosive
+        // armor resistance as half of the smallest other one, so a resistance share moves it toward 0.5.
         public static readonly DamageTypeTable Types = new DamageTypeTable(new[]
         {
             new DamageTypeDefinition(1),
             new DamageTypeDefinition(1),
             new DamageTypeDefinition(1),
-            new DamageTypeDefinition(0),
+            new DamageTypeDefinition(0, 0.5f),
         }, Impact);
 
         // A ship's resistances by type, from the legacy percentages (IShipStats). Corrosive damage uses half of the

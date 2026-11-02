@@ -8,6 +8,9 @@ namespace CombatSimulation.Core
 
         // Bullets and beams (BulletStore).
         Bullet = 2,
+
+        // Worm tail segments (TailSegmentStore; phase 5, step 7d).
+        Segment = 3,
     }
 
     // Internal storage handle: kind, index and generation. Never exposed as a public ID.
@@ -147,6 +150,7 @@ namespace CombatSimulation.Core
         public ShipStatusFlags Status { get; set; }
         public ulong BlockedDevices { get; set; }
         public float Tint { get; set; }
+        public float ResistanceShare { get; set; }
 
         // The control bits a device sees at stage 2.
         public ulong UsableSystems => Systems & ~BlockedDevices;
@@ -223,6 +227,7 @@ namespace CombatSimulation.Core
             Status = ShipStatusFlags.None;
             BlockedDevices = 0;
             Tint = 0f;
+            ResistanceShare = 0f;
             PreStepVelocity = Vec2.Zero;
             if (_pendingDamage.Length != damageTypes) _pendingDamage = new float[damageTypes];
             else System.Array.Clear(_pendingDamage, 0, damageTypes);
@@ -368,6 +373,7 @@ namespace CombatSimulation.Core
             Status = ShipStatusFlags.None;
             BlockedDevices = 0;
             Tint = 0f;
+            ResistanceShare = 0f;
             PreStepVelocity = Vec2.Zero;
             ClearPendingDamage();
             _spawnSampleCount = 0;

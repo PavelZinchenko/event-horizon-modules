@@ -215,7 +215,7 @@ namespace CombatSimulation.Core
                 energy.Update(TickDuration);
             }
             if (ReplayPredictedDamage(ship.Id, tick, correction.AppliedHitSequence))
-                ApplyShieldFirst(ref shield, ref armor, ref energy, _replayDamage, ship.Definition);
+                ApplyShieldFirst(ref shield, ref armor, ref energy, _replayDamage, ship.Definition, ship.ResistanceShare);
             Settle(ref ship.Armor, armor);
             Settle(ref ship.Shield, shield);
             Settle(ref ship.Energy, energy);
@@ -331,14 +331,16 @@ namespace CombatSimulation.Core
         }
 
         private void ApplyShieldFirst(ShipEntity ship) =>
-            ApplyShieldFirst(ref ship.Shield, ref ship.Armor, ref ship.Energy, ship.PendingDamage, ship.Definition);
+            ApplyShieldFirst(ref ship.Shield, ref ship.Armor, ref ship.Energy, ship.PendingDamage, ship.Definition,
+                ship.ResistanceShare);
 
         // Legacy Impact.ApplyShield and ShipStats.ApplyDamage, by damage type (D4). The shield meets the types group by
         // group in shield order; each type's load is its damage less its shield resistance. A group larger than the
         // shield left keeps the same share of each type. Armor then takes what passed, less its armor resistance, and
-        // energy gains its share of what passed. damage holds raw amounts by type; this changes it to what passed.
+        // energy gains its share of what passed. damage holds raw amounts by type; this changes it to what passed. A
+        // resistance share (ShipStatus) moves each armor resistance toward the ceiling of its type.
         private void ApplyShieldFirst(ref ResourcePool shield, ref ResourcePool armor, ref ResourcePool energy,
-            float[] damage, ShipDefinition definition)
+            float[] damage, ShipDefinition definition, float resistanceShare)
         {
             var types = Setup.DamageTypes;
             var walk = types.ShieldWalk;
@@ -377,7 +379,10 @@ namespace CombatSimulation.Core
             {
                 if (!(damage[type] > 0f)) continue;
                 var resistance = definition.Resistance(type);
-                armorDamage += damage[type] * (1f - resistance.Armor);
+                var armorResistance = resistanceShare > 0f
+                    ? resistance.Armor + resistanceShare * (types[type].ResistanceCeiling - resistance.Armor)
+                    : resistance.Armor;
+                armorDamage += damage[type] * (1f - armorResistance);
                 energyGain += damage[type] * resistance.EnergyGain;
             }
             armor.Consume(armorDamage);
