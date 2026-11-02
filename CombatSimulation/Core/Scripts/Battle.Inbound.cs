@@ -315,6 +315,7 @@ namespace CombatSimulation.Core
             {
                 // A projectile may already have disappeared through prediction. Its owner removal is still a commit.
                 if (operation.BayKey.HasValue) return false;
+                MarkTriggerParentRemoved(operation.EntityId, operation.Tick);
                 return true;
             }
             if (EntityOwner(handle) != operation.Owner) return false;
@@ -326,6 +327,7 @@ namespace CombatSimulation.Core
                 if (bullet.IsBeam) DetachBeam(bullet, handle, operation.Tick);
                 _events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _events.Count, bullet));
                 ReleaseBullet(index);
+                MarkTriggerParentRemoved(operation.EntityId, operation.Tick);
             }
             else
             {

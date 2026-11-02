@@ -39,13 +39,13 @@ namespace CombatSimulation.Core
 
             // Legacy UpdateVelocity: below full speed along the heading, accelerate toward speed x heading.
             var velocity = world.GetBulletVelocity(bullet.Body);
-            if (Vec2.Dot(velocity, heading) < definition.Speed)
+            if (Vec2.Dot(velocity, heading) < bullet.Speed)
             {
-                var change = definition.Speed * heading - velocity;
+                var change = bullet.Speed * heading - velocity;
                 var length = change.Length;
                 if (length > MinThrustDirection)
                     world.SetBulletVelocity(bullet.Body,
-                        velocity + definition.Acceleration * Battle.TickDuration / length * change);
+                        velocity + bullet.Acceleration * Battle.TickDuration / length * change);
             }
 
             // Legacy UpdateRotation: full turn rate toward the target unless it is within the dead zone.
@@ -73,11 +73,11 @@ namespace CombatSimulation.Core
             for (var i = 0; i < count; ++i)
             {
                 var heading = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
-                if (Vec2.Dot(velocity, heading) < definition.Speed)
+                if (Vec2.Dot(velocity, heading) < bullet.Speed)
                 {
-                    var change = definition.Speed * heading - velocity;
+                    var change = bullet.Speed * heading - velocity;
                     var length = change.Length;
-                    if (length > MinThrustDirection) velocity += definition.Acceleration * Battle.TickDuration / length * change;
+                    if (length > MinThrustDirection) velocity += bullet.Acceleration * Battle.TickDuration / length * change;
                 }
                 if (target != null)
                 {

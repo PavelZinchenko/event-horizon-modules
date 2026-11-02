@@ -32,7 +32,8 @@ namespace CombatSimulation.Core
         public BulletDefinition(float radius, float speed, float range, float damage, float weight = 0f,
             float parentVelocityEffect = 1f, float hitPoints = 0f, bool homing = false,
             float startingVelocityMultiplier = 1f, int damageType = 0, float recoil = 0f, float push = 0f,
-            IReadOnlyList<DamageAmount> extraDamage = null)
+            IReadOnlyList<DamageAmount> extraDamage = null, IReadOnlyList<BulletTriggerDefinition> triggers = null,
+            bool detonateWhenDestroyed = true, bool canBeDisarmed = true)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -73,6 +74,20 @@ namespace CombatSimulation.Core
                 }
             }
 
+            var triggerList = Array.Empty<BulletTriggerDefinition>();
+            var conditions = BulletTriggerConditions.None;
+            var spawns = false;
+            if (triggers != null && triggers.Count > 0)
+            {
+                triggerList = new BulletTriggerDefinition[triggers.Count];
+                for (var i = 0; i < triggerList.Length; ++i)
+                {
+                    triggerList[i] = triggers[i] ?? throw new ArgumentNullException(nameof(triggers));
+                    conditions |= triggerList[i].Conditions;
+                    spawns |= !triggerList[i].IsDetonate;
+                }
+            }
+
             Radius = radius;
             Speed = speed;
             Range = range;
@@ -88,6 +103,11 @@ namespace CombatSimulation.Core
             IsHoming = homing;
             StartingVelocityMultiplier = startingVelocityMultiplier;
             LifetimeTicks = TickTime.After(Lifetime);
+            Triggers = triggerList;
+            TriggerConditions = conditions;
+            HasSpawnTriggers = spawns;
+            DetonateWhenDestroyed = detonateWhenDestroyed;
+            CanBeDisarmed = canBeDisarmed;
 
             // Legacy BulletFactory.CreateController: both scale with 1 / (0.2 + 2 x weight).
             var agility = 1f / (0.2f + weight * 2f);
@@ -149,5 +169,20 @@ namespace CombatSimulation.Core
         // Legacy PushAction (phase 4 E4): the impulse on a ship or drone target is Push x the bullet velocity, at the
         // target's origin. Negative pulls. Missiles are never pushed (legacy MissileDamageHandler drops impulses).
         public float Push { get; }
+
+        // Gameplay triggers in legacy order (phase 5, step 2). The index is the spawn source of a child's identity.
+        public IReadOnlyList<BulletTriggerDefinition> Triggers { get; }
+
+        // Every condition of any trigger, and whether any trigger spawns a bullet.
+        public BulletTriggerConditions TriggerConditions { get; }
+        public bool HasSpawnTriggers { get; }
+
+        // Legacy Body.DetonateWhenDestroyed: a bullet that stops at a hit or is shot down detonates (Detonated triggers
+        // after Destroyed ones); otherwise only its Destroyed triggers run.
+        public bool DetonateWhenDestroyed { get; }
+
+        // Legacy Body.CanBeDisarmed. Otherwise point defense still zaps the bullet (energy, cooldown, Hit triggers), and
+        // the bullet flies on (legacy Bullet.OnCollision ignores the Disarm effect).
+        public bool CanBeDisarmed { get; }
     }
 }

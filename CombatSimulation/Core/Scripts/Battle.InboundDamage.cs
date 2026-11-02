@@ -108,19 +108,31 @@ namespace CombatSimulation.Core
             if (!_entities.TryGet(hit.TargetId, out var handle) || !_bullets.TryGet(handle, out var index)) return;
             ref readonly var bullet = ref _bullets[index];
             if (bullet.Owner != hit.TargetOwner || !Setup.IsLocalOwner(bullet.Owner)) return;
+            // A contact that stops the bullet counts once for its Hit triggers, even if this device saw it too.
+            var stops = bullet.PendingRemoval == RemovalReason.None;
             switch (hit.ImpactKind)
             {
                 case HitImpactKind.Disarm:
+                    if (!bullet.Definition.CanBeDisarmed)
+                    {
+                        // The zap still counts as a contact; the bullet flies on.
+                        if (RecordBulletContact(hit.AttackerId, hit.TargetId, hit.Tick)) AddPendingHit(index);
+                        _events.Add(BattleEvent.RemoteDisarm(BattleId, Tick, _events.Count, hit));
+                        break;
+                    }
+                    if (stops) AddPendingHit(index);
                     _bullets.MarkRemoval(handle, RemovalReason.Disposal);
                     _events.Add(BattleEvent.RemoteDisarm(BattleId, Tick, _events.Count, hit));
                     break;
                 case HitImpactKind.Stop:
+                    if (stops) AddPendingHit(index);
                     _bullets.MarkRemoval(handle, RemovalReason.Death);
                     break;
                 default:
                     if (!RecordBulletContact(hit.AttackerId, hit.TargetId,
                         hit.ImpactKind == HitImpactKind.DamageOverTime ? hit.Tick : -1)) break;
                     _bullets.AddDamage(handle, hit.Amount);
+                    AddPendingHit(index);
                     _events.Add(BattleEvent.RemoteHit(BattleId, Tick, _events.Count, hit, hit.Amount));
                     break;
             }

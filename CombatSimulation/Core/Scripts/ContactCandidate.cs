@@ -47,6 +47,10 @@ namespace CombatSimulation.Core
         // A bullet or ray attacker that does not stop at its first valid hit.
         public bool AttackerPassThrough;
 
+        // A point-defense zap on a bullet that cannot be disarmed (legacy Body.CanBeDisarmed false): the zap is paid
+        // and the bullet stays a valid attacker and target.
+        public bool TargetKeepsFlying;
+
         // Damage over time counts once per attacker and target entity per step (D16).
         public bool OncePerTargetEntity;
 

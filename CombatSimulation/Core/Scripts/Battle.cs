@@ -329,7 +329,9 @@ namespace CombatSimulation.Core
             {
                 if (!_bullets.IsAlive(i)) continue;
                 ref var bullet = ref _bullets[i];
-                if (!bullet.IsBeam && bullet.Definition.IsHoming) HomingSteering.Update(this, ref bullet);
+                // A child spawned at stage 12 has not moved yet in its spawn tick.
+                if (!bullet.IsBeam && bullet.Definition.IsHoming && bullet.SpawnTick < Tick)
+                    HomingSteering.Update(this, ref bullet);
             }
         }
 
@@ -352,6 +354,7 @@ namespace CombatSimulation.Core
             _spawnRequests.Clear();
             ApplyRemoteOperations(6);
             RemoveUnconfirmedBullets();
+            PruneTriggerParents();
         }
 
         private void SpawnDrone(in SpawnRequest request, uint sequence)
@@ -405,7 +408,9 @@ namespace CombatSimulation.Core
 
             ref readonly var bullet = ref _bullets[index];
             _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, bullet, Authority(bullet.Owner)));
-            CaptureBulletSpawn(bullet, request.BarrelIndex, sequence, !definition.IsHoming, muzzle, angle);
+            CaptureBulletSpawn(bullet, bullet.DeviceIndex, request.BarrelIndex, sequence, Tick, !definition.IsHoming,
+                muzzle, angle);
+            RunCreatedTriggers(index);
         }
 
         // Legacy BulletFactory.ConfigureBody at the muzzle of the sample. A spawn tick before the present advances the
@@ -443,11 +448,13 @@ namespace CombatSimulation.Core
             ref var bullet = ref _bullets[index];
             bullet.Id = id;
             bullet.ParentId = ship.Id;
+            bullet.ShipId = ship.Id;
             bullet.Side = ship.Side;
             bullet.Allegiance = ship.Allegiance;
             bullet.Owner = ship.Owner;
             bullet.DeviceIndex = deviceIndex;
             bullet.Definition = definition;
+            bullet.SpeedScale = 1f;
             bullet.ExpiryTick = spawnTick + definition.LifetimeTicks - 1;
             bullet.HitPoints = definition.HitPoints;
             bullet.SpawnTick = spawnTick;
@@ -496,7 +503,7 @@ namespace CombatSimulation.Core
             if (index < 0) return;
             ref readonly var beam = ref _bullets[index];
             _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, beam, Authority(beam.Owner)));
-            CaptureBulletSpawn(beam, request.BarrelIndex, sequence);
+            CaptureBulletSpawn(beam, beam.DeviceIndex, request.BarrelIndex, sequence, Tick);
         }
 
         // Returns -1 on an ID collision.
@@ -515,6 +522,7 @@ namespace CombatSimulation.Core
             ref var beam = ref _bullets[index];
             beam.Id = id;
             beam.ParentId = ship.Id;
+            beam.ShipId = ship.Id;
             beam.Side = ship.Side;
             beam.Allegiance = ship.Allegiance;
             beam.Owner = ship.Owner;
@@ -563,7 +571,17 @@ namespace CombatSimulation.Core
                 if (hit.Kind == ContactKind.Disarm)
                 {
                     if (!_bullets.TryGet(hit.TargetHandle, out var disarmed)) continue;
-                    _bullets.MarkRemoval(hit.TargetHandle, RemovalReason.Disposal);
+                    // Legacy: point defense is a contact, so Hit triggers run before Disarmed ones. A bullet that cannot
+                    // be disarmed counts each zap once, whether this device or a remote one saw it.
+                    if (hit.TargetKeepsFlying)
+                    {
+                        if (RecordBulletContact(hit.Attacker, hit.Target, Tick)) AddPendingHit(disarmed);
+                    }
+                    else
+                    {
+                        if (_bullets[disarmed].PendingRemoval == RemovalReason.None) AddPendingHit(disarmed);
+                        _bullets.MarkRemoval(hit.TargetHandle, RemovalReason.Disposal);
+                    }
                     _events.Add(BattleEvent.DisarmEvent(BattleId, Tick, _events.Count, hit,
                         Authority(_bullets[disarmed].Owner)));
                     var defender = _ships.Get(hit.AttackerHandle);
@@ -575,8 +593,11 @@ namespace CombatSimulation.Core
                 if (hit.Kind != ContactKind.Hit) continue;
 
                 // A projectile stops on either copy. Its removal has its own authority flag.
-                if (!hit.AttackerPassThrough && hit.Source != ContactSource.Ray)
-                    _bullets.MarkRemoval(hit.AttackerHandle, RemovalReason.Death);
+                if (hit.Source != ContactSource.Ray && _bullets.TryGet(hit.AttackerHandle, out var stopped))
+                {
+                    if (_bullets[stopped].PendingRemoval == RemovalReason.None) AddPendingHit(stopped);
+                    if (!hit.AttackerPassThrough) _bullets.MarkRemoval(hit.AttackerHandle, RemovalReason.Death);
+                }
 
                 BattleEventAuthority authority;
                 if (hit.TargetHandle.Kind == EntityKind.Bullet)
@@ -591,7 +612,10 @@ namespace CombatSimulation.Core
                     {
                         // A remote attacker's contact counts once, whether this device or the attacker's owner saw it.
                         if (Setup.IsLocalOwner(attackerOwner) || RecordBulletContact(hit.Attacker, hit.Target, ray ? Tick : -1))
+                        {
                             _bullets.AddDamage(hit.TargetHandle, hit.Damage);
+                            AddPendingHit(index);
+                        }
                         // A remote projectile that stops at a local bullet stops on its owner too.
                         if (attackerBullet && !hit.AttackerPassThrough && !ray)
                             ClaimBulletContact(hit.Target, targetBullet.Owner, -1, _bullets[attackerIndex],
@@ -807,13 +831,17 @@ namespace CombatSimulation.Core
             RemoveBullets();
         }
 
+        // The owner runs the triggers of each bullet before its removal record, so the stream names the parent of every
+        // child. A bullet with only Hit triggers due stays.
         private void RemoveBullets()
         {
             _bullets.CollectRemovals(_bulletRemovals);
             for (var i = 0; i < _bulletRemovals.Count; ++i)
             {
                 var index = _bulletRemovals[i];
+                RunStructureTriggers(index);
                 ref readonly var bullet = ref _bullets[index];
+                if (bullet.PendingRemoval == RemovalReason.None) continue;
                 _outgoingHits.RemoveAttacker(bullet.Id, Tick + 1);
                 _events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _events.Count, bullet, Authority(bullet.Owner)));
                 CaptureRemoval(bullet.Id, bullet.Owner, bullet.PendingRemoval);
@@ -826,6 +854,7 @@ namespace CombatSimulation.Core
         private void ReleaseBullet(int index)
         {
             ref readonly var bullet = ref _bullets[index];
+            if (!Setup.IsLocalOwner(bullet.Owner)) ForgetTriggerParentCopy(bullet);
             if (!bullet.IsBeam) World.DestroyBullet(bullet.Body);
             if (_bulletContacts.Count > 0) ForgetBulletContacts(bullet.Id);
             _entities.Remove(bullet.Id);
@@ -1048,7 +1077,7 @@ namespace CombatSimulation.Core
             {
                 if (!_bullets.IsAlive(i)) continue;
                 ref var bullet = ref _bullets[i];
-                if (bullet.ParentId != ship.Id) continue;
+                if (bullet.ShipId != ship.Id) continue;
                 bullet.Allegiance = allegiance;
                 if (!bullet.IsBeam) World.SetBulletFilter(bullet.Body, CollisionFilters.Bullet(bullet.Definition, allegiance));
             }

@@ -8,6 +8,9 @@ namespace CombatSimulation.Core
     {
         SpawnPlacement = 1,
         WeaponSpread = 2,
+
+        // A child bullet (phase 5, step 2): pattern rotation, offset X, offset Y, speed, lifetime, in this order.
+        ChildSpawn = 3,
     }
 
     // Counter-based random (investigation 6.7): a draw is a function of match seed, entity, tick and purpose.

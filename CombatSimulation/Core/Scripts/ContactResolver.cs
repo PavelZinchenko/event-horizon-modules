@@ -90,7 +90,7 @@ namespace CombatSimulation.Core
 
             if (candidate.Kind == ContactKind.Disarm)
             {
-                if (IsBullet(candidate.TargetHandle))
+                if (IsBullet(candidate.TargetHandle) && !candidate.TargetKeepsFlying)
                 {
                     // Touch can resize the arrays. Fetch the array only after it returns.
                     var index = Touch(candidate.TargetHandle);

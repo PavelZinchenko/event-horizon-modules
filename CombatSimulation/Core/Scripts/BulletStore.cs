@@ -11,13 +11,29 @@ namespace CombatSimulation.Core
         public bool IsAlive;
 
         public EntityId Id;
+        // The direct parent: a ship, or a bullet for a child bullet (phase 5).
         public EntityId ParentId;
+        // The ship that fired the bullet or its first ancestor. Allegiance changes follow it.
+        public EntityId ShipId;
         public int Side;
         public Allegiance Allegiance;
         public int Owner;
+        // The weapon of ShipId, for children too: hits name it.
         public int DeviceIndex;
         public BulletDefinition Definition;
         public BulletId Body;
+
+        // Legacy RandomFactor of a child bullet: the share of the definition's speed and thrust (1 otherwise).
+        public float SpeedScale;
+        public float Speed => Definition.Speed * SpeedScale;
+        public float Acceleration => Definition.Acceleration * SpeedScale;
+
+        // Owner only: contacts of this tick whose Hit triggers stage 12 runs.
+        public int PendingHits;
+
+        // The children spawned for one spawn tick, across triggers: the sequence of the next child's identity.
+        public long ChildTick;
+        public uint ChildCount;
 
         // Exactly one definition is set. Beams keep the ray pose sampled at stage 6.
         public BeamDefinition BeamDefinition;
@@ -226,14 +242,15 @@ namespace CombatSimulation.Core
             }
         }
 
-        // Stage 12. The indices of marked bullets, in entity ID order, so the removal events do not depend on storage.
-        // Insertion sort: it allocates nothing, and few bullets leave in one tick.
+        // Stage 12. The indices of marked bullets and of bullets with pending Hit triggers, in entity ID order, so the
+        // events do not depend on storage. Insertion sort: it allocates nothing, and few bullets leave in one tick.
         public void CollectRemovals(List<int> result)
         {
             result.Clear();
             for (var i = 0; i < _count; ++i)
             {
-                if (!_items[i].IsAlive || _items[i].PendingRemoval == RemovalReason.None) continue;
+                if (!_items[i].IsAlive || (_items[i].PendingRemoval == RemovalReason.None && _items[i].PendingHits == 0))
+                    continue;
 
                 var id = _items[i].Id.Value;
                 var position = result.Count;

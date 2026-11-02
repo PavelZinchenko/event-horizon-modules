@@ -73,6 +73,7 @@ namespace CombatSimulation.Core
                             Target = bullet.Id,
                             TargetHandle = battle.Bullets.GetHandle(index),
                             TargetPriority = ShapeHitPriority.Hull,
+                            TargetKeepsFlying = !bullet.Definition.CanBeDisarmed,
                             Point = battle.World.GetBulletPosition(bullet.Body),
                         });
                     }

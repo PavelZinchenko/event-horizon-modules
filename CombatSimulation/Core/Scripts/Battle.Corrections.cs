@@ -49,7 +49,7 @@ namespace CombatSimulation.Core
                 var position = World.GetBulletPosition(bullet.Body);
                 var rotation = World.GetBulletRotation(bullet.Body);
                 var velocity = World.GetBulletVelocity(bullet.Body);
-                var fullSpeed = (velocity - bullet.Definition.Speed * new Vec2(rotation.C, rotation.S)).Length <= FullSpeedTolerance;
+                var fullSpeed = (velocity - bullet.Speed * new Vec2(rotation.C, rotation.S)).Length <= FullSpeedTolerance;
                 var priority = !bullet.Corrected ? EarlyPriority + (tick - bullet.SpawnTick)
                     : (tick - bullet.CorrectedTick) * (IsNearPeer(peerOwner, position, bullet.Definition) ? NearWeight : 1f);
                 batch.AddMissile(new MissileCorrection(bullet.Id, position, rotation.Angle, !fullSpeed, velocity, priority));
@@ -170,7 +170,7 @@ namespace CombatSimulation.Core
             var position = World.Torus.Wrap(correction.Position);
             var angle = correction.Angle;
             var velocity = correction.HasVelocity ? correction.Velocity
-                : bullet.Definition.Speed * new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
+                : bullet.Speed * new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
             HomingSteering.Advance(this, bullet, (int)Math.Min(int.MaxValue, Tick - 1 - bullet.CorrectionTick),
                 ref position, ref angle, ref velocity);
             World.SetBulletPose(bullet.Body, position, angle);

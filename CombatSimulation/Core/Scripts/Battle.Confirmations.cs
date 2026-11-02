@@ -50,26 +50,29 @@ namespace CombatSimulation.Core
 
         // A plain projectile sends its launch (P1): the receiver's copy of the shooter aims a little differently, and
         // the error grows with flight time.
-        private void CaptureBulletSpawn(in BulletEntity bullet, int barrelIndex, uint sequence, bool sendLaunch = false,
-            Vec2 muzzle = default, float angle = 0f)
+        // The source is the device index, or the trigger index for a child bullet; a child always sends its launch.
+        private void CaptureBulletSpawn(in BulletEntity bullet, int source, int barrelIndex, uint sequence, long spawnTick,
+            bool sendLaunch = false, Vec2 muzzle = default, float angle = 0f)
         {
             if (!ShouldCapture(bullet.Owner)) return;
             var operationSequence = NextOperationSequence(bullet.Owner);
             _outgoingOperations.Add(sendLaunch
-                ? OwnerOperation.BulletFired(BattleId, bullet.Owner, operationSequence, Tick, bullet.Id, bullet.ParentId,
-                    bullet.DeviceIndex, barrelIndex, sequence, muzzle, angle)
-                : OwnerOperation.BulletFired(BattleId, bullet.Owner, operationSequence, Tick, bullet.Id, bullet.ParentId,
-                    bullet.DeviceIndex, barrelIndex, sequence));
+                ? OwnerOperation.BulletFired(BattleId, bullet.Owner, operationSequence, spawnTick, bullet.Id,
+                    bullet.ParentId, source, barrelIndex, sequence, muzzle, angle)
+                : OwnerOperation.BulletFired(BattleId, bullet.Owner, operationSequence, spawnTick, bullet.Id,
+                    bullet.ParentId, source, barrelIndex, sequence));
         }
 
         // Confirms the local copy, adopts a copy fired at another tick (P2), or adds the missing bullet at its spawn
         // tick. A bullet this device already removed by prediction, or a projectile that has expired, stays gone. The
         // confirmed shot re-syncs the shooter's cannon and barrel timers (G1): an overdue fire input shifts a held
         // weapon's cooldown phase for the whole burst. Energy and recoil are left to corrections.
+        // A record whose parent is not a ship names a child bullet (phase 5, step 2).
         private bool ApplyRemoteBulletSpawn(in OwnerOperation operation)
         {
             var ship = FindShip(operation.ParentId);
-            if (ship == null || ship.Owner != operation.Owner || operation.DeviceIndex >= ship.DeviceCount) return false;
+            if (ship == null) return ApplyRemoteChildSpawn(operation);
+            if (ship.Owner != operation.Owner || operation.DeviceIndex >= ship.DeviceCount) return false;
             var device = ship.GetDevice(operation.DeviceIndex);
             var cannon = device as CannonDevice;
             var beamDevice = device as BeamDevice;
@@ -82,18 +85,32 @@ namespace CombatSimulation.Core
             {
                 if (!_bullets.TryGet(handle, out var existing) || _bullets[existing].Owner != operation.Owner) return false;
                 _bullets[existing].Confirmed = true;
+                RememberTriggerParent(_bullets[existing]);
                 if (cannon != null && operation.HasLaunchPose) Reaim(ship, cannon, existing, operation);
                 return true;
             }
 
-            if (_predictedRemovalIds.Contains(operation.EntityId)) return true;
-            if (cannon != null && operation.Tick + cannon.Definition.Bullet.LifetimeTicks - 1 < Tick) return true;
-            if (HasDueRemoval(operation.EntityId)) return true;
+            // A copy that is gone here: the owner may still send its children.
+            if (_predictedRemovalIds.Contains(operation.EntityId) ||
+                cannon != null && operation.Tick + cannon.Definition.Bullet.LifetimeTicks - 1 < Tick ||
+                HasDueRemoval(operation.EntityId))
+            {
+                if (cannon != null && cannon.Definition.Bullet.HasSpawnTriggers)
+                {
+                    if (!ship.TryGetSpawnSample(operation.Tick, out var shot)) shot = ReadSpawnSample(ship);
+                    Launch(ship, operation.BarrelIndex, operation.EntityId, cannon.Definition.Bullet, cannon.Definition.Spread,
+                        operation.Tick, shot, operation.HasLaunchPose ? operation : default, out _, out _, out _,
+                        out var velocity, out _);
+                    RememberTriggerParent(ship, operation.DeviceIndex, cannon.Definition.Bullet, operation.EntityId, velocity);
+                }
+                return true;
+            }
 
             var copy = FindCopyOfShot(device, operation);
             if (copy >= 0)
             {
                 Adopt(ship, cannon, copy, operation);
+                RememberTriggerParent(_bullets[copy]);
                 return true;
             }
 
@@ -119,6 +136,7 @@ namespace CombatSimulation.Core
 
             if (index < 0) return false;
             _bullets[index].Confirmed = true;
+            RememberTriggerParent(_bullets[index]);
             _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, _bullets[index]));
             return true;
         }
