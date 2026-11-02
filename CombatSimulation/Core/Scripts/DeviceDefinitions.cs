@@ -24,8 +24,9 @@ namespace CombatSimulation.Core
         public float Angle { get; }
     }
 
-    // Immutable parameters of one ship device. Phase 2 has explicit code per device; the data form waits for the
-    // data-model gate (A4). The device index in ShipDefinition.Devices is also its control bit.
+    // Immutable parameters of one ship device. Each device class is explicit code; from phase 5, step 7 (H2) the gate
+    // devices compose the shared ActivationPolicy, ShipStatus and lethal damage condition. The device index in
+    // ShipDefinition.Devices is also its control bit.
     public abstract class DeviceDefinition
     {
         private protected DeviceDefinition() { }

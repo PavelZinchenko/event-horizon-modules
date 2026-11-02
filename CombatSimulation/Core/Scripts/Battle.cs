@@ -290,13 +290,31 @@ namespace CombatSimulation.Core
                 // Legacy ShipRetreatEffect.CanActivateSystem: a retreating ship activates no system.
                 for (var d = 0; d < ship.DeviceCount; ++d)
                 {
-                    if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) ship.GetDevice(d).Stop(this);
+                    if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) ship.GetDevice(d).UpdateRetreating(this, ship);
                     else ship.GetDevice(d).Update(this, ship);
                 }
             }
         }
 
-        private void EvaluateModifiers() { }
+        // Stage 3 (phase 5, step 7). Collects the status of each ship's running device uses. A change of NoContacts
+        // changes the hull filters; physics follows at this tick's step.
+        private void EvaluateModifiers()
+        {
+            for (var i = 0; i < ShipEntryCount; ++i)
+            {
+                var ship = GetShipEntry(i);
+                if (ship == null) continue;
+
+                var status = new ShipStatus();
+                for (var d = 0; d < ship.DeviceCount; ++d)
+                    ship.GetDevice(d).AddStatus(this, ship, ref status);
+
+                var contactsChanged = ((ship.Status ^ status.Flags) & ShipStatusFlags.NoContacts) != 0;
+                ship.Status = status.Flags;
+                ship.BlockedDevices = status.BlockedDevices;
+                if (contactsChanged) SetHullFilters(ship);
+            }
+        }
 
         // Stage 4. The target grid takes the ship poses at the start of the step. A retreating ship has its engine
         // off and drifts (legacy ShipRetreatEffect); it stays a missile target. Then homing bullets steer.
@@ -770,7 +788,21 @@ namespace CombatSimulation.Core
             }
 
             DrainPlayerShips();
+            ReactToLethalDamage();
             _bullets.ApplyDamage(Setup);
+        }
+
+        // End of stage 10 (phase 5, step 7, H3): every hit of the tick counts first. A device may save a local ship
+        // that has no armor left; stage 11 then finds none to mark. A remote copy follows its owner's record.
+        private void ReactToLethalDamage()
+        {
+            for (var i = 0; i < ShipEntryCount; ++i)
+            {
+                var ship = GetShipEntry(i);
+                if (ship == null || !Setup.IsLocalOwner(ship.Owner) || ship.Armor.Value > 0f) continue;
+                for (var d = 0; d < ship.DeviceCount; ++d)
+                    if (ship.GetDevice(d).OnLethalDamage(this, ship)) break;
+            }
         }
 
         // Legacy CombatTimer, DrainPlayerHp (TM3): after the limit, each active player roster ship loses k % of its
@@ -1133,9 +1165,7 @@ namespace CombatSimulation.Core
         private void SetAllegiance(ShipEntity ship, Allegiance allegiance)
         {
             ship.Allegiance = allegiance;
-            var filter = ship.IsDrone ? CollisionFilters.Drone(allegiance) : CollisionFilters.Ship(allegiance);
-            for (var i = 0; i < ship.ShapeCount; ++i)
-                World.SetShapeFilter(ship.GetShape(i), filter);
+            SetHullFilters(ship);
 
             for (var i = 0; i < _bullets.Capacity; ++i)
             {
@@ -1145,6 +1175,13 @@ namespace CombatSimulation.Core
                 bullet.Allegiance = allegiance;
                 if (!bullet.IsBeam) World.SetBulletFilter(bullet.Body, CollisionFilters.Bullet(bullet.Definition, allegiance));
             }
+        }
+
+        private void SetHullFilters(ShipEntity ship)
+        {
+            var filter = ShipStatusRules.HullFilter(ship);
+            for (var i = 0; i < ship.ShapeCount; ++i)
+                World.SetShapeFilter(ship.GetShape(i), filter);
         }
 
         private void AddTransition(RosterSlot slot, RosterStatus previousStatus, RosterTransitionReason reason, EntityId id)

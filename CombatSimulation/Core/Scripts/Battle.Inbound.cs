@@ -155,6 +155,12 @@ namespace CombatSimulation.Core
                 case OwnerOperationKind.Retreat:
                     return !operation.EntityId.IsNull && (!_entities.TryGet(operation.EntityId, out handle) ||
                         (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner && _ships.Get(handle)?.Slot != null));
+                // The ship may be gone; a live ship must be the owner's and have the device.
+                case OwnerOperationKind.DeviceUse:
+                    return !operation.EntityId.IsNull && operation.DeviceIndex >= 0 &&
+                        (!_entities.TryGet(operation.EntityId, out handle) ||
+                         (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner &&
+                          operation.DeviceIndex < _ships.Get(handle).DeviceCount));
                 // The parent may not exist yet; it is checked when the record applies.
                 case OwnerOperationKind.BulletSpawn:
                     return !operation.ParentId.IsNull && operation.DeviceIndex >= 0 && operation.BarrelIndex >= 0 &&
@@ -208,6 +214,11 @@ namespace CombatSimulation.Core
                         else if (operation.Kind == OwnerOperationKind.Allegiance)
                         {
                             ApplyRemoteAllegiance(operation);
+                            _appliedOperations.Add(operation);
+                        }
+                        else if (operation.Kind == OwnerOperationKind.DeviceUse)
+                        {
+                            ApplyRemoteDeviceUse(operation);
                             _appliedOperations.Add(operation);
                         }
                         else if (ApplyRemoteRemoval(operation)) _appliedOperations.Add(operation);
@@ -305,6 +316,16 @@ namespace CombatSimulation.Core
                 SetAllegiance(ship, operation.Allegiance);
         }
 
+        // Phase 5, step 7 (H8): the copy's device starts or ends the use at the owner's tick, before this tick's
+        // systems. A ship that is already gone needs nothing; the record still commits. Until the record arrives, the
+        // copy has the old status.
+        private void ApplyRemoteDeviceUse(in OwnerOperation operation)
+        {
+            var ship = FindShip(operation.EntityId);
+            if (ship != null && ship.Owner == operation.Owner && operation.DeviceIndex < ship.DeviceCount)
+                ship.GetDevice(operation.DeviceIndex).ApplyRemoteUse(this, ship, operation.Tick, operation.UseStarted);
+        }
+
         // The reasons an owner sends: Unconfirmed is local to a receiver.
         internal static bool IsSentRemovalReason(RemovalReason reason) =>
             reason >= RemovalReason.Death && reason <= RemovalReason.Disposal || reason == RemovalReason.Vanish;
@@ -369,6 +390,15 @@ namespace CombatSimulation.Core
                 Tick, id, record, slot.ActiveShip == null ? default : ReadSpawnPose(slot.ActiveShip)));
         }
 
+        // Phase 5, step 7 (H8): a device use that started or ended on a local ship. The tick is the use's first status
+        // tick: this tick, or the next one for a use that lethal damage started at stage 10.
+        internal void CaptureDeviceUse(ShipEntity ship, int deviceIndex, bool started, long tick)
+        {
+            if (ShouldCapture(ship.Owner))
+                _outgoingOperations.Add(OwnerOperation.DeviceUsed(BattleId, ship.Owner, NextOperationSequence(ship.Owner),
+                    tick, ship.Id, deviceIndex, started));
+        }
+
         private void CaptureDroneSpawn(ShipEntity ship, EntityId parent)
         {
             if (ShouldCapture(ship.Owner))
@@ -427,7 +457,8 @@ namespace CombatSimulation.Core
             operation.Kind == OwnerOperationKind.MissileTarget ? 4 :
             operation.Kind == OwnerOperationKind.DroneSpawn ? 5 :
             operation.Kind == OwnerOperationKind.BulletSpawn ? 6 :
-            operation.Kind == OwnerOperationKind.Retreat || operation.Kind == OwnerOperationKind.Allegiance ? 1 :
+            operation.Kind == OwnerOperationKind.Retreat || operation.Kind == OwnerOperationKind.Allegiance ||
+            operation.Kind == OwnerOperationKind.DeviceUse ? 1 :
             operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed ? 1 : 12;
 
         private static int CompareHits(in InboundHit a, in InboundHit b)

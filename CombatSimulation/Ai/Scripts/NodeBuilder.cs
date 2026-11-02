@@ -231,6 +231,14 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_LookForThreats content) => new LookForThreatsNode(content.Cooldown);
         public INode Create(BehaviorTreeNode_MatchVelocityWithTarget content) => new MatchVelocityNode(content.Tolerance);
 
+        // Legacy ShipSystems.FindFirst: the first working device of the class, automatic or not; null without one.
+        private AiDevice FirstDevice(DeviceClass deviceClass)
+        {
+            foreach (var device in _profile.Devices)
+                if (device.DeviceClass == deviceClass) return device;
+            return null;
+        }
+
         // Legacy ActivateDeviceNode.Create: the devices of the class that are not automatic; none gives Failure.
         public INode Create(BehaviorTreeNode_ActivateDevice content)
         {
@@ -246,7 +254,7 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_SustainAim content) => new SustainAimNode(false);
         public INode Create(BehaviorTreeNode_ChargeWeapons content) =>
             HasWeapon(weapon => weapon.WeaponClass == AiWeaponClass.RequiredCharging) ? Stub(content) : EmptyNode.Failure;
-        public INode Create(BehaviorTreeNode_Chase content) => new ChaseNode();
+        public INode Create(BehaviorTreeNode_Chase content) => new ChaseNode(FirstDevice(DeviceClass.TeleporterV2));
         public INode Create(BehaviorTreeNode_AvoidThreats content) => new AvoidThreatsNode();
         public INode Create(BehaviorTreeNode_SlowDown content) => Stub(content);
         // Legacy RecoilNode.Create: the weapons with high recoil; none gives Failure.

@@ -36,6 +36,9 @@ namespace CombatSimulation.Runtime.Tests
                 OwnerOperation.MissileTargetChanged(batch, 20, 9, 127, child, default),
                 // D13: the ship takes another allegiance.
                 OwnerOperation.AllegianceChanged(batch, 20, 10, 125, ship, Allegiance.Undefined),
+                // Phase 5, step 7: a device use starts, another ends.
+                OwnerOperation.DeviceUsed(batch, 20, 11, 126, ship, 3, true),
+                OwnerOperation.DeviceUsed(batch, 20, 12, 125, ship, 0, false),
             };
             // A removed bullet can still attack in its own batch. An end record is one tick ahead.
             var hits = new[]
@@ -49,7 +52,7 @@ namespace CombatSimulation.Runtime.Tests
             var bytes = link.Write(125, operations, hits);
             var scan = new List<SessionCodec.ScannedRecord>();
             var watermark = link.Read(bytes, out var actualOperations, out var actualHits, scan);
-            Assert.AreEqual(125, watermark.Tick); Assert.AreEqual(10UL, watermark.OperationSequence);
+            Assert.AreEqual(125, watermark.Tick); Assert.AreEqual(12UL, watermark.OperationSequence);
             Assert.AreEqual(20, watermark.Owner); Assert.AreEqual(batch, watermark.BattleId);
             CollectionAssert.AreEqual(operations, actualOperations);
             CollectionAssert.AreEqual(hits, actualHits);
@@ -64,16 +67,19 @@ namespace CombatSimulation.Runtime.Tests
             CollectionAssert.AreEqual(new[] { SessionCodec.RecordKind.Roster, SessionCodec.RecordKind.DroneLaunch,
                 SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.Retreat,
                 SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.MissileTarget,
-                SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Allegiance, SessionCodec.RecordKind.Hit,
+                SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Allegiance, SessionCodec.RecordKind.DeviceUse,
+                SessionCodec.RecordKind.DeviceUse, SessionCodec.RecordKind.Hit,
                 SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
             // A push (phase 4 E4) adds 64 bits to its hit; every hit has the 1-bit flag.
             // Version 8 widens every record kind to 4 bits (D13).
-            Assert.LessOrEqual(scan[3].Bits, 42); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 33); Assert.LessOrEqual(scan[10].Bits, 90 + 64);
-            Assert.LessOrEqual(scan[12].Bits, 90);
+            Assert.LessOrEqual(scan[3].Bits, 42); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 33); Assert.LessOrEqual(scan[12].Bits, 90 + 64);
+            Assert.LessOrEqual(scan[14].Bits, 90);
             // A missile target is about 3 bytes in the plan: here 2 bytes, with tick offsets +1 and +2 (0 in a real batch).
             Assert.AreEqual(17, scan[7].Bits); Assert.AreEqual(12, scan[8].Bits);
             // An allegiance change: kind, tick offset 0, control index 0 and allegiance in about 1 byte.
             Assert.AreEqual(9, scan[9].Bits); Assert.AreEqual(RemovalReason.Vanish, scan[5].RemovalReason);
+            // A device use: kind, tick offset, control index, device and the start bit in about 2 bytes.
+            Assert.AreEqual(18, scan[10].Bits); Assert.LessOrEqual(scan[11].Bits, 18);
             Assert.AreEqual(RemovalReason.Expiry, scan[6].RemovalReason);
 
             // A later hit cannot name the removed bullet.
@@ -110,7 +116,14 @@ namespace CombatSimulation.Runtime.Tests
             { w.WriteVarUInt(0); w.WriteBits(5, 3); }, 2), out _, out _));
             Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 8, 0, (ref BitWriter w) =>
             { w.WriteVarUInt(0); w.WriteBits((ulong)Allegiance.Undefined, 3); }, 2), out _, out _));
-            Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 9, 0), out _, out _));
+            // Phase 5, step 7: a device use (kind 9) that names no known ship, a device index of 64, kind 10.
+            Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 9, 0, (ref BitWriter w) =>
+            { w.WriteVarUInt(0); w.WriteVarUInt(0); w.WriteBool(true); }), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 9, 0, (ref BitWriter w) =>
+            { w.WriteVarUInt(0); w.WriteVarUInt(64); w.WriteBool(true); }, 2), out _, out _));
+            Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 9, 0, (ref BitWriter w) =>
+            { w.WriteVarUInt(0); w.WriteVarUInt(63); w.WriteBool(false); }, 2), out _, out _));
+            Assert.Throws<FormatException>(() => new Link().Read(Raw(2, 10, 0), out _, out _));
 
             // With ship 0 named: a hit on an unknown target index, a NaN amount, a removal of an unknown bullet age,
             // the never-sent reason Unconfirmed, an unknown retreat ship.

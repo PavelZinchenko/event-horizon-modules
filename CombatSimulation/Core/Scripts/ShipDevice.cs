@@ -10,7 +10,8 @@ namespace CombatSimulation.Core
         // The device index in the ship definition, also its control bit.
         public int Index { get; }
 
-        public bool IsControlOn(ShipEntity ship) => (ship.Systems & (1UL << Index)) != 0;
+        // A device blocked by another device's status sees its bit released (legacy ISystemsModification).
+        public bool IsControlOn(ShipEntity ship) => (ship.UsableSystems & (1UL << Index)) != 0;
 
         // Legacy SystemBase.Active, recorded by Update (DeviceState.Active).
         public bool IsActive { get; protected set; }
@@ -31,6 +32,23 @@ namespace CombatSimulation.Core
             Deactivate(battle);
         }
 
+        // Stage 2 for a retreating ship (legacy ShipRetreatEffect: no system activates). Most devices stop; a running
+        // use goes on as with a released bit.
+        internal virtual void UpdateRetreating(Battle battle, ShipEntity ship) => Stop(battle);
+
+        // Stage 3 (phase 5, step 7): adds the modifiers of a running use.
+        internal virtual void AddStatus(Battle battle, ShipEntity ship, ref ShipStatus status) { }
+
+        // End of stage 10, on the owner only: the damage of this tick left no armor. True when the device saved the
+        // ship; the next devices are not asked.
+        internal virtual bool OnLethalDamage(Battle battle, ShipEntity ship) => false;
+
+        // A remote copy follows its owner's record of a use that started or ended at the tick (H8).
+        internal virtual void ApplyRemoteUse(Battle battle, ShipEntity ship, long tick, bool started) { }
+
+        // Legacy WeaponType other than Continuous and RequiredCharging: a warp blocks it.
+        internal virtual bool IsShotWeapon => false;
+
         // Stage 14, at the end of the tick.
         internal virtual DeviceState GetState(Battle battle, ShipEntity ship, long tick) => DeviceState.Inert;
     }
@@ -46,6 +64,8 @@ namespace CombatSimulation.Core
 
         public CannonDefinition Definition { get; }
         public long LastShotTick { get; private set; } = NeverFired;
+
+        internal override bool IsShotWeapon => true;
 
         public override void Reset()
         {

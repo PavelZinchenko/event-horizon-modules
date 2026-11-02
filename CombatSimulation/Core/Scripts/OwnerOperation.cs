@@ -49,7 +49,7 @@ namespace CombatSimulation.Core
         }
     }
 
-    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance }
+    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse }
 
     // One logical commit. A roster operation includes its entity spawn/removal, never a second message.
     // Sequence starts at 1 per owner and covers this batch only (hits have their own sequence).
@@ -68,7 +68,7 @@ namespace CombatSimulation.Core
         public readonly SpawnPose Pose;
         public readonly RemovalReason RemovalReason;
 
-        // Bullet spawns only: the identity inputs of SpawnIdentity.CreateChild besides parent and tick.
+        // Bullet spawns: the identity inputs of SpawnIdentity.CreateChild besides parent and tick. Device uses: the device.
         public readonly int DeviceIndex;
         public readonly int BarrelIndex;
         public readonly uint SpawnSequence;
@@ -82,12 +82,16 @@ namespace CombatSimulation.Core
         // Allegiance changes only (D13).
         public readonly Allegiance Allegiance;
 
+        // Device uses only (phase 5, step 7): the use started at the tick, else it ended.
+        public readonly bool UseStarted;
+
         private OwnerOperation(BattleId battleId, int owner, ulong sequence, long tick, OwnerOperationKind kind,
             EntityId entityId, RosterRecord roster = default, DroneBayKey? bayKey = null, EntityId parentId = default,
             SpawnPose pose = default, RemovalReason removalReason = RemovalReason.None,
             int deviceIndex = 0, int barrelIndex = 0, uint spawnSequence = 0, bool hasLaunchPose = false,
-            EntityId targetId = default, Allegiance allegiance = default)
+            EntityId targetId = default, Allegiance allegiance = default, bool useStarted = false)
         {
+            UseStarted = useStarted;
             Allegiance = allegiance;
             HasLaunchPose = hasLaunchPose;
             TargetId = targetId;
@@ -152,6 +156,12 @@ namespace CombatSimulation.Core
         public static OwnerOperation AllegianceChanged(BattleId battleId, int owner, ulong sequence, long tick,
             EntityId entityId, Allegiance allegiance) =>
             new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.Allegiance, entityId, allegiance: allegiance);
+
+        // A device of the ship started or ended a use at stage 2 of tick (phase 5, step 7, H8): InfinityStone, WarpDrive.
+        public static OwnerOperation DeviceUsed(BattleId battleId, int owner, ulong sequence, long tick,
+            EntityId entityId, int deviceIndex, bool started) =>
+            new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.DeviceUse, entityId,
+                deviceIndex: deviceIndex, useStarted: started);
     }
 
     // "All my operations through tick Tick are sent; the last one has sequence OperationSequence" (0: none yet).

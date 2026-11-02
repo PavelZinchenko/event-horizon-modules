@@ -109,14 +109,15 @@ namespace CombatSimulation.Runtime
     //   Missile target (P3): missile bullet age (VarUInt), target control index + 1 in the receiver's stream (VarUInt;
     //     0: no target).
     //   Allegiance (phase 4, D13; version 8): ship control index (VarUInt), allegiance (3).
+    //   Device use (phase 5, step 7; version 9): ship control index (VarUInt), device index (VarUInt), started (1 bit).
     //   Pose: position, angle, linear velocity, angular velocity (six 32-bit floats).
     // Operation sequences are consecutive inside a batch and end at the header's value. Operations come before hits,
     // so a hit names only bullets already counted.
     internal static class SessionCodec
     {
-        internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance }
+        internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse }
 
-        internal const byte Version = 8;
+        internal const byte Version = 9;
         internal const int MaxBatchBytes = 1 << 20;
         private const int KindBits = 4, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3, AllegianceBits = 3;
         private const int MaxVarUIntBits = 16 + 1 + 64;
@@ -221,6 +222,12 @@ namespace CombatSimulation.Runtime
                         throw new InvalidOperationException("An allegiance change names a ship the stream does not know.");
                     Header(ref w, RecordKind.Allegiance, batchTick, op.Tick);
                     w.WriteVarUInt(changed); w.WriteBits((ulong)op.Allegiance, AllegianceBits);
+                    break;
+                case OwnerOperationKind.DeviceUse:
+                    if (!own.TryGetBody(op.EntityId, out var user))
+                        throw new InvalidOperationException("A device use names a ship the stream does not know.");
+                    Header(ref w, RecordKind.DeviceUse, batchTick, op.Tick);
+                    w.WriteVarUInt(user); w.WriteVarUInt((ulong)op.DeviceIndex); w.WriteBool(op.UseStarted);
                     break;
                 default: throw new InvalidOperationException("Unknown owner operation.");
             }
@@ -371,6 +378,13 @@ namespace CombatSimulation.Runtime
                         operations.Add(OwnerOperation.AllegianceChanged(battle, sender, ++peer.LastOperation, r.Tick,
                             Body(peer, name), allegiance));
                         break;
+                    case RecordKind.DeviceUse:
+                        name = r.VarUInt(); var used = r.VarUInt(); var started = r.Bool();
+                        Require(used < 64);
+                        if (!resolve) break;
+                        operations.Add(OwnerOperation.DeviceUsed(battle, sender, ++peer.LastOperation, r.Tick,
+                            Body(peer, name), (int)used, started));
+                        break;
                 }
                 scan?.Add(new ScannedRecord(r.Kind, r.BitPosition - start, reason));
                 start = r.BitPosition;
@@ -432,7 +446,7 @@ namespace CombatSimulation.Runtime
             {
                 if (_reader.AtPadding()) return false;
                 var kind = Bits(KindBits);
-                Require(kind >= (ulong)RecordKind.Hit && kind <= (ulong)RecordKind.Allegiance);
+                Require(kind >= (ulong)RecordKind.Hit && kind <= (ulong)RecordKind.DeviceUse);
                 Kind = (RecordKind)kind;
                 var code = VarUInt();
                 var offset = (long)(code >> 1) ^ -(long)(code & 1);

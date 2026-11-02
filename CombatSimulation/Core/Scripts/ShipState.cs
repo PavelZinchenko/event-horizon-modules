@@ -52,6 +52,9 @@ namespace CombatSimulation.Core
         // The absolute tick at which the retreat completes, or -1 without a retreat.
         public readonly long RetreatCompletionTick;
 
+        // The status of the tick's running device uses (phase 5, step 7).
+        public readonly ShipStatusFlags Status;
+
         // The first of this ship's Definition.Devices.Count entries in the snapshot's device buffer.
         internal readonly int DeviceStart;
 
@@ -77,6 +80,7 @@ namespace CombatSimulation.Core
             Course = ship.Course;
             Systems = ship.Systems;
             RetreatCompletionTick = ship.RetreatCompletionTick;
+            Status = ship.Status;
             DeviceStart = deviceStart;
         }
 

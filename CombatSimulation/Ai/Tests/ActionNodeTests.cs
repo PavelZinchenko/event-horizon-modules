@@ -327,6 +327,59 @@ namespace CombatSimulation.Ai.Tests
             }
         }
 
+        // Phase 5, step 7a: at full throttle Chase holds the first warp drive while the target is within its range.
+        [Test]
+        public void ChaseUsesTheWarpDriveTowardATargetInRange()
+        {
+            Assert.IsTrue(ChaseWarps(1000f), "aligned within 5 degrees and in range");
+            Assert.IsFalse(ChaseWarps(5f), "beyond the warp range");
+        }
+
+        // The point-defense bit (device 1) stands in for the warp drive: the snapshot shows the held bit.
+        private static bool ChaseWarps(float range)
+        {
+            var runner = Battle(new ChasePilots(new AiDevice(1, DeviceClass.TeleporterV2, false, range)));
+            for (var i = 0; i < 300; ++i)
+            {
+                runner.Step();
+                if ((runner.Snapshot.Ships[0].Systems & 2UL) != 0) return true;
+            }
+            return false;
+        }
+
+        // Ship 0 chases the enemy; the enemy idles.
+        private sealed class ChasePilots : IPilotProvider
+        {
+            public ChasePilots(AiDevice warpDrive) => _warpDrive = warpDrive;
+
+            public IPilot CreatePilot(BattleSnapshot snapshot, in ShipState ship, out PilotSchedule schedule)
+            {
+                schedule = PilotSchedule.Ship;
+                if (ship.Side != 0) return null;
+
+                var context = new AiContext(ArmedShip, AiSettings.Default, schedule.Period * CombatSimulation.Core.Battle.TickDuration,
+                    Utilites.RandomState.FromSeed(1), BattleData());
+                return new BehaviorTreePilot(new ChaseEnemy(new ChaseNode(_warpDrive)), context,
+                    new Dictionary<BehaviorNodeType, int>());
+            }
+
+            private readonly AiDevice _warpDrive;
+        }
+
+        private sealed class ChaseEnemy : INode
+        {
+            public ChaseEnemy(INode chase) => _chase = chase;
+
+            public NodeState Evaluate(AiContext context)
+            {
+                foreach (var ship in context.Snapshot.Ships)
+                    if (ship.Side != context.Ship.Side) context.TargetShip = ship.Id;
+                return _chase.Evaluate(context);
+            }
+
+            private readonly INode _chase;
+        }
+
         // Ship 0 runs the tree; the enemy idles.
         private sealed class SidePilots : IPilotProvider
         {

@@ -6,8 +6,8 @@ using GameDatabase.Enums;
 namespace CombatSimulation.Ai
 {
     // Ports of the legacy movement, aiming and attack nodes (phase 4, step 7d). A target that left the battle counts as
-    // no target. The accelerator, warp drive and fortification branches of Chase and Ram wait for those devices
-    // (phase 5); they are inert now, so legacy would not find them either (D6).
+    // no target. The accelerator and fortification branches of Chase and Ram wait for those devices (phase 5); they are
+    // inert now, so legacy would not find them either (D6).
 
     // Legacy SelectWeaponNode. A null list selects every weapon.
     internal sealed class SelectWeaponNode : INode
@@ -127,16 +127,40 @@ namespace CombatSimulation.Ai
     }
 
     // Legacy ChaseNode: runs while it has a target, even one it cannot see.
+    // Legacy ChaseNode with its warp drive branch (phase 5, step 7a): at full throttle the first warp drive jumps
+    // toward a target within its range beyond the selected weapons' minimum range.
     internal sealed class ChaseNode : INode
     {
+        private const float MaxWarpDeltaAngle = 5 * LegacyMath.Degree;
+        private const float MinJumpDistance = 5f;
+
+        // warpDrive is the first warp drive, or null.
+        public ChaseNode(AiDevice warpDrive = null) => _warpDrive = warpDrive;
+
         public NodeState Evaluate(AiContext context)
         {
             if (context.TargetShip.IsNull)
                 return NodeState.Failure;
 
-            Navigation.ChaseAndRam(context, context.TargetShip, out _, out _);
+            var status = Navigation.ChaseAndRam(context, context.TargetShip, out _, out var deltaAngle);
+            if (status == Navigation.Status.FullThrottle && _warpDrive != null) UseWarpDrive(context, deltaAngle);
             return NodeState.Running;
         }
+
+        // Legacy Helpers.DistanceWrap: centre to centre on the torus.
+        private void UseWarpDrive(AiContext context, float deltaAngle)
+        {
+            var isActive = context.DeviceOf(_warpDrive.DeviceIndex).Active;
+            if (!isActive && deltaAngle > MaxWarpDeltaAngle) return;
+            if (!context.TryGetShip(context.TargetShip, out var target)) return;
+
+            var distance = context.Delta(context.Ship.Position, target.Position).Length - context.SelectedWeapons.RangeMin;
+            if (distance <= 0 || distance > _warpDrive.Range || !isActive && distance < MinJumpDistance) return;
+
+            context.Controls.ActivateSystem(_warpDrive.DeviceIndex);
+        }
+
+        private readonly AiDevice _warpDrive;
     }
 
     // Legacy RamNode: fails without a target or while it only follows; runs from a second before the hit.

@@ -142,6 +142,14 @@ namespace CombatSimulation.Core
         // The absolute tick at which the retreat completes (tick stages, rule 5), or NoRetreat.
         public long RetreatCompletionTick { get; set; }
 
+        // Stage 3 (phase 5, step 7): the status of this tick's active devices. The devices it blocks stay blocked
+        // through stage 2 of the next tick.
+        public ShipStatusFlags Status { get; set; }
+        public ulong BlockedDevices { get; set; }
+
+        // The control bits a device sees at stage 2.
+        public ulong UsableSystems => Systems & ~BlockedDevices;
+
         // Set at stage 11; stage 12 applies it.
         public bool PendingDeath { get; set; }
 
@@ -211,6 +219,8 @@ namespace CombatSimulation.Core
             RetreatCompletionTick = NoRetreat;
             PendingDeath = false;
             PendingVanish = false;
+            Status = ShipStatusFlags.None;
+            BlockedDevices = 0;
             PreStepVelocity = Vec2.Zero;
             if (_pendingDamage.Length != damageTypes) _pendingDamage = new float[damageTypes];
             else System.Array.Clear(_pendingDamage, 0, damageTypes);
@@ -353,6 +363,8 @@ namespace CombatSimulation.Core
             Definition = null;
             RetreatCompletionTick = NoRetreat;
             PendingDeath = false;
+            Status = ShipStatusFlags.None;
+            BlockedDevices = 0;
             PreStepVelocity = Vec2.Zero;
             ClearPendingDamage();
             _spawnSampleCount = 0;

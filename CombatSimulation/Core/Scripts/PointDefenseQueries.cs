@@ -38,8 +38,9 @@ namespace CombatSimulation.Core
                         {
                             if (!battle.Shapes.TryGet(target.Shape, out var shape)) continue;
                             var drone = battle.FindShip(shape.OwnerId);
+                            // A query has no category, so the hull filter of a drone without contacts does not stop it.
                             if (drone == null || !drone.IsDrone || !Allegiances.IsHostile(drone.Allegiance, ship.Allegiance) ||
-                                !_droneTargets.Add(drone.Id)) continue;
+                                (drone.Status & ShipStatusFlags.NoContacts) != 0 || !_droneTargets.Add(drone.Id)) continue;
                             _candidates.Add(new ContactCandidate
                             {
                                 Time = 0f,
