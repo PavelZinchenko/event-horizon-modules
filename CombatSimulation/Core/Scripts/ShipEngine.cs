@@ -13,11 +13,12 @@ namespace CombatSimulation.Core
         private const float MinSpin = (float)(0.01 * Math.PI / 180.0);
         private const float FullCircle = (float)(2.0 * Math.PI);
 
-        // Stage 4: the engine input of this tick. No engine while retreating (legacy ShipRetreatEffect). EngineOff
-        // (phase 5, step 7) sets throttle 0 and no course, so only the spin brake runs.
+        // Stage 4: the engine input of this tick. No engine while retreating (legacy ShipRetreatEffect) or with Drift.
+        // EngineOff (phase 5, step 7) sets throttle 0 and no course, so only the spin brake runs.
         public static EngineInput Input(ShipEntity ship)
         {
-            var engine = ship.RetreatCompletionTick != ShipEntity.NoRetreat ? null
+            var engine = ship.RetreatCompletionTick != ShipEntity.NoRetreat || (ship.Status & ShipStatusFlags.Drift) != 0
+                ? null
                 : ship.EngineHasEnergy ? ship.Definition.Engine : ship.Definition.EngineWithoutEnergy;
             return (ship.Status & ShipStatusFlags.EngineOff) != 0
                 ? new EngineInput(engine, 0f, false, 0f)

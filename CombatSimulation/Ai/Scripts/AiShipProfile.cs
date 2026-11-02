@@ -68,12 +68,14 @@ namespace CombatSimulation.Ai
     // binding makes it automatic (legacy ISystem.IsAutomatic, key below 0).
     public sealed class AiDevice
     {
-        public AiDevice(int deviceIndex, DeviceClass deviceClass, bool isAutomatic, float range = 0f)
+        public AiDevice(int deviceIndex, DeviceClass deviceClass, bool isAutomatic, float range = 0f,
+            float activationTime = 0f)
         {
             DeviceIndex = deviceIndex;
             DeviceClass = deviceClass;
             IsAutomatic = isAutomatic;
             Range = range;
+            ActivationTime = activationTime;
         }
 
         public int DeviceIndex { get; }
@@ -82,6 +84,9 @@ namespace CombatSimulation.Ai
 
         // Legacy WarpDrive.MaxRange; 0 for other classes.
         public float Range { get; }
+
+        // Legacy DetonatorDevice.ActivationTime (its lock, in seconds); 0 for other classes.
+        public float ActivationTime { get; }
     }
 
     // A drone bay (legacy IDroneBay): its control bit and whether its key binding makes it automatic.

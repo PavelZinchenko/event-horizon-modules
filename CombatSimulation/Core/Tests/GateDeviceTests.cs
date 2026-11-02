@@ -6,8 +6,9 @@ using NUnit.Framework;
 
 namespace CombatSimulation.Core.Tests
 {
-    // Phase 5, step 7a: the gate examples of InfinityStone and WarpDrive (TODO/battle_simulator_phase5.md,
-    // "Data-model gate (7)"), the stage 3 status and the owner records of device uses (H8).
+    // Phase 5, steps 7a and 7b: the gate examples of InfinityStone, WarpDrive and Detonator
+    // (TODO/battle_simulator_phase5.md, "Data-model gate (7)"), the stage 3 status and the owner records of device uses
+    // and explosions (H8).
     public class GateDeviceTests
     {
         private const float Tolerance = 1e-3f;
@@ -26,6 +27,41 @@ namespace CombatSimulation.Core.Tests
         private static ShipDefinition WarpShip(float energy = 30f, params DeviceDefinition[] more) =>
             Fixtures.ShipWith(energy: new ResourceDefinition(energy), barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
                 devices: new DeviceDefinition[] { Warp }.Concat(more).ToArray());
+
+        // Record 5: energy 1, cooldown 20 s, lifetime 1 s (50 ticks), power 3, range 10. Ship: 60 cells, damage
+        // multiplier 1, scale 4, mass 100: radius 20, heat 180, push 200.
+        private static readonly DetonatorDefinition Detonator = new DetonatorDefinition(1f, 20f, 1f,
+            DetonatorDefinition.CreateExplosion(3f * 60f, 0, 10f, 4f, 100f));
+
+        // Device 0 the detonator, device 1 a cannon without cost; energy 10 without recharge.
+        private static ShipDefinition DetonatorShip(params DeviceDefinition[] more) =>
+            Fixtures.ShipWith(mass: 100f, energy: new ResourceDefinition(10f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[] { Detonator, new CannonDefinition(0, 0.02f, 0f, 0f, Fixtures.Bolt) }
+                    .Concat(more).ToArray());
+
+        // Scale 2, mass 2, armor 200, no shield.
+        private static readonly ShipDefinition DetonatorTarget =
+            Fixtures.ShipWith(mass: 2f, armor: 200f, shield: new ResourceDefinition(0f));
+
+        // With reserve, side 0 has a second slot that stays ready, so the battle goes on after the detonator ship dies.
+        private static Driver DetonatorDuel(ShipDefinition ship, bool reserve = false)
+        {
+            var roster = new List<RosterSlotSetup>
+            {
+                new RosterSlotSetup(new RosterId(1), 0, ship),
+                new RosterSlotSetup(new RosterId(101), 1, DetonatorTarget),
+            };
+            if (reserve) roster.Add(new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship));
+
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster));
+            driver.Deploy(1);
+            driver.Deploy(101);
+            driver.Step();
+            driver.Place(1, new Vec2(50f, 50f), Vec2.Zero);
+            driver.Place(101, new Vec2(150f, 150f), Vec2.Zero);
+            return driver;
+        }
 
         private static DeviceState Device(Driver driver, uint rosterId, int index)
         {
@@ -278,6 +314,131 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(0f, driver.Battle.World.GetLinearVelocity(driver.Ship(101).Body).Length, Tolerance);
         }
 
+        // Detonator, row 1: the lock lets the ship drift, blocks every other device from the next tick and tints the ship.
+        [Test]
+        public void TheLockLetsTheShipDriftAndBlocksTheOtherDevices()
+        {
+            var driver = DetonatorDuel(DetonatorShip());
+            driver.Step(5); // The barrel is ready 3 ticks after deployment.
+            var ship = driver.Ship(1);
+            driver.Place(1, new Vec2(50f, 50f), new Vec2(5f, 0f));
+            driver.Battle.World.SetAngularVelocity(ship.Body, 1f);
+            var tick = driver.Tick;
+            driver.Control(1, course: 2f, throttle: 1f, systems: 3);
+
+            var events = driver.StepCollecting(1);
+            Assert.AreEqual(9f, ship.Energy.Value, Tolerance);
+            Assert.AreEqual(ShipStatusFlags.Drift, driver.Battle.Snapshot.Ships[0].Status);
+            Assert.AreEqual(0f, driver.Battle.Snapshot.Ships[0].Tint, Tolerance);
+
+            events.AddRange(driver.StepCollecting(25));
+            Assert.AreEqual(5f, driver.Battle.World.GetLinearVelocity(ship.Body).X, Tolerance);
+            Assert.AreEqual(0f, driver.Battle.World.GetLinearVelocity(ship.Body).Y, Tolerance);
+            Assert.AreEqual(1f, driver.Battle.World.GetAngularVelocity(ship.Body), Tolerance);
+            Assert.AreEqual(0.5f, driver.Battle.Snapshot.Ships[0].Tint, Tolerance);
+
+            // The cannon after the detonator fires in the start tick, then waits for the end of the lock.
+            events.AddRange(driver.StepCollecting(25));
+            var spawns = CannonTests.BulletSpawns(events);
+            Assert.AreEqual(new[] { tick, tick + 50 }, spawns.Select(e => e.Tick).ToArray());
+            Assert.AreSame(Detonator.Explosion, spawns[1].BulletDefinition);
+        }
+
+        // Rows 2 and 3: the first tick after the lock spawns the explosion at the ship centre, and the ship dies. A target
+        // of scale 2 at 12 u takes half: heat 90 and push 100.
+        [Test]
+        public void TheExplosionHitsByFalloffAndTheShipDies()
+        {
+            var driver = DetonatorDuel(DetonatorShip());
+            driver.Place(101, new Vec2(62f, 50f), Vec2.Zero);
+            var tick = driver.Tick;
+            driver.Control(1, systems: 1);
+            driver.StepUntil(tick + 50);
+            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+
+            var events = driver.StepCollecting(1);
+            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.IsTrue(events.Any(e => e.Kind == BattleEventKind.RosterTransition &&
+                e.TransitionReason == RosterTransitionReason.Killed));
+            var explosion = driver.Battle.Snapshot.Bullets.ToArray().Single();
+            Assert.AreSame(Detonator.Explosion, explosion.Definition);
+            Assert.AreEqual(50f, explosion.Position.X, Tolerance);
+            Assert.AreEqual(50f, explosion.Position.Y, Tolerance);
+            Assert.AreEqual(0f, explosion.LinearVelocity.Length, Tolerance);
+
+            var hit = events.Single(e => e.Kind == BattleEventKind.Hit);
+            Assert.AreEqual(90f, hit.Damage, Tolerance);
+            Assert.AreEqual(110f, driver.Ship(101).Armor.Value, Tolerance);
+            Assert.AreEqual(50f, driver.Battle.World.GetLinearVelocity(driver.Ship(101).Body).X, Tolerance);
+        }
+
+        // Row 4: a ship that dies during the lock does not explode.
+        [Test]
+        public void AShipThatDiesDuringTheLockDoesNotExplode()
+        {
+            var driver = DetonatorDuel(DetonatorShip(), reserve: true);
+            driver.Control(1, systems: 1);
+            driver.Step(10);
+            driver.Kill(1);
+
+            var events = driver.StepCollecting(60);
+            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.IsEmpty(CannonTests.BulletSpawns(events));
+        }
+
+        // Row 5 and the approved timer change: a ready InfinityStone saves the ship; the cooldown runs from the explosion,
+        // and the next use locks the ship for the full time again.
+        [Test]
+        public void AShipThatSurvivedLocksAgainForTheFullTime()
+        {
+            var driver = DetonatorDuel(DetonatorShip(Stone));
+            var tick = driver.Tick;
+            driver.Control(1, systems: 1);
+            driver.StepUntil(tick + 51);
+            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(1000f, driver.Ship(1).Armor.Value, Tolerance);
+
+            // 20 s from the explosion tick.
+            driver.StepUntil(tick + 50 + 1000);
+            Assert.AreEqual(ShipStatusFlags.None, driver.Ship(1).Status & ShipStatusFlags.Drift);
+            driver.Step();
+            Assert.AreEqual(ShipStatusFlags.Drift, driver.Ship(1).Status & ShipStatusFlags.Drift);
+
+            // The stone is cooling down (60 s), so the second explosion kills.
+            driver.StepUntil(tick + 1050 + 50);
+            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            driver.Step();
+            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+        }
+
+        // Row 6: a retreat does not stop the lock.
+        [Test]
+        public void TheLockEndsInAnExplosionDuringARetreat()
+        {
+            var driver = DetonatorDuel(DetonatorShip());
+            var tick = driver.Tick;
+            driver.Control(1, systems: 1);
+            driver.Step(10);
+            driver.Retreat(driver.Entity(1));
+
+            driver.StepUntil(tick + 50);
+            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            driver.Step();
+            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+        }
+
+        [Test]
+        public void TheExplosionRadiusAndPushFollowTheShip()
+        {
+            var explosion = DetonatorDefinition.CreateExplosion(180f, 0, 10f, 4f, 100f);
+            Assert.AreEqual(20f, explosion.Radius, Tolerance);
+            Assert.AreEqual(200f, explosion.RadialPushWithFalloff, Tolerance);
+            Assert.AreEqual(0.5f, explosion.Falloff(12f, 2f), Tolerance);
+            Assert.AreEqual(BulletImpact.AllTargets, explosion.Impact);
+            Assert.IsTrue(explosion.DamageFalloff);
+            Assert.AreEqual(16, explosion.LifetimeTicks);
+        }
+
         // H8: the owner sends the start and the end; the copy follows them and never starts a warp itself.
 
         private const int RemoteOwner = 20;
@@ -365,6 +526,67 @@ namespace CombatSimulation.Core.Tests
             Tick(owner, remote, link);
             Assert.AreEqual(100f, remote.Ship(101).Armor.Value, Tolerance);
             Assert.AreEqual(ShipStatusFlags.NoContacts, remote.Ship(101).Status);
+        }
+
+        // Detonator (H8): the copy locks from the owner's start record and adds the explosion from its spawn record, with
+        // the owner's identity; the owner's roster record removes the ship.
+        [Test]
+        public void TheCopyFollowsTheOwnersDetonation()
+        {
+            var (owner, remote, link) = Pair(DetonatorShip());
+            var tick = owner.Tick;
+            owner.Control(101, systems: 1);
+            Tick(owner, remote, link);
+            Assert.AreEqual(ShipStatusFlags.Drift, remote.Ship(101).Status);
+            Assert.AreEqual(1UL << 1, remote.Ship(101).BlockedDevices);
+
+            while (owner.Tick < tick + 50) Tick(owner, remote, link);
+            Assert.AreEqual(RosterStatus.Active, remote.Status(101));
+            Tick(owner, remote, link);
+
+            var ownerExplosion = owner.Battle.Snapshot.Bullets.ToArray().Single();
+            var copy = remote.Battle.Snapshot.Bullets.ToArray().Single();
+            Assert.AreEqual(ownerExplosion.Id, copy.Id);
+            Assert.AreEqual(ownerExplosion.ExpiryTick, copy.ExpiryTick);
+            Assert.AreEqual(ownerExplosion.Position.X, copy.Position.X, Tolerance);
+            Assert.AreEqual(ownerExplosion.Position.Y, copy.Position.Y, Tolerance);
+            Assert.AreEqual(RosterStatus.Destroyed, remote.Status(101));
+        }
+
+        // A late spawn record still adds the explosion while it lives.
+        [Test]
+        public void ALateExplosionRecordReplays()
+        {
+            var (owner, remote, link) = Pair(DetonatorShip());
+            var tick = owner.Tick;
+            owner.Control(101, systems: 1);
+            while (owner.Tick < tick + 50) Tick(owner, remote, link);
+
+            for (var i = 0; i < 3; ++i)
+            {
+                owner.Step();
+                link.Capture(owner);
+                remote.Step();
+            }
+            link.Deliver(remote);
+            remote.Step();
+
+            var copy = remote.Battle.Snapshot.Bullets.ToArray().Single();
+            Assert.AreEqual(owner.Battle.Snapshot.Bullets.ToArray().Single().Id, copy.Id);
+            Assert.AreEqual(RosterStatus.Destroyed, remote.Status(101));
+        }
+
+        [Test]
+        public void TheCopyNeitherLocksNorExplodesFromItsOwnControls()
+        {
+            var (_, remote, _) = Pair(DetonatorShip());
+            remote.Control(101, systems: 1);
+            remote.Step(60);
+
+            Assert.AreEqual(ShipStatusFlags.None, remote.Ship(101).Status);
+            Assert.AreEqual(10f, remote.Ship(101).Energy.Value, Tolerance);
+            Assert.AreEqual(RosterStatus.Active, remote.Status(101));
+            Assert.AreEqual(0, remote.Battle.Snapshot.Bullets.Length);
         }
 
         [Test]

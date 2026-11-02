@@ -146,6 +146,7 @@ namespace CombatSimulation.Core
         // through stage 2 of the next tick.
         public ShipStatusFlags Status { get; set; }
         public ulong BlockedDevices { get; set; }
+        public float Tint { get; set; }
 
         // The control bits a device sees at stage 2.
         public ulong UsableSystems => Systems & ~BlockedDevices;
@@ -221,6 +222,7 @@ namespace CombatSimulation.Core
             PendingVanish = false;
             Status = ShipStatusFlags.None;
             BlockedDevices = 0;
+            Tint = 0f;
             PreStepVelocity = Vec2.Zero;
             if (_pendingDamage.Length != damageTypes) _pendingDamage = new float[damageTypes];
             else System.Array.Clear(_pendingDamage, 0, damageTypes);
@@ -365,6 +367,7 @@ namespace CombatSimulation.Core
             PendingDeath = false;
             Status = ShipStatusFlags.None;
             BlockedDevices = 0;
+            Tint = 0f;
             PreStepVelocity = Vec2.Zero;
             ClearPendingDamage();
             _spawnSampleCount = 0;

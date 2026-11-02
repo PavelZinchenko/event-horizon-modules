@@ -223,7 +223,12 @@ namespace CombatSimulation.Ai
         }
 
         public INode Create(BehaviorTreeNode_Ram content) => new RamNode();
-        public INode Create(BehaviorTreeNode_DetonateShip content) => Stub(content);
+        // Legacy DetonateShipNode: Failure without a detonator.
+        public INode Create(BehaviorTreeNode_DetonateShip content)
+        {
+            var detonator = FirstDevice(DeviceClass.Detonator);
+            return detonator != null ? new DetonateShipNode(detonator, content.InAttackRange) : EmptyNode.Failure;
+        }
         public INode Create(BehaviorTreeNode_Vanish content) => new VanishNode();
         public INode Create(BehaviorTreeNode_MaintainAttackRange content) => Stub(content);
         public INode Create(BehaviorTreeNode_LookAtTarget content) => new LookAtTargetNode();

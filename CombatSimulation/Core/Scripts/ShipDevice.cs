@@ -114,12 +114,16 @@ namespace CombatSimulation.Core
         public override void Update(Battle battle, ShipEntity ship) { }
     }
 
-    // A projectile, beam or drone requested at stage 2. Stage 5 creates it at the weapon or bay pose.
+    // A projectile, beam or drone requested at stage 2. Stage 5 creates it at the weapon or bay pose, or at the ship
+    // centre.
     internal readonly struct SpawnRequest
     {
+        // A bullet at the ship centre, without a barrel (phase 5, step 7b); its spawn slot is 0.
+        public const int ShipCentre = -1;
+
         public readonly ShipEntity Ship;
         public readonly int DeviceIndex;
-        // Weapon barrel, or the bay's lifetime launch slot for a drone request.
+        // Weapon barrel, the bay's lifetime launch slot for a drone request, or ShipCentre.
         public readonly int BarrelIndex;
         public readonly float Spread;
         public readonly BulletDefinition Bullet;
@@ -136,6 +140,10 @@ namespace CombatSimulation.Core
             Beam = null;
             DroneBay = null;
         }
+
+        // A device's bullet at the ship centre, at rotation 0, without spread (legacy SpaceObjectFactory.CreateArea).
+        public SpawnRequest(ShipEntity ship, int deviceIndex, BulletDefinition bullet)
+            : this(ship, deviceIndex, ShipCentre, 0f, bullet) { }
 
         public SpawnRequest(ShipEntity ship, BeamDevice beam)
         {
@@ -162,5 +170,8 @@ namespace CombatSimulation.Core
         // Spawns from one spawn slot in one tick; the sequence counts them (Identity, item 3).
         public bool HasSameSlot(in SpawnRequest other) =>
             Ship == other.Ship && DeviceIndex == other.DeviceIndex && BarrelIndex == other.BarrelIndex;
+
+        // The spawn slot of the identity: the barrel or bay slot; 0 at the ship centre.
+        public static uint SpawnSlot(int barrelIndex) => barrelIndex == ShipCentre ? 0u : (uint)barrelIndex;
     }
 }

@@ -55,6 +55,9 @@ namespace CombatSimulation.Core
         // The status of the tick's running device uses (phase 5, step 7).
         public readonly ShipStatusFlags Status;
 
+        // The share from 0 to 1 by which the view moves the ship colour to its device colour (phase 5, step 7b).
+        public readonly float Tint;
+
         // The first of this ship's Definition.Devices.Count entries in the snapshot's device buffer.
         internal readonly int DeviceStart;
 
@@ -81,6 +84,7 @@ namespace CombatSimulation.Core
             Systems = ship.Systems;
             RetreatCompletionTick = ship.RetreatCompletionTick;
             Status = ship.Status;
+            Tint = ship.Tint;
             DeviceStart = deviceStart;
         }
 

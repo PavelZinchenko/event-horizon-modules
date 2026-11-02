@@ -312,6 +312,7 @@ namespace CombatSimulation.Core
                 var contactsChanged = ((ship.Status ^ status.Flags) & ShipStatusFlags.NoContacts) != 0;
                 ship.Status = status.Flags;
                 ship.BlockedDevices = status.BlockedDevices;
+                ship.Tint = status.Tint;
                 if (contactsChanged) SetHullFilters(ship);
             }
         }
@@ -426,19 +427,21 @@ namespace CombatSimulation.Core
 
             ref readonly var bullet = ref _bullets[index];
             _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, bullet, Authority(bullet.Owner)));
-            CaptureBulletSpawn(bullet, bullet.DeviceIndex, request.BarrelIndex, sequence, Tick, !definition.IsHoming,
-                muzzle, angle);
+            CaptureBulletSpawn(bullet, bullet.DeviceIndex, (int)SpawnRequest.SpawnSlot(request.BarrelIndex), sequence, Tick,
+                !definition.IsHoming, muzzle, angle);
             RunCreatedTriggers(index);
         }
 
         // Legacy BulletFactory.ConfigureBody at the muzzle of the sample. A spawn tick before the present advances the
         // bullet on a line, step by step as physics moves it, without hit tests. Returns -1 on an ID collision.
         // With an owner launch pose (P1), the muzzle and angle come from it; the inherited velocity stays the sample's.
+        // barrelIndex may be SpawnRequest.ShipCentre.
         private int CreateBullet(ShipEntity ship, int deviceIndex, int barrelIndex, uint sequence,
             BulletDefinition definition, float spread, long spawnTick, in SpawnSample sample, out Vec2 muzzle,
             out Vec2 direction, out float angle, in OwnerOperation launch = default)
         {
-            var id = SpawnIdentity.CreateChild(ship.Id, spawnTick, (uint)deviceIndex, (uint)barrelIndex, sequence);
+            var id = SpawnIdentity.CreateChild(ship.Id, spawnTick, (uint)deviceIndex, SpawnRequest.SpawnSlot(barrelIndex),
+                sequence);
             var index = _bullets.Allocate();
             if (!TryRegister(id, _bullets.GetHandle(index)))
             {
@@ -501,6 +504,11 @@ namespace CombatSimulation.Core
             {
                 muzzle = launch.Pose.Position;
                 angle = launch.Pose.Angle;
+            }
+            else if (barrelIndex == SpawnRequest.ShipCentre)
+            {
+                muzzle = sample.Position;
+                angle = 0f;
             }
             else
             {

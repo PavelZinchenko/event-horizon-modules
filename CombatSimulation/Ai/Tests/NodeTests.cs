@@ -388,11 +388,11 @@ namespace CombatSimulation.Ai.Tests
         public void NodesWithoutPortAreCountedStubs()
         {
             var builder = Builder(Context(out _));
-            var node = builder.Build(Node(Composite(BehaviorNodeType.Selector, Leaf(BehaviorNodeType.DetonateShip),
-                Leaf(BehaviorNodeType.DetonateShip), Leaf(BehaviorNodeType.MainTargetIsAlly))));
+            var node = builder.Build(Node(Composite(BehaviorNodeType.Selector, Leaf(BehaviorNodeType.MaintainAttackRange),
+                Leaf(BehaviorNodeType.MaintainAttackRange), Leaf(BehaviorNodeType.MainTargetIsAlly))));
 
             Assert.AreSame(EmptyNode.Failure, node);
-            Assert.AreEqual(2, builder.Stubs[BehaviorNodeType.DetonateShip]);
+            Assert.AreEqual(2, builder.Stubs[BehaviorNodeType.MaintainAttackRange]);
             Assert.AreEqual(1, builder.Stubs[BehaviorNodeType.MainTargetIsAlly]);
         }
     }

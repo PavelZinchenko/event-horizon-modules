@@ -18,6 +18,10 @@ namespace CombatSimulation.Core
 
         // Drawn at 10% opacity (legacy WarpDrive FeaturesData.Opacity); the view only.
         Faded = 4,
+
+        // No thrust, no turn and no spin brake: the ship keeps its velocity and spin (legacy Detonator EngineData: turn
+        // rate, propulsion and throttle 0).
+        Drift = 8,
     }
 
     internal struct ShipStatus
@@ -26,6 +30,10 @@ namespace CombatSimulation.Core
 
         // Devices whose control bit counts as released from the next tick on (legacy ISystemsModification).
         public ulong BlockedDevices;
+
+        // The share from 0 to 1 by which the view moves the ship colour to its device colour (legacy Detonator
+        // FeaturesData.Color); the view only.
+        public float Tint;
     }
 
     internal static class ShipStatusRules

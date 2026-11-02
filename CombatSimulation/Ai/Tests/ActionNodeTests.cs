@@ -238,6 +238,33 @@ namespace CombatSimulation.Ai.Tests
                 "a node without bays, as in legacy");
         }
 
+        // Phase 5, step 7b: legacy DetonateShipNode holds the first detonator; with InRange only when the ship and its
+        // target, moved on for the lock time, touch.
+        [Test]
+        public void DetonateShipHoldsTheDetonator()
+        {
+            var leaf = Leaf(BehaviorNodeType.DetonateShip);
+            Assert.AreSame(EmptyNode.Failure, Builder(Context(out _)).Build(Node(leaf)), "no detonator");
+
+            var profile = new AiShipProfile(ArmedShip.Weapons,
+                new[] { new AiDevice(1, DeviceClass.Detonator, isAutomatic: false, activationTime: 1f) }, null,
+                false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, AiTargetPriority.Normal, 0f);
+            var context = TargetContext(out var target, profile);
+            Assert.AreEqual(S, Builder(context).Build(Node(leaf)).Evaluate(context));
+            Assert.IsTrue(context.Controls.IsSystemActivated(1));
+
+            // Both model scales are 2: the ships touch at a centre distance of 2.
+            var inRange = new BehaviorTreeNodeSerializable { Type = BehaviorNodeType.DetonateShip, InRange = true };
+            var distance = context.Delta(context.Ship.Position, target.Position).Length;
+            Assert.Greater(distance, 2f);
+            context.Controls.Reset();
+            Assert.AreEqual(F, Builder(context).Build(Node(inRange)).Evaluate(context), "the target is far");
+            Assert.IsFalse(context.Controls.IsSystemActivated(1));
+
+            context.TargetShip = default;
+            Assert.AreEqual(F, Builder(context).Build(Node(inRange)).Evaluate(context), "no target");
+        }
+
         // Legacy CommonControls clamps the throttle.
         [Test]
         public void ThrottleIsClamped()

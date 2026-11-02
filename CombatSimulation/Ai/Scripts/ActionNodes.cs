@@ -178,6 +178,40 @@ namespace CombatSimulation.Ai
         }
     }
 
+    // Legacy DetonateShipNode (phase 5, step 7b): holds the first detonator. With inAttackRange it fails unless the ship
+    // and the target, each moved on by its velocity for the lock time, touch (centre distance up to the sum of half
+    // their model scales). Legacy measures without the torus wrap.
+    internal sealed class DetonateShipNode : INode
+    {
+        public DetonateShipNode(AiDevice detonator, bool inAttackRange)
+        {
+            _detonator = detonator;
+            _inAttackRange = inAttackRange;
+        }
+
+        public NodeState Evaluate(AiContext context)
+        {
+            if (_inAttackRange)
+            {
+                if (!context.TryGetShip(context.TargetShip, out var target))
+                    return NodeState.Failure;
+
+                var time = _detonator.ActivationTime;
+                var ship = context.Ship;
+                var distance = context.Delta(ship.Position + time * ship.LinearVelocity,
+                    target.Position + time * target.LinearVelocity).Length;
+                if (distance > 0.5f * context.Profile.ModelScale + 0.5f * context.ProfileOf(target).ModelScale)
+                    return NodeState.Failure;
+            }
+
+            context.Controls.ActivateSystem(_detonator.DeviceIndex);
+            return NodeState.Success;
+        }
+
+        private readonly AiDevice _detonator;
+        private readonly bool _inAttackRange;
+    }
+
     // Legacy MoveToAttackRange: keeps the target at the distance between the selected weapons' ranges.
     internal sealed class MoveToAttackRangeNode : INode
     {

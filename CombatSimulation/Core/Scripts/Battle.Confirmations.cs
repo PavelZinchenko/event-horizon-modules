@@ -74,6 +74,7 @@ namespace CombatSimulation.Core
             if (ship == null) return ApplyRemoteChildSpawn(operation);
             if (ship.Owner != operation.Owner || operation.DeviceIndex >= ship.DeviceCount) return false;
             var device = ship.GetDevice(operation.DeviceIndex);
+            if (device is DetonatorDevice detonator) return ApplyRemoteExplosion(ship, detonator, operation);
             var cannon = device as CannonDevice;
             var beamDevice = device as BeamDevice;
             if (cannon != null ? cannon.Definition.BarrelIndex != operation.BarrelIndex :
@@ -137,6 +138,23 @@ namespace CombatSimulation.Core
             if (index < 0) return false;
             _bullets[index].Confirmed = true;
             RememberTriggerParent(_bullets[index]);
+            _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, _bullets[index]));
+            return true;
+        }
+
+        // Phase 5, step 7b (H8): a remote Detonator's explosion at the owner's ship centre. The copy never derives it, so
+        // it appears one network delay late; an explosion that has expired here is skipped.
+        private bool ApplyRemoteExplosion(ShipEntity ship, DetonatorDevice detonator, in OwnerOperation operation)
+        {
+            var explosion = detonator.Definition.Explosion;
+            if (!operation.HasLaunchPose || operation.BarrelIndex != 0 || _entities.TryGet(operation.EntityId, out _))
+                return false;
+            if (operation.Tick + explosion.LifetimeTicks - 1 < Tick || HasDueRemoval(operation.EntityId)) return true;
+
+            var index = CreateBullet(ship, operation.DeviceIndex, SpawnRequest.ShipCentre, operation.SpawnSequence,
+                explosion, 0f, operation.Tick, ReadSpawnSample(ship), out _, out _, out _, operation);
+            if (index < 0) return false;
+            _bullets[index].Confirmed = true;
             _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, _bullets[index]));
             return true;
         }
