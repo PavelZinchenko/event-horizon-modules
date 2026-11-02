@@ -146,7 +146,8 @@ namespace CombatSimulation.Core
         private void Reaim(ShipEntity ship, CannonDevice cannon, int index, in OwnerOperation launch)
         {
             ref readonly var bullet = ref _bullets[index];
-            if (bullet.IsBeam || bullet.Definition.IsHoming) return;
+            // An attached copy rides on its own ship copy (phase 5, step 3).
+            if (bullet.IsBeam || bullet.Definition.IsHoming || bullet.Definition.AttachedToParent) return;
             if (!ship.TryGetSpawnSample(launch.Tick, out var sample)) sample = ReadSpawnSample(ship);
             Launch(ship, launch.BarrelIndex, bullet.Id, bullet.Definition, cannon.Definition.Spread, bullet.SpawnTick,
                 sample, launch, out _, out var angle, out _, out var velocity, out var position);

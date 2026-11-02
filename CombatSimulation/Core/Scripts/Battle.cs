@@ -399,7 +399,7 @@ namespace CombatSimulation.Core
             if (index < 0) return;
 
             var definition = request.Bullet;
-            if (definition.Recoil > 0f)
+            if (definition.Recoil > 0f && !definition.AttachedToParent)
             {
                 var relative = definition.Speed * definition.StartingVelocityMultiplier * direction +
                                (definition.ParentVelocityEffect - 1f) * sample.LinearVelocity;
@@ -445,6 +445,14 @@ namespace CombatSimulation.Core
                 Filter = CollisionFilters.Bullet(definition, ship.Allegiance),
             }, new Circle(Vec2.Zero, definition.Radius));
 
+            // Legacy BulletFactory.ConfigureBody: an attached bullet rides on the barrel, at its pose (phase 5, step 3).
+            // Each device attaches it to its own copy of the ship.
+            if (definition.AttachedToParent)
+            {
+                var barrel = ship.Definition.Barrels[barrelIndex];
+                World.AttachBullet(body, ship.Body, new Pose(barrel.Position, Rot.FromAngle(barrel.Angle)));
+            }
+
             ref var bullet = ref _bullets[index];
             bullet.Id = id;
             bullet.ParentId = ship.Id;
@@ -471,25 +479,32 @@ namespace CombatSimulation.Core
             long spawnTick, in SpawnSample sample, in OwnerOperation launch, out Vec2 muzzle, out float angle,
             out Vec2 direction, out Vec2 velocity, out Vec2 position)
         {
-            if (launch.HasLaunchPose)
+            if (launch.HasLaunchPose && !definition.AttachedToParent)
             {
                 muzzle = launch.Pose.Position;
                 angle = launch.Pose.Angle;
             }
             else
             {
+                // An attached bullet has no spread (legacy ConfigureBody); the barrel decides its pose.
                 var barrel = ship.Definition.Barrels[barrelIndex];
                 muzzle = sample.Position + sample.Rotation.Rotate(barrel.Position);
-                var random = CounterRandom.Create(Setup.MatchSeed, id, spawnTick, RandomPurpose.WeaponSpread);
-                angle = sample.Angle + barrel.Angle + (random.NextFloat() - 0.5f) * spread;
+                angle = sample.Angle + barrel.Angle;
+                if (!definition.AttachedToParent)
+                {
+                    var random = CounterRandom.Create(Setup.MatchSeed, id, spawnTick, RandomPurpose.WeaponSpread);
+                    angle += (random.NextFloat() - 0.5f) * spread;
+                }
             }
 
             direction = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
-            velocity = definition.Speed * definition.StartingVelocityMultiplier * direction +
-                       definition.ParentVelocityEffect * sample.LinearVelocity;
+            velocity = definition.AttachedToParent
+                ? sample.LinearVelocity
+                : definition.Speed * definition.StartingVelocityMultiplier * direction +
+                  definition.ParentVelocityEffect * sample.LinearVelocity;
 
             position = muzzle;
-            if (spawnTick < Tick)
+            if (spawnTick < Tick && !definition.AttachedToParent)
             {
                 position = World.Torus.Wrap(position);
                 for (var tick = spawnTick; tick < Tick; ++tick)
@@ -608,10 +623,13 @@ namespace CombatSimulation.Core
                     var attackerBullet = _bullets.TryGet(hit.AttackerHandle, out var attackerIndex);
                     var attackerOwner = attackerBullet ? _bullets[attackerIndex].Owner : _ships.Get(hit.AttackerHandle)?.Owner ?? -1;
                     var ray = hit.Source == ContactSource.Ray;
+                    // A ray and damage over time deal one tick per contact; any other contact deals its damage once.
+                    var perTick = ray || (attackerBullet && !_bullets[attackerIndex].IsBeam &&
+                                          _bullets[attackerIndex].Definition.Impact == BulletImpact.OverTime);
                     if (authority == BattleEventAuthority.Committed)
                     {
                         // A remote attacker's contact counts once, whether this device or the attacker's owner saw it.
-                        if (Setup.IsLocalOwner(attackerOwner) || RecordBulletContact(hit.Attacker, hit.Target, ray ? Tick : -1))
+                        if (Setup.IsLocalOwner(attackerOwner) || RecordBulletContact(hit.Attacker, hit.Target, perTick ? Tick : -1))
                         {
                             _bullets.AddDamage(hit.TargetHandle, hit.Damage);
                             AddPendingHit(index);
@@ -628,7 +646,7 @@ namespace CombatSimulation.Core
                             _bullets.MarkRemoval(hit.TargetHandle, RemovalReason.Death);
                         if (attackerOwner >= 0)
                             ClaimBulletContact(hit.Attacker, attackerOwner, hit.AttackerDeviceIndex, targetBullet,
-                                ray ? HitImpactKind.DamageOverTime : HitImpactKind.Impact, hit.Damage);
+                                perTick ? HitImpactKind.DamageOverTime : HitImpactKind.Impact, hit.Damage);
                     }
                 }
                 else
@@ -642,6 +660,8 @@ namespace CombatSimulation.Core
                     var damageType = hit.DamageType;
                     BulletDefinition projectile = null;
                     var impulse = Vec2.Zero;
+                    var falloff = 1f;
+                    var shape = hit.TargetShapeOrder;
                     if (_bullets.TryGet(hit.AttackerHandle, out var index))
                     {
                         ref readonly var attacker = ref _bullets[index];
@@ -653,13 +673,25 @@ namespace CombatSimulation.Core
                         {
                             amount = attacker.BeamDefinition.DamagePerSecond;
                         }
+                        else if (attacker.Definition.Impact == BulletImpact.OverTime)
+                        {
+                            // One damage type at a fixed rate (BulletDefinition). The record names shape 0, so the
+                            // interval stays one contact while the bullet moves over the hull parts.
+                            kind = HitImpactKind.DamageOverTime;
+                            amount = attacker.Definition.Damage;
+                            damage = amount * TickDuration;
+                            damageType = attacker.Definition.DamageType;
+                            shape = 0;
+                        }
                         else
                         {
                             // The candidate holds the total; a ship takes each damage effect with its own type.
                             projectile = attacker.Definition;
-                            amount = damage = projectile.Damage;
+                            if (projectile.HasFalloff) falloff = hit.Falloff;
+                            amount = damage = BulletStore.EffectDamage(projectile, projectile.Damage,
+                                projectile.DamageFalloff, falloff);
                             damageType = projectile.DamageType;
-                            if (projectile.Push != 0f) impulse = projectile.Push * World.GetBulletVelocity(attacker.Body);
+                            impulse = PushImpulse(attacker, target, falloff);
                         }
                     }
                     else
@@ -679,20 +711,22 @@ namespace CombatSimulation.Core
                         target.AddPendingDamage(damageType, damage);
                         if (remote)
                             _outgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
-                                hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind, amount,
+                                hit.Target, target.Owner, shape, HitContactState.Start, kind, amount,
                                 damageType: (byte)damageType, impulse: impulse));
                         if (projectile != null)
                         {
                             var extra = projectile.ExtraDamage;
                             for (var e = 0; e < extra.Count; ++e)
                             {
-                                target.AddPendingDamage(extra[e].DamageType, extra[e].Amount);
+                                var extraAmount = BulletStore.EffectDamage(projectile, extra[e].Amount, extra[e].Falloff,
+                                    falloff);
+                                target.AddPendingDamage(extra[e].DamageType, extraAmount);
                                 if (remote)
                                     _outgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                         hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind,
-                                        extra[e].Amount, damageType: (byte)extra[e].DamageType));
+                                        extraAmount, damageType: (byte)extra[e].DamageType));
                             }
-                            if (projectile.Push != 0f) ApplyPush(target, impulse);
+                            if (impulse.X != 0f || impulse.Y != 0f) ApplyPush(target, impulse);
                         }
                     }
                 }
@@ -705,6 +739,21 @@ namespace CombatSimulation.Core
         // Legacy PushAction: the impulse acts at the target's origin, so it never turns the target.
         private void ApplyPush(ShipEntity target, Vec2 impulse) =>
             World.ApplyImpulse(target.Body, impulse, World.GetPosition(target.Body));
+
+        // Legacy PushAction (Push x the bullet velocity) plus RadialPushAction (phase 5, step 3): away from the bullet
+        // centre toward the target's origin. Legacy applies the radial impulse at the bullet centre; that point lies on
+        // the same line through the origin, so the torque is the same.
+        private Vec2 PushImpulse(in BulletEntity bullet, ShipEntity target, float falloff)
+        {
+            var definition = bullet.Definition;
+            var impulse = Vec2.Zero;
+            if (definition.Push != 0f) impulse = definition.Push * World.GetBulletVelocity(bullet.Body);
+            var radial = definition.RadialPush + definition.RadialPushWithFalloff * falloff;
+            if (radial != 0f)
+                impulse += radial * World.Torus.Delta(World.GetBulletPosition(bullet.Body),
+                    World.GetPosition(target.Body)).Normalized;
+            return impulse;
+        }
 
         // Stage 10. One pass, shield first, then armor (legacy Impact.ApplyShield and ShipStats.ApplyDamage).
         // Received hits add to a local target's pending damage. A remote target's pending damage is only the damage
@@ -1043,6 +1092,7 @@ namespace CombatSimulation.Core
         private void RemoveShip(ShipEntity ship, RemovalReason reason)
         {
             for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Stop(this);
+            RemoveAttachedBullets(ship);
             _events.Add(BattleEvent.Removal(BattleId, Tick, _events.Count, ship, reason));
             if (ship.IsDrone) CaptureRemoval(ship.Id, ship.Owner, reason, ship.Bay.Key);
             for (var i = 0; i < ship.ShapeCount; ++i)
@@ -1053,6 +1103,20 @@ namespace CombatSimulation.Core
             _entities.Remove(ship.Id);
             if (ship.IsDrone) ship.Bay.RecordLoss();
             _ships.Release(ship);
+        }
+
+        // A bullet attached to the ship leaves with it, as a beam does, without triggers (owner, 2026-11-02). Its copies
+        // on other devices leave with their ship copy too.
+        private void RemoveAttachedBullets(ShipEntity ship)
+        {
+            for (var i = 0; i < _bullets.Capacity; ++i)
+            {
+                if (!_bullets.IsAlive(i)) continue;
+                ref var bullet = ref _bullets[i];
+                if (bullet.IsBeam || bullet.ParentId != ship.Id || !bullet.Definition.AttachedToParent) continue;
+                bullet.SkipTriggers = true;
+                if (bullet.PendingRemoval == RemovalReason.None) bullet.PendingRemoval = RemovalReason.Disposal;
+            }
         }
 
         // D13: the ship, its hull filters and its live bullets and beams take the new allegiance. Legacy bullets read

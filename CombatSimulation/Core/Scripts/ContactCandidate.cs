@@ -60,6 +60,10 @@ namespace CombatSimulation.Core
 
         public float Damage;
 
+        // The area falloff of a bullet attacker with falloff effects, at the poses after the physics step (E6). Stage 9
+        // reads it only when the definition has falloff.
+        public float Falloff;
+
         // An index into the battle's damage type table (D4). Ship targets only; bullet targets take damage as is.
         public int DamageType;
 

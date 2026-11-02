@@ -60,7 +60,10 @@ namespace CombatSimulation.Core
                         }
                         if (!battle.Bullets.TryGetByBody(target.Bullet, out var index)) continue;
                         ref readonly var bullet = ref battle.Bullets[index];
-                        if (bullet.IsBeam || !Allegiances.IsHostile(bullet.Allegiance, ship.Allegiance) || bullet.PendingRemoval != RemovalReason.None) continue;
+                        // Legacy PointDefenseCollisionAction disarms energy bolts and missiles, never an area (phase 5).
+                        if (bullet.IsBeam || bullet.Definition.IsArea ||
+                            !Allegiances.IsHostile(bullet.Allegiance, ship.Allegiance) ||
+                            bullet.PendingRemoval != RemovalReason.None) continue;
                         _candidates.Add(new ContactCandidate
                         {
                             Time = 0f,

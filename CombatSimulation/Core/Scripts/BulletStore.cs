@@ -58,6 +58,9 @@ namespace CombatSimulation.Core
         // Set at stage 9 (stopped at a hit) or stage 11 (expired); stage 12 applies it.
         public RemovalReason PendingRemoval;
 
+        // An attached bullet that leaves with its ship runs no triggers (phase 5, step 3; owner, 2026-11-02).
+        public bool SkipTriggers;
+
         // The owner's spawn tick. A remote bullet is Confirmed once its owner's fire record arrives; local bullets
         // are confirmed at creation.
         public long SpawnTick;
@@ -155,7 +158,8 @@ namespace CombatSimulation.Core
 
         // Stage 8. Each physics hit on a live ship or missile becomes a candidate. Every physics bullet is
         // pass-through, so physics reports the first hit on each target unit; the resolver keeps the first valid one
-        // (contact ordering).
+        // (contact ordering). Phase 5, step 3: an AllTargets bullet takes a unit only when it enters (physics Begin);
+        // an OverTime bullet takes every touching unit, with one tick of its damage. Neither stops at a hit.
         public void CollectHits(PhysicsWorld world, ShapeTable shapes, ShipStore ships, ContactResolver resolver)
         {
             var hits = world.BulletHits;
@@ -164,6 +168,8 @@ namespace CombatSimulation.Core
                 ref readonly var hit = ref hits[i];
                 if (!TryGetByBody(hit.Bullet, out var index)) continue;
                 ref readonly var bullet = ref _items[index];
+                var definition = bullet.Definition;
+                if (definition.Impact == BulletImpact.AllTargets && !hit.Begin) continue;
 
                 var candidate = new ContactCandidate
                 {
@@ -174,13 +180,15 @@ namespace CombatSimulation.Core
                     AttackerHandle = GetHandle(index),
 
                     // Q1 and Q2b: a bolt and a missile both stop at their first valid contact.
-                    AttackerPassThrough = false,
-                    // The total: a missile target sums every type; stage 9 splits it again for a ship target.
-                    Damage = bullet.Definition.TotalDamage,
-                    DamageType = bullet.Definition.DamageType,
+                    AttackerPassThrough = definition.Impact != BulletImpact.FirstTarget,
+                    // One hit per target entity and step, whatever its units (D16).
+                    OncePerTargetEntity = definition.Impact != BulletImpact.FirstTarget,
+                    DamageType = definition.DamageType,
                     Point = hit.Point,
                 };
 
+                Vec2 targetPosition;
+                float targetScale;
                 if (hit.Target.IsBullet)
                 {
                     // Legacy: only a missile takes damage from a bullet (MissileDamageHandler), and a missile does not
@@ -193,19 +201,45 @@ namespace CombatSimulation.Core
                     candidate.Target = targetBullet.Id;
                     candidate.TargetHandle = GetHandle(targetIndex);
                     candidate.TargetHitPoints = targetBullet.HitPoints;
+                    targetPosition = world.GetBulletPosition(targetBullet.Body);
+                    targetScale = targetBullet.Definition.Scale;
                 }
                 else
                 {
-                    if (!shapes.TryGet(hit.Target.Shape, out var target) || ships.Get(target.Owner) == null) continue;
+                    if (!shapes.TryGet(hit.Target.Shape, out var target)) continue;
+                    var ship = ships.Get(target.Owner);
+                    if (ship == null) continue;
 
                     candidate.TargetPriority = target.Priority;
                     candidate.Target = target.OwnerId;
                     candidate.TargetShapeOrder = target.Order;
                     candidate.TargetHandle = target.Owner;
+                    targetPosition = world.GetPosition(ship.Body);
+                    targetScale = ship.Definition.Scale;
                 }
 
+                // The total: a missile target sums every type; stage 9 splits it again for a ship target.
+                candidate.Falloff = definition.HasFalloff
+                    ? definition.Falloff(world.Torus.Delta(world.GetBulletPosition(bullet.Body), targetPosition).Length,
+                        targetScale)
+                    : 1f;
+                candidate.Damage = TotalDamage(definition, candidate.Falloff);
                 resolver.Add(candidate);
             }
+        }
+
+        // One hit's damage of each effect, after the falloff; one tick of it for OverTime. A ship takes them one by one.
+        public static float EffectDamage(BulletDefinition definition, float amount, bool falloff, float factor) =>
+            amount * (falloff ? factor : 1f) * (definition.Impact == BulletImpact.OverTime ? Battle.TickDuration : 1f);
+
+        private static float TotalDamage(BulletDefinition definition, float falloff)
+        {
+            if (!definition.HasFalloff && definition.Impact != BulletImpact.OverTime) return definition.TotalDamage;
+            var total = EffectDamage(definition, definition.Damage, definition.DamageFalloff, falloff);
+            var extra = definition.ExtraDamage;
+            for (var e = 0; e < extra.Count; ++e)
+                total += EffectDamage(definition, extra[e].Amount, extra[e].Falloff, falloff);
+            return total;
         }
 
         // Stage 9. Damage of an accepted hit on a missile; a stale or non-bullet handle is ignored.

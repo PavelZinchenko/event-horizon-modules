@@ -28,6 +28,9 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(conditions), "A trigger needs known conditions.");
             if (!(randomFactor >= 0f && randomFactor <= 1f))
                 throw new ArgumentOutOfRangeException(nameof(randomFactor), "Random factor must be in [0, 1].");
+            // Physics attaches bullets to bodies only (phase 5, step 3).
+            if (bullet != null && bullet.AttachedToParent)
+                throw new ArgumentException("A child bullet cannot be attached to its parent bullet.", nameof(bullet));
 
             Conditions = conditions;
             Bullet = bullet;

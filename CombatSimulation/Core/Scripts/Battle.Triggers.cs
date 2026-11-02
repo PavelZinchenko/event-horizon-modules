@@ -27,7 +27,7 @@ namespace CombatSimulation.Core
             ref var bullet = ref _bullets[index];
             var hits = bullet.PendingHits;
             bullet.PendingHits = 0;
-            if (bullet.IsBeam || bullet.Definition.TriggerConditions == BulletTriggerConditions.None ||
+            if (bullet.IsBeam || bullet.SkipTriggers || bullet.Definition.TriggerConditions == BulletTriggerConditions.None ||
                 !Setup.IsLocalOwner(bullet.Owner)) return;
 
             var spawnTick = Tick + 1;
