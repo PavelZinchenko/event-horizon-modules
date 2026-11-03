@@ -73,20 +73,136 @@ namespace CombatSimulation.Core.Tests
                 maxActiveShipsPerSide);
         }
 
-        public static ScriptedBattle RunToResult(BattleSetup setup)
+        // Phase 5 content (step 8b baseline): child bullets with nesting, areas with falloff and push, a cloud, point
+        // defense against fragments, the four gate devices and a worm tail. Slots x01-x05: bomber, worm, mothership,
+        // skirmisher, sapper.
+        public static readonly BulletDefinition Fragment = new BulletDefinition(0.1f, 12f, 4f, 2f);
+
+        public static readonly BulletDefinition Cloud =
+            new BulletDefinition(2.5f, 0f, 0f, 10f, impact: BulletImpact.OverTime, lifetime: 1f);
+
+        // A blast that leaves a cloud: two nesting levels below the missile.
+        public static readonly BulletDefinition Blast = new BulletDefinition(3f, 0f, 0f, 20f,
+            impact: BulletImpact.AllTargets, damageFalloff: true, radialPushWithFalloff: 5f, lifetime: 0.3f,
+            triggers: new[] { BulletTriggerDefinition.Spawn(BulletTriggerConditions.Expired, Cloud) });
+
+        // Eight fragments in a ring when the bomb expires, hits or is shot down.
+        public static readonly BulletDefinition FragBomb = new BulletDefinition(0.3f, 12f, 12f, 4f, hitPoints: 1f,
+            triggers: new[]
+            {
+                BulletTriggerDefinition.Spawn(BulletTriggerConditions.Expired | BulletTriggerConditions.Hit |
+                    BulletTriggerConditions.Destroyed, Fragment, Ring(8), 0.2f),
+            });
+
+        public static readonly BulletDefinition AreaMissile = new BulletDefinition(0.2f, 15f, 30f, 6f, weight: 0.1f,
+            hitPoints: 2f, homing: true, startingVelocityMultiplier: 0.1f,
+            triggers: new[] { BulletTriggerDefinition.Spawn(BulletTriggerConditions.Hit | BulletTriggerConditions.Expired, Blast) });
+
+        public static readonly ShipDefinition Clone = Fixtures.ShipWith(armor: 900f,
+            shield: new ResourceDefinition(180f, 10f, 1f), energy: new ResourceDefinition(300f, 30f, 0.5f),
+            barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+            devices: new DeviceDefinition[] { new CannonDefinition(0, 0.2f, 2f, 4f * Fixtures.Degrees, Fixtures.Bolt) });
+
+        // Detonator record 5 on a ship of 60 cells, scale 4 and mass 100: radius 20, heat 180, push 200.
+        public static readonly DetonatorDefinition Detonator = new DetonatorDefinition(1f, 20f, 1f,
+            DetonatorDefinition.CreateExplosion(180f, 0, 10f, 4f, 100f));
+
+        // Bomber: frag bombs (device 0), area missiles (device 1) and point defense (device 2).
+        public static ShipDefinition Bomber() =>
+            Fixtures.ShipWith(armor: 600f, shield: new ResourceDefinition(200f, 10f, 1f),
+                energy: new ResourceDefinition(300f, 30f, 0.5f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)), new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[]
+                {
+                    new CannonDefinition(0, 1f, 3f, 0f, FragBomb),
+                    new CannonDefinition(1, 1.5f, 5f, 0f, AreaMissile),
+                    new PointDefenseDefinition(4f, 0.3f, 1f, droneDamage: 10f),
+                });
+
+        // Worm: record 20 tail (device 0) and a cannon (device 1); kinetic resistance 0.2.
+        public static ShipDefinition Worm() =>
+            Fixtures.ShipWith(mass: 10f, armor: 1000f, shield: new ResourceDefinition(0f),
+                energy: new ResourceDefinition(300f, 30f, 0.5f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[]
+                {
+                    new WormTailDefinition(0.3f, 10, 5f, 0.45f, 0.35f, 0.4419455f),
+                    new CannonDefinition(0, 0.2f, 2f, 4f * Fixtures.Degrees, Fixtures.Bolt),
+                },
+                resistances: LegacyDamageModel.Resistances(0.2f, 0f, 0f, 0f));
+
+        // Mothership: clonning center S (device 0) and a cannon (device 1).
+        public static ShipDefinition Mothership() =>
+            Fixtures.ShipWith(armor: 1000f, shield: new ResourceDefinition(200f, 10f, 1f),
+                energy: new ResourceDefinition(300f, 30f, 0.5f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[]
+                {
+                    new ClonningCenterDefinition(0f, 30f, Clone),
+                    new CannonDefinition(0, 0.2f, 2f, 4f * Fixtures.Degrees, Fixtures.Bolt),
+                });
+
+        // Skirmisher: a cannon (device 0), WarpDrive record 32 (device 1) and InfinityStone record 23 (device 2).
+        public static ShipDefinition Skirmisher() =>
+            Fixtures.ShipWith(armor: 400f, shield: new ResourceDefinition(100f, 10f, 1f),
+                energy: new ResourceDefinition(300f, 30f, 0.5f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[]
+                {
+                    new CannonDefinition(0, 0.1f, 2f, 4f * Fixtures.Degrees, Fixtures.Bolt),
+                    new WarpDriveDefinition(10f, 3f, 100f, 44f),
+                    new InfinityStoneDefinition(60f, 2f),
+                });
+
+        // Sapper: the detonator (device 0) and a cannon (device 1).
+        public static ShipDefinition Sapper() =>
+            Fixtures.ShipWith(mass: 100f, armor: 600f, shield: new ResourceDefinition(200f, 10f, 1f),
+                energy: new ResourceDefinition(300f, 30f, 0.5f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[]
+                {
+                    Detonator,
+                    new CannonDefinition(0, 0.2f, 2f, 4f * Fixtures.Degrees, Fixtures.Bolt),
+                });
+
+        // Every slot deploys at once. Owners only matter for a two-owner run: side 0 slots belong to owner0, side 1
+        // slots to owner1.
+        public static BattleSetup Phase5Setup(int owner0 = 0, int owner1 = 0, IReadOnlyCollection<int> localOwners = null)
         {
-            var battle = new ScriptedBattle(setup, record: true, retreat: true);
+            var ships = new[] { Bomber(), Worm(), Mothership(), Skirmisher(), Sapper() };
+            var roster = new List<RosterSlotSetup>();
+            for (var side = 0; side < BattleSetup.SideCount; ++side)
+                for (var i = 0; i < ships.Length; ++i)
+                    roster.Add(new RosterSlotSetup(new RosterId((uint)(1 + i + 100 * side)), side, ships[i],
+                        side == 0 ? owner0 : owner1));
+
+            return new BattleSetup(new BattleId(5), 11, roster, ArenaSize, ArenaSize, TimeLimitTicks, ships.Length, localOwners);
+        }
+
+        private static BulletSpawnPattern Ring(int count)
+        {
+            var slots = new SpawnSlot[count];
+            for (var i = 0; i < count; ++i)
+                slots[i] = new SpawnSlot(2f * (float)Math.PI * i / count, 0f, Vec2.Zero, Vec2.Zero);
+            return new BulletSpawnPattern(slots);
+        }
+
+        public static ScriptedBattle RunToResult(BattleSetup setup, bool fullDigest = false)
+        {
+            var battle = new ScriptedBattle(setup, record: true, retreat: true, fullDigest);
             while (!battle.IsCompleted && battle.Runner.Tick < MaxTicks) battle.Step();
             return battle;
         }
 
         // Record: keep the event log, counts and snapshot sizes. It allocates, so allocation tests turn it off.
-        public ScriptedBattle(BattleSetup setup, bool record, bool retreat)
+        // Full digest: also status, device states and tail segments (phase 5); the phase 2 baseline hash omits them.
+        public ScriptedBattle(BattleSetup setup, bool record, bool retreat, bool fullDigest = false)
         {
             Runner = new BattleRunner(setup, new PilotProvider());
             _maxActive = setup.MaxActiveShipsPerSide;
             _record = record;
             _retreat = retreat;
+            _fullDigest = fullDigest;
             Command(Runner.Snapshot);
         }
 
@@ -101,6 +217,10 @@ namespace CombatSimulation.Core.Tests
         public int Hits, BeamHits, RammingHits, PointDefenseHits, Disarms;
         public int MaxShips, MaxBullets;
         public long SnapshotBytesTotal, SnapshotBytesMax, Ticks;
+
+        // Phase 5 coverage: spawns per bullet definition, clone spawns, peak tail segments, ship-ticks per status flag.
+        public readonly Dictionary<BulletDefinition, int> BulletSpawns = new Dictionary<BulletDefinition, int>();
+        public int CloneSpawns, MaxSegments, NoContactsTicks, FadedTicks, DriftTicks;
 
         public void Step()
         {
@@ -155,7 +275,7 @@ namespace CombatSimulation.Core.Tests
             var ships = snapshot.Ships;
             var bullets = snapshot.Bullets;
             var events = snapshot.Events;
-            Log.Add($"{snapshot.Tick} {Digest(snapshot):X16}");
+            Log.Add($"{snapshot.Tick} {Digest(snapshot, _fullDigest):X16}");
 
             for (var i = 0; i < events.Length; ++i)
             {
@@ -165,8 +285,18 @@ namespace CombatSimulation.Core.Tests
                 {
                     case BattleEventKind.Spawn:
                         if (item.IsBeam) { ++BeamSpawns; _beams.Add(item.EntityId); }
-                        else if (item.IsBullet) { if (item.BulletDefinition.IsMissile) ++MissileSpawns; else ++BoltSpawns; }
-                        else { if (item.IsDrone) ++DroneSpawns; else ++ShipSpawns; _ships.Add(item.EntityId); }
+                        else if (item.IsBullet)
+                        {
+                            if (item.BulletDefinition.IsMissile) ++MissileSpawns; else ++BoltSpawns;
+                            BulletSpawns.TryGetValue(item.BulletDefinition, out var count);
+                            BulletSpawns[item.BulletDefinition] = count + 1;
+                        }
+                        else
+                        {
+                            if (item.IsDrone) ++DroneSpawns; else ++ShipSpawns;
+                            if (item.Definition == Clone) ++CloneSpawns;
+                            _ships.Add(item.EntityId);
+                        }
                         break;
                     case BattleEventKind.Removal:
                         if (item.IsBullet || item.RemovalReason != RemovalReason.Death) break;
@@ -194,6 +324,13 @@ namespace CombatSimulation.Core.Tests
             }
 
             ++Ticks;
+            foreach (var ship in ships)
+            {
+                if ((ship.Status & ShipStatusFlags.NoContacts) != 0) ++NoContactsTicks;
+                if ((ship.Status & ShipStatusFlags.Faded) != 0) ++FadedTicks;
+                if ((ship.Status & ShipStatusFlags.Drift) != 0) ++DriftTicks;
+            }
+            MaxSegments = Math.Max(MaxSegments, snapshot.Segments.Length);
             MaxShips = Math.Max(MaxShips, ships.Length);
             MaxBullets = Math.Max(MaxBullets, bullets.Length);
             var bytes = SnapshotSizes.Of(snapshot);
@@ -201,8 +338,11 @@ namespace CombatSimulation.Core.Tests
             SnapshotBytesMax = Math.Max(SnapshotBytesMax, bytes);
         }
 
-        // Catches a divergence that produces no event: poses, velocities and resources as raw bits.
-        private static ulong Digest(BattleSnapshot snapshot)
+        public int SpawnsOf(BulletDefinition definition) => BulletSpawns.TryGetValue(definition, out var count) ? count : 0;
+
+        // Catches a divergence that produces no event: poses, velocities and resources as raw bits. Full adds the ship
+        // status, the device states and the tail segments.
+        internal static ulong Digest(BattleSnapshot snapshot, bool full)
         {
             var hash = 14695981039346656037UL;
             foreach (var ship in snapshot.Ships)
@@ -216,6 +356,17 @@ namespace CombatSimulation.Core.Tests
                 Mix(ref hash, ship.Shield.Value);
                 Mix(ref hash, ship.Energy.Value);
                 Mix(ref hash, ship.Systems);
+                if (!full) continue;
+                Mix(ref hash, (ulong)ship.Status);
+                Mix(ref hash, ship.Tint);
+                Mix(ref hash, ship.ResistanceShare);
+                foreach (var device in snapshot.GetDevices(ship))
+                {
+                    Mix(ref hash, (ulong)((device.Ready ? 1 : 0) | (device.Active ? 2 : 0)));
+                    Mix(ref hash, device.Cooldown);
+                    Mix(ref hash, (ulong)(uint)device.InHangar);
+                    Mix(ref hash, (ulong)(uint)device.ActiveDrones);
+                }
             }
 
             foreach (var bullet in snapshot.Bullets)
@@ -226,6 +377,17 @@ namespace CombatSimulation.Core.Tests
                 Mix(ref hash, bullet.Angle);
                 Mix(ref hash, bullet.BeamEndPoint);
             }
+
+            if (full)
+                foreach (var segment in snapshot.Segments)
+                {
+                    Mix(ref hash, segment.Id.Value);
+                    Mix(ref hash, (ulong)(uint)segment.Number);
+                    Mix(ref hash, segment.Detached ? 1UL : 0UL);
+                    Mix(ref hash, segment.Scale);
+                    Mix(ref hash, segment.Position);
+                    Mix(ref hash, segment.Angle);
+                }
 
             Mix(ref hash, (ulong)snapshot.TimerElapsedTicks);
             return hash;
@@ -243,11 +405,12 @@ namespace CombatSimulation.Core.Tests
         private readonly int _maxActive;
         private readonly bool _record;
         private readonly bool _retreat;
+        private readonly bool _fullDigest;
         private readonly HashSet<EntityId> _ships = new HashSet<EntityId>();
         private readonly HashSet<EntityId> _beams = new HashSet<EntityId>();
         private readonly HashSet<RosterId> _deployed = new HashSet<RosterId>();
 
-        private sealed class PilotProvider : IPilotProvider
+        internal sealed class PilotProvider : IPilotProvider
         {
             public IPilot CreatePilot(BattleSnapshot snapshot, in ShipState ship, out PilotSchedule schedule)
             {
@@ -259,6 +422,8 @@ namespace CombatSimulation.Core.Tests
         // Flies at the nearest enemy by the shortest torus vector. Holds a weapon bit when the enemy is in range and
         // inside the weapon's aim cone; holds point defense and drone bays always. A drone whose bay slot is destroyed
         // self-destructs (Q6); a drone of a retreated slot waits for the redeployment.
+        // Phase 5 devices: the detonator is held with an enemy inside half its explosion radius, the warp drive with an
+        // enemy farther than WarpDistance inside the aim cone; the InfinityStone is never held (lethal damage starts it).
         private sealed class ChasePilot : IPilot
         {
             public ChasePilot(ShipDefinition definition)
@@ -277,6 +442,15 @@ namespace CombatSimulation.Core.Tests
                         case BeamDefinition beam:
                             _range[i] = beam.Range;
                             _aim[i] = 10f * Fixtures.Degrees;
+                            break;
+                        case DetonatorDefinition detonator:
+                            _range[i] = 0.5f * detonator.Explosion.Radius;
+                            _aim[i] = (float)Math.PI;
+                            break;
+                        case WarpDriveDefinition _:
+                            _warp |= 1UL << i;
+                            break;
+                        case InfinityStoneDefinition _:
                             break;
                         default:
                             _alwaysOn |= 1UL << i;
@@ -318,6 +492,7 @@ namespace CombatSimulation.Core.Tests
                 var systems = _alwaysOn;
                 for (var i = 0; i < _range.Length; ++i)
                     if (_range[i] > 0f && nearestDistance <= _range[i] && error <= _aim[i]) systems |= 1UL << i;
+                if (nearestDistance > WarpDistance && error <= 10f * Fixtures.Degrees) systems |= _warp;
 
                 // Close in at full throttle; inside the stand-off range only turn, so the guns can aim.
                 controls = PilotControls.Create(course, nearestDistance > StandOff ? 1f : 0f, systems);
@@ -344,10 +519,12 @@ namespace CombatSimulation.Core.Tests
             }
 
             private const float StandOff = 6f;
+            private const float WarpDistance = 25f;
 
             private readonly float[] _range;
             private readonly float[] _aim;
             private readonly ulong _alwaysOn;
+            private readonly ulong _warp;
         }
     }
 
