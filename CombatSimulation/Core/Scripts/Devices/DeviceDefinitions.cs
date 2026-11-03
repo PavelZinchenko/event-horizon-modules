@@ -39,10 +39,26 @@ namespace CombatSimulation.Core
         internal abstract ShipDevice CreateDevice(int index);
     }
 
-    // Legacy CommonCannon (Q1): fires while the control bit is held, every cooldown, while energy allows.
+    // Legacy weapon classes that fire projectiles from a held key (phase 5, step 4a).
+    public enum CannonMode : byte
+    {
+        // Legacy CommonCannon: one bullet per shot.
+        Single,
+
+        // Legacy MultishotCannon: Magazine bullets in one shot, each with its own spread, for Magazine x EnergyCost.
+        MultiShot,
+
+        // Legacy MachineGun: Magazine shots at the barrel cooldown, then the weapon cooldown. A released key keeps the
+        // count of the magazine.
+        MachineGun,
+    }
+
+    // Legacy CommonCannon (Q1): fires while the control bit is held, every cooldown, while energy allows. Phase 5, step
+    // 4a adds the multi-shot and machine gun modes.
     public sealed class CannonDefinition : DeviceDefinition
     {
-        public CannonDefinition(int barrelIndex, float cooldown, float energyCost, float spread, BulletDefinition bullet)
+        public CannonDefinition(int barrelIndex, float cooldown, float energyCost, float spread, BulletDefinition bullet,
+            CannonMode mode = CannonMode.Single, int magazine = 1)
         {
             if (barrelIndex < 0)
                 throw new ArgumentOutOfRangeException(nameof(barrelIndex), "Barrel index must not be negative.");
@@ -52,12 +68,18 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(energyCost), "Energy cost must be finite and not negative.");
             if (!(spread >= 0f) || float.IsInfinity(spread))
                 throw new ArgumentOutOfRangeException(nameof(spread), "Spread must be finite and not negative.");
+            if (mode < CannonMode.Single || mode > CannonMode.MachineGun)
+                throw new ArgumentOutOfRangeException(nameof(mode), "Unknown cannon mode.");
+            if (mode == CannonMode.Single ? magazine != 1 : magazine < 1)
+                throw new ArgumentOutOfRangeException(nameof(magazine), "A single cannon has a magazine of 1; others need at least 1.");
 
             BarrelIndex = barrelIndex;
             Cooldown = cooldown;
             EnergyCost = energyCost;
             Spread = spread;
             Bullet = bullet ?? throw new ArgumentNullException(nameof(bullet));
+            Mode = mode;
+            Magazine = magazine;
             CooldownTicks = TickTime.AtLeast(cooldown);
         }
 
@@ -73,8 +95,20 @@ namespace CombatSimulation.Core
 
         public BulletDefinition Bullet { get; }
 
-        // Legacy SystemBase.CanBeActivated: TimeFromLastUse >= MaxCooldown.
+        public CannonMode Mode { get; }
+
+        // Bullets per shot (multi-shot) or shots per burst (machine gun); 1 for a single cannon.
+        public int Magazine { get; }
+
+        // Legacy SystemBase.CanBeActivated: TimeFromLastUse >= MaxCooldown. A machine gun waits it after each burst.
         public int CooldownTicks { get; }
+
+        // Legacy WeaponFactory sets BulletStats.RandomFactor for these classes: each bullet's speed and lifetime vary by
+        // (r - 0.5) x factor.
+        public float RandomFactor => Mode == CannonMode.MachineGun ? 0.2f : Mode == CannonMode.MultiShot ? 0.3f : 0f;
+
+        // The energy of one shot: a multi-shot pays for its whole volley at once.
+        public float ShotEnergyCost => Mode == CannonMode.MultiShot ? EnergyCost * Magazine : EnergyCost;
 
         internal override void Validate(int barrelCount)
         {

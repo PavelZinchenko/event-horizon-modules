@@ -158,8 +158,8 @@ namespace CombatSimulation.Core
         // With an owner launch pose (P1), the muzzle and angle come from it; the inherited velocity stays the sample's.
         // barrelIndex may be SpawnRequest.ShipCentre.
         public int CreateBullet(ShipEntity ship, int deviceIndex, int barrelIndex, uint sequence,
-            BulletDefinition definition, float spread, long spawnTick, in SpawnSample sample, out Vec2 muzzle,
-            out Vec2 direction, out float angle, in OwnerOperation launch = default)
+            BulletDefinition definition, float spread, float randomFactor, long spawnTick, in SpawnSample sample,
+            out Vec2 muzzle, out Vec2 direction, out float angle, in OwnerOperation launch = default)
         {
             var id = SpawnIdentity.CreateChild(ship.Id, spawnTick, (uint)deviceIndex, SpawnRequest.SpawnSlot(barrelIndex),
                 sequence);
@@ -172,8 +172,9 @@ namespace CombatSimulation.Core
                 return -1;
             }
 
-            Launch(ship, barrelIndex, id, definition, spread, spawnTick, sample, launch, out muzzle, out angle,
-                out direction, out var velocity, out var position);
+            Launch(ship, barrelIndex, id, definition, spread, randomFactor, spawnTick, sample, launch, out muzzle,
+                out angle, out direction, out var velocity, out var position);
+            DrawShot(id, spawnTick, definition, randomFactor, out var speedScale, out var lifetimeTicks);
 
             var body = Physics.CreateBullet(new BulletDef
             {
@@ -204,8 +205,8 @@ namespace CombatSimulation.Core
             bullet.Owner = ship.Owner;
             bullet.DeviceIndex = deviceIndex;
             bullet.Definition = definition;
-            bullet.SpeedScale = 1f;
-            bullet.ExpiryTick = spawnTick + definition.LifetimeTicks - 1;
+            bullet.SpeedScale = speedScale;
+            bullet.ExpiryTick = spawnTick + lifetimeTicks - 1;
             bullet.HitPoints = definition.HitPoints;
             bullet.SpawnTick = spawnTick;
             bullet.Confirmed = Setup.IsLocalOwner(ship.Owner);
@@ -216,10 +217,10 @@ namespace CombatSimulation.Core
             return index;
         }
 
-        // The launch of a projectile and its position at the present tick, before this tick's physics.
+        // The launch of a projectile and its position and velocity at the present tick, before this tick's physics.
         public void Launch(ShipEntity ship, int barrelIndex, EntityId id, BulletDefinition definition, float spread,
-            long spawnTick, in SpawnSample sample, in OwnerOperation launch, out Vec2 muzzle, out float angle,
-            out Vec2 direction, out Vec2 velocity, out Vec2 position)
+            float randomFactor, long spawnTick, in SpawnSample sample, in OwnerOperation launch, out Vec2 muzzle,
+            out float angle, out Vec2 direction, out Vec2 velocity, out Vec2 position)
         {
             if (launch.HasLaunchPose && !definition.AttachedToParent)
             {
@@ -244,19 +245,39 @@ namespace CombatSimulation.Core
                 }
             }
 
+            DrawShot(id, spawnTick, definition, randomFactor, out var speedScale, out _);
             direction = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
             velocity = definition.AttachedToParent
                 ? sample.LinearVelocity
-                : definition.Speed * definition.StartingVelocityMultiplier * direction +
+                : definition.Speed * speedScale * definition.StartingVelocityMultiplier * direction +
                   definition.ParentVelocityEffect * sample.LinearVelocity;
 
             position = muzzle;
             if (spawnTick < Tick && !definition.AttachedToParent)
             {
                 position = Physics.Torus.Wrap(position);
-                for (var tick = spawnTick; tick < Tick; ++tick)
-                    position = Physics.Torus.Wrap(position + Battle.TickDuration * velocity);
+                RocketSteering.Advance(Physics.Torus, definition, speedScale, angle, spawnTick, Tick, ref position,
+                    ref velocity);
             }
+        }
+
+        // Legacy BulletStats.GetBulletSpeed and GetBulletLifetime with the weapon's RandomFactor (phase 5, step 4a): each
+        // varies by (r - 0.5) x factor. The draws come from the shot's identity, so both devices get the same values.
+        public void DrawShot(EntityId id, long spawnTick, BulletDefinition definition, float randomFactor,
+            out float speedScale, out int lifetimeTicks)
+        {
+            if (!(randomFactor > 0f))
+            {
+                speedScale = 1f;
+                lifetimeTicks = definition.LifetimeTicks;
+                return;
+            }
+
+            var random = CounterRandom.Create(Setup.MatchSeed, id, spawnTick, RandomPurpose.ShotVariation);
+            var speed = random.NextFloat();
+            var lifetime = random.NextFloat();
+            speedScale = 1f + (speed - 0.5f) * randomFactor;
+            lifetimeTicks = TickTime.After(definition.Lifetime * (1f + (lifetime - 0.5f) * randomFactor));
         }
 
         // Returns -1 on an ID collision.

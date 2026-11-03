@@ -103,13 +103,13 @@ namespace CombatSimulation.Core
             var ship = request.Ship;
             var sample = _world.ReadSpawnSample(ship);
             var index = _world.CreateBullet(ship, request.DeviceIndex, request.BarrelIndex, sequence, request.Bullet,
-                request.Spread, Tick, sample, out var muzzle, out var direction, out var angle);
+                request.Spread, request.RandomFactor, Tick, sample, out var muzzle, out var direction, out var angle);
             if (index < 0) return;
 
             var definition = request.Bullet;
             if (definition.Recoil > 0f && !definition.AttachedToParent)
             {
-                var relative = definition.Speed * definition.StartingVelocityMultiplier * direction +
+                var relative = _world.Bullets[index].Speed * definition.StartingVelocityMultiplier * direction +
                                (definition.ParentVelocityEffect - 1f) * sample.LinearVelocity;
                 Physics.ApplyImpulse(ship.Body, -definition.Recoil * relative, muzzle);
             }

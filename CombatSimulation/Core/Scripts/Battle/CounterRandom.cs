@@ -14,6 +14,9 @@ namespace CombatSimulation.Core
 
         // A clone (phase 5, step 7c): its direction from the mothership, in whole degrees.
         CloneSpawn = 4,
+
+        // A shot of a weapon with a random factor (phase 5, step 4a): speed, lifetime, in this order.
+        ShotVariation = 5,
     }
 
     // Counter-based random (investigation 6.7): a draw is a function of match seed, entity, tick and purpose.

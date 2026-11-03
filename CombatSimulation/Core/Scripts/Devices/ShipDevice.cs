@@ -62,7 +62,9 @@ namespace CombatSimulation.Core
     }
 
     // Legacy CommonCannon on a FixedPlatform (Q1). A shot needs the held bit, the weapon cooldown, the barrel
-    // cooldown and the energy cost, in that order; a failed check spends nothing.
+    // cooldown and the energy cost, in that order; a failed check spends nothing. Phase 5, step 4a: legacy
+    // MultishotCannon fires its whole magazine in one shot; legacy MachineGun fires its magazine at the barrel cooldown,
+    // and its weapon cooldown starts in the tick after the last shot.
     internal sealed class CannonDevice : ShipDevice
     {
         // Legacy TimeFromLastUse starts at 3600 s: the weapon is ready at once.
@@ -71,7 +73,12 @@ namespace CombatSimulation.Core
         public CannonDevice(CannonDefinition definition, int index) : base(index) => Definition = definition;
 
         public CannonDefinition Definition { get; }
+
+        // Legacy TimeFromLastUse = 0: the last shot, or the end of a machine gun burst.
         public long LastShotTick { get; private set; } = NeverFired;
+
+        // Machine gun: shots of the current magazine.
+        public int Shots { get; private set; }
 
         internal override bool IsShotWeapon => true;
 
@@ -79,39 +86,86 @@ namespace CombatSimulation.Core
         {
             base.Reset(tick);
             LastShotTick = NeverFired;
+            Shots = 0;
         }
 
         // A confirmed shot at tick T re-syncs the copy's cooldown phase (network plan, G1), unless the copy already
-        // fired a later predicted shot at or after T + cooldown.
+        // fired a later predicted shot at or after T + cooldown. A machine gun's cooldown follows its bursts, not its
+        // shots; the barrel record re-syncs its shots.
         internal void ConfirmShot(long tick)
         {
+            if (Definition.Mode == CannonMode.MachineGun) return;
             if (LastShotTick < tick + Definition.CooldownTicks) LastShotTick = tick;
         }
+
+        // The shortest spacing of two shots of one spawn slot (the copy window of a confirmed shot).
+        internal int ShotSpacingTicks => Definition.Mode == CannonMode.MachineGun
+            ? ShipEntity.BarrelCooldownTicks
+            : Math.Max(Definition.CooldownTicks, ShipEntity.BarrelCooldownTicks);
 
         public override void Update(DeviceContext context, ShipEntity ship)
         {
             IsActive = false;
-            if (!IsControlOn(ship)) return;
-
             var tick = context.Tick;
+            if (Definition.Mode == CannonMode.MachineGun)
+            {
+                UpdateMachineGun(context, ship, tick);
+                return;
+            }
+
+            if (!IsControlOn(ship)) return;
             if (tick - LastShotTick < Definition.CooldownTicks) return;
             if (!ship.IsBarrelReady(Definition.BarrelIndex, tick)) return;
-            if (!ship.Energy.TryConsume(Definition.EnergyCost)) return;
+            if (!ship.Energy.TryConsume(Definition.ShotEnergyCost)) return;
 
             IsActive = true;
             LastShotTick = tick;
-            ship.RecordBarrelShot(Definition.BarrelIndex, tick);
-            context.RequestSpawn(new SpawnRequest(ship, Index, Definition.BarrelIndex, Definition.Spread,
-                Definition.Bullet));
+            Fire(context, ship, tick);
         }
 
-        // Legacy CommonCannon: CanBeActivated adds the barrel and the energy cost; Cooldown is the larger timer.
+        // Legacy MachineGun.OnUpdatePhysics: CanBeActivated needs the weapon cooldown and energy above the cost; the shot
+        // also needs the barrel. A full magazine refills, and starts the cooldown, in the next update without the key.
+        private void UpdateMachineGun(DeviceContext context, ShipEntity ship, long tick)
+        {
+            if (IsControlOn(ship) && Shots < Definition.Magazine && CanStartBurst(ship, tick))
+            {
+                if (!ship.IsBarrelReady(Definition.BarrelIndex, tick) || !ship.Energy.TryConsume(Definition.EnergyCost))
+                    return;
+
+                IsActive = true;
+                ++Shots;
+                Fire(context, ship, tick);
+            }
+            else if (Shots >= Definition.Magazine)
+            {
+                Shots = 0;
+                LastShotTick = tick;
+            }
+        }
+
+        private bool CanStartBurst(ShipEntity ship, long tick) =>
+            tick - LastShotTick >= Definition.CooldownTicks && ship.Energy.Value > Definition.EnergyCost;
+
+        // One barrel shot; a multi-shot requests its whole magazine from the same spawn slot.
+        private void Fire(DeviceContext context, ShipEntity ship, long tick)
+        {
+            ship.RecordBarrelShot(Definition.BarrelIndex, tick);
+            var count = Definition.Mode == CannonMode.MultiShot ? Definition.Magazine : 1;
+            for (var i = 0; i < count; ++i)
+                context.RequestSpawn(new SpawnRequest(ship, Index, Definition.BarrelIndex, Definition.Spread,
+                    Definition.Bullet, Definition.RandomFactor));
+        }
+
+        // Legacy CanBeActivated adds the energy cost (the barrel too, but not for a machine gun); Cooldown is the larger
+        // timer.
         internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick)
         {
             var weapon = DeviceState.Remaining(tick + 1 - LastShotTick, Definition.CooldownTicks);
             var barrel = DeviceState.Remaining(tick + 1 - ship.GetBarrelShotTick(Definition.BarrelIndex),
                 ShipEntity.BarrelCooldownTicks);
-            var ready = weapon == 0f && barrel == 0f && ship.Energy.CanConsume(Definition.EnergyCost);
+            var ready = Definition.Mode == CannonMode.MachineGun
+                ? weapon == 0f && ship.Energy.Value > Definition.EnergyCost
+                : weapon == 0f && barrel == 0f && ship.Energy.CanConsume(Definition.ShotEnergyCost);
             return new DeviceState(ready, IsActive, Math.Max(weapon, barrel));
         }
     }
@@ -135,16 +189,20 @@ namespace CombatSimulation.Core
         // Weapon barrel, the bay's lifetime launch slot for a launched ship, or ShipCentre.
         public readonly int BarrelIndex;
         public readonly float Spread;
+        // Legacy BulletStats.RandomFactor of the weapon: the bullet's speed and lifetime vary (phase 5, step 4a).
+        public readonly float RandomFactor;
         public readonly BulletDefinition Bullet;
         public readonly BeamDevice Beam;
         public readonly bool LaunchesShip;
 
-        public SpawnRequest(ShipEntity ship, int deviceIndex, int barrelIndex, float spread, BulletDefinition bullet)
+        public SpawnRequest(ShipEntity ship, int deviceIndex, int barrelIndex, float spread, BulletDefinition bullet,
+            float randomFactor = 0f)
         {
             Ship = ship;
             DeviceIndex = deviceIndex;
             BarrelIndex = barrelIndex;
             Spread = spread;
+            RandomFactor = randomFactor;
             Bullet = bullet;
             Beam = null;
             LaunchesShip = false;
@@ -160,6 +218,7 @@ namespace CombatSimulation.Core
             DeviceIndex = beam.Index;
             BarrelIndex = beam.Definition.BarrelIndex;
             Spread = 0f;
+            RandomFactor = 0f;
             Bullet = null;
             Beam = beam;
             LaunchesShip = false;
@@ -171,6 +230,7 @@ namespace CombatSimulation.Core
             DeviceIndex = deviceIndex;
             BarrelIndex = ship.Slot.GetBay(deviceIndex).Launched;
             Spread = 0f;
+            RandomFactor = 0f;
             Bullet = null;
             Beam = null;
             LaunchesShip = true;

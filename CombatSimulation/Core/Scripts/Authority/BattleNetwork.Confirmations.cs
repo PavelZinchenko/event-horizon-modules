@@ -87,16 +87,15 @@ namespace CombatSimulation.Core
             }
 
             // A copy that is gone here: the owner may still send its children.
-            if (_predictedRemovalIds.Contains(operation.EntityId) ||
-                cannon != null && operation.Tick + cannon.Definition.Bullet.LifetimeTicks - 1 < Tick ||
+            if (_predictedRemovalIds.Contains(operation.EntityId) || cannon != null && HasExpired(cannon, operation) ||
                 HasDueRemoval(operation.EntityId))
             {
                 if (cannon != null && cannon.Definition.Bullet.HasSpawnTriggers)
                 {
                     if (!ship.TryGetSpawnSample(operation.Tick, out var shot)) shot = _world.ReadSpawnSample(ship);
                     _world.Launch(ship, operation.BarrelIndex, operation.EntityId, cannon.Definition.Bullet, cannon.Definition.Spread,
-                        operation.Tick, shot, operation.HasLaunchPose ? operation : default, out _, out _, out _,
-                        out var velocity, out _);
+                        cannon.Definition.RandomFactor, operation.Tick, shot, operation.HasLaunchPose ? operation : default,
+                        out _, out _, out _, out var velocity, out _);
                     _triggers.RememberTriggerParent(ship, operation.DeviceIndex, cannon.Definition.Bullet, operation.EntityId, velocity);
                 }
                 return true;
@@ -115,8 +114,8 @@ namespace CombatSimulation.Core
             {
                 if (!ship.TryGetSpawnSample(operation.Tick, out var sample)) sample = _world.ReadSpawnSample(ship);
                 index = _world.CreateBullet(ship, operation.DeviceIndex, operation.BarrelIndex, operation.SpawnSequence,
-                    cannon.Definition.Bullet, cannon.Definition.Spread, operation.Tick, sample, out _, out _, out _,
-                    operation.HasLaunchPose ? operation : default);
+                    cannon.Definition.Bullet, cannon.Definition.Spread, cannon.Definition.RandomFactor, operation.Tick, sample,
+                    out _, out _, out _, operation.HasLaunchPose ? operation : default);
             }
             else
             {
@@ -147,7 +146,7 @@ namespace CombatSimulation.Core
             if (operation.Tick + explosion.LifetimeTicks - 1 < Tick || HasDueRemoval(operation.EntityId)) return true;
 
             var index = _world.CreateBullet(ship, operation.DeviceIndex, SpawnRequest.ShipCentre, operation.SpawnSequence,
-                explosion, 0f, operation.Tick, _world.ReadSpawnSample(ship), out _, out _, out _, operation);
+                explosion, 0f, 0f, operation.Tick, _world.ReadSpawnSample(ship), out _, out _, out _, operation);
             if (index < 0) return false;
             _world.Bullets[index].Confirmed = true;
             _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, _world.Bullets[index]));
@@ -162,8 +161,8 @@ namespace CombatSimulation.Core
             // An attached copy rides on its own ship copy (phase 5, step 3).
             if (bullet.IsBeam || bullet.Definition.IsHoming || bullet.Definition.AttachedToParent) return;
             if (!ship.TryGetSpawnSample(launch.Tick, out var sample)) sample = _world.ReadSpawnSample(ship);
-            _world.Launch(ship, launch.BarrelIndex, bullet.Id, bullet.Definition, cannon.Definition.Spread, bullet.SpawnTick,
-                sample, launch, out _, out var angle, out _, out var velocity, out var position);
+            _world.Launch(ship, launch.BarrelIndex, bullet.Id, bullet.Definition, cannon.Definition.Spread,
+                cannon.Definition.RandomFactor, bullet.SpawnTick, sample, launch, out _, out var angle, out _, out var velocity, out var position);
             Physics.SetBulletPose(bullet.Body, position, angle);
             Physics.SetBulletVelocity(bullet.Body, velocity);
         }
@@ -209,9 +208,15 @@ namespace CombatSimulation.Core
             bullet.Id == SpawnIdentity.CreateChild(bullet.ParentId, bullet.SpawnTick, (uint)operation.DeviceIndex,
                 (uint)operation.BarrelIndex, operation.SpawnSequence);
 
-        // A cannon fires at most once per cooldown and barrel cooldown.
-        private static long CopyWindow(CannonDevice cannon) =>
-            Math.Max(1, Math.Max(cannon.Definition.CooldownTicks, ShipEntity.BarrelCooldownTicks)) - 1;
+        private bool HasExpired(CannonDevice cannon, in OwnerOperation operation)
+        {
+            _world.DrawShot(operation.EntityId, operation.Tick, cannon.Definition.Bullet, cannon.Definition.RandomFactor,
+                out _, out var lifetimeTicks);
+            return operation.Tick + lifetimeTicks - 1 < Tick;
+        }
+
+        // A cannon fires at most once per cooldown and barrel cooldown; a machine gun once per barrel cooldown.
+        private static long CopyWindow(CannonDevice cannon) => Math.Max(1, cannon.ShotSpacingTicks) - 1;
 
         // The copy takes the owner's ID, spawn tick and expiry; a plain projectile also takes the owner's launch (P1).
         // The body, beam attachment and contacts so far stay. The Rename event lets the scene keep the copy's view.
@@ -225,7 +230,14 @@ namespace CombatSimulation.Core
             // A homing copy keeps its search phase relative to the owner's spawn tick (P3).
             bullet.NextSearchTick += operation.Tick - bullet.SpawnTick;
             bullet.SpawnTick = operation.Tick;
-            if (!bullet.IsBeam) bullet.ExpiryTick = operation.Tick + bullet.Definition.LifetimeTicks - 1;
+            if (!bullet.IsBeam)
+            {
+                // The owner's identity draws the speed and lifetime of a shot with a random factor (step 4a).
+                _world.DrawShot(operation.EntityId, operation.Tick, bullet.Definition, cannon?.Definition.RandomFactor ?? 0f,
+                    out var speedScale, out var lifetimeTicks);
+                bullet.SpeedScale = speedScale;
+                bullet.ExpiryTick = operation.Tick + lifetimeTicks - 1;
+            }
             bullet.Confirmed = true;
             _world.Events.Add(BattleEvent.BulletRename(BattleId, Tick, _world.Events.Count, bullet, previous));
             if (cannon != null && operation.HasLaunchPose) Reaim(ship, cannon, index, operation);

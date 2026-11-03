@@ -135,7 +135,8 @@ namespace CombatSimulation.Core
             }
         }
 
-        // A child's body at its launch pose, moved on a line from its spawn tick to the present (a late record).
+        // A child's body at its launch pose, moved from its spawn tick to the present (a late record): on a line, or with
+        // the thrust of a rocket.
         // Returns -1 on an ID collision.
         private int CreateChild(EntityId id, in BulletEntity parent, Vec2 parentVelocity, BulletDefinition definition,
             in ChildDraw draw, long spawnTick, Vec2 launch, float angle)
@@ -151,8 +152,8 @@ namespace CombatSimulation.Core
             var velocity = definition.Speed * draw.SpeedScale * definition.StartingVelocityMultiplier * direction +
                            definition.ParentVelocityEffect * parentVelocity;
             var position = launch;
-            for (var tick = spawnTick; tick < Tick; ++tick)
-                position = Physics.Torus.Wrap(position + Battle.TickDuration * velocity);
+            RocketSteering.Advance(Physics.Torus, definition, draw.SpeedScale, angle, spawnTick, Tick, ref position,
+                ref velocity);
 
             var ship = _world.FindShip(parent.ShipId);
             var body = Physics.CreateBullet(new BulletDef

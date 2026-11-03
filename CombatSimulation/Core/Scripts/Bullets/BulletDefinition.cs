@@ -42,7 +42,7 @@ namespace CombatSimulation.Core
             IReadOnlyList<DamageAmount> extraDamage = null, IReadOnlyList<BulletTriggerDefinition> triggers = null,
             bool detonateWhenDestroyed = true, bool canBeDisarmed = true, BulletImpact impact = BulletImpact.FirstTarget,
             bool damageFalloff = false, float radialPush = 0f, float radialPushWithFalloff = 0f, float lifetime = 0f,
-            float scale = 0f, bool attachedToParent = false)
+            float scale = 0f, bool attachedToParent = false, bool rocket = false)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -63,6 +63,8 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(radialPush), "Radial push must be finite.");
             if (attachedToParent && homing)
                 throw new ArgumentException("An attached bullet cannot home.", nameof(attachedToParent));
+            if (rocket && (homing || attachedToParent))
+                throw new ArgumentException("A rocket neither homes nor rides on its parent.", nameof(rocket));
             if (!(damage >= 0f) || float.IsInfinity(damage))
                 throw new ArgumentOutOfRangeException(nameof(damage), "Damage must be finite and not negative.");
             if (!(weight >= 0f) || float.IsInfinity(weight))
@@ -131,6 +133,7 @@ namespace CombatSimulation.Core
             ParentVelocityEffect = parentVelocityEffect;
             HitPoints = hitPoints;
             IsHoming = homing;
+            IsRocket = rocket;
             StartingVelocityMultiplier = startingVelocityMultiplier;
             Impact = impact;
             DamageFalloff = damageFalloff;
@@ -147,10 +150,11 @@ namespace CombatSimulation.Core
             DetonateWhenDestroyed = detonateWhenDestroyed;
             CanBeDisarmed = canBeDisarmed;
 
-            // Legacy BulletFactory.CreateController: both scale with 1 / (0.2 + 2 x weight).
+            // Legacy BulletFactory.CreateController: both scale with 1 / (0.2 + 2 x weight); a rocket accelerates at
+            // speed / (0.1 + weight).
             var agility = 1f / (0.2f + weight * 2f);
             TurnRate = 120f * agility * (float)(Math.PI / 180.0);
-            Acceleration = 0.5f * speed * agility;
+            Acceleration = rocket ? speed / (0.1f + weight) : 0.5f * speed * agility;
         }
 
         // Collision circle at the bullet origin. Phase 4 takes the shape from the bullet prefab.
@@ -187,10 +191,14 @@ namespace CombatSimulation.Core
         // Legacy HomingController: searches a target and turns toward it.
         public bool IsHoming { get; }
 
+        // Legacy RocketController (phase 5, step 4a): thrust along the heading up to Speed, which also removes the
+        // sideways speed. It never turns.
+        public bool IsRocket { get; }
+
         // The share of Speed the bullet starts with (legacy StartingVelocityMultiplier).
         public float StartingVelocityMultiplier { get; }
 
-        // Homing: the turn rate in radians per second and the thrust in units per second squared.
+        // Homing: the turn rate in radians per second. Homing and rocket: the thrust in units per second squared.
         public float TurnRate { get; }
         public float Acceleration { get; }
 
