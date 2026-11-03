@@ -28,16 +28,21 @@ namespace CombatSimulation.Core
         }
 
         // A late spawn (a remote record): the projectile's position and velocity at the start of the present tick. A
-        // late record applies at stage 1, so stage 4 of the present tick still thrusts the rocket; stage 4 first thrusts
-        // it in the tick after its spawn tick.
+        // late record applies at stage 1, so stage 4 of the present tick still thrusts the rocket or launches the beam
+        // bolt (phase 5, step 4e); stage 4 first acts in the tick after the spawn tick.
         public static void Advance(Torus torus, BulletDefinition definition, float speedScale, float angle,
             long spawnTick, long tick, ref Vec2 position, ref Vec2 velocity)
         {
-            var heading = definition.IsRocket ? new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle)) : default;
+            var heading = definition.IsRocket || definition.IsBeamBolt
+                ? new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle))
+                : default;
+            var growth = definition.GrowthTicks(speedScale);
             for (var t = spawnTick; t < tick; ++t)
             {
                 if (definition.IsRocket && t > spawnTick)
                     velocity = Thrust(velocity, heading, definition.Speed * speedScale, definition.Acceleration * speedScale);
+                else if (definition.IsBeamBolt && t - spawnTick == growth)
+                    velocity += definition.Speed * speedScale * heading;
                 position = torus.Wrap(position + Battle.TickDuration * velocity);
             }
         }

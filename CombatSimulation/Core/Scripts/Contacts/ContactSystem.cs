@@ -2,7 +2,7 @@ using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
-    // Contacts (phase 5, step 8b, item 7). Stage 6: the beam and point-defense queries. Stage 8: every source adds its
+    // Contacts (phase 5, step 8b, item 7). Stage 6: the beam, beam bolt (step 4e) and point-defense queries. Stage 8: every source adds its
     // contact candidates. Stage 9: the resolver accepts them in key order, and each accepted contact reaches its
     // target: pending damage and a push on a ship, damage or removal on a bullet, a queued hit on a tail segment.
     // Stage 10 applies the damage (DamageSystem).
@@ -33,6 +33,7 @@ namespace CombatSimulation.Core
         public void RunQueries()
         {
             _beams.Run(_battle);
+            _bolts.Run(_battle);
             _pointDefense.Run(_battle);
         }
 
@@ -41,6 +42,7 @@ namespace CombatSimulation.Core
         {
             _resolver.BeginStep();
             _beams.Collect(_resolver);
+            _bolts.Collect(_resolver);
             _pointDefense.Collect(_resolver);
             _world.Bullets.CollectHits(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver);
             _world.Bullets.CollectStuckHits(Physics, _world.Entities, _world.Shapes, _world.Ships, _world.Segments, _resolver);
@@ -56,6 +58,7 @@ namespace CombatSimulation.Core
         {
             _resolver.Resolve();
             _beams.Complete(_battle, _resolver);
+            _bolts.Complete(_battle, _resolver);
             _network?.OutgoingHits.BeginContacts();
 
             var accepted = _resolver.Accepted;
@@ -259,6 +262,7 @@ namespace CombatSimulation.Core
         private readonly ContactResolver _resolver = new ContactResolver();
         private readonly RammingTracker _ramming = new RammingTracker();
         private readonly BeamQueries _beams = new BeamQueries();
+        private readonly BeamBolts _bolts = new BeamBolts();
         private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();
     }
 }

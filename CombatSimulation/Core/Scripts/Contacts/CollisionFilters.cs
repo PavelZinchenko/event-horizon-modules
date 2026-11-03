@@ -28,8 +28,12 @@ namespace CombatSimulation.Core
             new Filter(MissileCategory(allegiance), ShipCategory(allegiance) | DroneCategory(allegiance) |
                 EnergyCategory(allegiance) | MissileCategory(allegiance));
 
+        // A beam bolt's body pairs with no shape and no bullet (phase 5, step 4e): its ray finds its hits. Category-free
+        // queries (point defense) still see it, so they skip it.
         public static Filter Bullet(BulletDefinition definition, Allegiance allegiance) =>
-            definition.IsMissile ? Missile(allegiance) : Energy(allegiance);
+            definition.IsBeamBolt ? NoContacts : definition.IsMissile ? Missile(allegiance) : Energy(allegiance);
+
+        private static readonly Filter NoContacts = new Filter(0, ~0UL);
 
         // Query-only category: targets cannot exclude it through their own collision masks.
         public static Filter PointDefense(Allegiance allegiance) =>

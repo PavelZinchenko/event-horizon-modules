@@ -62,7 +62,8 @@ namespace CombatSimulation.Core
                         if (!battle.Bullets.TryGetByBody(target.Bullet, out var index)) continue;
                         ref readonly var bullet = ref battle.Bullets[index];
                         // Legacy PointDefenseCollisionAction disarms energy bolts and missiles, never an area (phase 5).
-                        if (bullet.IsBeam || bullet.Definition.IsArea ||
+                        // A beam bolt has no physics collider in legacy, so point defense never finds it (step 4e).
+                        if (bullet.IsBeam || bullet.Definition.IsArea || bullet.Definition.IsBeamBolt ||
                             !Allegiances.IsHostile(bullet.Allegiance, ship.Allegiance) ||
                             bullet.PendingRemoval != RemovalReason.None) continue;
                         _candidates.Add(new ContactCandidate

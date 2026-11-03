@@ -149,7 +149,7 @@ namespace CombatSimulation.Core
             }
 
             var direction = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
-            var velocity = definition.Speed * draw.SpeedScale * definition.StartingVelocityMultiplier * direction +
+            var velocity = BeamBolts.LaunchSpeed(definition, draw.SpeedScale) * direction +
                            definition.ParentVelocityEffect * parentVelocity;
             var position = launch;
             RocketSteering.Advance(Physics.Torus, definition, draw.SpeedScale, angle, spawnTick, Tick, ref position,
@@ -202,7 +202,8 @@ namespace CombatSimulation.Core
             var factor = trigger.RandomFactor;
             draw.SpeedScale = factor > 0f ? 1f + (speed - 0.5f) * factor : 1f;
             draw.LifetimeTicks = factor > 0f
-                ? TickTime.After(trigger.Bullet.Lifetime * (1f + (lifetime - 0.5f) * factor))
+                ? TickTime.After(trigger.Bullet.Lifetime * (1f + (lifetime - 0.5f) * factor)) +
+                  trigger.Bullet.GrowthTicks(draw.SpeedScale)
                 : trigger.Bullet.LifetimeTicks;
             return draw;
         }

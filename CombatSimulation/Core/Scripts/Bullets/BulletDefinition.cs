@@ -43,7 +43,7 @@ namespace CombatSimulation.Core
             bool detonateWhenDestroyed = true, bool canBeDisarmed = true, BulletImpact impact = BulletImpact.FirstTarget,
             bool damageFalloff = false, float radialPush = 0f, float radialPushWithFalloff = 0f, float lifetime = 0f,
             float scale = 0f, bool attachedToParent = false, bool rocket = false, float stickyLifetime = 0f,
-            bool magnetic = false, bool hasDirection = true)
+            bool magnetic = false, bool hasDirection = true, float beamLength = 0f, bool piercing = false)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -72,6 +72,13 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(stickyLifetime), "Sticky lifetime must be finite and not negative.");
             if (stickyLifetime > 0f && (homing || rocket || attachedToParent))
                 throw new ArgumentException("A sticky bullet neither steers nor rides on its parent.", nameof(stickyLifetime));
+            if (!(beamLength >= 0f) || float.IsInfinity(beamLength))
+                throw new ArgumentOutOfRangeException(nameof(beamLength), "Beam length must be finite and not negative.");
+            if (beamLength > 0f && (!(speed > 0f) || homing || rocket || stickyLifetime > 0f || attachedToParent || hitPoints > 0f))
+                throw new ArgumentException("A beam bolt has a speed and neither steers, rides on its parent nor has hit points.",
+                    nameof(beamLength));
+            if (piercing && !(beamLength > 0f))
+                throw new ArgumentException("Only a beam bolt pierces.", nameof(piercing));
             if (!(damage >= 0f) || float.IsInfinity(damage))
                 throw new ArgumentOutOfRangeException(nameof(damage), "Damage must be finite and not negative.");
             if (!(weight >= 0f) || float.IsInfinity(weight))
@@ -151,8 +158,10 @@ namespace CombatSimulation.Core
             HasFalloff = falloff;
             Scale = scale > 0f ? scale : 2f * radius;
             AttachedToParent = attachedToParent;
+            BeamLength = beamLength;
+            Piercing = piercing;
             Lifetime = lifetime > 0f ? lifetime : range / speed;
-            LifetimeTicks = TickTime.After(Lifetime);
+            LifetimeTicks = TickTime.After(Lifetime) + GrowthTicks(1f);
             Triggers = triggerList;
             TriggerConditions = conditions;
             HasSpawnTriggers = spawns;
@@ -265,8 +274,25 @@ namespace CombatSimulation.Core
         // velocity of its own, and leaves with the ship without triggers (owner, 2026-11-02).
         public bool AttachedToParent { get; }
 
-        // Physics steps the bullet flies. Legacy expires a bullet when its age exceeds the lifetime (Lifetime.IsExpired).
+        // Physics steps the bullet flies, from its spawn tick. Legacy expires a bullet when its age exceeds the lifetime
+        // (Lifetime.IsExpired). A beam bolt adds its growth: its lifetime does not run while it grows.
         public int LifetimeTicks { get; }
+
+        // Legacy MovingBeamController (phase 5, step 4e): above zero, the bullet is a beam bolt, a ray of this length
+        // from its origin along its heading. It hits through the ray only; nothing hits its body, and point defense does
+        // not see it (the legacy prefab has no physics collider). It starts with its parent's velocity share only and
+        // grows by its speed per second; when it reaches this length it takes its speed along its heading, and only
+        // then its lifetime starts. In its last ticks the ray shrinks to the remaining lifetime x speed.
+        public float BeamLength { get; }
+        public bool IsBeamBolt => BeamLength > 0f;
+
+        // Legacy PiercingLaser prefab (RayCastCollider._passThrough): the ray reports every body along it, not the first.
+        public bool Piercing { get; }
+
+        // Legacy MovingBeamController grows the ray until speed x elapsed time reaches the length: the ticks from the
+        // spawn tick to the tick the bolt starts to fly. 0 for other bullets.
+        public int GrowthTicks(float speedScale) =>
+            IsBeamBolt ? TickTime.AtLeast(BeamLength / (Speed * speedScale)) : 0;
 
         // Legacy BulletStats.Recoil (Q1, revised by phase 4 E1): the impulse on the ship per shot is Recoil x the bullet
         // velocity relative to the ship. It comes from Body.Recoil only, never from the weight.

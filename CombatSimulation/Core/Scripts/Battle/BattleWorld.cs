@@ -254,7 +254,7 @@ namespace CombatSimulation.Core
             direction = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
             velocity = definition.AttachedToParent
                 ? sample.LinearVelocity
-                : definition.Speed * speedScale * definition.StartingVelocityMultiplier * direction +
+                : BeamBolts.LaunchSpeed(definition, speedScale) * direction +
                   definition.ParentVelocityEffect * sample.LinearVelocity;
 
             position = muzzle;
@@ -282,7 +282,8 @@ namespace CombatSimulation.Core
             var speed = random.NextFloat();
             var lifetime = random.NextFloat();
             speedScale = 1f + (speed - 0.5f) * randomFactor;
-            lifetimeTicks = TickTime.After(definition.Lifetime * (1f + (lifetime - 0.5f) * randomFactor));
+            lifetimeTicks = TickTime.After(definition.Lifetime * (1f + (lifetime - 0.5f) * randomFactor)) +
+                            definition.GrowthTicks(speedScale);
         }
 
         // Returns -1 on an ID collision.

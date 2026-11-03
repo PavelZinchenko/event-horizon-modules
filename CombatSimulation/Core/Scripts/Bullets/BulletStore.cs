@@ -43,6 +43,9 @@ namespace CombatSimulation.Core
         public Vec2 BeamEndPoint;
         public bool RayOverflow;
 
+        // A beam bolt's ray length in this tick (phase 5, step 4e): cast at stage 6, cut at its first hit at stage 9.
+        public float RayLength;
+
         // The last tick the bullet flies in; stage 11 of that tick marks its expiry.
         public long ExpiryTick;
 
@@ -302,7 +305,7 @@ namespace CombatSimulation.Core
         public static float EffectDamage(BulletDefinition definition, float amount, bool falloff, float factor) =>
             amount * (falloff ? factor : 1f) * (definition.Impact == BulletImpact.OverTime ? Battle.TickDuration : 1f);
 
-        private static float TotalDamage(BulletDefinition definition, float falloff)
+        internal static float TotalDamage(BulletDefinition definition, float falloff)
         {
             if (!definition.HasFalloff && definition.Impact != BulletImpact.OverTime) return definition.TotalDamage;
             var total = EffectDamage(definition, definition.Damage, definition.DamageFalloff, falloff);

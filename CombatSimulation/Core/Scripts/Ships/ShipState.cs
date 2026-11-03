@@ -108,9 +108,11 @@ namespace CombatSimulation.Core
         public readonly BeamDefinition BeamDefinition;
         public bool IsBeam => BeamDefinition != null;
 
-        // Beams: the sampled ray endpoint and selected entity, or no entity at full range.
+        // Beams: the sampled ray endpoint and selected entity, or no entity at full range. A beam bolt (phase 5, step 4e):
+        // the end of this tick's ray from the bolt's pose, at its first hit for a ray without pass-through.
         public readonly Vec2 BeamEndPoint;
         public readonly EntityId BeamTargetId;
+        public bool HasRay => IsBeam || Definition.IsBeamBolt;
 
         // Canonical torus coordinates and radians.
         public readonly Vec2 Position;
@@ -129,10 +131,18 @@ namespace CombatSimulation.Core
             Owner = bullet.Owner;
             Definition = bullet.Definition;
             BeamDefinition = bullet.BeamDefinition;
-            BeamEndPoint = bullet.BeamEndPoint;
             BeamTargetId = bullet.IsBeam ? bullet.TargetId : default;
             Position = bullet.IsBeam ? bullet.BeamOrigin : world.GetBulletPosition(bullet.Body);
             Angle = bullet.IsBeam ? bullet.BeamAngle : world.GetBulletRotation(bullet.Body).Angle;
+            if (bullet.IsBeam)
+                BeamEndPoint = bullet.BeamEndPoint;
+            else if (bullet.Definition.IsBeamBolt)
+            {
+                var heading = world.GetBulletRotation(bullet.Body);
+                BeamEndPoint = world.Torus.Wrap(Position + bullet.RayLength * new Vec2(heading.C, heading.S));
+            }
+            else
+                BeamEndPoint = default;
             LinearVelocity = bullet.IsBeam ? Vec2.Zero : world.GetBulletVelocity(bullet.Body);
             ExpiryTick = bullet.ExpiryTick;
         }
