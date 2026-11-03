@@ -5,7 +5,8 @@ namespace CombatSimulation.Core
 {
     // Legacy HomingController (Q2b), at stage 4 of every tick after the spawn tick: target search, thrust along the
     // current heading, then the turn. Physics never turns a bullet, so the core sets the heading the legacy body
-    // reaches after its physics step.
+    // reaches after its physics step. A magnetic bullet (legacy MagneticController, phase 5, step 4c) shares the search
+    // and the network rules, but steers its velocity.
     internal static class HomingSteering
     {
         // Legacy searches when more than 2 s have passed since the last search.
@@ -15,6 +16,9 @@ namespace CombatSimulation.Core
 
         // Unity's Vector2.normalized returns zero below this length.
         private const float MinThrustDirection = 1e-5f;
+
+        // Legacy MagneticController.UpdateRotation: the angular velocity is 10 x the angle to the velocity, per second.
+        private const float MagneticTurnFactor = 10f;
 
         public static void Update(Battle battle, ref BulletEntity bullet)
         {
@@ -30,15 +34,28 @@ namespace CombatSimulation.Core
             if (battle.Tick >= bullet.NextSearchTick || (target == null && !bullet.TargetId.IsNull))
             {
                 battle.Targets.FindMissileTarget(position, heading, bullet.Allegiance,
-                    definition.Range * BulletDefinition.SearchRangeFactor, definition.Radius, out var id);
+                    definition.Range * BulletDefinition.SearchRangeFactor, definition.Radius, out var id,
+                    definition.IsMagnetic && !definition.HasDirection);
                 if (id != bullet.TargetId) battle.CaptureMissileTarget(bullet, id);
                 bullet.TargetId = id;
                 bullet.NextSearchTick = battle.Tick + SearchTicks;
                 target = id.IsNull ? null : battle.FindShip(id);
             }
 
-            // Legacy UpdateVelocity: below full speed along the heading, accelerate toward speed x heading.
             var velocity = world.GetBulletVelocity(bullet.Body);
+            if (definition.IsMagnetic)
+            {
+                var thrusted = target == null ? velocity : MagneticThrust(velocity,
+                    world.Torus.Delta(position, world.GetPosition(target.Body)), world.GetLinearVelocity(target.Body),
+                    bullet.Speed, bullet.Acceleration);
+                if (thrusted.X != velocity.X || thrusted.Y != velocity.Y) world.SetBulletVelocity(bullet.Body, thrusted);
+                if (!definition.HasDirection) return;
+                var angle = TurnToVelocity(rotation.Angle, thrusted);
+                if (angle != rotation.Angle) world.SetBulletPose(bullet.Body, position, angle);
+                return;
+            }
+
+            // Legacy UpdateVelocity: below full speed along the heading, accelerate toward speed x heading.
             if (Vec2.Dot(velocity, heading) < bullet.Speed)
             {
                 var change = bullet.Speed * heading - velocity;
@@ -70,8 +87,19 @@ namespace CombatSimulation.Core
             var definition = bullet.Definition;
             var target = bullet.TargetId.IsNull ? null : battle.FindShip(bullet.TargetId);
             var targetPosition = target == null ? Vec2.Zero : world.GetPosition(target.Body);
+            var targetVelocity = target == null ? Vec2.Zero : world.GetLinearVelocity(target.Body);
             for (var i = 0; i < count; ++i)
             {
+                if (definition.IsMagnetic)
+                {
+                    if (target != null)
+                        velocity = MagneticThrust(velocity, world.Torus.Delta(position, targetPosition), targetVelocity,
+                            bullet.Speed, bullet.Acceleration);
+                    if (definition.HasDirection) angle = TurnToVelocity(angle, velocity);
+                    position = world.Torus.Wrap(position + Battle.TickDuration * velocity);
+                    continue;
+                }
+
                 var heading = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
                 if (Vec2.Dot(velocity, heading) < bullet.Speed)
                 {
@@ -89,6 +117,31 @@ namespace CombatSimulation.Core
                 }
                 position = world.Torus.Wrap(position + Battle.TickDuration * velocity);
             }
+        }
+
+        // Legacy MagneticController.UpdateVelocity (phase 5, step 4c): full thrust toward the velocity of Speed that
+        // leads to the target, aimed at the target position plus its velocity x the time to cover the distance at
+        // Speed. The thrust has full size every tick, so the speed jitters around Speed (legacy). Legacy measures the
+        // distance without the torus wrap; the core uses the nearest image, as the homing turn does.
+        internal static Vec2 MagneticThrust(Vec2 velocity, Vec2 delta, Vec2 targetVelocity, float speed, float acceleration)
+        {
+            var lead = speed > 0f ? delta + delta.Length / speed * targetVelocity : delta;
+            var change = speed * Normalized(lead) - velocity;
+            return velocity + acceleration * Battle.TickDuration * Normalized(change);
+        }
+
+        // Legacy MagneticController.UpdateRotation without a parent: the heading turns toward the velocity, with or
+        // without a target. A zero velocity points at angle 0 (legacy RotationHelpers.Angle).
+        internal static float TurnToVelocity(float angle, Vec2 velocity)
+        {
+            var delta = Battle.WrapAngle((float)Math.Atan2(velocity.Y, velocity.X) - angle);
+            return delta == 0f ? angle : angle + MagneticTurnFactor * Battle.TickDuration * delta;
+        }
+
+        private static Vec2 Normalized(Vec2 value)
+        {
+            var length = value.Length;
+            return length > MinThrustDirection ? new Vec2(value.X / length, value.Y / length) : Vec2.Zero;
         }
     }
 }

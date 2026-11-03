@@ -36,6 +36,11 @@ namespace CombatSimulation.Core.Tests
         public static readonly BulletDefinition Missile = new BulletDefinition(0.2f, 15f, 30f, 8f, weight: 0.1f,
             hitPoints: 2f, homing: true, startingVelocityMultiplier: 0.1f, recoil: 0.1f);
 
+        // Legacy PixieTorpedo (ammunition 120): velocity 30, range 80, weight 0.5, homing with IgnoreRotation (phase 5,
+        // step 4c). Magnetic thrust 30 / (0.2 + 2 x 0.5) = 25 u/s², 0.5 u/s per tick; search within 104 u.
+        public static readonly BulletDefinition Pixie = new BulletDefinition(0.4f, 30f, 80f, 10f, weight: 0.5f,
+            homing: true, magnetic: true);
+
         // One cannon (device 0) on one barrel at the given muzzle point; by default 1 u ahead of the hull centre.
         public static ShipDefinition CannonShip(BulletDefinition bullet = null, float cooldown = 0.1f,
             float energyCost = 2f, float spread = 0f, Vec2? muzzle = null, float mass = 1f,

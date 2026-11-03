@@ -497,6 +497,32 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(0, p.B.Battle.Submit(NetPair.OwnerA, batch));
         }
 
+        // Phase 5, step 4c: a magnetic copy takes the owner's state and re-runs the magnetic steering to the present.
+        [Test]
+        public void AMagneticCorrectionReplaysTheMagneticSteering()
+        {
+            var p = Missiles(bullet: Fixtures.Pixie);
+            p.Step(12);
+            var bullet = FirstMissile(p.A);
+            var batch = Write(p.A);
+            Assert.AreEqual(bullet, batch.Missiles[0].EntityId);
+            p.Step(3);
+
+            ref var copy = ref p.B.Battle.Bullets[Find(p.B, bullet)];
+            var world = p.B.Battle.World;
+            world.SetBulletPose(copy.Body, world.GetBulletPosition(copy.Body) + new Vec2(0.7f, -0.4f),
+                world.GetBulletRotation(copy.Body).Angle + 0.5f);
+            world.SetBulletVelocity(copy.Body, world.GetBulletVelocity(copy.Body) + new Vec2(-3f, 2f));
+            Assert.Less(0, p.B.Battle.Submit(NetPair.OwnerA, batch));
+            p.Step();
+            copy = ref p.B.Battle.Bullets[Find(p.B, bullet)];
+            ref readonly var owner = ref p.A.Battle.Bullets[Find(p.A, bullet)];
+            var ownerWorld = p.A.Battle.World;
+            Assert.Less(world.Torus.Delta(ownerWorld.GetBulletPosition(owner.Body), world.GetBulletPosition(copy.Body)).Length, 1e-3f);
+            Assert.Less((ownerWorld.GetBulletVelocity(owner.Body) - world.GetBulletVelocity(copy.Body)).Length, 1e-3f);
+            Assert.AreEqual(ownerWorld.GetBulletRotation(owner.Body).Angle, world.GetBulletRotation(copy.Body).Angle, 1e-4f);
+        }
+
         // Never-corrected missiles first, oldest first; then the longest-waiting. Equal weights give round-robin.
         [Test]
         public void MissileCorrectionsComeEarlyAfterSpawnThenRoundRobin()
@@ -569,10 +595,10 @@ namespace CombatSimulation.Core.Tests
         private static readonly ShipDefinition MissileShip = Fixtures.CannonShip(Fixtures.Missile, energy: new ResourceDefinition(100000f));
 
         // A fires missiles from slot 101 at slot 1, 20 units ahead and hard to kill; both devices run the same input.
-        private static NetPair Missiles(float cooldown = 0.1f)
+        private static NetPair Missiles(float cooldown = 0.1f, BulletDefinition bullet = null)
         {
-            var ship = cooldown == 0.1f ? MissileShip
-                : Fixtures.CannonShip(Fixtures.Missile, cooldown, energy: new ResourceDefinition(100000f));
+            var ship = cooldown == 0.1f && bullet == null ? MissileShip
+                : Fixtures.CannonShip(bullet ?? Fixtures.Missile, cooldown, energy: new ResourceDefinition(100000f));
             var p = new NetPair(Fixtures.ShipWith(armor: 1e9f), ship);
             p.A.Place(1, new Vec2(70f, 50f), Vec2.Zero);
             p.B.Place(1, new Vec2(70f, 50f), Vec2.Zero);

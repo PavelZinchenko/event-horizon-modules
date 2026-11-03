@@ -54,9 +54,10 @@ namespace CombatSimulation.Core
         // Legacy GetEnemyForMissile with the owner's fallback (2026-10-20). Range is the centre distance minus both
         // radii, at the nearest torus image. Within maxRange: the nearest enemy within the search cone of the heading;
         // without one, the enemy with the smallest deviation. Equal keys go to the lower EntityId, so the result does
-        // not depend on the order of cells or entries. Beyond maxRange there is no target.
+        // not depend on the order of cells or entries. Beyond maxRange there is no target. All around (legacy 360 degree
+        // deviation, phase 5, step 4c): every enemy is in the cone, so the nearest one wins.
         public bool FindMissileTarget(Vec2 position, Vec2 heading, Allegiance allegiance, float maxRange, float selfRadius,
-            out EntityId target)
+            out EntityId target, bool allAround = false)
         {
             target = default;
             if (_count == 0) return false;
@@ -84,7 +85,7 @@ namespace CombatSimulation.Core
 
                 // Cosine of the deviation: larger means nearer the heading. A target at the centre counts as ahead.
                 var cos = distance > 0f ? Vec2.Dot(delta, heading) / distance : 1f;
-                var inCone = cos >= ConeCos;
+                var inCone = allAround || cos >= ConeCos;
                 var key = inCone ? distance - entry.Radius : -cos;
 
                 if (found)

@@ -42,7 +42,8 @@ namespace CombatSimulation.Core
             IReadOnlyList<DamageAmount> extraDamage = null, IReadOnlyList<BulletTriggerDefinition> triggers = null,
             bool detonateWhenDestroyed = true, bool canBeDisarmed = true, BulletImpact impact = BulletImpact.FirstTarget,
             bool damageFalloff = false, float radialPush = 0f, float radialPushWithFalloff = 0f, float lifetime = 0f,
-            float scale = 0f, bool attachedToParent = false, bool rocket = false, float stickyLifetime = 0f)
+            float scale = 0f, bool attachedToParent = false, bool rocket = false, float stickyLifetime = 0f,
+            bool magnetic = false, bool hasDirection = true)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -63,6 +64,8 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(radialPush), "Radial push must be finite.");
             if (attachedToParent && homing)
                 throw new ArgumentException("An attached bullet cannot home.", nameof(attachedToParent));
+            if (magnetic && !homing)
+                throw new ArgumentException("A magnetic bullet is a homing bullet.", nameof(magnetic));
             if (rocket && (homing || attachedToParent))
                 throw new ArgumentException("A rocket neither homes nor rides on its parent.", nameof(rocket));
             if (!(stickyLifetime >= 0f) || float.IsInfinity(stickyLifetime))
@@ -137,6 +140,8 @@ namespace CombatSimulation.Core
             ParentVelocityEffect = parentVelocityEffect;
             HitPoints = hitPoints;
             IsHoming = homing;
+            IsMagnetic = magnetic;
+            HasDirection = hasDirection;
             IsRocket = rocket;
             StartingVelocityMultiplier = startingVelocityMultiplier;
             Impact = impact;
@@ -157,10 +162,10 @@ namespace CombatSimulation.Core
             StickyTicks = stickyLifetime > 0f ? TickTime.AtLeast(stickyLifetime) : 0;
 
             // Legacy BulletFactory.CreateController: both scale with 1 / (0.2 + 2 x weight); a rocket accelerates at
-            // speed / (0.1 + weight).
+            // speed / (0.1 + weight), a magnetic bullet at twice the homing thrust.
             var agility = 1f / (0.2f + weight * 2f);
             TurnRate = 120f * agility * (float)(Math.PI / 180.0);
-            Acceleration = rocket ? speed / (0.1f + weight) : 0.5f * speed * agility;
+            Acceleration = rocket ? speed / (0.1f + weight) : magnetic ? speed * agility : 0.5f * speed * agility;
         }
 
         // Collision circle at the bullet origin. Phase 4 takes the shape from the bullet prefab.
@@ -197,6 +202,14 @@ namespace CombatSimulation.Core
         // Legacy HomingController: searches a target and turns toward it.
         public bool IsHoming { get; }
 
+        // Legacy MagneticController (homing with IgnoreRotation, phase 5, step 4c): a homing bullet that thrusts toward
+        // the velocity leading to its target instead of turning toward it. Every homing rule of the network applies.
+        public bool IsMagnetic { get; }
+
+        // Legacy BulletShape.HasDirection, read only by a magnetic bullet: with a direction it searches in the 30 degree
+        // cone and turns toward its velocity; without one (Spark, Mine) it searches all around and never turns.
+        public bool HasDirection { get; }
+
         // Legacy RocketController (phase 5, step 4a): thrust along the heading up to Speed, which also removes the
         // sideways speed. It never turns.
         public bool IsRocket { get; }
@@ -212,7 +225,8 @@ namespace CombatSimulation.Core
         // The share of Speed the bullet starts with (legacy StartingVelocityMultiplier).
         public float StartingVelocityMultiplier { get; }
 
-        // Homing: the turn rate in radians per second. Homing and rocket: the thrust in units per second squared.
+        // Homing: the turn rate in radians per second. Homing, magnetic and rocket: the thrust in units per second
+        // squared.
         public float TurnRate { get; }
         public float Acceleration { get; }
 
