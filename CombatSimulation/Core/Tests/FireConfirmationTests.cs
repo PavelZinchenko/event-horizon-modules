@@ -16,6 +16,11 @@ namespace CombatSimulation.Core.Tests
             barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
             devices: new[] { new BeamDefinition(0, 0f, 1f, 1f, 4f, 8f) });
 
+        // Phase 5, step 4d: a shot beam with spread (7-tick cooldown, 6-tick lifetime).
+        private static readonly ShipDefinition ShotBeam = Fixtures.ShipWith(energy: new ResourceDefinition(100000f),
+            barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+            devices: new[] { BeamDefinition.Shot(0, 0.125f, 1f, 4f, 8f, 0.1f, spread: 30f * Fixtures.Degrees) });
+
         private static BattleSetup Setup(int localOwner, ShipDefinition ship) => new BattleSetup(new BattleId(77), 13,
             new[]
             {
@@ -449,6 +454,81 @@ namespace CombatSimulation.Core.Tests
             Assert.IsFalse(Has(remote, fired));
             Assert.IsFalse(device.TryGetBeam(out _));
             Assert.AreEqual(BattleEventAuthority.Committed, Events(remote, fired).Single().Authority);
+        }
+
+        // Phase 5, step 4d: the copy of a shot beam has the owner's ID, so it draws the owner's spread angle each tick, and
+        // it expires at the owner's tick.
+        [Test]
+        public void ShotBeamCopiesMatchTheirOwner()
+        {
+            var (owner, remote, link) = Pair(ShotBeam);
+            owner.Control(101, systems: 1);
+            remote.Control(101, systems: 1);
+            owner.Control(101, systems: 0, tick: 3);
+            remote.Control(101, systems: 0, tick: 3);
+            var fired = Shot(owner, 2);
+
+            // The beam's last tick is 7; stage 12 of tick 7 removes it.
+            for (var tick = 2; tick <= 6; ++tick)
+            {
+                Tick(owner, remote, link);
+                var beam = owner.Battle.Snapshot.Bullets.ToArray().Single(b => b.IsBeam);
+                var copy = remote.Battle.Snapshot.Bullets.ToArray().Single(b => b.IsBeam);
+                Assert.AreEqual(fired, beam.Id);
+                Assert.AreEqual(fired, copy.Id);
+                Assert.AreEqual(beam.Angle, copy.Angle);
+                Assert.IsTrue(remote.Battle.Bullets[Find(remote, fired)].Confirmed);
+            }
+
+            Tick(owner, remote, link);
+            Assert.IsFalse(Has(owner, fired));
+            Assert.IsFalse(Has(remote, fired));
+        }
+
+        // P2 for a shot beam: an overdue fire input fires the copy at another tick; the record renames it and gives it the
+        // owner's expiry.
+        [TestCase(1)]
+        [TestCase(-1)]
+        public void PredictedShotBeamIsAdopted(int late)
+        {
+            var (owner, remote, link) = Pair(ShotBeam);
+            for (var tick = 2; tick <= 2 + Math.Abs(late); ++tick)
+            {
+                if (tick == 2) (late > 0 ? owner : remote).Control(101, systems: 1);
+                if (tick == 2 + Math.Abs(late)) (late > 0 ? remote : owner).Control(101, systems: 1);
+                Tick(owner, remote, link, deliver: false);
+            }
+
+            var firedTick = late > 0 ? 2 : 2 - late;
+            var fired = Shot(owner, firedTick);
+            var copy = Shot(owner, late > 0 ? 2 + late : 2);
+            Assert.IsTrue(Has(remote, copy));
+            link.Deliver(remote);
+            owner.Step();
+            link.Capture(owner);
+            remote.Step();
+
+            Assert.IsFalse(Has(remote, copy));
+            Assert.AreEqual(firedTick + 5, remote.Battle.Bullets[Find(remote, fired)].ExpiryTick);
+            Assert.AreEqual(copy, Events(remote, fired).Single(e => e.Kind == BattleEventKind.Rename).PreviousId);
+            Assert.AreEqual(owner.Battle.Snapshot.Bullets.ToArray().Single(b => b.IsBeam).Angle,
+                remote.Battle.Snapshot.Bullets.ToArray().Single(b => b.IsBeam).Angle);
+        }
+
+        // A record of a shot beam that has expired here adds nothing, but still re-syncs the copy's cooldown.
+        [Test]
+        public void ALateShotBeamRecordAfterItsLifetimeAddsNothing()
+        {
+            var (owner, remote, link) = Pair(ShotBeam);
+            owner.Control(101, systems: 1);
+            owner.Control(101, systems: 0, tick: 3);
+            for (var tick = 2; tick <= 9; ++tick) Tick(owner, remote, link, deliver: false);
+
+            link.Deliver(remote);
+            remote.Step();
+            Assert.IsFalse(Has(remote, Shot(owner, 2)));
+            Assert.AreEqual(0, remote.Battle.Snapshot.Bullets.Length);
+            Assert.AreEqual(2, ((BeamDevice)remote.Ship(101).GetDevice(0)).LastShotTick);
         }
 
         [Test]

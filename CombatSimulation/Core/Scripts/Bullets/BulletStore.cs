@@ -331,15 +331,19 @@ namespace CombatSimulation.Core
         }
 
         // Stage 11. A missile without hit points dies; a bullet expires after the physics of its last tick.
-        // A death in the same tick wins over the expiry.
+        // A death in the same tick wins over the expiry. A shot beam expires as a bullet does (phase 5, step 4d).
         public void MarkDeaths(long tick, BattleSetup setup)
         {
             for (var i = 0; i < _count; ++i)
             {
                 ref var bullet = ref _items[i];
-                if (!bullet.IsAlive || bullet.IsBeam || bullet.PendingRemoval != RemovalReason.None) continue;
+                if (!bullet.IsAlive || bullet.PendingRemoval != RemovalReason.None) continue;
 
-                if (bullet.Definition.IsMissile && bullet.HitPoints <= 0f && setup.IsLocalOwner(bullet.Owner))
+                if (bullet.IsBeam)
+                {
+                    if (bullet.ExpiryTick == tick) bullet.PendingRemoval = RemovalReason.Expiry;
+                }
+                else if (bullet.Definition.IsMissile && bullet.HitPoints <= 0f && setup.IsLocalOwner(bullet.Owner))
                     bullet.PendingRemoval = RemovalReason.Death;
                 else if (bullet.ExpiryTick == tick)
                     bullet.PendingRemoval = RemovalReason.Expiry;

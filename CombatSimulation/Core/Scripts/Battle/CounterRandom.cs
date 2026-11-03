@@ -17,6 +17,9 @@ namespace CombatSimulation.Core
 
         // A shot of a weapon with a random factor (phase 5, step 4a): speed, lifetime, in this order.
         ShotVariation = 5,
+
+        // A beam's spread angle in one tick (phase 5, step 4d).
+        BeamJitter = 6,
     }
 
     // Counter-based random (investigation 6.7): a draw is a function of match seed, entity, tick and purpose.

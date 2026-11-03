@@ -174,8 +174,9 @@ namespace CombatSimulation.Ai
                     return Create(ship, definition.Barrels[cannon.BarrelIndex], cannon.Bullet.Speed,
                         cannon.Bullet.ParentVelocityEffect, cannon.EnergyCost, FireRateOf(cannon.Cooldown));
                 case BeamDefinition beam:
-                    return Create(ship, definition.Barrels[beam.BarrelIndex], 0f, 0f, beam.EnergyPerSecond,
-                        FireRateOf(beam.Cooldown));
+                    // Legacy WeaponInfo.EnergyCost: per second for a continuous beam, per shot for a shot beam.
+                    return Create(ship, definition.Barrels[beam.BarrelIndex], 0f, 0f,
+                        beam.IsShot ? beam.ActivationCost : beam.EnergyPerSecond, FireRateOf(beam.Cooldown));
                 default:
                     throw new InvalidOperationException($"AI weapon at device {weapon.DeviceIndex} is not a cannon or a beam");
             }

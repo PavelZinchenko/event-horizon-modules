@@ -60,7 +60,7 @@ namespace CombatSimulation.Ai
         // Legacy WeaponInfo.Recoil: ammunition recoil ÷ ship weight for common weapons, else 0.
         public float Recoil { get; }
 
-        // Legacy WeaponInfo.Spread in radians: the full spread angle. The core beam has none, so the side table keeps it.
+        // Legacy WeaponInfo.Spread in radians: the full spread angle.
         public float Spread { get; }
     }
 

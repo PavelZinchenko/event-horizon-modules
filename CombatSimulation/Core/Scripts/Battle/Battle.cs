@@ -183,6 +183,12 @@ namespace CombatSimulation.Core
         internal ShapeTable Shapes => _world.Shapes;
         internal TailSegmentStore Segments => _world.Segments;
         internal ShipEntity FindShip(EntityId id) => _world.FindShip(id);
+        internal bool TryGetBullet(EntityId id, out int index)
+        {
+            index = -1;
+            return _world.Entities.TryGet(id, out var handle) && handle.Kind == EntityKind.Bullet &&
+                   _world.Bullets.TryGet(handle, out index);
+        }
         internal int ShipEntryCount => _world.ShipEntryCount;
         internal ShipEntity GetShipEntry(int index) => _world.GetShipEntry(index);
         internal bool TryRegister(EntityId id, EntityHandle handle) => _world.TryRegister(id, handle);
@@ -618,14 +624,15 @@ namespace CombatSimulation.Core
         }
 
         // A bullet attached to the ship leaves with it, as a beam does, without triggers (owner, 2026-11-02). Its copies
-        // on other devices leave with their ship copy too.
+        // on other devices leave with their ship copy too. A continuous beam left when its device stopped; a shot beam
+        // that has not expired leaves here (legacy BulletCompositeDisposable, phase 5, step 4d).
         private void RemoveAttachedBullets(ShipEntity ship)
         {
             for (var i = 0; i < _world.Bullets.Capacity; ++i)
             {
                 if (!_world.Bullets.IsAlive(i)) continue;
                 ref var bullet = ref _world.Bullets[i];
-                if (bullet.IsBeam || bullet.ParentId != ship.Id || !bullet.Definition.AttachedToParent) continue;
+                if (bullet.ParentId != ship.Id || !bullet.IsBeam && !bullet.Definition.AttachedToParent) continue;
                 bullet.SkipTriggers = true;
                 if (bullet.PendingRemoval == RemovalReason.None) bullet.PendingRemoval = RemovalReason.Disposal;
             }

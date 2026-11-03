@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CombatSimulation.Physics;
 using GameDiagnostics;
+using Utilites;
 
 namespace CombatSimulation.Core
 {
@@ -27,7 +28,7 @@ namespace CombatSimulation.Core
                 var barrel = ship.Definition.Barrels[definition.BarrelIndex];
                 beam.BeamOrigin = world.Torus.Wrap(world.GetPosition(ship.Body) +
                     world.GetRotation(ship.Body).Rotate(barrel.Position));
-                beam.BeamAngle = world.GetAngle(ship.Body) + barrel.Angle;
+                beam.BeamAngle = Aim(battle, beam, world.GetAngle(ship.Body) + barrel.Angle);
                 var direction = new Vec2((float)Math.Cos(beam.BeamAngle), (float)Math.Sin(beam.BeamAngle));
                 // Match PhysicsWorld's torus ray-length cap, including the no-hit endpoint.
                 var range = Math.Min(definition.Range, Math.Min(world.Torus.Width, world.Torus.Height));
@@ -77,6 +78,53 @@ namespace CombatSimulation.Core
                     _candidates.Add(candidate);
                 }
             }
+        }
+
+        // Phase 5, step 4d. Legacy LookAtTargetController: a tracking beam points at the centre of the target it touched
+        // in the previous tick, at most TrackingAngle from the barrel; without one it turns by up to the full spread
+        // either way. Legacy BeamController: up to half the spread either way. The draw is counter-based on the beam ID,
+        // so a remote copy draws the same angle; no spread draws nothing.
+        private static float Aim(Battle battle, in BulletEntity beam, float barrelAngle)
+        {
+            var definition = beam.BeamDefinition;
+            if (definition.TrackingAngle > 0f && TryGetTargetPosition(battle, beam.TargetId, out var target))
+            {
+                var delta = battle.World.Torus.Delta(beam.BeamOrigin, target);
+                if (delta.X != 0f || delta.Y != 0f)
+                {
+                    var turn = Battle.WrapAngle((float)Math.Atan2(delta.Y, delta.X) - barrelAngle);
+                    return barrelAngle + Math.Max(-definition.TrackingAngle, Math.Min(definition.TrackingAngle, turn));
+                }
+            }
+
+            if (definition.Spread <= 0f) return barrelAngle;
+            var random = CounterRandom.Create(battle.Setup.MatchSeed, beam.Id, battle.Tick, RandomPurpose.BeamJitter);
+            var draw = random.NextFloat();
+            return definition.TrackingAngle > 0f
+                ? barrelAngle + (2f * draw - 1f) * definition.Spread
+                : barrelAngle + (draw - 0.5f) * definition.Spread;
+        }
+
+        // Legacy Body.WorldPosition of the touched unit: a ship, a tail segment or a missile.
+        private static bool TryGetTargetPosition(Battle battle, EntityId id, out Vec2 position)
+        {
+            position = Vec2.Zero;
+            if (id.IsNull) return false;
+            var ship = battle.FindShip(id);
+            if (ship != null)
+            {
+                position = battle.World.GetPosition(ship.Body);
+                return true;
+            }
+            var segment = battle.FindSegment(id);
+            if (segment != null)
+            {
+                position = battle.World.GetPosition(segment.Body);
+                return true;
+            }
+            if (!battle.TryGetBullet(id, out var index)) return false;
+            position = battle.World.GetBulletPosition(battle.Bullets[index].Body);
+            return true;
         }
 
         public void Collect(ContactResolver contacts)

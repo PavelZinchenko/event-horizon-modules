@@ -307,9 +307,16 @@ namespace CombatSimulation.Core
             beam.Owner = ship.Owner;
             beam.DeviceIndex = device.Index;
             beam.BeamDefinition = device.Definition;
-            beam.ExpiryTick = long.MaxValue; // Device-owned lifetime, without projectile expiry.
             beam.SpawnTick = spawnTick;
             beam.Confirmed = Setup.IsLocalOwner(ship.Owner);
+            if (device.Definition.IsShot)
+            {
+                // Phase 5, step 4d: a shot beam expires after its lifetime, as a projectile does.
+                beam.ExpiryTick = spawnTick + device.Definition.LifetimeTicks - 1;
+                return index;
+            }
+
+            beam.ExpiryTick = long.MaxValue; // Device-owned lifetime, without projectile expiry.
             device.Attach(handle);
             return index;
         }
