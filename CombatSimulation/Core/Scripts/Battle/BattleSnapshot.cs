@@ -93,7 +93,7 @@ namespace CombatSimulation.Core
                 if (_devices.Length < deviceCount + devices)
                     Array.Resize(ref _devices, Math.Max(deviceCount + devices, _devices.Length * 2));
                 for (var d = 0; d < devices; ++d)
-                    _devices[deviceCount + d] = ship.GetDevice(d).GetState(battle, ship, tick);
+                    _devices[deviceCount + d] = ship.GetDevice(d).GetState(battle.DeviceContext, ship, tick);
                 _ships[_shipCount++] = new ShipState(ship, world, deviceCount);
                 deviceCount += devices;
             }

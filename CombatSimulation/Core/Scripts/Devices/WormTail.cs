@@ -110,17 +110,17 @@ namespace CombatSimulation.Core
             HeadGrowthTick = tick;
         }
 
-        public override void Update(Battle battle, ShipEntity ship) => battle.GrowTail(ship, this);
+        public override void Update(DeviceContext context, ShipEntity ship) => context.GrowTail(ship, this);
 
         // Legacy segments update while their ship retreats.
-        internal override void UpdateRetreating(Battle battle, ShipEntity ship) => Update(battle, ship);
+        internal override void UpdateRetreating(DeviceContext context, ShipEntity ship) => Update(context, ship);
 
         // Legacy WormTailDeviceV2.TryApplyModification: the attached share of the tail.
-        internal override void AddStatus(Battle battle, ShipEntity ship, ref ShipStatus status) =>
-            status.AddResistanceShare(battle.CountAttachedSegments(this) / (float)Definition.Size);
+        internal override void AddStatus(DeviceContext context, ShipEntity ship, ref ShipStatus status) =>
+            status.AddResistanceShare(context.CountAttachedSegments(this) / (float)Definition.Size);
 
         // Legacy CanBeActivated is false: the device has no use.
-        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick) =>
+        internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick) =>
             new DeviceState(false, false, 0f);
     }
 }

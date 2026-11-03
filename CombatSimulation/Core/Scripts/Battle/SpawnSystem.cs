@@ -80,7 +80,7 @@ namespace CombatSimulation.Core
             bay.RecordLaunch();
             _world.Events.Add(BattleEvent.Spawn(BattleId, Tick, _world.Events.Count, ship, _world.Authority(ship.Owner)));
             _network?.CaptureDroneSpawn(ship, parent.Id);
-            parent.GetDevice(request.DeviceIndex).OnShipLaunched(_battle, parent, id, Tick);
+            parent.GetDevice(request.DeviceIndex).OnShipLaunched(_battle.DeviceContext, parent, id, Tick);
         }
 
         // Legacy ClonningDevice.SpawnShip: the mothership position plus its scale in a random direction of whole

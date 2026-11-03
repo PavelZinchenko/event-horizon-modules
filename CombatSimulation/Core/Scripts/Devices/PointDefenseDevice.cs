@@ -22,30 +22,30 @@ namespace CombatSimulation.Core
             _queryTick = 0;
         }
 
-        public override void Update(Battle battle, ShipEntity ship)
+        public override void Update(DeviceContext context, ShipEntity ship)
         {
             if (!IsControlOn(ship))
             {
                 IsActive = false;
-                Deactivate(battle);
+                Deactivate(context);
                 return;
             }
 
-            IsActive = IsReady(ship, battle.Tick);
+            IsActive = IsReady(ship, context.Tick);
             if (Enabled || !IsActive || !ship.Energy.TryConsume(Definition.EnergyCost)) return;
 
             Enabled = true;
             if (!_started)
             {
-                NextQueryTick = battle.Tick + Definition.QueryCooldownTicks;
+                NextQueryTick = context.Tick + Definition.QueryCooldownTicks;
                 _started = true;
             }
         }
 
-        public override void Deactivate(Battle battle) => Disable(battle.Tick);
+        public override void Deactivate(DeviceContext context) => Disable(context.Tick);
 
         // Legacy PointDefenseSystem.CanBeActivated: the activation cooldown, and enabled or the cost available.
-        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick) =>
+        internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick) =>
             new DeviceState(IsReady(ship, tick + 1), IsActive,
                 DeviceState.Remaining(tick + 1 - _stoppedTick, Definition.ActivationCooldownTicks));
 

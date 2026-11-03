@@ -17,48 +17,48 @@ namespace CombatSimulation.Core
         public bool IsActive { get; protected set; }
 
         // Stage 2, after the resources recharge. Not called while the ship retreats.
-        public abstract void Update(Battle battle, ShipEntity ship);
+        public abstract void Update(DeviceContext context, ShipEntity ship);
 
         // Restores a pooled device for a new entity that enters the battle at the tick; persistent bay inventory is
         // stored on the roster.
         public virtual void Reset(long tick) => IsActive = false;
 
         // Stops persistent devices before retreat queries or before the parent is released.
-        public virtual void Deactivate(Battle battle) { }
+        public virtual void Deactivate(DeviceContext context) { }
 
         // Stage 2 for a retreating ship, and before the parent is released: no system is active.
-        internal void Stop(Battle battle)
+        internal void Stop(DeviceContext context)
         {
             IsActive = false;
-            Deactivate(battle);
+            Deactivate(context);
         }
 
         // Stage 2 for a retreating ship (legacy ShipRetreatEffect: no system activates). Most devices stop; a running
         // use goes on as with a released bit.
-        internal virtual void UpdateRetreating(Battle battle, ShipEntity ship) => Stop(battle);
+        internal virtual void UpdateRetreating(DeviceContext context, ShipEntity ship) => Stop(context);
 
         // Stage 3 (phase 5, step 7): adds the modifiers of a running use.
-        internal virtual void AddStatus(Battle battle, ShipEntity ship, ref ShipStatus status) { }
+        internal virtual void AddStatus(DeviceContext context, ShipEntity ship, ref ShipStatus status) { }
 
         // End of stage 10, on the owner only: the damage of this tick left no armor. True when the device saved the
         // ship; the next devices are not asked.
-        internal virtual bool OnLethalDamage(Battle battle, ShipEntity ship) => false;
+        internal virtual bool OnLethalDamage(DeviceContext context, ShipEntity ship) => false;
 
         // A remote copy follows its owner's record of a use that started or ended at the tick (H8).
-        internal virtual void ApplyRemoteUse(Battle battle, ShipEntity ship, long tick, bool started) { }
+        internal virtual void ApplyRemoteUse(DeviceContext context, ShipEntity ship, long tick, bool started) { }
 
         // Phase 5, step 7c: this device launched the child ship at the tick, locally or by its owner's record.
-        internal virtual void OnShipLaunched(Battle battle, ShipEntity ship, EntityId child, long tick) { }
+        internal virtual void OnShipLaunched(DeviceContext context, ShipEntity ship, EntityId child, long tick) { }
 
         // A ship that this device index of the slot launched left the battle at the tick. The device of the slot's
         // active ship hears it, though a former deployment may have launched it.
-        internal virtual void OnShipLost(Battle battle, ShipEntity ship, EntityId child, long tick) { }
+        internal virtual void OnShipLost(DeviceContext context, ShipEntity ship, EntityId child, long tick) { }
 
         // Legacy WeaponType other than Continuous and RequiredCharging: a warp blocks it.
         internal virtual bool IsShotWeapon => false;
 
         // Stage 14, at the end of the tick.
-        internal virtual DeviceState GetState(Battle battle, ShipEntity ship, long tick) => DeviceState.Inert;
+        internal virtual DeviceState GetState(DeviceContext context, ShipEntity ship, long tick) => DeviceState.Inert;
     }
 
     // Legacy CommonCannon on a FixedPlatform (Q1). A shot needs the held bit, the weapon cooldown, the barrel
@@ -88,12 +88,12 @@ namespace CombatSimulation.Core
             if (LastShotTick < tick + Definition.CooldownTicks) LastShotTick = tick;
         }
 
-        public override void Update(Battle battle, ShipEntity ship)
+        public override void Update(DeviceContext context, ShipEntity ship)
         {
             IsActive = false;
             if (!IsControlOn(ship)) return;
 
-            var tick = battle.Tick;
+            var tick = context.Tick;
             if (tick - LastShotTick < Definition.CooldownTicks) return;
             if (!ship.IsBarrelReady(Definition.BarrelIndex, tick)) return;
             if (!ship.Energy.TryConsume(Definition.EnergyCost)) return;
@@ -101,11 +101,12 @@ namespace CombatSimulation.Core
             IsActive = true;
             LastShotTick = tick;
             ship.RecordBarrelShot(Definition.BarrelIndex, tick);
-            battle.RequestSpawn(new SpawnRequest(ship, Index, Definition.BarrelIndex, Definition.Spread, Definition.Bullet));
+            context.RequestSpawn(new SpawnRequest(ship, Index, Definition.BarrelIndex, Definition.Spread,
+                Definition.Bullet));
         }
 
         // Legacy CommonCannon: CanBeActivated adds the barrel and the energy cost; Cooldown is the larger timer.
-        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick)
+        internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick)
         {
             var weapon = DeviceState.Remaining(tick + 1 - LastShotTick, Definition.CooldownTicks);
             var barrel = DeviceState.Remaining(tick + 1 - ship.GetBarrelShotTick(Definition.BarrelIndex),
@@ -119,7 +120,7 @@ namespace CombatSimulation.Core
     internal sealed class InertDevice : ShipDevice
     {
         public InertDevice(int index) : base(index) { }
-        public override void Update(Battle battle, ShipEntity ship) { }
+        public override void Update(DeviceContext context, ShipEntity ship) { }
     }
 
     // A projectile, beam or launched ship (drone or clone) requested at stage 2. Stage 5 creates it at the weapon or bay

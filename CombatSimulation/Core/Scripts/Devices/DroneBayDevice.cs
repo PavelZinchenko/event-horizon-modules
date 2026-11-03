@@ -34,18 +34,18 @@ namespace CombatSimulation.Core
         public DroneBayDevice(DroneBayDefinition definition, int index) : base(index) => Definition = definition;
         public DroneBayDefinition Definition { get; }
 
-        public override void Update(Battle battle, ShipEntity ship)
+        public override void Update(DeviceContext context, ShipEntity ship)
         {
-            IsActive = IsControlOn(ship) && IsReady(ship, battle.Tick);
-            if (!IsActive || !battle.Setup.IsLocalOwner(ship.Owner) || !ship.Energy.TryConsume(Definition.EnergyCost))
+            IsActive = IsControlOn(ship) && IsReady(ship, context.Tick);
+            if (!IsActive || !context.Setup.IsLocalOwner(ship.Owner) || !ship.Energy.TryConsume(Definition.EnergyCost))
                 return;
 
-            ship.LastDroneLaunchTick = battle.Tick;
-            battle.RequestSpawn(SpawnRequest.Launch(ship, Index));
+            ship.LastDroneLaunchTick = context.Tick;
+            context.RequestSpawn(SpawnRequest.Launch(ship, Index));
         }
 
         // Legacy DroneBay: CanBeActivated needs a drone in the hangar, the launch timer and the cost.
-        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick)
+        internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick)
         {
             var bay = ship.Slot.GetBay(Index);
             return new DeviceState(IsReady(ship, tick + 1), IsActive,

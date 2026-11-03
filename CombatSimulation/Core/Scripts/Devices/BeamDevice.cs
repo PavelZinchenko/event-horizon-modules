@@ -18,31 +18,31 @@ namespace CombatSimulation.Core
         }
 
         // Legacy ContinuousCannon: Active is the held bit while the beam is attached, even in the tick the energy runs out.
-        public override void Update(Battle battle, ShipEntity ship)
+        public override void Update(DeviceContext context, ShipEntity ship)
         {
             if (_active)
             {
                 IsActive = IsControlOn(ship);
                 if (!IsActive || !ship.Energy.TryConsume(Definition.EnergyPerSecond * Battle.TickDuration))
-                    Deactivate(battle);
+                    Deactivate(context);
                 return;
             }
 
-            IsActive = IsControlOn(ship) && IsReady(ship, battle.Tick);
+            IsActive = IsControlOn(ship) && IsReady(ship, context.Tick);
             if (!IsActive || !ship.Energy.TryConsume(Definition.ActivationCost))
                 return;
 
-            ship.RecordBarrelShot(Definition.BarrelIndex, battle.Tick);
-            battle.RequestSpawn(new SpawnRequest(ship, this));
+            ship.RecordBarrelShot(Definition.BarrelIndex, context.Tick);
+            context.RequestSpawn(new SpawnRequest(ship, this));
         }
 
         // Legacy ContinuousCannon.CanBeActivated has no energy check.
-        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick)
+        internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick)
         {
             var weapon = _active ? 0f : DeviceState.Remaining(tick + 1 - _stoppedTick, Definition.CooldownTicks);
             var barrel = DeviceState.Remaining(tick + 1 - ship.GetBarrelShotTick(Definition.BarrelIndex),
                 ShipEntity.BarrelCooldownTicks);
-            var beam = _active && battle.Bullets.TryGet(_handle, out var index) ? battle.Bullets[index].Id : default;
+            var beam = _active && context.Bullets.TryGet(_handle, out var index) ? context.Bullets[index].Id : default;
             return new DeviceState(_active || IsReady(ship, tick + 1), IsActive, Math.Max(weapon, barrel), beam: beam);
         }
 
@@ -72,13 +72,13 @@ namespace CombatSimulation.Core
             _stoppedTick = tick;
         }
 
-        public override void Deactivate(Battle battle)
+        public override void Deactivate(DeviceContext context)
         {
             if (!_active) return;
-            battle.Bullets.MarkRemoval(_handle, RemovalReason.Disposal);
+            context.Bullets.MarkRemoval(_handle, RemovalReason.Disposal);
             _active = false;
             _handle = default;
-            _stoppedTick = battle.Tick;
+            _stoppedTick = context.Tick;
         }
 
         private EntityHandle _handle;

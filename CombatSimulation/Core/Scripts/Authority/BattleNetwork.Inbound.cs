@@ -274,7 +274,8 @@ namespace CombatSimulation.Core
             // The copy of the parent links its clone (phase 5, step 7c); a parent that already left needs nothing.
             var parent = _world.FindShip(operation.ParentId);
             if (parent != null && parent.Slot == bay.Slot)
-                parent.GetDevice(bay.Key.DeviceIndex).OnShipLaunched(_battle, parent, ship.Id, operation.Tick);
+                parent.GetDevice(bay.Key.DeviceIndex)
+                    .OnShipLaunched(_battle.DeviceContext, parent, ship.Id, operation.Tick);
             return true;
         }
 
@@ -316,7 +317,8 @@ namespace CombatSimulation.Core
         {
             var ship = _world.FindShip(operation.EntityId);
             if (ship != null && ship.Owner == operation.Owner && operation.DeviceIndex < ship.DeviceCount)
-                ship.GetDevice(operation.DeviceIndex).ApplyRemoteUse(_battle, ship, operation.Tick, operation.UseStarted);
+                ship.GetDevice(operation.DeviceIndex)
+                    .ApplyRemoteUse(_battle.DeviceContext, ship, operation.Tick, operation.UseStarted);
         }
 
         private bool ApplyRemoteRemoval(in OwnerOperation operation)

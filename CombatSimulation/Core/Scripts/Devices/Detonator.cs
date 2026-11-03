@@ -56,30 +56,30 @@ namespace CombatSimulation.Core
         }
 
         // Legacy CanBeActivated keeps its cooldown during the lock, so Active is the held bit with energy.
-        public override void Update(Battle battle, ShipEntity ship)
+        public override void Update(DeviceContext context, ShipEntity ship)
         {
-            IsActive = IsControlOn(ship) && _use.IsReady(Definition.Activation, ship, battle.Tick);
+            IsActive = IsControlOn(ship) && _use.IsReady(Definition.Activation, ship, context.Tick);
             if (_use.IsRunning)
             {
-                UpdateRunning(battle, ship);
+                UpdateRunning(context, ship);
                 return;
             }
 
-            if (!IsActive || !battle.Setup.IsLocalOwner(ship.Owner) ||
-                !_use.TryStart(Definition.Activation, ship, battle.Tick)) return;
-            battle.CaptureDeviceUse(ship, Index, true, battle.Tick);
+            if (!IsActive || !context.Setup.IsLocalOwner(ship.Owner) ||
+                !_use.TryStart(Definition.Activation, ship, context.Tick)) return;
+            context.CaptureDeviceUse(ship, Index, true, context.Tick);
         }
 
         // A retreat does not stop the lock (legacy: the lock runs without the key).
-        internal override void UpdateRetreating(Battle battle, ShipEntity ship)
+        internal override void UpdateRetreating(DeviceContext context, ShipEntity ship)
         {
             IsActive = false;
-            if (_use.IsRunning) UpdateRunning(battle, ship);
+            if (_use.IsRunning) UpdateRunning(context, ship);
         }
 
-        internal override void AddStatus(Battle battle, ShipEntity ship, ref ShipStatus status)
+        internal override void AddStatus(DeviceContext context, ShipEntity ship, ref ShipStatus status)
         {
-            var tick = battle.Tick;
+            var tick = context.Tick;
             if (!_use.IsRunningAt(Definition.Activation, tick)) return;
 
             status.Flags |= ShipStatusFlags.Drift;
@@ -91,23 +91,23 @@ namespace CombatSimulation.Core
             if (tint > status.Tint) status.Tint = tint;
         }
 
-        internal override void ApplyRemoteUse(Battle battle, ShipEntity ship, long tick, bool started)
+        internal override void ApplyRemoteUse(DeviceContext context, ShipEntity ship, long tick, bool started)
         {
             if (started && !_use.IsRunning) _use.Start(Definition.Activation, tick);
         }
 
-        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick) =>
+        internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick) =>
             new DeviceState(_use.IsReady(Definition.Activation, ship, tick + 1), IsActive,
                 _use.Cooldown(Definition.Activation, tick + 1));
 
-        private void UpdateRunning(Battle battle, ShipEntity ship)
+        private void UpdateRunning(DeviceContext context, ShipEntity ship)
         {
-            if (!_use.ShouldEnd(Definition.Activation, battle.Tick, true)) return;
+            if (!_use.ShouldEnd(Definition.Activation, context.Tick, true)) return;
 
-            _use.End(Definition.Activation, battle.Tick);
-            if (!battle.Setup.IsLocalOwner(ship.Owner)) return;
+            _use.End(Definition.Activation, context.Tick);
+            if (!context.Setup.IsLocalOwner(ship.Owner)) return;
 
-            battle.RequestSpawn(new SpawnRequest(ship, Index, Definition.Explosion));
+            context.RequestSpawn(new SpawnRequest(ship, Index, Definition.Explosion));
             ship.Armor.Consume(ship.Armor.Max);
         }
 

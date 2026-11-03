@@ -109,7 +109,7 @@ namespace CombatSimulation.Core
                 var ship = _world.GetShipEntry(i);
                 if (ship == null || !Setup.IsLocalOwner(ship.Owner) || ship.Armor.Value > 0f) continue;
                 for (var d = 0; d < ship.DeviceCount; ++d)
-                    if (ship.GetDevice(d).OnLethalDamage(_battle, ship)) break;
+                    if (ship.GetDevice(d).OnLethalDamage(_battle.DeviceContext, ship)) break;
             }
         }
 

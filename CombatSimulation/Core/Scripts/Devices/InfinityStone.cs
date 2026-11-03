@@ -29,27 +29,27 @@ namespace CombatSimulation.Core
             _use.Reset();
         }
 
-        public override void Update(Battle battle, ShipEntity ship)
+        public override void Update(DeviceContext context, ShipEntity ship)
         {
-            IsActive = IsControlOn(ship) && _use.IsReady(Definition.Activation, ship, battle.Tick);
-            if (!IsActive || !battle.Setup.IsLocalOwner(ship.Owner)) return;
+            IsActive = IsControlOn(ship) && _use.IsReady(Definition.Activation, ship, context.Tick);
+            if (!IsActive || !context.Setup.IsLocalOwner(ship.Owner)) return;
 
-            _use.Start(Definition.Activation, battle.Tick);
+            _use.Start(Definition.Activation, context.Tick);
             Restore(ship);
-            battle.CaptureDeviceUse(ship, Index, true, battle.Tick);
+            context.CaptureDeviceUse(ship, Index, true, context.Tick);
         }
 
         // NoContacts runs on without the key.
-        internal override void UpdateRetreating(Battle battle, ShipEntity ship) => IsActive = false;
+        internal override void UpdateRetreating(DeviceContext context, ShipEntity ship) => IsActive = false;
 
-        internal override void AddStatus(Battle battle, ShipEntity ship, ref ShipStatus status)
+        internal override void AddStatus(DeviceContext context, ShipEntity ship, ref ShipStatus status)
         {
-            if (_use.IsRunningAt(Definition.Activation, battle.Tick)) status.Flags |= ShipStatusFlags.NoContacts;
+            if (_use.IsRunningAt(Definition.Activation, context.Tick)) status.Flags |= ShipStatusFlags.NoContacts;
         }
 
-        internal override bool OnLethalDamage(Battle battle, ShipEntity ship)
+        internal override bool OnLethalDamage(DeviceContext context, ShipEntity ship)
         {
-            var tick = battle.Tick;
+            var tick = context.Tick;
             if (_use.IsRunningAt(Definition.Activation, tick))
             {
                 Restore(ship);
@@ -59,19 +59,19 @@ namespace CombatSimulation.Core
             if (!_use.IsReady(Definition.Activation, ship, tick)) return false;
             _use.StartNextTick(Definition.Activation, tick);
             Restore(ship);
-            battle.CaptureDeviceUse(ship, Index, true, tick + 1);
+            context.CaptureDeviceUse(ship, Index, true, tick + 1);
             return true;
         }
 
         // The record names the first tick of NoContacts; the copy's cooldown counts from it.
-        internal override void ApplyRemoteUse(Battle battle, ShipEntity ship, long tick, bool started)
+        internal override void ApplyRemoteUse(DeviceContext context, ShipEntity ship, long tick, bool started)
         {
             if (!started) return;
             _use.Start(Definition.Activation, tick);
             Restore(ship);
         }
 
-        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick) =>
+        internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick) =>
             new DeviceState(_use.IsReady(Definition.Activation, ship, tick + 1), IsActive,
                 _use.Cooldown(Definition.Activation, tick + 1));
 

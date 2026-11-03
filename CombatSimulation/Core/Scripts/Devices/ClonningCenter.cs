@@ -44,22 +44,22 @@ namespace CombatSimulation.Core
         }
 
         // Legacy Active is the held bit with CanBeActivated: no clone, the cooldown and the cost.
-        public override void Update(Battle battle, ShipEntity ship)
+        public override void Update(DeviceContext context, ShipEntity ship)
         {
-            IsActive = IsControlOn(ship) && IsReady(ship, battle.Tick);
-            if (!IsActive || !battle.Setup.IsLocalOwner(ship.Owner) ||
-                !_use.TryStart(Definition.Activation, ship, battle.Tick)) return;
+            IsActive = IsControlOn(ship) && IsReady(ship, context.Tick);
+            if (!IsActive || !context.Setup.IsLocalOwner(ship.Owner) ||
+                !_use.TryStart(Definition.Activation, ship, context.Tick)) return;
 
-            battle.RequestSpawn(SpawnRequest.Launch(ship, Index));
+            context.RequestSpawn(SpawnRequest.Launch(ship, Index));
         }
 
-        internal override void OnShipLaunched(Battle battle, ShipEntity ship, EntityId child, long tick)
+        internal override void OnShipLaunched(DeviceContext context, ShipEntity ship, EntityId child, long tick)
         {
             _clone = child;
             if (!_use.IsRunning) _use.Start(Definition.Activation, tick);
         }
 
-        internal override void OnShipLost(Battle battle, ShipEntity ship, EntityId child, long tick)
+        internal override void OnShipLost(DeviceContext context, ShipEntity ship, EntityId child, long tick)
         {
             if (child != _clone) return;
             _clone = default;
@@ -68,7 +68,7 @@ namespace CombatSimulation.Core
 
         // Legacy Cooldown is 1 while the clone lives. The AI's SpawnDrones counts the device as one clone in the hangar
         // without a clone, and one active clone with it.
-        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick)
+        internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick)
         {
             var hasClone = !_clone.IsNull;
             return new DeviceState(IsReady(ship, tick + 1), IsActive,

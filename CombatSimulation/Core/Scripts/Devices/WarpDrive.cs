@@ -46,32 +46,32 @@ namespace CombatSimulation.Core
         }
 
         // Legacy CanBeActivated stays true during a warp, so Active is the held bit.
-        public override void Update(Battle battle, ShipEntity ship)
+        public override void Update(DeviceContext context, ShipEntity ship)
         {
             var held = IsControlOn(ship);
             if (_use.IsRunning)
             {
                 IsActive = held;
-                UpdateRunning(battle, ship, held);
+                UpdateRunning(context, ship, held);
                 return;
             }
 
-            IsActive = held && _use.IsReady(Definition.Activation, ship, battle.Tick);
-            if (!IsActive || !battle.Setup.IsLocalOwner(ship.Owner) ||
-                !_use.TryStart(Definition.Activation, ship, battle.Tick)) return;
+            IsActive = held && _use.IsReady(Definition.Activation, ship, context.Tick);
+            if (!IsActive || !context.Setup.IsLocalOwner(ship.Owner) ||
+                !_use.TryStart(Definition.Activation, ship, context.Tick)) return;
 
-            Start(battle, ship);
-            battle.CaptureDeviceUse(ship, Index, true, battle.Tick);
+            Start(context, ship);
+            context.CaptureDeviceUse(ship, Index, true, context.Tick);
         }
 
         // A retreat ends the warp as a released bit does.
-        internal override void UpdateRetreating(Battle battle, ShipEntity ship)
+        internal override void UpdateRetreating(DeviceContext context, ShipEntity ship)
         {
             IsActive = false;
-            if (_use.IsRunning) UpdateRunning(battle, ship, false);
+            if (_use.IsRunning) UpdateRunning(context, ship, false);
         }
 
-        internal override void AddStatus(Battle battle, ShipEntity ship, ref ShipStatus status)
+        internal override void AddStatus(DeviceContext context, ShipEntity ship, ref ShipStatus status)
         {
             if (!_use.IsRunning) return;
 
@@ -80,41 +80,41 @@ namespace CombatSimulation.Core
                 if (ship.GetDevice(i).IsShotWeapon) status.BlockedDevices |= 1UL << i;
         }
 
-        internal override void ApplyRemoteUse(Battle battle, ShipEntity ship, long tick, bool started)
+        internal override void ApplyRemoteUse(DeviceContext context, ShipEntity ship, long tick, bool started)
         {
             if (started)
             {
                 if (_use.IsRunning) return;
                 _use.Start(Definition.Activation, tick);
-                Start(battle, ship);
+                Start(context, ship);
             }
             else
             {
                 // A copy that already ended at the full duration takes the owner's cooldown start.
                 _use.End(Definition.Activation, tick);
-                battle.World.SetLinearVelocity(ship.Body, Vec2.Zero);
+                context.Physics.SetLinearVelocity(ship.Body, Vec2.Zero);
             }
         }
 
-        internal override DeviceState GetState(Battle battle, ShipEntity ship, long tick) =>
+        internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick) =>
             new DeviceState(_use.IsRunning || _use.IsReady(Definition.Activation, ship, tick + 1), IsActive,
                 _use.IsRunning ? 0f : _use.Cooldown(Definition.Activation, tick + 1));
 
-        private void UpdateRunning(Battle battle, ShipEntity ship, bool held)
+        private void UpdateRunning(DeviceContext context, ShipEntity ship, bool held)
         {
-            var local = battle.Setup.IsLocalOwner(ship.Owner);
-            if (!_use.ShouldEnd(Definition.Activation, battle.Tick, held || !local)) return;
+            var local = context.Setup.IsLocalOwner(ship.Owner);
+            if (!_use.ShouldEnd(Definition.Activation, context.Tick, held || !local)) return;
 
-            _use.End(Definition.Activation, battle.Tick);
-            battle.World.SetLinearVelocity(ship.Body, Vec2.Zero);
-            if (local) battle.CaptureDeviceUse(ship, Index, false, battle.Tick);
+            _use.End(Definition.Activation, context.Tick);
+            context.Physics.SetLinearVelocity(ship.Body, Vec2.Zero);
+            if (local) context.CaptureDeviceUse(ship, Index, false, context.Tick);
         }
 
-        private void Start(Battle battle, ShipEntity ship)
+        private void Start(DeviceContext context, ShipEntity ship)
         {
-            var rotation = battle.World.GetRotation(ship.Body);
-            battle.World.SetLinearVelocity(ship.Body, Definition.Speed * new Vec2(rotation.C, rotation.S));
-            battle.World.SetAngularVelocity(ship.Body, 0f);
+            var rotation = context.Physics.GetRotation(ship.Body);
+            context.Physics.SetLinearVelocity(ship.Body, Definition.Speed * new Vec2(rotation.C, rotation.S));
+            context.Physics.SetAngularVelocity(ship.Body, 0f);
         }
 
         private DeviceActivation _use;

@@ -28,6 +28,7 @@ namespace CombatSimulation.Core
             var bulletContacts = new BulletContactLedger();
             if (setup.HasRemoteOwners) _network = new BattleNetwork(_world, this, _tails, _triggers, bulletContacts);
             _spawns = new SpawnSystem(_world, this, _triggers, _network);
+            DeviceContext = new DeviceContext(_world, _spawns, _tails, _network);
             _contacts = new ContactSystem(_world, this, _tails, _triggers, _network, bulletContacts);
             _damage = new DamageSystem(_world, this, _tails);
 
@@ -51,6 +52,7 @@ namespace CombatSimulation.Core
 
         // Physics handles and mutable state never leave Core's trusted assembly boundary.
         internal PhysicsWorld World => _world.Physics;
+        internal DeviceContext DeviceContext { get; }
         internal Roster Roster => _world.Roster;
         internal BattleResult Result { get; private set; }
         internal BattleResult CandidateResult { get; private set; }
@@ -163,8 +165,7 @@ namespace CombatSimulation.Core
         internal CommittedBattleFlow Flow => _flow;
         internal TargetGrid Targets => _targets;
 
-        // Spawn, contact and damage members for devices, tails, the network part and tests (8b, decision 1).
-        internal void RequestSpawn(in SpawnRequest request) => _spawns.Request(request);
+        // Contact and damage members for tails, the network part and tests (8b, decision 1).
         internal void QueueDeath(EntityId id) => _damage.QueueDeath(id);
         internal ContactResolver Contacts => _contacts.Resolver;
         internal RammingTracker Ramming => _contacts.Ramming;
@@ -177,8 +178,7 @@ namespace CombatSimulation.Core
             _damage.ApplyShieldFirst(ref shield, ref armor, ref energy, damage, definition, resistanceShare);
         internal void ForgetContacts(EntityId id) => _contacts.Forget(id);
 
-        // World members for devices, AI, the snapshot and tests, which take the battle until DeviceContext (8b,
-        // decision 1).
+        // World members for the bullet and point-defense queries, the snapshot and tests (8b, decision 1).
         internal BulletStore Bullets => _world.Bullets;
         internal ShapeTable Shapes => _world.Shapes;
         internal TailSegmentStore Segments => _world.Segments;
@@ -188,15 +188,13 @@ namespace CombatSimulation.Core
         internal bool TryRegister(EntityId id, EntityHandle handle) => _world.TryRegister(id, handle);
         internal BattleEventAuthority Authority(int owner) => _world.Authority(owner);
 
-        // Tail and trigger members for devices, beam queries and tests (8b, decision 1).
+        // Tail and trigger members for beam queries and tests (8b, decision 1).
         internal TailSegment FindSegment(EntityId id) => _tails.FindSegment(id);
-        internal int CountAttachedSegments(WormTailDevice device) => _tails.CountAttachedSegments(device);
-        internal void GrowTail(ShipEntity ship, WormTailDevice device) => _tails.GrowTail(ship, device);
         internal void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse) =>
             _tails.QueueSegmentHit(segment, damage, impulse);
         internal int TriggerParentCount => _triggers.TriggerParentCount;
 
-        // Network members for devices, tails, triggers, the snapshot, Runtime and tests (8b, decision 1). Without remote
+        // Network members for tails, triggers, homing, the snapshot, Runtime and tests (8b, decision 1). Without remote
         // owners there is no network part (decision 3b): each member gives the value of a network part that received
         // and sent nothing.
         internal List<OwnerOperation> OutgoingOperations => _network?.OutgoingOperations ?? NoOperations;
@@ -209,8 +207,6 @@ namespace CombatSimulation.Core
         internal int PredictedHitCount => _network?.PredictedHitCount ?? 0;
         internal ulong AppliedHitSequence(int sender) => _network?.AppliedHitSequence(sender) ?? 0;
         internal void MissileCorrectionSent(EntityId id, long tick) => _network?.MissileCorrectionSent(id, tick);
-        internal void CaptureDeviceUse(ShipEntity ship, int deviceIndex, bool started, long tick) =>
-            _network?.CaptureDeviceUse(ship, deviceIndex, started, tick);
         internal void CaptureMissileTarget(in BulletEntity bullet, EntityId target) =>
             _network?.CaptureMissileTarget(bullet, target);
         internal void CaptureRemoval(EntityId id, int owner, RemovalReason reason, DroneBayKey? bay = null) =>
@@ -317,8 +313,9 @@ namespace CombatSimulation.Core
                 // Legacy ShipRetreatEffect.CanActivateSystem: a retreating ship activates no system.
                 for (var d = 0; d < ship.DeviceCount; ++d)
                 {
-                    if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) ship.GetDevice(d).UpdateRetreating(this, ship);
-                    else ship.GetDevice(d).Update(this, ship);
+                    var device = ship.GetDevice(d);
+                    if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) device.UpdateRetreating(DeviceContext, ship);
+                    else device.Update(DeviceContext, ship);
                 }
             }
 
@@ -336,7 +333,7 @@ namespace CombatSimulation.Core
 
                 var status = new ShipStatus();
                 for (var d = 0; d < ship.DeviceCount; ++d)
-                    ship.GetDevice(d).AddStatus(this, ship, ref status);
+                    ship.GetDevice(d).AddStatus(DeviceContext, ship, ref status);
 
                 var contactsChanged = ((ship.Status ^ status.Flags) & ShipStatusFlags.NoContacts) != 0;
                 ship.Status = status.Flags;
@@ -598,7 +595,7 @@ namespace CombatSimulation.Core
         internal void RemoveShip(ShipEntity ship, RemovalReason reason)
         {
             _tails.RemoveShipSegments(ship, reason);
-            for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Stop(this);
+            for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Stop(DeviceContext);
             RemoveAttachedBullets(ship);
             _world.Events.Add(BattleEvent.Removal(BattleId, Tick, _world.Events.Count, ship, reason));
             if (ship.IsDrone) CaptureRemoval(ship.Id, ship.Owner, reason, ship.Bay.Key);
@@ -612,7 +609,7 @@ namespace CombatSimulation.Core
             {
                 ship.Bay.RecordLoss();
                 var mothership = ship.Bay.Slot.ActiveShip;
-                mothership?.GetDevice(ship.Bay.Key.DeviceIndex).OnShipLost(this, mothership, ship.Id, Tick);
+                mothership?.GetDevice(ship.Bay.Key.DeviceIndex).OnShipLost(DeviceContext, mothership, ship.Id, Tick);
             }
             _world.Ships.Release(ship);
         }
