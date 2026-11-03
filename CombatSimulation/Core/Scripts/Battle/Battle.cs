@@ -28,12 +28,12 @@ namespace CombatSimulation.Core
         {
             if (setup == null) throw new ArgumentNullException(nameof(setup));
             _world = new BattleWorld(setup);
-            _replayDamage = new float[setup.DamageTypes.Count];
             _commands = new CommandQueue(setup.BattleId);
             _flow = new CommittedBattleFlow(setup);
             _targets = new TargetGrid(World.Torus);
             _tails = new WormTails(_world, this);
             _triggers = new BulletTriggers(_world, this);
+            _network = new BattleNetwork(_world, this, _tails, _triggers);
 
             _published = new BattleSnapshot(BattleId, Roster.Slots.Count);
             _writing = new BattleSnapshot(BattleId, Roster.Slots.Count);
@@ -87,14 +87,54 @@ namespace CombatSimulation.Core
             return reason == null || Reject(frame, reason);
         }
 
+        // Call before Step with records from the reliable ordered stream. Sender identity comes from
+        // Runtime's peer binding. Roster revision gaps are held independently of transport sequencing.
+        public bool Submit(int senderOwner, in OwnerOperation operation)
+        {
+            RequireRunning();
+            return _network.Submit(senderOwner, operation);
+        }
+
+        public bool Submit(in InboundHit record)
+        {
+            RequireRunning();
+            return _network.Submit(record);
+        }
+
+        // Call after the operations the watermark covers. It takes effect once every operation sequence up to
+        // OperationSequence has been submitted; older or repeated watermarks are ignored.
+        public bool Submit(int senderOwner, in OwnerWatermark watermark)
+        {
+            RequireRunning();
+            return _network.Submit(senderOwner, watermark);
+        }
+
+        // Holds each valid correction on its remote entity until stage 1 after its tick. A correction that is not
+        // newer than the held or last applied one for its entity is dropped. Returns the number held.
+        public int Submit(int senderOwner, CorrectionBatch batch)
+        {
+            RequireRunning();
+            return _network.Submit(senderOwner, batch);
+        }
+
+        // Call after Step: the batch describes the last completed tick. AppliedHitSequence acknowledges the hits
+        // of peerOwner that this device has applied by then.
+        public void WriteCorrections(int owner, int peerOwner, CorrectionBatch batch) =>
+            _network.WriteCorrections(owner, peerOwner, batch);
+
+        private void RequireRunning()
+        {
+            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no records.");
+        }
+
         public void Step()
         {
             if (IsCompleted) throw new InvalidOperationException("The battle has a result; it cannot step.");
             if (Tick == long.MaxValue)
                 throw new InvalidOperationException("Battle tick counter exhausted.");
 
-            ApplyRemoteOperations();
-            ApplyCorrections();
+            _network.ApplyRemoteOperations();
+            _network.ApplyCorrections();
             ApplyCommands();
             UpdateSystems();
             EvaluateModifiers();
@@ -105,7 +145,7 @@ namespace CombatSimulation.Core
             StepPhysics();
             CollectContacts();
             ResolveContacts();
-            AccumulateRemoteDamage();
+            _network.AccumulateRemoteDamage();
             ApplyDamage();
             MarkDeaths();
             ApplyStructureChanges();
@@ -119,7 +159,7 @@ namespace CombatSimulation.Core
         // Stage 2: a device asks for a bullet; stage 5 creates it.
         internal void RequestSpawn(in SpawnRequest request) => _spawnRequests.Add(request);
 
-        internal List<ResolvedHit> OutgoingHits => _outgoingHits.Records;
+        internal CommittedBattleFlow Flow => _flow;
         internal TargetGrid Targets => _targets;
         internal ContactResolver Contacts => _contacts;
         internal RammingTracker Ramming => _ramming;
@@ -143,6 +183,48 @@ namespace CombatSimulation.Core
         internal void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse) =>
             _tails.QueueSegmentHit(segment, damage, impulse);
         internal int TriggerParentCount => _triggers.TriggerParentCount;
+
+        // Network members for devices, tails, triggers, the snapshot, Runtime and tests (8b, decision 1).
+        internal List<OwnerOperation> OutgoingOperations => _network.OutgoingOperations;
+        internal List<OwnerOperation> AppliedOperations => _network.AppliedOperations;
+        internal List<ResolvedHit> OutgoingHits => _network.OutgoingHits.Records;
+        internal bool AcceptsInputFrom(EntityId entity, int owner) => _network.AcceptsInputFrom(entity, owner);
+        internal long ConfirmedThrough(int owner) => _network.ConfirmedThrough(owner);
+        internal int PredictedRemovalCount => _network.PredictedRemovalCount;
+        internal int PredictedHitCount => _network.PredictedHitCount;
+        internal ulong AppliedHitSequence(int sender) => _network.AppliedHitSequence(sender);
+        internal void MissileCorrectionSent(EntityId id, long tick) => _network.MissileCorrectionSent(id, tick);
+        internal void CaptureDeviceUse(ShipEntity ship, int deviceIndex, bool started, long tick) =>
+            _network.CaptureDeviceUse(ship, deviceIndex, started, tick);
+        internal void CaptureMissileTarget(in BulletEntity bullet, EntityId target) =>
+            _network.CaptureMissileTarget(bullet, target);
+        internal void CaptureRemoval(EntityId id, int owner, RemovalReason reason, DroneBayKey? bay = null) =>
+            _network.CaptureRemoval(id, owner, reason, bay);
+        internal void CaptureBulletSpawn(in BulletEntity bullet, int source, int barrelIndex, uint sequence, long spawnTick,
+            bool sendLaunch = false, Vec2 muzzle = default, float angle = 0f) =>
+            _network.CaptureBulletSpawn(bullet, source, barrelIndex, sequence, spawnTick, sendLaunch, muzzle, angle);
+        internal void CaptureSegmentSpawn(ShipEntity ship, int deviceIndex, int number, EntityId id) =>
+            _network.CaptureSegmentSpawn(ship, deviceIndex, number, id);
+        internal bool HasDueRemoval(EntityId id) => _network.HasDueRemoval(id);
+        internal bool RecordBulletContact(EntityId attacker, EntityId target, long tick) =>
+            _network.RecordBulletContact(attacker, target, tick);
+        internal void ClaimBulletContact(EntityId attacker, int attackerOwner, int deviceIndex, in BulletEntity target,
+            HitImpactKind kind, float amount) =>
+            _network.ClaimBulletContact(attacker, attackerOwner, deviceIndex, target, kind, amount);
+        internal void SendBulletContact(in ResolvedHit hit) => _network.SendBulletContact(hit);
+
+        // The reasons an owner sends: Unconfirmed is local to a receiver.
+        internal static bool IsSentRemovalReason(RemovalReason reason) =>
+            reason >= RemovalReason.Death && reason <= RemovalReason.Disposal || reason == RemovalReason.Vanish;
+
+        internal static float WrapAngle(float angle)
+        {
+            const float twoPi = (float)(2.0 * Math.PI);
+            angle %= twoPi;
+            if (angle > Math.PI) angle -= twoPi;
+            else if (angle < -Math.PI) angle += twoPi;
+            return angle;
+        }
 
         public bool Submit(in SelfDestructCommand command)
         {
@@ -274,7 +356,7 @@ namespace CombatSimulation.Core
 
             // Each missile reads only its own state and the grid, so the storage order has no effect. Owner target
             // records of this tick apply first (P3).
-            ApplyRemoteOperations(4);
+            _network.ApplyRemoteOperations(4);
             for (var i = 0; i < _world.Bullets.Capacity; ++i)
             {
                 if (!_world.Bullets.IsAlive(i)) continue;
@@ -289,8 +371,8 @@ namespace CombatSimulation.Core
         // Fire confirmations of this tick follow the local spawns (operation stage 6), then unconfirmed bullets leave.
         private void ApplySpawnRequests()
         {
-            RecordSpawnSamples();
-            ApplyRemoteOperations(5);
+            _network.RecordSpawnSamples();
+            _network.ApplyRemoteOperations(5);
             for (var i = 0; i < _spawnRequests.Count; ++i)
             {
                 var request = _spawnRequests[i];
@@ -302,8 +384,8 @@ namespace CombatSimulation.Core
             }
 
             _spawnRequests.Clear();
-            ApplyRemoteOperations(6);
-            RemoveUnconfirmedBullets();
+            _network.ApplyRemoteOperations(6);
+            _network.RemoveUnconfirmedBullets();
             _triggers.PruneTriggerParents();
         }
 
@@ -338,7 +420,7 @@ namespace CombatSimulation.Core
             _world.AddDrone(ship);
             bay.RecordLaunch();
             _world.Events.Add(BattleEvent.Spawn(BattleId, Tick, _world.Events.Count, ship, _world.Authority(ship.Owner)));
-            CaptureDroneSpawn(ship, parent.Id);
+            _network.CaptureDroneSpawn(ship, parent.Id);
             parent.GetDevice(request.DeviceIndex).OnShipLaunched(this, parent, id, Tick);
         }
 
@@ -360,7 +442,7 @@ namespace CombatSimulation.Core
         private void SpawnBullet(in SpawnRequest request, uint sequence)
         {
             var ship = request.Ship;
-            var sample = ReadSpawnSample(ship);
+            var sample = _world.ReadSpawnSample(ship);
             var index = _world.CreateBullet(ship, request.DeviceIndex, request.BarrelIndex, sequence, request.Bullet,
                 request.Spread, Tick, sample, out var muzzle, out var direction, out var angle);
             if (index < 0) return;
@@ -415,7 +497,7 @@ namespace CombatSimulation.Core
         {
             _contacts.Resolve();
             _beams.Complete(this, _contacts);
-            _outgoingHits.BeginContacts();
+            _network.OutgoingHits.BeginContacts();
 
             var accepted = _contacts.Accepted;
             for (var i = 0; i < accepted.Length; ++i)
@@ -556,7 +638,7 @@ namespace CombatSimulation.Core
                         var remote = !Setup.IsLocalOwner(target.Owner);
                         target.AddPendingDamage(damageType, damage);
                         if (remote)
-                            _outgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
+                            _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                 hit.Target, target.Owner, shape, HitContactState.Start, kind, amount,
                                 damageType: (byte)damageType, impulse: impulse));
                         if (projectile != null)
@@ -568,7 +650,7 @@ namespace CombatSimulation.Core
                                     falloff);
                                 target.AddPendingDamage(extra[e].DamageType, extraAmount);
                                 if (remote)
-                                    _outgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
+                                    _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                         hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind,
                                         extraAmount, damageType: (byte)extra[e].DamageType));
                             }
@@ -579,11 +661,11 @@ namespace CombatSimulation.Core
 
                 _world.Events.Add(BattleEvent.HitEvent(BattleId, Tick, _world.Events.Count, hit, authority));
             }
-            _outgoingHits.CompleteContacts(Tick);
+            _network.OutgoingHits.CompleteContacts(Tick);
         }
 
         // Legacy PushAction: the impulse acts at the target's origin, so it never turns the target.
-        private void ApplyPush(ShipEntity target, Vec2 impulse) =>
+        internal void ApplyPush(ShipEntity target, Vec2 impulse) =>
             World.ApplyImpulse(target.Body, impulse, World.GetPosition(target.Body));
 
         // Legacy PushAction (Push x the bullet velocity) plus RadialPushAction (phase 5, step 3): away from the bullet
@@ -619,6 +701,66 @@ namespace CombatSimulation.Core
             DrainPlayerShips();
             ReactToLethalDamage();
             _world.Bullets.ApplyDamage(Setup);
+        }
+
+        private void ApplyShieldFirst(ShipEntity ship) =>
+            ApplyShieldFirst(ref ship.Shield, ref ship.Armor, ref ship.Energy, ship.PendingDamage, ship.Definition,
+                ship.ResistanceShare);
+
+        // Legacy Impact.ApplyShield and ShipStats.ApplyDamage, by damage type (D4). The shield meets the types group by
+        // group in shield order; each type's load is its damage less its shield resistance. A group larger than the
+        // shield left keeps the same share of each type. Armor then takes what passed, less its armor resistance, and
+        // energy gains its share of what passed. damage holds raw amounts by type; this changes it to what passed. A
+        // resistance share (ShipStatus) moves each armor resistance toward the ceiling of its type.
+        internal void ApplyShieldFirst(ref ResourcePool shield, ref ResourcePool armor, ref ResourcePool energy,
+            float[] damage, ShipDefinition definition, float resistanceShare)
+        {
+            var types = Setup.DamageTypes;
+            var walk = types.ShieldWalk;
+            var left = shield.Max > 0f && shield.Value > 0f ? shield.Value : 0f;
+            var absorbed = 0f;
+            for (var start = 0; start < walk.Length && left > 0f;)
+            {
+                var order = types[walk[start]].ShieldOrder;
+                var end = start;
+                var load = 0f;
+                for (; end < walk.Length && types[walk[end]].ShieldOrder == order; ++end)
+                    load += damage[walk[end]] * (1f - definition.Resistance(walk[end]).Shield);
+
+                if (load > 0f)
+                {
+                    if (load <= left)
+                    {
+                        for (var i = start; i < end; ++i) damage[walk[i]] = 0f;
+                        absorbed += load;
+                        left -= load;
+                    }
+                    else
+                    {
+                        for (var i = start; i < end; ++i) damage[walk[i]] -= left * damage[walk[i]] / load;
+                        absorbed += left;
+                        left = 0f;
+                    }
+                }
+                start = end;
+            }
+            if (absorbed > 0f) shield.Consume(absorbed);
+
+            var armorDamage = 0f;
+            var energyGain = 0f;
+            for (var type = 0; type < damage.Length; ++type)
+            {
+                if (!(damage[type] > 0f)) continue;
+                var resistance = definition.Resistance(type);
+                var armorResistance = resistanceShare > 0f
+                    ? resistance.Armor + resistanceShare * (types[type].ResistanceCeiling - resistance.Armor)
+                    : resistance.Armor;
+                armorDamage += damage[type] * (1f - armorResistance);
+                energyGain += damage[type] * resistance.EnergyGain;
+            }
+            armor.Consume(armorDamage);
+            // A gain does not restart the energy delay (legacy Energy.Get with a negative amount).
+            if (energyGain > 0f) energy.Consume(-energyGain);
         }
 
         // End of stage 10 (phase 5, step 7, H3): every hit of the tick counts first. A device may save a local ship
@@ -681,7 +823,7 @@ namespace CombatSimulation.Core
         // their ship.
         private void ApplyStructureChanges()
         {
-            ApplyRemoteOperations(12);
+            _network.ApplyRemoteOperations(12);
             var slots = Roster.Slots;
             for (var i = 0; i < slots.Count; ++i)
             {
@@ -754,11 +896,11 @@ namespace CombatSimulation.Core
                 _triggers.RunStructureTriggers(index);
                 ref readonly var bullet = ref _world.Bullets[index];
                 if (bullet.PendingRemoval == RemovalReason.None) continue;
-                _outgoingHits.RemoveAttacker(bullet.Id, Tick + 1);
+                _network.OutgoingHits.RemoveAttacker(bullet.Id, Tick + 1);
                 _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet, _world.Authority(bullet.Owner)));
                 CaptureRemoval(bullet.Id, bullet.Owner, bullet.PendingRemoval);
                 if (!bullet.Confirmed && Setup.HasRemoteOwners && !Setup.IsLocalOwner(bullet.Owner))
-                    RecordPredictedRemoval(bullet);
+                    _network.RecordPredictedRemoval(bullet);
                 ReleaseBullet(index);
             }
         }
@@ -767,15 +909,15 @@ namespace CombatSimulation.Core
         internal void ForgetContacts(EntityId id)
         {
             _ramming.Forget(id);
-            if (_bulletContacts.Count > 0) ForgetBulletContacts(id);
+            _network.ForgetBulletContacts(id);
         }
 
-        private void ReleaseBullet(int index)
+        internal void ReleaseBullet(int index)
         {
             ref readonly var bullet = ref _world.Bullets[index];
             if (!Setup.IsLocalOwner(bullet.Owner)) _triggers.ForgetTriggerParentCopy(bullet);
             if (!bullet.IsBeam) World.DestroyBullet(bullet.Body);
-            if (_bulletContacts.Count > 0) ForgetBulletContacts(bullet.Id);
+            _network.ForgetBulletContacts(bullet.Id);
             _world.Entities.Remove(bullet.Id);
             _world.Bullets.Release(index);
         }
@@ -790,19 +932,7 @@ namespace CombatSimulation.Core
 
         private void EvaluateResult()
         {
-            var frontier = Tick;
-            for (var i = 0; i < Setup.Roster.Count; ++i)
-            {
-                var slot = Setup.Roster[i];
-                if (Setup.IsLocalOwner(slot.Owner)) continue;
-                if (!_watermarks.TryGetValue(slot.Owner, out var watermark)) { frontier = -1; break; }
-                watermark.Promote(OperationsThrough(slot.Owner));
-                frontier = Math.Min(frontier, watermark.Through);
-            }
-            // Received operations may still wait for a roster revision or their original stage.
-            foreach (var operation in _remoteOperations)
-                frontier = Math.Min(frontier, operation.Tick - 1);
-            Result = _flow.Evaluate(Tick, frontier, out var candidate, out var elapsed);
+            Result = _flow.Evaluate(Tick, _network.ResultFrontier(), out var candidate, out var elapsed);
             CandidateResult = candidate;
             TimerElapsedTicks = elapsed;
         }
@@ -810,13 +940,11 @@ namespace CombatSimulation.Core
         // Stage 14. Writes the snapshot and the event batch of this tick, then swaps the buffers.
         private void Publish()
         {
-            RecordBodySamples();
-            RecordPredictedHits();
+            _network.RecordBodySamples();
+            _network.RecordPredictedHits();
             _writing.Write(this, Tick, World, Roster, _world.Events);
             _world.Events.Clear();
-            _outgoingHits.Records.Clear();
-            _outgoingOperations.Clear();
-            _appliedOperations.Clear();
+            _network.ClearTickRecords();
 
             var published = _writing;
             _writing = _published;
@@ -890,8 +1018,7 @@ namespace CombatSimulation.Core
             if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) { Reject(command, "already retreating"); return; }
 
             ship.RetreatCompletionTick = Tick + RetreatTicks;
-            if (ShouldCapture(ship.Owner))
-                _outgoingOperations.Add(OwnerOperation.RetreatStarted(BattleId, ship.Owner, NextOperationSequence(ship.Owner), Tick, ship.Id));
+            _network.CaptureRetreat(ship);
         }
 
         // Legacy Scene.FindFreePlace and ShipInfo.Create, with counter-based random.
@@ -933,7 +1060,7 @@ namespace CombatSimulation.Core
             return nearest;
         }
 
-        private void RemoveShip(ShipEntity ship, RemovalReason reason)
+        internal void RemoveShip(ShipEntity ship, RemovalReason reason)
         {
             _tails.RemoveShipSegments(ship, reason);
             for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Stop(this);
@@ -943,7 +1070,7 @@ namespace CombatSimulation.Core
             for (var i = 0; i < ship.ShapeCount; ++i)
                 _world.Shapes.Release(ship.GetShape(i));
             _ramming.Forget(ship.Id);
-            if (!Setup.IsLocalOwner(ship.Owner)) ForgetPredictedHits(ship.Id);
+            if (!Setup.IsLocalOwner(ship.Owner)) _network.ForgetPredictedHits(ship.Id);
             World.DestroyBody(ship.Body);
             _world.Entities.Remove(ship.Id);
             if (ship.IsDrone)
@@ -975,17 +1102,15 @@ namespace CombatSimulation.Core
         {
             if (ship.Allegiance == allegiance) return;
             _world.SetAllegiance(ship, allegiance);
-            if (ShouldCapture(ship.Owner))
-                _outgoingOperations.Add(OwnerOperation.AllegianceChanged(BattleId, ship.Owner,
-                    NextOperationSequence(ship.Owner), Tick, ship.Id, allegiance));
+            _network.CaptureAllegiance(ship, allegiance);
         }
 
-        private void AddTransition(RosterSlot slot, RosterStatus previousStatus, RosterTransitionReason reason, EntityId id)
+        internal void AddTransition(RosterSlot slot, RosterStatus previousStatus, RosterTransitionReason reason, EntityId id)
         {
             _world.Events.Add(BattleEvent.Transition(BattleId, Tick, _world.Events.Count, slot, previousStatus, reason, id,
-                _applyingRemoteOperation ? BattleEventAuthority.Committed : _world.Authority(slot.Owner)));
-            if (!_applyingRemoteOperation) _flow.Add(Tick, slot.Side, previousStatus, slot.Status);
-            CaptureRoster(slot, previousStatus, reason, id);
+                _network.ApplyingRemoteOperation ? BattleEventAuthority.Committed : _world.Authority(slot.Owner)));
+            if (!_network.ApplyingRemoteOperation) _flow.Add(Tick, slot.Side, previousStatus, slot.Status);
+            _network.CaptureRoster(slot, previousStatus, reason, id);
         }
 
         private bool Reject(in RosterCommand command, string reason)
@@ -1026,6 +1151,7 @@ namespace CombatSimulation.Core
         private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();
         private readonly List<SpawnRequest> _spawnRequests = new List<SpawnRequest>();
         private readonly List<int> _bulletRemovals = new List<int>();
+        private readonly BattleNetwork _network;
         private readonly WormTails _tails;
         private readonly BulletTriggers _triggers;
         private readonly ContactResolver _contacts = new ContactResolver();
@@ -1033,7 +1159,6 @@ namespace CombatSimulation.Core
         private readonly TargetGrid _targets;
         private readonly List<EntityId> _deathRequests = new List<EntityId>();
         private readonly bool[] _destroySide = new bool[BattleSetup.SideCount];
-        private readonly OutgoingHitBuffer _outgoingHits = new OutgoingHitBuffer();
         private BattleSnapshot _published;
         private BattleSnapshot _writing;
     }

@@ -51,6 +51,17 @@ namespace CombatSimulation.Core
 
         public void AdvanceTick() => ++Tick;
 
+        public SpawnSample ReadSpawnSample(ShipEntity ship) => new SpawnSample(Tick, Physics.GetPosition(ship.Body),
+            Physics.GetRotation(ship.Body), Physics.GetAngle(ship.Body), Physics.GetLinearVelocity(ship.Body));
+
+        public SpawnPose ReadSpawnPose(ShipEntity ship) => new SpawnPose(Physics.GetPosition(ship.Body),
+            Physics.GetAngle(ship.Body), Physics.GetLinearVelocity(ship.Body), Physics.GetAngularVelocity(ship.Body));
+
+        public int EntityOwner(EntityHandle handle) => handle.Kind == EntityKind.Bullet
+            ? (Bullets.TryGet(handle, out var index) ? Bullets[index].Owner : -1)
+            : handle.Kind == EntityKind.Segment ? Segments.Get(handle)?.Owner ?? -1
+            : (Ships.Get(handle)?.Owner ?? -1);
+
         public BattleEventAuthority Authority(int owner) => Setup.IsLocalOwner(owner)
             ? BattleEventAuthority.Committed : BattleEventAuthority.Predicted;
 

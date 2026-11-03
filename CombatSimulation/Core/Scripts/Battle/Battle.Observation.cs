@@ -28,8 +28,8 @@ namespace CombatSimulation.Core
                 device = bullet.DeviceIndex;
                 homing = !bullet.IsBeam && bullet.Definition.IsHoming;
             }
-            observer.Contact(new ContactObservation(Tick, hit, EntityOwner(hit.AttackerHandle),
-                EntityOwner(hit.TargetHandle), device, homing, _world.Ships.Get(hit.TargetHandle)));
+            observer.Contact(new ContactObservation(Tick, hit, _world.EntityOwner(hit.AttackerHandle),
+                _world.EntityOwner(hit.TargetHandle), device, homing, _world.Ships.Get(hit.TargetHandle)));
         }
     }
 }

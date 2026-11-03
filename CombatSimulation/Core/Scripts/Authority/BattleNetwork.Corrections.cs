@@ -8,11 +8,9 @@ namespace CombatSimulation.Core
     // its ships and drones; the receiver re-runs the movement from the owner's state (C1), and moves resources and
     // point-defense timers to the owner's. Damage this device sends to a remote ship is applied to the copy at once
     // and replayed after each correction until the target owner acknowledges it.
-    public sealed partial class Battle
+    internal sealed partial class BattleNetwork
     {
-        // Call after Step: the batch describes the last completed tick. AppliedHitSequence acknowledges the hits
-        // of peerOwner that this device has applied by then.
-        public void WriteCorrections(int owner, int peerOwner, CorrectionBatch batch)
+        internal void WriteCorrections(int owner, int peerOwner, CorrectionBatch batch)
         {
             if (batch == null) throw new ArgumentNullException(nameof(batch));
             if (!Setup.IsLocalOwner(owner)) throw new ArgumentException("The owner is not local.", nameof(owner));
@@ -27,7 +25,7 @@ namespace CombatSimulation.Core
 
                 for (var d = 0; d < ship.DeviceCount; ++d)
                     if (ship.GetDevice(d) is PointDefenseDevice pointDefense) batch.AddTimers(pointDefense.Export(Tick - 1));
-                batch.CommitBody(ship.Id, ReadSpawnPose(ship), ResourceLevel.Of(ship.Armor, true),
+                batch.CommitBody(ship.Id, _world.ReadSpawnPose(ship), ResourceLevel.Of(ship.Armor, true),
                     ResourceLevel.Of(ship.Shield, false), ResourceLevel.Of(ship.Energy, false));
             }
             WriteMissileCorrections(owner, peerOwner, batch);
@@ -46,9 +44,9 @@ namespace CombatSimulation.Core
                 ref readonly var bullet = ref _world.Bullets[i];
                 if (bullet.Owner != owner || bullet.IsBeam || !bullet.Definition.IsHoming ||
                     bullet.PendingRemoval != RemovalReason.None) continue;
-                var position = World.GetBulletPosition(bullet.Body);
-                var rotation = World.GetBulletRotation(bullet.Body);
-                var velocity = World.GetBulletVelocity(bullet.Body);
+                var position = Physics.GetBulletPosition(bullet.Body);
+                var rotation = Physics.GetBulletRotation(bullet.Body);
+                var velocity = Physics.GetBulletVelocity(bullet.Body);
                 var fullSpeed = (velocity - bullet.Speed * new Vec2(rotation.C, rotation.S)).Length <= FullSpeedTolerance;
                 var priority = !bullet.Corrected ? EarlyPriority + (tick - bullet.SpawnTick)
                     : (tick - bullet.CorrectedTick) * (IsNearPeer(peerOwner, position, bullet.Definition) ? NearWeight : 1f);
@@ -64,7 +62,7 @@ namespace CombatSimulation.Core
             {
                 var ship = _world.GetShipEntry(i);
                 if (ship == null || ship.Owner != peerOwner) continue;
-                var distance = World.Torus.Delta(position, World.GetPosition(ship.Body)).Length - ship.Definition.HullRadius;
+                var distance = Physics.Torus.Delta(position, Physics.GetPosition(ship.Body)).Length - ship.Definition.HullRadius;
                 if (distance <= reach) return true;
                 for (var d = 0; d < ship.DeviceCount; ++d)
                     if (ship.GetDevice(d) is PointDefenseDevice pointDefense &&
@@ -90,11 +88,8 @@ namespace CombatSimulation.Core
         // Velocity within this of Speed along the heading is not sent: about 0.3 mm of error per tick.
         internal const float FullSpeedTolerance = 1f / 64f;
 
-        // Holds each valid correction on its remote entity until stage 1 after its tick. A correction that is not
-        // newer than the held or last applied one for its entity is dropped. Returns the number held.
-        public int Submit(int senderOwner, CorrectionBatch batch)
+        internal int Submit(int senderOwner, CorrectionBatch batch)
         {
-            RequireRunning();
             if (batch == null) throw new ArgumentNullException(nameof(batch));
             if (batch.BattleId != BattleId || batch.Owner != senderOwner || !IsRemoteOwner(senderOwner) ||
                 batch.Tick < 0 || batch.Tick == long.MaxValue) return 0;
@@ -140,7 +135,7 @@ namespace CombatSimulation.Core
         }
 
         // Stage 1, after received operations and before commands.
-        private void ApplyCorrections()
+        internal void ApplyCorrections()
         {
             if (!Setup.HasRemoteOwners) return;
             for (var i = 0; i < _world.ShipEntryCount; ++i)
@@ -165,20 +160,20 @@ namespace CombatSimulation.Core
         private void ApplyMissileCorrection(ref BulletEntity bullet)
         {
             var correction = bullet.Correction;
-            var before = World.GetBulletPosition(bullet.Body);
-            var angleBefore = World.GetBulletRotation(bullet.Body).Angle;
-            var position = World.Torus.Wrap(correction.Position);
+            var before = Physics.GetBulletPosition(bullet.Body);
+            var angleBefore = Physics.GetBulletRotation(bullet.Body).Angle;
+            var position = Physics.Torus.Wrap(correction.Position);
             var angle = correction.Angle;
             var velocity = correction.HasVelocity ? correction.Velocity
                 : bullet.Speed * new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
-            HomingSteering.Advance(this, bullet, (int)Math.Min(int.MaxValue, Tick - 1 - bullet.CorrectionTick),
+            HomingSteering.Advance(_battle, bullet, (int)Math.Min(int.MaxValue, Tick - 1 - bullet.CorrectionTick),
                 ref position, ref angle, ref velocity);
-            World.SetBulletPose(bullet.Body, position, angle);
-            World.SetBulletVelocity(bullet.Body, velocity);
+            Physics.SetBulletPose(bullet.Body, position, angle);
+            Physics.SetBulletVelocity(bullet.Body, velocity);
             bullet.Corrected = true;
             bullet.CorrectedTick = bullet.CorrectionTick;
-            Observer?.Correction(new CorrectionObservation(bullet, bullet.CorrectionTick, Tick,
-                World.Torus.Delta(before, position), WrapAngle(angle - angleBefore)));
+            _battle.Observer?.Correction(new CorrectionObservation(bullet, bullet.CorrectionTick, Tick,
+                Physics.Torus.Delta(before, position), Battle.WrapAngle(angle - angleBefore)));
         }
 
         private void ApplyCorrection(ShipEntity ship, PendingCorrection correction)
@@ -188,34 +183,34 @@ namespace CombatSimulation.Core
             var armorBefore = ship.Armor.Value;
             var shieldBefore = ship.Shield.Value;
             var hasHistory = ship.TryGetBodySample(tick, out var sample);
-            var positionError = hasHistory ? World.Torus.Delta(sample.Position, body.Motion.Position) : Vec2.Zero;
-            var angleError = hasHistory ? WrapAngle(body.Motion.Angle - sample.Angle) : 0f;
+            var positionError = hasHistory ? Physics.Torus.Delta(sample.Position, body.Motion.Position) : Vec2.Zero;
+            var angleError = hasHistory ? Battle.WrapAngle(body.Motion.Angle - sample.Angle) : 0f;
 
             // Movement (C1): the error at the owner's tick, carried to the present by re-running the motion from both
             // states, then added to the present. Outside the history, the next correction inside it repairs the movement.
             if (hasHistory)
             {
                 var error = PropagateError(ship, tick, body.Motion, sample);
-                World.SetPose(ship.Body, World.GetPosition(ship.Body) + error.Position, World.GetAngle(ship.Body) + error.Angle);
-                World.SetLinearVelocity(ship.Body, World.GetLinearVelocity(ship.Body) + error.LinearVelocity);
-                World.SetAngularVelocity(ship.Body, World.GetAngularVelocity(ship.Body) + error.AngularVelocity);
+                Physics.SetPose(ship.Body, Physics.GetPosition(ship.Body) + error.Position, Physics.GetAngle(ship.Body) + error.Angle);
+                Physics.SetLinearVelocity(ship.Body, Physics.GetLinearVelocity(ship.Body) + error.LinearVelocity);
+                Physics.SetAngularVelocity(ship.Body, Physics.GetAngularVelocity(ship.Body) + error.AngularVelocity);
             }
 
             // Gameplay (G1): each resource gets a candidate, the owner's level at its tick recharged through the last
             // completed tick, minus the damage this device sent that the owner had not applied by its tick. The
             // candidate replaces the value only when they differ by more than one level. The delay always follows.
-            var elapsed = (Tick - 1 - tick) * TickDuration;
+            var elapsed = (Tick - 1 - tick) * Battle.TickDuration;
             var armor = Candidate(ship.Armor, body.Armor, elapsed);
             var shield = Candidate(ship.Shield, body.Shield, elapsed);
             var energy = Candidate(ship.Energy, body.Energy, elapsed);
             for (var t = tick + 1; t < Tick && !(IsSettled(armor) && IsSettled(shield) && IsSettled(energy)); ++t)
             {
-                armor.Update(TickDuration);
-                shield.Update(TickDuration);
-                energy.Update(TickDuration);
+                armor.Update(Battle.TickDuration);
+                shield.Update(Battle.TickDuration);
+                energy.Update(Battle.TickDuration);
             }
             if (ReplayPredictedDamage(ship.Id, tick, correction.AppliedHitSequence))
-                ApplyShieldFirst(ref shield, ref armor, ref energy, _replayDamage, ship.Definition, ship.ResistanceShare);
+                _battle.ApplyShieldFirst(ref shield, ref armor, ref energy, _replayDamage, ship.Definition, ship.ResistanceShare);
             Settle(ref ship.Armor, armor);
             Settle(ref ship.Shield, shield);
             Settle(ref ship.Energy, energy);
@@ -224,7 +219,7 @@ namespace CombatSimulation.Core
             for (var d = 0; d < ship.DeviceCount; ++d)
                 if (ship.GetDevice(d) is PointDefenseDevice pointDefense) pointDefense.Import(tick, correction.Timers[next++]);
             ship.LastCorrectionTick = tick;
-            Observer?.Correction(new CorrectionObservation(ship, tick, Tick, hasHistory, positionError,
+            _battle.Observer?.Correction(new CorrectionObservation(ship, tick, Tick, hasHistory, positionError,
                 angleError, armorBefore, shieldBefore));
         }
 
@@ -257,9 +252,9 @@ namespace CombatSimulation.Core
         // next correction measures only the error that remains.
         private SpawnPose PropagateError(ShipEntity ship, long tick, in SpawnPose owner, in SpawnPose sample)
         {
-            var torus = World.Torus;
-            var substeps = World.Settings.Substeps;
-            var localCenter = World.GetLocalCenter(ship.Body);
+            var torus = Physics.Torus;
+            var substeps = Physics.Settings.Substeps;
+            var localCenter = Physics.GetLocalCenter(ship.Body);
             var a = new FreeMotion(owner);
             var b = new FreeMotion(sample);
             var error = a.Minus(b, torus);
@@ -267,12 +262,12 @@ namespace CombatSimulation.Core
             for (var t = tick + 1; t < Tick; ++t)
             {
                 var input = ship.GetEngineInput(t);
-                a.ApplyEngine(input, TickDuration);
-                b.ApplyEngine(input, TickDuration);
+                a.ApplyEngine(input, Battle.TickDuration);
+                b.ApplyEngine(input, Battle.TickDuration);
                 error = a.Minus(b, torus);
                 ship.ShiftSpawnSample(t, torus, error.Position, error.Angle, error.LinearVelocity);
-                a.Integrate(torus, localCenter, substeps, TickDuration);
-                b.Integrate(torus, localCenter, substeps, TickDuration);
+                a.Integrate(torus, localCenter, substeps, Battle.TickDuration);
+                b.Integrate(torus, localCenter, substeps, Battle.TickDuration);
                 error = a.Minus(b, torus);
                 ship.ShiftBodySample(t, torus, error.Position, error.Angle, error.LinearVelocity, error.AngularVelocity);
             }
@@ -317,92 +312,23 @@ namespace CombatSimulation.Core
 
             // This state minus the other: position on the torus, angle wrapped.
             public SpawnPose Minus(in FreeMotion other, in Torus torus) => new SpawnPose(
-                torus.Delta(other._origin, _origin), WrapAngle(_rotation.Angle - other._rotation.Angle),
+                torus.Delta(other._origin, _origin), Battle.WrapAngle(_rotation.Angle - other._rotation.Angle),
                 _velocity - other._velocity, _angularVelocity - other._angularVelocity);
         }
 
-        internal static float WrapAngle(float angle)
-        {
-            const float twoPi = (float)(2.0 * Math.PI);
-            angle %= twoPi;
-            if (angle > Math.PI) angle -= twoPi;
-            else if (angle < -Math.PI) angle += twoPi;
-            return angle;
-        }
-
-        private void ApplyShieldFirst(ShipEntity ship) =>
-            ApplyShieldFirst(ref ship.Shield, ref ship.Armor, ref ship.Energy, ship.PendingDamage, ship.Definition,
-                ship.ResistanceShare);
-
-        // Legacy Impact.ApplyShield and ShipStats.ApplyDamage, by damage type (D4). The shield meets the types group by
-        // group in shield order; each type's load is its damage less its shield resistance. A group larger than the
-        // shield left keeps the same share of each type. Armor then takes what passed, less its armor resistance, and
-        // energy gains its share of what passed. damage holds raw amounts by type; this changes it to what passed. A
-        // resistance share (ShipStatus) moves each armor resistance toward the ceiling of its type.
-        private void ApplyShieldFirst(ref ResourcePool shield, ref ResourcePool armor, ref ResourcePool energy,
-            float[] damage, ShipDefinition definition, float resistanceShare)
-        {
-            var types = Setup.DamageTypes;
-            var walk = types.ShieldWalk;
-            var left = shield.Max > 0f && shield.Value > 0f ? shield.Value : 0f;
-            var absorbed = 0f;
-            for (var start = 0; start < walk.Length && left > 0f;)
-            {
-                var order = types[walk[start]].ShieldOrder;
-                var end = start;
-                var load = 0f;
-                for (; end < walk.Length && types[walk[end]].ShieldOrder == order; ++end)
-                    load += damage[walk[end]] * (1f - definition.Resistance(walk[end]).Shield);
-
-                if (load > 0f)
-                {
-                    if (load <= left)
-                    {
-                        for (var i = start; i < end; ++i) damage[walk[i]] = 0f;
-                        absorbed += load;
-                        left -= load;
-                    }
-                    else
-                    {
-                        for (var i = start; i < end; ++i) damage[walk[i]] -= left * damage[walk[i]] / load;
-                        absorbed += left;
-                        left = 0f;
-                    }
-                }
-                start = end;
-            }
-            if (absorbed > 0f) shield.Consume(absorbed);
-
-            var armorDamage = 0f;
-            var energyGain = 0f;
-            for (var type = 0; type < damage.Length; ++type)
-            {
-                if (!(damage[type] > 0f)) continue;
-                var resistance = definition.Resistance(type);
-                var armorResistance = resistanceShare > 0f
-                    ? resistance.Armor + resistanceShare * (types[type].ResistanceCeiling - resistance.Armor)
-                    : resistance.Armor;
-                armorDamage += damage[type] * (1f - armorResistance);
-                energyGain += damage[type] * resistance.EnergyGain;
-            }
-            armor.Consume(armorDamage);
-            // A gain does not restart the energy delay (legacy Energy.Get with a negative amount).
-            if (energyGain > 0f) energy.Consume(-energyGain);
-        }
-
         // Stage 14, before the snapshot: the end-of-tick state a correction for this tick describes.
-        private void RecordBodySamples()
+        internal void RecordBodySamples()
         {
             if (!Setup.HasRemoteOwners) return;
             for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
                 var ship = _world.GetShipEntry(i);
-                if (ship != null && !Setup.IsLocalOwner(ship.Owner)) ship.RecordBodySample(Tick, ReadSpawnPose(ship));
+                if (ship != null && !Setup.IsLocalOwner(ship.Owner)) ship.RecordBodySample(Tick, _world.ReadSpawnPose(ship));
             }
         }
 
         // Stage 14: this tick's outgoing records join the ledger. A beam end closes its open interval.
-        private void RecordPredictedHits()
+        internal void RecordPredictedHits()
         {
             var records = _outgoingHits.Records;
             for (var i = 0; i < records.Count; ++i)
@@ -468,7 +394,7 @@ namespace CombatSimulation.Core
                             applied = Math.Max(0L, Math.Min(tick + 1, ownerEnd) - (start + delay));
                         }
                         if (shown > applied)
-                            any |= AddReplayDamage(entry.Hit.DamageType, (double)(shown - applied) * entry.Hit.Amount * TickDuration);
+                            any |= AddReplayDamage(entry.Hit.DamageType, (double)(shown - applied) * entry.Hit.Amount * Battle.TickDuration);
                         keep = !(endKnown && tick + 1 >= entry.EndTick + delay);
                     }
                 }
@@ -486,7 +412,7 @@ namespace CombatSimulation.Core
         }
 
         // A removed target needs no replay.
-        private void ForgetPredictedHits(EntityId target)
+        internal void ForgetPredictedHits(EntityId target)
         {
             var kept = 0;
             for (var i = 0; i < _predictedHits.Count; ++i)

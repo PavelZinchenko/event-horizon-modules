@@ -7,13 +7,10 @@ namespace CombatSimulation.Core
     // Fire confirmations (network plan, step 4). The owner sends a BulletSpawn record for each projectile and beam on
     // the reliable ordered stream, then a watermark. The receiver confirms its matching copies, adds the missing ones,
     // and removes remote bullets that the watermark covers but no record confirms.
-    public sealed partial class Battle
+    internal sealed partial class BattleNetwork
     {
-        // Call after the operations the watermark covers. It takes effect once every operation sequence up to
-        // OperationSequence has been submitted; older or repeated watermarks are ignored.
-        public bool Submit(int senderOwner, in OwnerWatermark watermark)
+        internal bool Submit(int senderOwner, in OwnerWatermark watermark)
         {
-            RequireRunning();
             if (watermark.BattleId != BattleId || watermark.Owner != senderOwner || !IsRemoteOwner(senderOwner) ||
                 watermark.Tick < 0) return false;
             if (!_watermarks.TryGetValue(senderOwner, out var state))
@@ -34,17 +31,14 @@ namespace CombatSimulation.Core
         private ulong OperationsThrough(int owner) =>
             _operationSequences.TryGetValue(owner, out var window) ? window.Through : 0;
 
-        private SpawnSample ReadSpawnSample(ShipEntity ship) => new SpawnSample(Tick, World.GetPosition(ship.Body),
-            World.GetRotation(ship.Body), World.GetAngle(ship.Body), World.GetLinearVelocity(ship.Body));
-
         // Stage 5, before any spawn. Only remote ships need the muzzle state of past ticks.
-        private void RecordSpawnSamples()
+        internal void RecordSpawnSamples()
         {
             if (!Setup.HasRemoteOwners) return;
             for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
                 var ship = _world.GetShipEntry(i);
-                if (ship != null && !Setup.IsLocalOwner(ship.Owner)) ship.RecordSpawnSample(ReadSpawnSample(ship));
+                if (ship != null && !Setup.IsLocalOwner(ship.Owner)) ship.RecordSpawnSample(_world.ReadSpawnSample(ship));
             }
         }
 
@@ -99,7 +93,7 @@ namespace CombatSimulation.Core
             {
                 if (cannon != null && cannon.Definition.Bullet.HasSpawnTriggers)
                 {
-                    if (!ship.TryGetSpawnSample(operation.Tick, out var shot)) shot = ReadSpawnSample(ship);
+                    if (!ship.TryGetSpawnSample(operation.Tick, out var shot)) shot = _world.ReadSpawnSample(ship);
                     _world.Launch(ship, operation.BarrelIndex, operation.EntityId, cannon.Definition.Bullet, cannon.Definition.Spread,
                         operation.Tick, shot, operation.HasLaunchPose ? operation : default, out _, out _, out _,
                         out var velocity, out _);
@@ -119,7 +113,7 @@ namespace CombatSimulation.Core
             int index;
             if (cannon != null)
             {
-                if (!ship.TryGetSpawnSample(operation.Tick, out var sample)) sample = ReadSpawnSample(ship);
+                if (!ship.TryGetSpawnSample(operation.Tick, out var sample)) sample = _world.ReadSpawnSample(ship);
                 index = _world.CreateBullet(ship, operation.DeviceIndex, operation.BarrelIndex, operation.SpawnSequence,
                     cannon.Definition.Bullet, cannon.Definition.Spread, operation.Tick, sample, out _, out _, out _,
                     operation.HasLaunchPose ? operation : default);
@@ -153,7 +147,7 @@ namespace CombatSimulation.Core
             if (operation.Tick + explosion.LifetimeTicks - 1 < Tick || HasDueRemoval(operation.EntityId)) return true;
 
             var index = _world.CreateBullet(ship, operation.DeviceIndex, SpawnRequest.ShipCentre, operation.SpawnSequence,
-                explosion, 0f, operation.Tick, ReadSpawnSample(ship), out _, out _, out _, operation);
+                explosion, 0f, operation.Tick, _world.ReadSpawnSample(ship), out _, out _, out _, operation);
             if (index < 0) return false;
             _world.Bullets[index].Confirmed = true;
             _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, _world.Bullets[index]));
@@ -167,11 +161,11 @@ namespace CombatSimulation.Core
             ref readonly var bullet = ref _world.Bullets[index];
             // An attached copy rides on its own ship copy (phase 5, step 3).
             if (bullet.IsBeam || bullet.Definition.IsHoming || bullet.Definition.AttachedToParent) return;
-            if (!ship.TryGetSpawnSample(launch.Tick, out var sample)) sample = ReadSpawnSample(ship);
+            if (!ship.TryGetSpawnSample(launch.Tick, out var sample)) sample = _world.ReadSpawnSample(ship);
             _world.Launch(ship, launch.BarrelIndex, bullet.Id, bullet.Definition, cannon.Definition.Spread, bullet.SpawnTick,
                 sample, launch, out _, out var angle, out _, out var velocity, out var position);
-            World.SetBulletPose(bullet.Body, position, angle);
-            World.SetBulletVelocity(bullet.Body, velocity);
+            Physics.SetBulletPose(bullet.Body, position, angle);
+            Physics.SetBulletVelocity(bullet.Body, velocity);
         }
 
         // P2: an unconfirmed copy of the confirmed shot from the same device, barrel and spawn sequence, at another spawn
@@ -251,7 +245,7 @@ namespace CombatSimulation.Core
 
         // End of stage 5. Every record up to the owner's settled tick has applied, so an unconfirmed copy there was
         // fired on this device only.
-        private void RemoveUnconfirmedBullets()
+        internal void RemoveUnconfirmedBullets()
         {
             if (_watermarks.Count == 0) return;
             var settled = false;
@@ -291,7 +285,7 @@ namespace CombatSimulation.Core
             bullet.PendingRemoval = reason;
             if (bullet.IsBeam) DetachBeam(bullet, _world.Bullets.GetHandle(index));
             _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet, BattleEventAuthority.Predicted));
-            ReleaseBullet(index);
+            _battle.ReleaseBullet(index);
         }
 
         private void DetachBeam(in BulletEntity beam, EntityHandle handle) => DetachBeam(beam, handle, Tick);
@@ -304,7 +298,7 @@ namespace CombatSimulation.Core
         }
 
         // A remote bullet that this device removed before its owner confirmed it (N2, expiry, beam stop).
-        private void RecordPredictedRemoval(in BulletEntity bullet)
+        internal void RecordPredictedRemoval(in BulletEntity bullet)
         {
             if (_predictedRemovalIds.Add(bullet.Id))
                 _predictedRemovals.Add(new PredictedRemoval(bullet.Id, bullet.Owner, bullet.SpawnTick));

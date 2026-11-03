@@ -4,13 +4,10 @@ using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
-    public sealed partial class Battle
+    internal sealed partial class BattleNetwork
     {
-        // Call before Step with records from the reliable ordered stream. Sender identity comes from
-        // Runtime's peer binding. Roster revision gaps are held independently of transport sequencing.
-        public bool Submit(int senderOwner, in OwnerOperation operation)
+        internal bool Submit(int senderOwner, in OwnerOperation operation)
         {
-            RequireRunning();
             if (operation.BattleId != BattleId || operation.Owner != senderOwner || !IsRemoteOwner(senderOwner) ||
                 operation.Sequence == 0 || operation.Tick < 0 || operation.Tick == long.MaxValue ||
                 !ValidateOperation(operation)) return false;
@@ -21,9 +18,8 @@ namespace CombatSimulation.Core
             return true;
         }
 
-        public bool Submit(in InboundHit record)
+        internal bool Submit(in InboundHit record)
         {
-            RequireRunning();
             var hit = record.Hit;
             if (hit.BattleId != BattleId || !IsRemoteOwner(record.SenderOwner) ||
                 hit.AttackerOwner != record.SenderOwner || !Setup.HasOwner(hit.TargetOwner) ||
@@ -43,10 +39,10 @@ namespace CombatSimulation.Core
                     hit.ImpactKind == HitImpactKind.DamageOverTime || hit.ContactState != HitContactState.Start)))
                 return false;
             // The attacker may already be gone. A live copy, when present, must agree with the sender.
-            if (_world.Entities.TryGet(hit.AttackerId, out var handle) && EntityOwner(handle) != record.SenderOwner)
+            if (_world.Entities.TryGet(hit.AttackerId, out var handle) && _world.EntityOwner(handle) != record.SenderOwner)
                 return false;
             if (_world.Entities.TryGet(hit.TargetId, out handle) &&
-                (IsContactTarget(handle.Kind) != hit.TargetIsBullet || EntityOwner(handle) != hit.TargetOwner)) return false;
+                (IsContactTarget(handle.Kind) != hit.TargetIsBullet || _world.EntityOwner(handle) != hit.TargetOwner)) return false;
             if (!AcceptSequence(_hitSequences, record.SenderOwner, record.Sequence)) return false;
             var index = _remoteHits.Count;
             while (index > 0 && CompareHits(record, _remoteHits[index - 1]) < 0) --index;
@@ -77,20 +73,10 @@ namespace CombatSimulation.Core
             return false;
         }
 
-        private void RequireRunning()
-        {
-            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no records.");
-        }
-
         private bool IsRemoteOwner(int owner) => Setup.HasOwner(owner) && !Setup.IsLocalOwner(owner);
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
         private static bool ValidPose(in SpawnPose pose) => Finite(pose.Position.X) && Finite(pose.Position.Y) &&
             Finite(pose.Angle) && Finite(pose.LinearVelocity.X) && Finite(pose.LinearVelocity.Y) && Finite(pose.AngularVelocity);
-
-        private int EntityOwner(EntityHandle handle) => handle.Kind == EntityKind.Bullet
-            ? (_world.Bullets.TryGet(handle, out var index) ? _world.Bullets[index].Owner : -1)
-            : handle.Kind == EntityKind.Segment ? _world.Segments.Get(handle)?.Owner ?? -1
-            : (_world.Ships.Get(handle)?.Owner ?? -1);
 
         // A hit record on a bullet or a tail segment names one contact (ResolvedHit.TargetIsBullet; network plan 9d).
         private static bool IsContactTarget(EntityKind kind) => kind == EntityKind.Bullet || kind == EntityKind.Segment;
@@ -134,14 +120,14 @@ namespace CombatSimulation.Core
                     return bay != null && bay.Slot.Owner == operation.Owner && !operation.EntityId.IsNull &&
                         !operation.ParentId.IsNull && ValidPose(operation.Pose);
                 case OwnerOperationKind.Removal:
-                    if (operation.EntityId.IsNull || !IsSentRemovalReason(operation.RemovalReason)) return false;
+                    if (operation.EntityId.IsNull || !Battle.IsSentRemovalReason(operation.RemovalReason)) return false;
                     if (operation.BayKey.HasValue)
                     {
                         var removalBay = FindBay(operation.BayKey.Value);
                         if (removalBay == null || removalBay.Slot.Owner != operation.Owner) return false;
                     }
                     return !_world.Entities.TryGet(operation.EntityId, out var handle) ||
-                        (EntityOwner(handle) == operation.Owner &&
+                        (_world.EntityOwner(handle) == operation.Owner &&
                          (IsContactTarget(handle.Kind) ? !operation.BayKey.HasValue :
                           _world.Ships.Get(handle)?.Bay?.Key == operation.BayKey && operation.BayKey.HasValue));
                 // The missile or its target may be gone; a live missile must be the owner's homing projectile.
@@ -155,15 +141,15 @@ namespace CombatSimulation.Core
                 case OwnerOperationKind.Allegiance:
                     return !operation.EntityId.IsNull && Allegiances.IsValid(operation.Allegiance) &&
                         (!_world.Entities.TryGet(operation.EntityId, out handle) ||
-                         (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner));
+                         (handle.Kind == EntityKind.Ship && _world.EntityOwner(handle) == operation.Owner));
                 case OwnerOperationKind.Retreat:
                     return !operation.EntityId.IsNull && (!_world.Entities.TryGet(operation.EntityId, out handle) ||
-                        (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner && _world.Ships.Get(handle)?.Slot != null));
+                        (handle.Kind == EntityKind.Ship && _world.EntityOwner(handle) == operation.Owner && _world.Ships.Get(handle)?.Slot != null));
                 // The ship may be gone; a live ship must be the owner's and have the device.
                 case OwnerOperationKind.DeviceUse:
                     return !operation.EntityId.IsNull && operation.DeviceIndex >= 0 &&
                         (!_world.Entities.TryGet(operation.EntityId, out handle) ||
-                         (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner &&
+                         (handle.Kind == EntityKind.Ship && _world.EntityOwner(handle) == operation.Owner &&
                           operation.DeviceIndex < _world.Ships.Get(handle).DeviceCount));
                 // The parent may not exist yet; it is checked when the record applies.
                 case OwnerOperationKind.BulletSpawn:
@@ -176,7 +162,7 @@ namespace CombatSimulation.Core
 
         // On-time operations retain their spawn/structure stage. Late operations apply before commands,
         // including complete chains of roster revisions; past ticks are never replayed.
-        private void ApplyRemoteOperations(int stage = 1)
+        internal void ApplyRemoteOperations(int stage = 1)
         {
             if (_remoteOperations.Count == 0) return;
             _applyingRemoteOperation = true;
@@ -245,7 +231,7 @@ namespace CombatSimulation.Core
                     _world.Entities.TryGet(operation.EntityId, out _)) return false;
                 ship = _world.Ships.Allocate();
                 if (!_world.TryRegister(operation.EntityId, ship.Handle)) { _world.Ships.Release(ship); return false; }
-                var body = World.CreateBody(new BodyDef { Mass = slot.Setup.Ship.Mass });
+                var body = Physics.CreateBody(new BodyDef { Mass = slot.Setup.Ship.Mass });
                 // Initialize with the owner's retained resources, not values inferred from a prediction.
                 slot.Import(record, null);
                 ship.Initialize(operation.EntityId, slot, body, operation.Tick, Setup.DamageTypes.Count);
@@ -259,13 +245,13 @@ namespace CombatSimulation.Core
                     (slot.ActiveShip?.Id ?? default) != operation.EntityId) return false;
                 if (slot.ActiveShip != null)
                 {
-                    RemoveShip(slot.ActiveShip, record.Reason == RosterTransitionReason.Retreated ? RemovalReason.Retreat : RemovalReason.Death);
+                    _battle.RemoveShip(slot.ActiveShip, record.Reason == RosterTransitionReason.Retreated ? RemovalReason.Retreat : RemovalReason.Death);
                 }
             }
             slot.Import(record, ship);
             _world.DeploymentOrder = Math.Max(_world.DeploymentOrder, record.DeploymentOrder);
-            _flow.Add(operation.Tick, slot.Side, record.PreviousStatus, record.Status);
-            AddTransition(slot, record.PreviousStatus, record.Reason, operation.EntityId);
+            _battle.Flow.Add(operation.Tick, slot.Side, record.PreviousStatus, record.Status);
+            _battle.AddTransition(slot, record.PreviousStatus, record.Reason, operation.EntityId);
             return true;
         }
 
@@ -277,7 +263,7 @@ namespace CombatSimulation.Core
                 operation.Tick, (uint)bay.Key.DeviceIndex, (uint)bay.Launched, 0)) return false;
             var ship = _world.Ships.Allocate();
             if (!_world.TryRegister(operation.EntityId, ship.Handle)) { _world.Ships.Release(ship); return false; }
-            var body = World.CreateBody(new BodyDef { Mass = bay.Drone.Mass });
+            var body = Physics.CreateBody(new BodyDef { Mass = bay.Drone.Mass });
             ship.InitializeDrone(operation.EntityId, bay, body, operation.Tick, Setup.DamageTypes.Count);
             _world.AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));
             SetSpawnPose(body, operation.Pose);
@@ -288,7 +274,7 @@ namespace CombatSimulation.Core
             // The copy of the parent links its clone (phase 5, step 7c); a parent that already left needs nothing.
             var parent = _world.FindShip(operation.ParentId);
             if (parent != null && parent.Slot == bay.Slot)
-                parent.GetDevice(bay.Key.DeviceIndex).OnShipLaunched(this, parent, ship.Id, operation.Tick);
+                parent.GetDevice(bay.Key.DeviceIndex).OnShipLaunched(_battle, parent, ship.Id, operation.Tick);
             return true;
         }
 
@@ -299,7 +285,7 @@ namespace CombatSimulation.Core
             var ship = _world.FindShip(operation.EntityId);
             if (ship == null || ship.Owner != operation.Owner || ship.Slot == null ||
                 ship.RetreatCompletionTick != ShipEntity.NoRetreat) return false;
-            ship.RetreatCompletionTick = operation.Tick + RetreatTicks;
+            ship.RetreatCompletionTick = operation.Tick + Battle.RetreatTicks;
             return true;
         }
 
@@ -330,12 +316,8 @@ namespace CombatSimulation.Core
         {
             var ship = _world.FindShip(operation.EntityId);
             if (ship != null && ship.Owner == operation.Owner && operation.DeviceIndex < ship.DeviceCount)
-                ship.GetDevice(operation.DeviceIndex).ApplyRemoteUse(this, ship, operation.Tick, operation.UseStarted);
+                ship.GetDevice(operation.DeviceIndex).ApplyRemoteUse(_battle, ship, operation.Tick, operation.UseStarted);
         }
-
-        // The reasons an owner sends: Unconfirmed is local to a receiver.
-        internal static bool IsSentRemovalReason(RemovalReason reason) =>
-            reason >= RemovalReason.Death && reason <= RemovalReason.Disposal || reason == RemovalReason.Vanish;
 
         private bool ApplyRemoteRemoval(in OwnerOperation operation)
         {
@@ -346,7 +328,7 @@ namespace CombatSimulation.Core
                 _triggers.MarkTriggerParentRemoved(operation.EntityId, operation.Tick);
                 return true;
             }
-            if (EntityOwner(handle) != operation.Owner) return false;
+            if (_world.EntityOwner(handle) != operation.Owner) return false;
             if (handle.Kind == EntityKind.Segment)
             {
                 if (operation.BayKey.HasValue) return false;
@@ -359,7 +341,7 @@ namespace CombatSimulation.Core
                 bullet.PendingRemoval = operation.RemovalReason;
                 if (bullet.IsBeam) DetachBeam(bullet, handle, operation.Tick);
                 _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet));
-                ReleaseBullet(index);
+                _battle.ReleaseBullet(index);
                 _triggers.MarkTriggerParentRemoved(operation.EntityId, operation.Tick);
             }
             else
@@ -368,20 +350,17 @@ namespace CombatSimulation.Core
                 if (ship == null || !ship.IsDrone || ship.Bay.Key != operation.BayKey) return false;
                 _removedRemoteEntities.Add(ship.Id);
                 _world.Drones.Remove(ship);
-                RemoveShip(ship, operation.RemovalReason);
+                _battle.RemoveShip(ship, operation.RemovalReason);
             }
             return true;
         }
 
         private void SetSpawnPose(BodyId body, in SpawnPose pose)
         {
-            World.SetPose(body, pose.Position, pose.Angle);
-            World.SetLinearVelocity(body, pose.LinearVelocity);
-            World.SetAngularVelocity(body, pose.AngularVelocity);
+            Physics.SetPose(body, pose.Position, pose.Angle);
+            Physics.SetLinearVelocity(body, pose.LinearVelocity);
+            Physics.SetAngularVelocity(body, pose.AngularVelocity);
         }
-
-        private SpawnPose ReadSpawnPose(ShipEntity ship) => new SpawnPose(World.GetPosition(ship.Body),
-            World.GetAngle(ship.Body), World.GetLinearVelocity(ship.Body), World.GetAngularVelocity(ship.Body));
 
         private ulong NextOperationSequence(int owner)
         {
@@ -392,14 +371,14 @@ namespace CombatSimulation.Core
 
         private bool ShouldCapture(int owner) => Setup.HasRemoteOwners && !_applyingRemoteOperation && Setup.IsLocalOwner(owner);
 
-        private void CaptureRoster(RosterSlot slot, RosterStatus previous, RosterTransitionReason reason, EntityId id)
+        internal void CaptureRoster(RosterSlot slot, RosterStatus previous, RosterTransitionReason reason, EntityId id)
         {
             if (!ShouldCapture(slot.Owner)) return;
             var state = new RosterSlotState(slot);
             var record = new RosterRecord(slot.RosterId, slot.Revision, previous, slot.Status, reason,
                 slot.DeploymentCount, slot.DeploymentOrder, slot.ArmorDeficit, slot.ShieldDeficit, state.DamageFraction);
             _outgoingOperations.Add(OwnerOperation.RosterChange(BattleId, slot.Owner, NextOperationSequence(slot.Owner),
-                Tick, id, record, slot.ActiveShip == null ? default : ReadSpawnPose(slot.ActiveShip)));
+                Tick, id, record, slot.ActiveShip == null ? default : _world.ReadSpawnPose(slot.ActiveShip)));
         }
 
         // Phase 5, step 7 (H8): a device use that started or ended on a local ship. The tick is the use's first status
@@ -411,11 +390,11 @@ namespace CombatSimulation.Core
                     tick, ship.Id, deviceIndex, started));
         }
 
-        private void CaptureDroneSpawn(ShipEntity ship, EntityId parent)
+        internal void CaptureDroneSpawn(ShipEntity ship, EntityId parent)
         {
             if (ShouldCapture(ship.Owner))
                 _outgoingOperations.Add(OwnerOperation.DroneLaunch(BattleId, ship.Owner, NextOperationSequence(ship.Owner),
-                    Tick, ship.Id, ship.Bay.Key, parent, ReadSpawnPose(ship)));
+                    Tick, ship.Id, ship.Bay.Key, parent, _world.ReadSpawnPose(ship)));
         }
 
         // P3: an owner search changed a homing projectile's target.

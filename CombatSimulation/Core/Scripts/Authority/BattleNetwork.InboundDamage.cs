@@ -3,18 +3,18 @@ using System.Collections.Generic;
 
 namespace CombatSimulation.Core
 {
-    public sealed partial class Battle
+    internal sealed partial class BattleNetwork
     {
         // Stage 10. Read all available boundaries before applying intervals, so a start and end received
         // together catch up only the owner's actual firing time. No attacker object is needed here.
-        private void AccumulateRemoteDamage()
+        internal void AccumulateRemoteDamage()
         {
             var count = 0;
             while (count < _remoteHits.Count && _remoteHits[count].Hit.Tick <= Tick)
             {
                 var record = _remoteHits[count++];
                 var hit = record.Hit;
-                Observer?.HitProcessed(new HitObservation(hit, Tick, LocalHitTarget(hit) != null));
+                _battle.Observer?.HitProcessed(new HitObservation(hit, Tick, LocalHitTarget(hit) != null));
                 RecordAppliedHit(record.SenderOwner, hit.Sequence);
                 if (hit.TargetIsBullet)
                 {
@@ -28,7 +28,7 @@ namespace CombatSimulation.Core
                     if (hit.Impulse.X != 0f || hit.Impulse.Y != 0f)
                     {
                         var target = LocalHitTarget(hit);
-                        if (target != null) ApplyPush(target, hit.Impulse);
+                        if (target != null) _battle.ApplyPush(target, hit.Impulse);
                     }
                     continue;
                 }
@@ -65,9 +65,9 @@ namespace CombatSimulation.Core
                 var through = Math.Min(Tick + 1, interval.EndTick);
                 if (through > interval.NextTick)
                 {
-                    var amount = (double)(through - interval.NextTick) * interval.Hit.Amount * TickDuration;
+                    var amount = (double)(through - interval.NextTick) * interval.Hit.Amount * Battle.TickDuration;
                     AddRemoteDamage(interval.Hit, (float)Math.Min(float.MaxValue, amount));
-                    Observer?.BeamDamage(new BeamDamageObservation(interval.Hit, Tick, interval.NextTick,
+                    _battle.Observer?.BeamDamage(new BeamDamageObservation(interval.Hit, Tick, interval.NextTick,
                         through, (float)Math.Min(float.MaxValue, amount)));
                     interval.NextTick = through;
                 }
@@ -157,8 +157,9 @@ namespace CombatSimulation.Core
         // A local attacker's contact on a remote bullet or segment goes to the target's owner.
         internal void SendBulletContact(in ResolvedHit hit) => _outgoingHits.AddBulletContact(hit);
 
-        private void ForgetBulletContacts(EntityId target)
+        internal void ForgetBulletContacts(EntityId target)
         {
+            if (_bulletContacts.Count == 0) return;
             for (var i = _bulletContacts.Count - 1; i >= 0; --i)
                 if (_bulletContacts[i].Target == target) _bulletContacts.RemoveAt(i);
         }
