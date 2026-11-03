@@ -78,7 +78,7 @@ namespace CombatSimulation.Core
 
         private ShipEntity LocalHitTarget(in ResolvedHit hit)
         {
-            var ship = FindShip(hit.TargetId);
+            var ship = _world.FindShip(hit.TargetId);
             return ship != null && ship.Owner == hit.TargetOwner && Setup.IsLocalOwner(ship.Owner) &&
                 hit.TargetShape < ship.ShapeCount ? ship : null;
         }
@@ -88,7 +88,7 @@ namespace CombatSimulation.Core
             var ship = LocalHitTarget(hit);
             if (ship == null || !(amount > 0f)) return;
             ship.AddPendingDamage(hit.DamageType, amount);
-            _events.Add(BattleEvent.RemoteHit(BattleId, Tick, _events.Count, hit, amount));
+            _world.Events.Add(BattleEvent.RemoteHit(BattleId, Tick, _world.Events.Count, hit, amount));
         }
 
         // Network plan 9d (owner, 2026-10-26): a contact between bullets, or between point defense and a bullet, counts if
@@ -105,14 +105,14 @@ namespace CombatSimulation.Core
         // damage once: this device's own contact with the same attacker (and tick, for a ray) already dealt it.
         private void ApplyBulletContact(in ResolvedHit hit)
         {
-            if (!_entities.TryGet(hit.TargetId, out var handle)) return;
+            if (!_world.Entities.TryGet(hit.TargetId, out var handle)) return;
             if (handle.Kind == EntityKind.Segment)
             {
-                ApplySegmentContact(hit, _segments.Get(handle));
+                ApplySegmentContact(hit, _world.Segments.Get(handle));
                 return;
             }
-            if (!_bullets.TryGet(handle, out var index)) return;
-            ref readonly var bullet = ref _bullets[index];
+            if (!_world.Bullets.TryGet(handle, out var index)) return;
+            ref readonly var bullet = ref _world.Bullets[index];
             if (bullet.Owner != hit.TargetOwner || !Setup.IsLocalOwner(bullet.Owner)) return;
             // A contact that stops the bullet counts once for its Hit triggers, even if this device saw it too.
             var stops = bullet.PendingRemoval == RemovalReason.None;
@@ -123,23 +123,23 @@ namespace CombatSimulation.Core
                     {
                         // The zap still counts as a contact; the bullet flies on.
                         if (RecordBulletContact(hit.AttackerId, hit.TargetId, hit.Tick)) AddPendingHit(index);
-                        _events.Add(BattleEvent.RemoteDisarm(BattleId, Tick, _events.Count, hit));
+                        _world.Events.Add(BattleEvent.RemoteDisarm(BattleId, Tick, _world.Events.Count, hit));
                         break;
                     }
                     if (stops) AddPendingHit(index);
-                    _bullets.MarkRemoval(handle, RemovalReason.Disposal);
-                    _events.Add(BattleEvent.RemoteDisarm(BattleId, Tick, _events.Count, hit));
+                    _world.Bullets.MarkRemoval(handle, RemovalReason.Disposal);
+                    _world.Events.Add(BattleEvent.RemoteDisarm(BattleId, Tick, _world.Events.Count, hit));
                     break;
                 case HitImpactKind.Stop:
                     if (stops) AddPendingHit(index);
-                    _bullets.MarkRemoval(handle, RemovalReason.Death);
+                    _world.Bullets.MarkRemoval(handle, RemovalReason.Death);
                     break;
                 default:
                     if (!RecordBulletContact(hit.AttackerId, hit.TargetId,
                         hit.ImpactKind == HitImpactKind.DamageOverTime ? hit.Tick : -1)) break;
-                    _bullets.AddDamage(handle, hit.Amount);
+                    _world.Bullets.AddDamage(handle, hit.Amount);
                     AddPendingHit(index);
-                    _events.Add(BattleEvent.RemoteHit(BattleId, Tick, _events.Count, hit, hit.Amount));
+                    _world.Events.Add(BattleEvent.RemoteHit(BattleId, Tick, _world.Events.Count, hit, hit.Amount));
                     break;
             }
         }

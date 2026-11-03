@@ -41,9 +41,9 @@ namespace CombatSimulation.Core
         private void RecordSpawnSamples()
         {
             if (!Setup.HasRemoteOwners) return;
-            for (var i = 0; i < ShipEntryCount; ++i)
+            for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
-                var ship = GetShipEntry(i);
+                var ship = _world.GetShipEntry(i);
                 if (ship != null && !Setup.IsLocalOwner(ship.Owner)) ship.RecordSpawnSample(ReadSpawnSample(ship));
             }
         }
@@ -70,7 +70,7 @@ namespace CombatSimulation.Core
         // A record whose parent is not a ship names a child bullet (phase 5, step 2).
         private bool ApplyRemoteBulletSpawn(in OwnerOperation operation)
         {
-            var ship = FindShip(operation.ParentId);
+            var ship = _world.FindShip(operation.ParentId);
             if (ship == null) return ApplyRemoteChildSpawn(operation);
             if (ship.Owner != operation.Owner || operation.DeviceIndex >= ship.DeviceCount) return false;
             var device = ship.GetDevice(operation.DeviceIndex);
@@ -83,11 +83,11 @@ namespace CombatSimulation.Core
             cannon?.ConfirmShot(operation.Tick);
             ship.RecordBarrelShot(operation.BarrelIndex, Math.Max(ship.GetBarrelShotTick(operation.BarrelIndex), operation.Tick));
 
-            if (_entities.TryGet(operation.EntityId, out var handle))
+            if (_world.Entities.TryGet(operation.EntityId, out var handle))
             {
-                if (!_bullets.TryGet(handle, out var existing) || _bullets[existing].Owner != operation.Owner) return false;
-                _bullets[existing].Confirmed = true;
-                RememberTriggerParent(_bullets[existing]);
+                if (!_world.Bullets.TryGet(handle, out var existing) || _world.Bullets[existing].Owner != operation.Owner) return false;
+                _world.Bullets[existing].Confirmed = true;
+                RememberTriggerParent(_world.Bullets[existing]);
                 if (cannon != null && operation.HasLaunchPose) Reaim(ship, cannon, existing, operation);
                 return true;
             }
@@ -100,7 +100,7 @@ namespace CombatSimulation.Core
                 if (cannon != null && cannon.Definition.Bullet.HasSpawnTriggers)
                 {
                     if (!ship.TryGetSpawnSample(operation.Tick, out var shot)) shot = ReadSpawnSample(ship);
-                    Launch(ship, operation.BarrelIndex, operation.EntityId, cannon.Definition.Bullet, cannon.Definition.Spread,
+                    _world.Launch(ship, operation.BarrelIndex, operation.EntityId, cannon.Definition.Bullet, cannon.Definition.Spread,
                         operation.Tick, shot, operation.HasLaunchPose ? operation : default, out _, out _, out _,
                         out var velocity, out _);
                     RememberTriggerParent(ship, operation.DeviceIndex, cannon.Definition.Bullet, operation.EntityId, velocity);
@@ -112,7 +112,7 @@ namespace CombatSimulation.Core
             if (copy >= 0)
             {
                 Adopt(ship, cannon, copy, operation);
-                RememberTriggerParent(_bullets[copy]);
+                RememberTriggerParent(_world.Bullets[copy]);
                 return true;
             }
 
@@ -120,7 +120,7 @@ namespace CombatSimulation.Core
             if (cannon != null)
             {
                 if (!ship.TryGetSpawnSample(operation.Tick, out var sample)) sample = ReadSpawnSample(ship);
-                index = CreateBullet(ship, operation.DeviceIndex, operation.BarrelIndex, operation.SpawnSequence,
+                index = _world.CreateBullet(ship, operation.DeviceIndex, operation.BarrelIndex, operation.SpawnSequence,
                     cannon.Definition.Bullet, cannon.Definition.Spread, operation.Tick, sample, out _, out _, out _,
                     operation.HasLaunchPose ? operation : default);
             }
@@ -129,17 +129,17 @@ namespace CombatSimulation.Core
                 // The owner stopped any earlier beam before this one, so a beam still attached here is a prediction.
                 if (beamDevice.TryGetBeam(out var current))
                 {
-                    if (_bullets.TryGet(current, out var currentIndex))
-                        RemoveBulletNow(currentIndex, _bullets[currentIndex].Confirmed ? RemovalReason.Disposal : RemovalReason.Unconfirmed);
+                    if (_world.Bullets.TryGet(current, out var currentIndex))
+                        RemoveBulletNow(currentIndex, _world.Bullets[currentIndex].Confirmed ? RemovalReason.Disposal : RemovalReason.Unconfirmed);
                     else beamDevice.Detach(current, Tick);
                 }
-                index = CreateBeam(ship, beamDevice, operation.SpawnSequence, operation.Tick);
+                index = _world.CreateBeam(ship, beamDevice, operation.SpawnSequence, operation.Tick);
             }
 
             if (index < 0) return false;
-            _bullets[index].Confirmed = true;
-            RememberTriggerParent(_bullets[index]);
-            _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, _bullets[index]));
+            _world.Bullets[index].Confirmed = true;
+            RememberTriggerParent(_world.Bullets[index]);
+            _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, _world.Bullets[index]));
             return true;
         }
 
@@ -148,15 +148,15 @@ namespace CombatSimulation.Core
         private bool ApplyRemoteExplosion(ShipEntity ship, DetonatorDevice detonator, in OwnerOperation operation)
         {
             var explosion = detonator.Definition.Explosion;
-            if (!operation.HasLaunchPose || operation.BarrelIndex != 0 || _entities.TryGet(operation.EntityId, out _))
+            if (!operation.HasLaunchPose || operation.BarrelIndex != 0 || _world.Entities.TryGet(operation.EntityId, out _))
                 return false;
             if (operation.Tick + explosion.LifetimeTicks - 1 < Tick || HasDueRemoval(operation.EntityId)) return true;
 
-            var index = CreateBullet(ship, operation.DeviceIndex, SpawnRequest.ShipCentre, operation.SpawnSequence,
+            var index = _world.CreateBullet(ship, operation.DeviceIndex, SpawnRequest.ShipCentre, operation.SpawnSequence,
                 explosion, 0f, operation.Tick, ReadSpawnSample(ship), out _, out _, out _, operation);
             if (index < 0) return false;
-            _bullets[index].Confirmed = true;
-            _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, _bullets[index]));
+            _world.Bullets[index].Confirmed = true;
+            _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, _world.Bullets[index]));
             return true;
         }
 
@@ -164,11 +164,11 @@ namespace CombatSimulation.Core
         // without hit tests. Contacts the copy made before are not undone; a copy already removed is not re-added.
         private void Reaim(ShipEntity ship, CannonDevice cannon, int index, in OwnerOperation launch)
         {
-            ref readonly var bullet = ref _bullets[index];
+            ref readonly var bullet = ref _world.Bullets[index];
             // An attached copy rides on its own ship copy (phase 5, step 3).
             if (bullet.IsBeam || bullet.Definition.IsHoming || bullet.Definition.AttachedToParent) return;
             if (!ship.TryGetSpawnSample(launch.Tick, out var sample)) sample = ReadSpawnSample(ship);
-            Launch(ship, launch.BarrelIndex, bullet.Id, bullet.Definition, cannon.Definition.Spread, bullet.SpawnTick,
+            _world.Launch(ship, launch.BarrelIndex, bullet.Id, bullet.Definition, cannon.Definition.Spread, bullet.SpawnTick,
                 sample, launch, out _, out var angle, out _, out var velocity, out var position);
             World.SetBulletPose(bullet.Body, position, angle);
             World.SetBulletVelocity(bullet.Body, velocity);
@@ -185,18 +185,18 @@ namespace CombatSimulation.Core
         {
             if (device is BeamDevice beamDevice)
             {
-                if (!beamDevice.TryGetBeam(out var current) || !_bullets.TryGet(current, out var beam)) return -1;
-                return IsCopyOfShot(_bullets[beam], operation, long.MaxValue) ? beam : -1;
+                if (!beamDevice.TryGetBeam(out var current) || !_world.Bullets.TryGet(current, out var beam)) return -1;
+                return IsCopyOfShot(_world.Bullets[beam], operation, long.MaxValue) ? beam : -1;
             }
 
             var window = CopyWindow((CannonDevice)device);
             if (window <= 0) return -1;
             var found = -1;
             var foundTick = 0L;
-            for (var i = 0; i < _bullets.Capacity; ++i)
+            for (var i = 0; i < _world.Bullets.Capacity; ++i)
             {
-                if (!_bullets.IsAlive(i)) continue;
-                ref readonly var bullet = ref _bullets[i];
+                if (!_world.Bullets.IsAlive(i)) continue;
+                ref readonly var bullet = ref _world.Bullets[i];
                 if (bullet.IsBeam || !IsCopyOfShot(bullet, operation, window)) continue;
                 var distance = Math.Abs(bullet.SpawnTick - operation.Tick);
                 var foundDistance = Math.Abs(foundTick - operation.Tick);
@@ -223,17 +223,17 @@ namespace CombatSimulation.Core
         // The body, beam attachment and contacts so far stay. The Rename event lets the scene keep the copy's view.
         private void Adopt(ShipEntity ship, CannonDevice cannon, int index, in OwnerOperation operation)
         {
-            ref var bullet = ref _bullets[index];
+            ref var bullet = ref _world.Bullets[index];
             var previous = bullet.Id;
-            _entities.Remove(previous);
-            TryRegister(operation.EntityId, _bullets.GetHandle(index));
+            _world.Entities.Remove(previous);
+            _world.TryRegister(operation.EntityId, _world.Bullets.GetHandle(index));
             bullet.Id = operation.EntityId;
             // A homing copy keeps its search phase relative to the owner's spawn tick (P3).
             bullet.NextSearchTick += operation.Tick - bullet.SpawnTick;
             bullet.SpawnTick = operation.Tick;
             if (!bullet.IsBeam) bullet.ExpiryTick = operation.Tick + bullet.Definition.LifetimeTicks - 1;
             bullet.Confirmed = true;
-            _events.Add(BattleEvent.BulletRename(BattleId, Tick, _events.Count, bullet, previous));
+            _world.Events.Add(BattleEvent.BulletRename(BattleId, Tick, _world.Events.Count, bullet, previous));
             if (cannon != null && operation.HasLaunchPose) Reaim(ship, cannon, index, operation);
         }
 
@@ -263,10 +263,10 @@ namespace CombatSimulation.Core
             }
             if (!settled) return;
 
-            for (var i = 0; i < _bullets.Capacity; ++i)
+            for (var i = 0; i < _world.Bullets.Capacity; ++i)
             {
-                if (!_bullets.IsAlive(i)) continue;
-                ref readonly var bullet = ref _bullets[i];
+                if (!_world.Bullets.IsAlive(i)) continue;
+                ref readonly var bullet = ref _world.Bullets[i];
                 if (bullet.Confirmed || !_watermarks.TryGetValue(bullet.Owner, out var state) || bullet.SpawnTick > state.Limit)
                     continue;
                 RemoveBulletNow(i, RemovalReason.Unconfirmed);
@@ -287,10 +287,10 @@ namespace CombatSimulation.Core
         // A predicted removal outside stage 12: the bullet leaves at once, before this tick's queries.
         private void RemoveBulletNow(int index, RemovalReason reason)
         {
-            ref var bullet = ref _bullets[index];
+            ref var bullet = ref _world.Bullets[index];
             bullet.PendingRemoval = reason;
-            if (bullet.IsBeam) DetachBeam(bullet, _bullets.GetHandle(index));
-            _events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _events.Count, bullet, BattleEventAuthority.Predicted));
+            if (bullet.IsBeam) DetachBeam(bullet, _world.Bullets.GetHandle(index));
+            _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet, BattleEventAuthority.Predicted));
             ReleaseBullet(index);
         }
 
@@ -298,7 +298,7 @@ namespace CombatSimulation.Core
 
         private void DetachBeam(in BulletEntity beam, EntityHandle handle, long stopTick)
         {
-            var ship = FindShip(beam.ParentId);
+            var ship = _world.FindShip(beam.ParentId);
             if (ship != null && beam.DeviceIndex < ship.DeviceCount && ship.GetDevice(beam.DeviceIndex) is BeamDevice device)
                 device.Detach(handle, stopTick);
         }

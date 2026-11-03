@@ -13,7 +13,7 @@ namespace CombatSimulation.Core
         // Legacy Bullet: Created triggers run when the bullet is made, at its spawn tick.
         private void RunCreatedTriggers(int index)
         {
-            ref readonly var bullet = ref _bullets[index];
+            ref readonly var bullet = ref _world.Bullets[index];
             if ((bullet.Definition.TriggerConditions & BulletTriggerConditions.Created) == 0 ||
                 !Setup.IsLocalOwner(bullet.Owner)) return;
             FireTriggers(index, BulletTriggerConditions.Created, bullet.SpawnTick);
@@ -24,7 +24,7 @@ namespace CombatSimulation.Core
         // next tick, so that tick is their spawn tick.
         private void RunStructureTriggers(int index)
         {
-            ref var bullet = ref _bullets[index];
+            ref var bullet = ref _world.Bullets[index];
             var hits = bullet.PendingHits;
             bullet.PendingHits = 0;
             if (bullet.IsBeam || bullet.SkipTriggers || bullet.Definition.TriggerConditions == BulletTriggerConditions.None ||
@@ -35,15 +35,15 @@ namespace CombatSimulation.Core
             {
                 // Legacy DetonateAction on Hit returns Destroy: the bullet stops.
                 if (FireTriggers(index, BulletTriggerConditions.Hit, spawnTick) &&
-                    _bullets[index].PendingRemoval == RemovalReason.None)
-                    _bullets[index].PendingRemoval = RemovalReason.Death;
+                    _world.Bullets[index].PendingRemoval == RemovalReason.None)
+                    _world.Bullets[index].PendingRemoval = RemovalReason.Death;
             }
 
-            switch (_bullets[index].PendingRemoval)
+            switch (_world.Bullets[index].PendingRemoval)
             {
                 case RemovalReason.Death:
                     FireTriggers(index, BulletTriggerConditions.Destroyed, spawnTick);
-                    if (_bullets[index].Definition.DetonateWhenDestroyed)
+                    if (_world.Bullets[index].Definition.DetonateWhenDestroyed)
                         FireTriggers(index, BulletTriggerConditions.Detonated, spawnTick);
                     break;
                 case RemovalReason.Expiry:
@@ -61,7 +61,7 @@ namespace CombatSimulation.Core
         // Owner only: counts a contact of a local projectile for its Hit triggers (stage 12).
         private void AddPendingHit(int index)
         {
-            ref var bullet = ref _bullets[index];
+            ref var bullet = ref _world.Bullets[index];
             if (!bullet.IsBeam && Setup.IsLocalOwner(bullet.Owner) &&
                 (bullet.Definition.TriggerConditions & BulletTriggerConditions.Hit) != 0)
                 ++bullet.PendingHits;
@@ -70,7 +70,7 @@ namespace CombatSimulation.Core
         // Runs the triggers of one condition in order. True if a Detonate trigger is among them.
         private bool FireTriggers(int index, BulletTriggerConditions condition, long spawnTick)
         {
-            var triggers = _bullets[index].Definition.Triggers;
+            var triggers = _world.Bullets[index].Definition.Triggers;
             var detonate = false;
             for (var t = 0; t < triggers.Count; ++t)
             {
@@ -88,7 +88,7 @@ namespace CombatSimulation.Core
         // nesting.
         private void SpawnChildren(int parentIndex, int triggerIndex, BulletTriggerDefinition trigger, long spawnTick)
         {
-            var parent = _bullets[parentIndex];
+            var parent = _world.Bullets[parentIndex];
             var position = World.GetBulletPosition(parent.Body);
             var parentAngle = World.GetBulletRotation(parent.Body).Angle;
             var parentVelocity = World.GetBulletVelocity(parent.Body);
@@ -97,7 +97,7 @@ namespace CombatSimulation.Core
             for (var i = 0; i < pattern.Count; ++i)
             {
                 // Each spawn can grow the store, so the parent is read again.
-                ref var counter = ref _bullets[parentIndex];
+                ref var counter = ref _world.Bullets[parentIndex];
                 if (counter.ChildTick != spawnTick)
                 {
                     counter.ChildTick = spawnTick;
@@ -116,8 +116,8 @@ namespace CombatSimulation.Core
 
                 var index = CreateChild(id, parent, parentVelocity, definition, draw, spawnTick, start, angle);
                 if (index < 0) continue;
-                ref readonly var child = ref _bullets[index];
-                _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, child, Authority(child.Owner)));
+                ref readonly var child = ref _world.Bullets[index];
+                _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, child, _world.Authority(child.Owner)));
                 CaptureBulletSpawn(child, triggerIndex, 0, sequence, spawnTick, true, start, angle);
                 RunCreatedTriggers(index);
             }
@@ -128,10 +128,10 @@ namespace CombatSimulation.Core
         private int CreateChild(EntityId id, in BulletEntity parent, Vec2 parentVelocity, BulletDefinition definition,
             in ChildDraw draw, long spawnTick, Vec2 launch, float angle)
         {
-            var index = _bullets.Allocate();
-            if (!TryRegister(id, _bullets.GetHandle(index)))
+            var index = _world.Bullets.Allocate();
+            if (!_world.TryRegister(id, _world.Bullets.GetHandle(index)))
             {
-                _bullets.Release(index);
+                _world.Bullets.Release(index);
                 return -1;
             }
 
@@ -142,7 +142,7 @@ namespace CombatSimulation.Core
             for (var tick = spawnTick; tick < Tick; ++tick)
                 position = World.Torus.Wrap(position + TickDuration * velocity);
 
-            var ship = FindShip(parent.ShipId);
+            var ship = _world.FindShip(parent.ShipId);
             var body = World.CreateBullet(new BulletDef
             {
                 Position = position,
@@ -153,7 +153,7 @@ namespace CombatSimulation.Core
                 Filter = CollisionFilters.Bullet(definition, parent.Allegiance),
             }, new Circle(Vec2.Zero, definition.Radius));
 
-            ref var bullet = ref _bullets[index];
+            ref var bullet = ref _world.Bullets[index];
             bullet.Id = id;
             bullet.ParentId = parent.Id;
             bullet.ShipId = parent.ShipId;
@@ -168,7 +168,7 @@ namespace CombatSimulation.Core
             bullet.SpawnTick = spawnTick;
             bullet.Confirmed = true;
             bullet.NextSearchTick = spawnTick + 1;
-            _bullets.SetBody(index, body);
+            _world.Bullets.SetBody(index, body);
             return index;
         }
 
@@ -208,9 +208,9 @@ namespace CombatSimulation.Core
             if (!operation.HasLaunchPose || operation.BarrelIndex != 0) return false;
 
             TriggerParent parent;
-            if (_entities.TryGet(operation.ParentId, out var handle) && _bullets.TryGet(handle, out var parentIndex))
+            if (_world.Entities.TryGet(operation.ParentId, out var handle) && _world.Bullets.TryGet(handle, out var parentIndex))
             {
-                ref readonly var copy = ref _bullets[parentIndex];
+                ref readonly var copy = ref _world.Bullets[parentIndex];
                 if (copy.IsBeam) return false;
                 parent = new TriggerParent(copy, World.GetBulletVelocity(copy.Body));
             }
@@ -218,7 +218,7 @@ namespace CombatSimulation.Core
 
             var triggers = parent.Bullet.Definition.Triggers;
             if (parent.Bullet.Owner != operation.Owner || operation.DeviceIndex >= triggers.Count ||
-                triggers[operation.DeviceIndex].IsDetonate || _entities.TryGet(operation.EntityId, out _)) return false;
+                triggers[operation.DeviceIndex].IsDetonate || _world.Entities.TryGet(operation.EntityId, out _)) return false;
 
             var trigger = triggers[operation.DeviceIndex];
             var draw = DrawChild(operation.EntityId, operation.Tick, trigger);
@@ -232,9 +232,9 @@ namespace CombatSimulation.Core
             var index = CreateChild(operation.EntityId, parent.Bullet, parent.Velocity, trigger.Bullet, draw,
                 operation.Tick, World.Torus.Wrap(operation.Pose.Position), operation.Pose.Angle);
             if (index < 0) return false;
-            ref readonly var child = ref _bullets[index];
+            ref readonly var child = ref _world.Bullets[index];
             RememberTriggerParent(child);
-            _events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _events.Count, child));
+            _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, child));
             return true;
         }
 

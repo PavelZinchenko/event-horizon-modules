@@ -43,9 +43,9 @@ namespace CombatSimulation.Core
                     hit.ImpactKind == HitImpactKind.DamageOverTime || hit.ContactState != HitContactState.Start)))
                 return false;
             // The attacker may already be gone. A live copy, when present, must agree with the sender.
-            if (_entities.TryGet(hit.AttackerId, out var handle) && EntityOwner(handle) != record.SenderOwner)
+            if (_world.Entities.TryGet(hit.AttackerId, out var handle) && EntityOwner(handle) != record.SenderOwner)
                 return false;
-            if (_entities.TryGet(hit.TargetId, out handle) &&
+            if (_world.Entities.TryGet(hit.TargetId, out handle) &&
                 (IsContactTarget(handle.Kind) != hit.TargetIsBullet || EntityOwner(handle) != hit.TargetOwner)) return false;
             if (!AcceptSequence(_hitSequences, record.SenderOwner, record.Sequence)) return false;
             var index = _remoteHits.Count;
@@ -62,7 +62,7 @@ namespace CombatSimulation.Core
         // controls, so the entity takes no more input.
         internal bool AcceptsInputFrom(EntityId entity, int owner)
         {
-            var ship = FindShip(entity);
+            var ship = _world.FindShip(entity);
             if (ship != null)
             {
                 if (ship.Owner != owner) return false;
@@ -88,9 +88,9 @@ namespace CombatSimulation.Core
             Finite(pose.Angle) && Finite(pose.LinearVelocity.X) && Finite(pose.LinearVelocity.Y) && Finite(pose.AngularVelocity);
 
         private int EntityOwner(EntityHandle handle) => handle.Kind == EntityKind.Bullet
-            ? (_bullets.TryGet(handle, out var index) ? _bullets[index].Owner : -1)
-            : handle.Kind == EntityKind.Segment ? _segments.Get(handle)?.Owner ?? -1
-            : (_ships.Get(handle)?.Owner ?? -1);
+            ? (_world.Bullets.TryGet(handle, out var index) ? _world.Bullets[index].Owner : -1)
+            : handle.Kind == EntityKind.Segment ? _world.Segments.Get(handle)?.Owner ?? -1
+            : (_world.Ships.Get(handle)?.Owner ?? -1);
 
         // A hit record on a bullet or a tail segment names one contact (ResolvedHit.TargetIsBullet; network plan 9d).
         private static bool IsContactTarget(EntityKind kind) => kind == EntityKind.Bullet || kind == EntityKind.Segment;
@@ -140,31 +140,31 @@ namespace CombatSimulation.Core
                         var removalBay = FindBay(operation.BayKey.Value);
                         if (removalBay == null || removalBay.Slot.Owner != operation.Owner) return false;
                     }
-                    return !_entities.TryGet(operation.EntityId, out var handle) ||
+                    return !_world.Entities.TryGet(operation.EntityId, out var handle) ||
                         (EntityOwner(handle) == operation.Owner &&
                          (IsContactTarget(handle.Kind) ? !operation.BayKey.HasValue :
-                          _ships.Get(handle)?.Bay?.Key == operation.BayKey && operation.BayKey.HasValue));
+                          _world.Ships.Get(handle)?.Bay?.Key == operation.BayKey && operation.BayKey.HasValue));
                 // The missile or its target may be gone; a live missile must be the owner's homing projectile.
                 case OwnerOperationKind.MissileTarget:
                     if (operation.EntityId.IsNull) return false;
-                    if (_entities.TryGet(operation.TargetId, out handle) && handle.Kind == EntityKind.Bullet) return false;
-                    return !_entities.TryGet(operation.EntityId, out handle) ||
-                        (_bullets.TryGet(handle, out var missile) && _bullets[missile].Owner == operation.Owner &&
-                         !_bullets[missile].IsBeam && _bullets[missile].Definition.IsHoming);
+                    if (_world.Entities.TryGet(operation.TargetId, out handle) && handle.Kind == EntityKind.Bullet) return false;
+                    return !_world.Entities.TryGet(operation.EntityId, out handle) ||
+                        (_world.Bullets.TryGet(handle, out var missile) && _world.Bullets[missile].Owner == operation.Owner &&
+                         !_world.Bullets[missile].IsBeam && _world.Bullets[missile].Definition.IsHoming);
                 // The ship may be gone; a live ship must be the owner's.
                 case OwnerOperationKind.Allegiance:
                     return !operation.EntityId.IsNull && Allegiances.IsValid(operation.Allegiance) &&
-                        (!_entities.TryGet(operation.EntityId, out handle) ||
+                        (!_world.Entities.TryGet(operation.EntityId, out handle) ||
                          (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner));
                 case OwnerOperationKind.Retreat:
-                    return !operation.EntityId.IsNull && (!_entities.TryGet(operation.EntityId, out handle) ||
-                        (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner && _ships.Get(handle)?.Slot != null));
+                    return !operation.EntityId.IsNull && (!_world.Entities.TryGet(operation.EntityId, out handle) ||
+                        (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner && _world.Ships.Get(handle)?.Slot != null));
                 // The ship may be gone; a live ship must be the owner's and have the device.
                 case OwnerOperationKind.DeviceUse:
                     return !operation.EntityId.IsNull && operation.DeviceIndex >= 0 &&
-                        (!_entities.TryGet(operation.EntityId, out handle) ||
+                        (!_world.Entities.TryGet(operation.EntityId, out handle) ||
                          (handle.Kind == EntityKind.Ship && EntityOwner(handle) == operation.Owner &&
-                          operation.DeviceIndex < _ships.Get(handle).DeviceCount));
+                          operation.DeviceIndex < _world.Ships.Get(handle).DeviceCount));
                 // The parent may not exist yet; it is checked when the record applies.
                 case OwnerOperationKind.BulletSpawn:
                     return !operation.ParentId.IsNull && operation.DeviceIndex >= 0 && operation.BarrelIndex >= 0 &&
@@ -242,16 +242,16 @@ namespace CombatSimulation.Core
             if (record.Reason == RosterTransitionReason.Deployed)
             {
                 if (slot.DeploymentCount == uint.MaxValue || record.DeploymentCount != slot.DeploymentCount + 1 ||
-                    _entities.TryGet(operation.EntityId, out _)) return false;
-                ship = _ships.Allocate();
-                if (!TryRegister(operation.EntityId, ship.Handle)) { _ships.Release(ship); return false; }
+                    _world.Entities.TryGet(operation.EntityId, out _)) return false;
+                ship = _world.Ships.Allocate();
+                if (!_world.TryRegister(operation.EntityId, ship.Handle)) { _world.Ships.Release(ship); return false; }
                 var body = World.CreateBody(new BodyDef { Mass = slot.Setup.Ship.Mass });
                 // Initialize with the owner's retained resources, not values inferred from a prediction.
                 slot.Import(record, null);
                 ship.Initialize(operation.EntityId, slot, body, operation.Tick, Setup.DamageTypes.Count);
-                AddShipShapes(ship, CollisionFilters.Ship(ship.Allegiance));
+                _world.AddShipShapes(ship, CollisionFilters.Ship(ship.Allegiance));
                 SetSpawnPose(body, operation.Pose);
-                _events.Add(BattleEvent.Spawn(BattleId, Tick, _events.Count, ship));
+                _world.Events.Add(BattleEvent.Spawn(BattleId, Tick, _world.Events.Count, ship));
             }
             else
             {
@@ -263,7 +263,7 @@ namespace CombatSimulation.Core
                 }
             }
             slot.Import(record, ship);
-            _deploymentOrder = Math.Max(_deploymentOrder, record.DeploymentOrder);
+            _world.DeploymentOrder = Math.Max(_world.DeploymentOrder, record.DeploymentOrder);
             _flow.Add(operation.Tick, slot.Side, record.PreviousStatus, record.Status);
             AddTransition(slot, record.PreviousStatus, record.Reason, operation.EntityId);
             return true;
@@ -271,24 +271,22 @@ namespace CombatSimulation.Core
 
         private bool ApplyRemoteDrone(in OwnerOperation operation)
         {
-            if (_entities.TryGet(operation.EntityId, out _) || _removedRemoteEntities.Contains(operation.EntityId)) return false;
+            if (_world.Entities.TryGet(operation.EntityId, out _) || _removedRemoteEntities.Contains(operation.EntityId)) return false;
             var bay = FindBay(operation.BayKey.Value);
             if (bay.InHangar <= 0 || operation.EntityId != SpawnIdentity.CreateChild(operation.ParentId,
                 operation.Tick, (uint)bay.Key.DeviceIndex, (uint)bay.Launched, 0)) return false;
-            var ship = _ships.Allocate();
-            if (!TryRegister(operation.EntityId, ship.Handle)) { _ships.Release(ship); return false; }
+            var ship = _world.Ships.Allocate();
+            if (!_world.TryRegister(operation.EntityId, ship.Handle)) { _world.Ships.Release(ship); return false; }
             var body = World.CreateBody(new BodyDef { Mass = bay.Drone.Mass });
             ship.InitializeDrone(operation.EntityId, bay, body, operation.Tick, Setup.DamageTypes.Count);
-            AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));
+            _world.AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));
             SetSpawnPose(body, operation.Pose);
-            var index = 0;
-            while (index < _drones.Count && _drones[index].Id.Value < ship.Id.Value) ++index;
-            _drones.Insert(index, ship);
+            _world.AddDrone(ship);
             bay.RecordLaunch();
-            _events.Add(BattleEvent.Spawn(BattleId, Tick, _events.Count, ship));
+            _world.Events.Add(BattleEvent.Spawn(BattleId, Tick, _world.Events.Count, ship));
 
             // The copy of the parent links its clone (phase 5, step 7c); a parent that already left needs nothing.
-            var parent = FindShip(operation.ParentId);
+            var parent = _world.FindShip(operation.ParentId);
             if (parent != null && parent.Slot == bay.Slot)
                 parent.GetDevice(bay.Key.DeviceIndex).OnShipLaunched(this, parent, ship.Id, operation.Tick);
             return true;
@@ -298,7 +296,7 @@ namespace CombatSimulation.Core
         // the owner's roster record completes the retreat.
         private bool ApplyRemoteRetreat(in OwnerOperation operation)
         {
-            var ship = FindShip(operation.EntityId);
+            var ship = _world.FindShip(operation.EntityId);
             if (ship == null || ship.Owner != operation.Owner || ship.Slot == null ||
                 ship.RetreatCompletionTick != ShipEntity.NoRetreat) return false;
             ship.RetreatCompletionTick = operation.Tick + RetreatTicks;
@@ -309,8 +307,8 @@ namespace CombatSimulation.Core
         // record still commits. A target that is gone here makes the copy search at once (HomingSteering).
         private void ApplyRemoteMissileTarget(in OwnerOperation operation)
         {
-            if (!_entities.TryGet(operation.EntityId, out var handle) || !_bullets.TryGet(handle, out var index)) return;
-            ref var bullet = ref _bullets[index];
+            if (!_world.Entities.TryGet(operation.EntityId, out var handle) || !_world.Bullets.TryGet(handle, out var index)) return;
+            ref var bullet = ref _world.Bullets[index];
             bullet.TargetId = operation.TargetId;
             bullet.NextSearchTick = operation.Tick + HomingSteering.SearchTicks;
         }
@@ -320,9 +318,9 @@ namespace CombatSimulation.Core
         // commits. Until the record arrives, the copy collides with its old allegiance.
         private void ApplyRemoteAllegiance(in OwnerOperation operation)
         {
-            var ship = FindShip(operation.EntityId);
+            var ship = _world.FindShip(operation.EntityId);
             if (ship != null && ship.Owner == operation.Owner && ship.Allegiance != operation.Allegiance)
-                SetAllegiance(ship, operation.Allegiance);
+                _world.SetAllegiance(ship, operation.Allegiance);
         }
 
         // Phase 5, step 7 (H8): the copy's device starts or ends the use at the owner's tick, before this tick's
@@ -330,7 +328,7 @@ namespace CombatSimulation.Core
         // copy has the old status.
         private void ApplyRemoteDeviceUse(in OwnerOperation operation)
         {
-            var ship = FindShip(operation.EntityId);
+            var ship = _world.FindShip(operation.EntityId);
             if (ship != null && ship.Owner == operation.Owner && operation.DeviceIndex < ship.DeviceCount)
                 ship.GetDevice(operation.DeviceIndex).ApplyRemoteUse(this, ship, operation.Tick, operation.UseStarted);
         }
@@ -341,7 +339,7 @@ namespace CombatSimulation.Core
 
         private bool ApplyRemoteRemoval(in OwnerOperation operation)
         {
-            if (!_entities.TryGet(operation.EntityId, out var handle))
+            if (!_world.Entities.TryGet(operation.EntityId, out var handle))
             {
                 // A projectile may already have disappeared through prediction. Its owner removal is still a commit.
                 if (operation.BayKey.HasValue) return false;
@@ -352,24 +350,24 @@ namespace CombatSimulation.Core
             if (handle.Kind == EntityKind.Segment)
             {
                 if (operation.BayKey.HasValue) return false;
-                RemoveSegment(_segments.Get(handle), operation.RemovalReason);
+                RemoveSegment(_world.Segments.Get(handle), operation.RemovalReason);
             }
             else if (handle.Kind == EntityKind.Bullet)
             {
-                if (operation.BayKey.HasValue || !_bullets.TryGet(handle, out var index)) return false;
-                ref var bullet = ref _bullets[index];
+                if (operation.BayKey.HasValue || !_world.Bullets.TryGet(handle, out var index)) return false;
+                ref var bullet = ref _world.Bullets[index];
                 bullet.PendingRemoval = operation.RemovalReason;
                 if (bullet.IsBeam) DetachBeam(bullet, handle, operation.Tick);
-                _events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _events.Count, bullet));
+                _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet));
                 ReleaseBullet(index);
                 MarkTriggerParentRemoved(operation.EntityId, operation.Tick);
             }
             else
             {
-                var ship = _ships.Get(handle);
+                var ship = _world.Ships.Get(handle);
                 if (ship == null || !ship.IsDrone || ship.Bay.Key != operation.BayKey) return false;
                 _removedRemoteEntities.Add(ship.Id);
-                _drones.Remove(ship);
+                _world.Drones.Remove(ship);
                 RemoveShip(ship, operation.RemovalReason);
             }
             return true;

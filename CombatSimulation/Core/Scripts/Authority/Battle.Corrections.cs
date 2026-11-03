@@ -20,9 +20,9 @@ namespace CombatSimulation.Core
             if (Tick == 0) throw new InvalidOperationException("The battle has no completed tick.");
 
             batch.Begin(BattleId, owner, Tick - 1, AppliedHitSequence(peerOwner));
-            for (var i = 0; i < ShipEntryCount; ++i)
+            for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
-                var ship = GetShipEntry(i);
+                var ship = _world.GetShipEntry(i);
                 if (ship == null || ship.Owner != owner) continue;
 
                 for (var d = 0; d < ship.DeviceCount; ++d)
@@ -40,10 +40,10 @@ namespace CombatSimulation.Core
         private void WriteMissileCorrections(int owner, int peerOwner, CorrectionBatch batch)
         {
             var tick = Tick - 1;
-            for (var i = 0; i < _bullets.Capacity; ++i)
+            for (var i = 0; i < _world.Bullets.Capacity; ++i)
             {
-                if (!_bullets.IsAlive(i)) continue;
-                ref readonly var bullet = ref _bullets[i];
+                if (!_world.Bullets.IsAlive(i)) continue;
+                ref readonly var bullet = ref _world.Bullets[i];
                 if (bullet.Owner != owner || bullet.IsBeam || !bullet.Definition.IsHoming ||
                     bullet.PendingRemoval != RemovalReason.None) continue;
                 var position = World.GetBulletPosition(bullet.Body);
@@ -60,9 +60,9 @@ namespace CombatSimulation.Core
         private bool IsNearPeer(int peerOwner, Vec2 position, BulletDefinition definition)
         {
             var reach = definition.Speed * NearSeconds;
-            for (var i = 0; i < ShipEntryCount; ++i)
+            for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
-                var ship = GetShipEntry(i);
+                var ship = _world.GetShipEntry(i);
                 if (ship == null || ship.Owner != peerOwner) continue;
                 var distance = World.Torus.Delta(position, World.GetPosition(ship.Body)).Length - ship.Definition.HullRadius;
                 if (distance <= reach) return true;
@@ -76,8 +76,8 @@ namespace CombatSimulation.Core
         // Runtime calls this for each missile it sent from a batch for tick.
         internal void MissileCorrectionSent(EntityId id, long tick)
         {
-            if (!_entities.TryGet(id, out var handle) || !_bullets.TryGet(handle, out var index)) return;
-            ref var bullet = ref _bullets[index];
+            if (!_world.Entities.TryGet(id, out var handle) || !_world.Bullets.TryGet(handle, out var index)) return;
+            ref var bullet = ref _world.Bullets[index];
             bullet.Corrected = true;
             bullet.CorrectedTick = tick;
         }
@@ -102,7 +102,7 @@ namespace CombatSimulation.Core
             var held = 0;
             foreach (var body in batch.Bodies)
             {
-                var ship = FindShip(body.EntityId);
+                var ship = _world.FindShip(body.EntityId);
                 if (ship == null || ship.Owner != senderOwner || !ValidCorrection(ship, batch, body)) continue;
                 if (batch.Tick <= ship.LastCorrectionTick || (ship.Correction.IsSet && batch.Tick <= ship.Correction.Tick))
                     continue;
@@ -111,8 +111,8 @@ namespace CombatSimulation.Core
             }
             foreach (var missile in batch.Missiles)
             {
-                if (!_entities.TryGet(missile.EntityId, out var handle) || !_bullets.TryGet(handle, out var index)) continue;
-                ref var bullet = ref _bullets[index];
+                if (!_world.Entities.TryGet(missile.EntityId, out var handle) || !_world.Bullets.TryGet(handle, out var index)) continue;
+                ref var bullet = ref _world.Bullets[index];
                 if (bullet.Owner != senderOwner || bullet.IsBeam || !bullet.Definition.IsHoming || !ValidMissile(missile) ||
                     batch.Tick < bullet.SpawnTick || (bullet.Corrected && batch.Tick <= bullet.CorrectedTick) ||
                     (bullet.HasCorrection && batch.Tick <= bullet.CorrectionTick)) continue;
@@ -143,17 +143,17 @@ namespace CombatSimulation.Core
         private void ApplyCorrections()
         {
             if (!Setup.HasRemoteOwners) return;
-            for (var i = 0; i < ShipEntryCount; ++i)
+            for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
-                var ship = GetShipEntry(i);
+                var ship = _world.GetShipEntry(i);
                 if (ship == null || !ship.Correction.IsSet || ship.Correction.Tick >= Tick) continue;
                 ApplyCorrection(ship, ship.Correction);
                 ship.Correction.IsSet = false;
             }
-            for (var i = 0; i < _bullets.Capacity; ++i)
+            for (var i = 0; i < _world.Bullets.Capacity; ++i)
             {
-                if (!_bullets.IsAlive(i)) continue;
-                ref var bullet = ref _bullets[i];
+                if (!_world.Bullets.IsAlive(i)) continue;
+                ref var bullet = ref _world.Bullets[i];
                 if (!bullet.HasCorrection || bullet.CorrectionTick >= Tick) continue;
                 ApplyMissileCorrection(ref bullet);
                 bullet.HasCorrection = false;
@@ -394,9 +394,9 @@ namespace CombatSimulation.Core
         private void RecordBodySamples()
         {
             if (!Setup.HasRemoteOwners) return;
-            for (var i = 0; i < ShipEntryCount; ++i)
+            for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
-                var ship = GetShipEntry(i);
+                var ship = _world.GetShipEntry(i);
                 if (ship != null && !Setup.IsLocalOwner(ship.Owner)) ship.RecordBodySample(Tick, ReadSpawnPose(ship));
             }
         }

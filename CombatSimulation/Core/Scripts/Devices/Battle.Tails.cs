@@ -16,16 +16,14 @@ namespace CombatSimulation.Core
     // either the attacker's or the owner's device sees it, as a contact on a bullet does (network plan 9d).
     public sealed partial class Battle
     {
-        internal TailSegmentStore Segments => _segments;
-
         internal TailSegment FindSegment(EntityId id) =>
-            _entities.TryGet(id, out var handle) ? _segments.Get(handle) : null;
+            _world.Entities.TryGet(id, out var handle) ? _world.Segments.Get(handle) : null;
 
         // Stage 3: legacy Length counts the segments of the chain from the head.
         internal int CountAttachedSegments(WormTailDevice device)
         {
             var count = 0;
-            for (var segment = _segments.Get(device.Head); segment != null; segment = _segments.Get(segment.Next))
+            for (var segment = _world.Segments.Get(device.Head); segment != null; segment = _world.Segments.Get(segment.Next))
                 ++count;
             return count;
         }
@@ -36,17 +34,17 @@ namespace CombatSimulation.Core
         {
             if (!Setup.IsLocalOwner(ship.Owner)) return;
 
-            var head = _segments.Get(device.Head);
+            var head = _world.Segments.Get(device.Head);
             if (head == null)
             {
                 if (Tick >= device.HeadGrowthTick) TryGrowSegment(ship, device, null);
                 return;
             }
 
-            for (var segment = head; segment != null; segment = _segments.Get(segment.Next))
+            for (var segment = head; segment != null; segment = _world.Segments.Get(segment.Next))
             {
                 Recover(segment);
-                if (_segments.Get(segment.Next) != null || segment.Number >= device.Definition.Size ||
+                if (_world.Segments.Get(segment.Next) != null || segment.Number >= device.Definition.Size ||
                     Tick < segment.NextGrowthTick) continue;
                 if (TryGrowSegment(ship, device, segment)) break;
             }
@@ -55,9 +53,9 @@ namespace CombatSimulation.Core
         // Stage 2, on the owner: legacy InitiateSelfDestruct runs out; the recent damage of a detached segment falls too.
         private void UpdateDetachedSegments()
         {
-            for (var i = 0; i < _segments.Capacity; ++i)
+            for (var i = 0; i < _world.Segments.Capacity; ++i)
             {
-                var segment = _segments[i];
+                var segment = _world.Segments[i];
                 if (!segment.IsAlive || !segment.Detached || !Setup.IsLocalOwner(segment.Owner)) continue;
                 if (Tick >= segment.SelfDestructTick) KillSegment(segment);
                 else Recover(segment);
@@ -103,10 +101,10 @@ namespace CombatSimulation.Core
             float scale, in Pose pose)
         {
             var definition = device.Definition;
-            var segment = _segments.Allocate();
-            if (!TryRegister(id, segment.Handle))
+            var segment = _world.Segments.Allocate();
+            if (!_world.TryRegister(id, segment.Handle))
             {
-                _segments.Release(segment);
+                _world.Segments.Release(segment);
                 return null;
             }
 
@@ -120,7 +118,7 @@ namespace CombatSimulation.Core
             var growsSlowly = parent != null && (parent.GrowsSlowly || parent.HasGrown);
             segment.Initialize(id, ship, device.Index, definition, (parent?.Number ?? 0) + 1, body, shape, scale, mass,
                 growsSlowly);
-            _shapes.Register(shape, new ShapeEntry(segment.Handle, id, ShapeHitPriority.Hull, 0));
+            _world.Shapes.Register(shape, new ShapeEntry(segment.Handle, id, ShapeHitPriority.Hull, 0));
 
             var limit = parent == null ? WormTailDefinition.HeadLimit : WormTailDefinition.SegmentLimit;
             segment.Joint = World.CreateHinge(new HingeDef
@@ -162,15 +160,15 @@ namespace CombatSimulation.Core
         // parent's velocity and no spin, and skips the damping; else it loses 5 x its sideways speed per second.
         private void UpdateSegmentMotion()
         {
-            for (var i = 0; i < _segments.Capacity; ++i)
+            for (var i = 0; i < _world.Segments.Capacity; ++i)
             {
-                var segment = _segments[i];
+                var segment = _world.Segments[i];
                 if (!segment.IsAlive) continue;
                 segment.PreStepVelocity = World.GetLinearVelocity(segment.Body);
                 if (segment.Detached) continue;
 
-                var parent = _segments.Get(segment.Parent);
-                var ship = parent == null ? FindShip(segment.ShipId) : null;
+                var parent = _world.Segments.Get(segment.Parent);
+                var ship = parent == null ? _world.FindShip(segment.ShipId) : null;
                 if (parent == null && ship == null) continue;
                 var parentBody = parent?.Body ?? ship.Body;
 
@@ -202,10 +200,10 @@ namespace CombatSimulation.Core
             HitImpactKind kind;
             var impulse = Vec2.Zero;
             var perTick = true;
-            var isBullet = _bullets.TryGet(hit.AttackerHandle, out var index);
+            var isBullet = _world.Bullets.TryGet(hit.AttackerHandle, out var index);
             if (isBullet)
             {
-                ref readonly var attacker = ref _bullets[index];
+                ref readonly var attacker = ref _world.Bullets[index];
                 attackerOwner = attacker.Owner;
                 deviceIndex = attacker.DeviceIndex;
                 if (attacker.IsBeam || attacker.Definition.Impact == BulletImpact.OverTime)
@@ -220,7 +218,7 @@ namespace CombatSimulation.Core
             }
             else
             {
-                var ship = _ships.Get(hit.AttackerHandle);
+                var ship = _world.Ships.Get(hit.AttackerHandle);
                 if (ship == null) return;
                 attackerOwner = ship.Owner;
                 deviceIndex = -1;
@@ -235,7 +233,7 @@ namespace CombatSimulation.Core
                 // A remote projectile that stops at a local segment stops on its owner too.
                 if (isBullet && !hit.AttackerPassThrough && hit.Source != ContactSource.Ray &&
                     !Setup.IsLocalOwner(attackerOwner))
-                    ClaimBulletContact(segment.Id, segment.Owner, -1, _bullets[index], HitImpactKind.Stop, 0f);
+                    ClaimBulletContact(segment.Id, segment.Owner, -1, _world.Bullets[index], HitImpactKind.Stop, 0f);
             }
             else if (Setup.IsLocalOwner(attackerOwner) && Setup.HasRemoteOwners)
             {
@@ -252,7 +250,7 @@ namespace CombatSimulation.Core
             var perTick = hit.ImpactKind == HitImpactKind.DamageOverTime || hit.DeviceIndex < 0;
             if (!RecordBulletContact(hit.AttackerId, hit.TargetId, perTick ? hit.Tick : -1)) return;
             QueueSegmentHit(segment, hit.Amount, Vec2.Zero);
-            _events.Add(BattleEvent.RemoteHit(BattleId, Tick, _events.Count, hit, hit.Amount));
+            _world.Events.Add(BattleEvent.RemoteHit(BattleId, Tick, _world.Events.Count, hit, hit.Amount));
         }
 
         // Stage 9 (and tests). Legacy segments take a tenth of the push at once (Impulse.Apply with the reaction factor).
@@ -270,7 +268,7 @@ namespace CombatSimulation.Core
         {
             for (var i = 0; i < _segmentHits.Count; ++i)
             {
-                var segment = _segments.Get(_segmentHits[i].Segment);
+                var segment = _world.Segments.Get(_segmentHits[i].Segment);
                 if (segment == null || segment.PendingDeath) continue;
 
                 var damage = _segmentHits[i].Damage;
@@ -283,7 +281,7 @@ namespace CombatSimulation.Core
                 }
 
                 if (TryDealDamage(segment, ref damage) || segment.Detached) continue;
-                FindShip(segment.ShipId)?.AddPendingDamage(Setup.DamageTypes.RammingDamageType, damage);
+                _world.FindShip(segment.ShipId)?.AddPendingDamage(Setup.DamageTypes.RammingDamageType, damage);
             }
             _segmentHits.Clear();
         }
@@ -300,7 +298,7 @@ namespace CombatSimulation.Core
                 return true;
             }
 
-            var next = _segments.Get(segment.Next);
+            var next = _world.Segments.Get(segment.Next);
             if (next != null && !next.PendingDeath && TryDealDamage(next, ref damage)) return true;
             if (segment.HitPoints <= 0f) return false;
             if (segment.HitPoints > damage)
@@ -328,14 +326,14 @@ namespace CombatSimulation.Core
         // The segments behind this one leave the chain; the first one loses its hinge. A timer that runs keeps its tick.
         private void DetachNext(TailSegment segment, long selfDestructTick)
         {
-            var next = _segments.Get(segment.Next);
+            var next = _world.Segments.Get(segment.Next);
             segment.Next = default;
             if (next == null) return;
 
             if (World.IsAlive(next.Joint)) World.DestroyJoint(next.Joint);
             next.Joint = default;
             next.Parent = default;
-            for (; next != null; next = _segments.Get(next.Next))
+            for (; next != null; next = _world.Segments.Get(next.Next))
             {
                 next.Detached = true;
                 if (selfDestructTick < next.SelfDestructTick) next.SelfDestructTick = selfDestructTick;
@@ -345,9 +343,9 @@ namespace CombatSimulation.Core
         // Stage 12, after the drones. The parent regrows the lost segment after the cooldown (legacy UpdateChildren).
         private void RemoveDeadSegments()
         {
-            for (var i = 0; i < _segments.Capacity; ++i)
+            for (var i = 0; i < _world.Segments.Capacity; ++i)
             {
-                var segment = _segments[i];
+                var segment = _world.Segments[i];
                 if (segment.IsAlive && segment.PendingDeath && Setup.IsLocalOwner(segment.Owner))
                     RemoveSegment(segment, RemovalReason.Death);
             }
@@ -359,7 +357,7 @@ namespace CombatSimulation.Core
             DetachNext(segment, Setup.IsLocalOwner(segment.Owner)
                 ? Tick + WormTailDefinition.SelfDestructTicks : TailSegment.NoTimer);
 
-            var parent = _segments.Get(segment.Parent);
+            var parent = _world.Segments.Get(segment.Parent);
             if (parent != null)
             {
                 if (parent.Next.Index == segment.Index && parent.Next.Generation == segment.Generation)
@@ -368,7 +366,7 @@ namespace CombatSimulation.Core
                     parent.NextGrowthTick = Tick + segment.Definition.CooldownTicks;
                 }
             }
-            else if (!segment.Detached && FindShip(segment.ShipId)?.GetDevice(segment.DeviceIndex) is WormTailDevice device &&
+            else if (!segment.Detached && _world.FindShip(segment.ShipId)?.GetDevice(segment.DeviceIndex) is WormTailDevice device &&
                      device.Head.Index == segment.Index && device.Head.Generation == segment.Generation)
             {
                 device.Head = default;
@@ -380,12 +378,12 @@ namespace CombatSimulation.Core
 
         private void ReleaseSegment(TailSegment segment)
         {
-            _shapes.Release(segment.Shape);
+            _world.Shapes.Release(segment.Shape);
             _ramming.Forget(segment.Id);
             if (_bulletContacts.Count > 0) ForgetBulletContacts(segment.Id);
             World.DestroyBody(segment.Body);
-            _entities.Remove(segment.Id);
-            _segments.Release(segment);
+            _world.Entities.Remove(segment.Id);
+            _world.Segments.Release(segment);
         }
 
         // Plan, WormTailV2 row 7 (owner, 2026-11-02). A ship that dies takes the head of its tail with it; the segments
@@ -397,7 +395,7 @@ namespace CombatSimulation.Core
             for (var d = 0; d < ship.DeviceCount; ++d)
             {
                 if (!(ship.GetDevice(d) is WormTailDevice device)) continue;
-                var head = _segments.Get(device.Head);
+                var head = _world.Segments.Get(device.Head);
                 if (head != null && reason == RemovalReason.Death)
                 {
                     DetachNext(head, Setup.IsLocalOwner(head.Owner)
@@ -405,7 +403,7 @@ namespace CombatSimulation.Core
                 }
                 for (var segment = head; segment != null;)
                 {
-                    var next = _segments.Get(segment.Next);
+                    var next = _world.Segments.Get(segment.Next);
                     CaptureRemoval(segment.Id, segment.Owner, reason);
                     ReleaseSegment(segment);
                     segment = next;
@@ -414,24 +412,12 @@ namespace CombatSimulation.Core
             }
         }
 
-        // D13: the attached segments take their ship's allegiance.
-        private void SetSegmentAllegiance(ShipEntity ship)
-        {
-            for (var i = 0; i < _segments.Capacity; ++i)
-            {
-                var segment = _segments[i];
-                if (!segment.IsAlive || segment.Detached || segment.ShipId != ship.Id) continue;
-                segment.Allegiance = ship.Allegiance;
-                World.SetShapeFilter(segment.Shape, CollisionFilters.Missile(ship.Allegiance));
-            }
-        }
-
         // The copy builds a segment from its owner's spawn record, behind the end of its own chain.
         private bool ApplyRemoteSegment(ShipEntity ship, WormTailDevice device, in OwnerOperation operation)
         {
-            if (_entities.TryGet(operation.EntityId, out _) || operation.SpawnSequence != 0) return false;
+            if (_world.Entities.TryGet(operation.EntityId, out _) || operation.SpawnSequence != 0) return false;
             TailSegment parent = null;
-            for (var segment = _segments.Get(device.Head); segment != null; segment = _segments.Get(segment.Next))
+            for (var segment = _world.Segments.Get(device.Head); segment != null; segment = _world.Segments.Get(segment.Next))
                 parent = segment;
             if ((parent?.Number ?? 0) + 1 != operation.BarrelIndex) return false;
 
@@ -452,7 +438,6 @@ namespace CombatSimulation.Core
             }
         }
 
-        private readonly TailSegmentStore _segments = new TailSegmentStore();
         private readonly List<SegmentHit> _segmentHits = new List<SegmentHit>();
         private readonly OverlapHit[] _segmentOverlaps = new OverlapHit[4];
     }

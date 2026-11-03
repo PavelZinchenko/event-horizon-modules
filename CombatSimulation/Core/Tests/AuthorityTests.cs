@@ -560,7 +560,7 @@ namespace CombatSimulation.Core.Tests
         private static ShipEntity SeedDrone(Battle battle, uint rosterId)
         {
             var bay = battle.Roster.Find(new RosterId(rosterId)).GetBay(0);
-            var ship = Field<ShipStore>(battle, "_ships").Allocate();
+            var ship = Field<BattleWorld>(battle, "_world").Ships.Allocate();
             var id = new EntityId(9000UL + rosterId);
             var body = battle.World.CreateBody(new BodyDef { Mass = bay.Drone.Mass });
             ship.InitializeDrone(id, bay, body, battle.Tick, battle.Setup.DamageTypes.Count);
@@ -571,11 +571,11 @@ namespace CombatSimulation.Core.Tests
             ship.AddShape(shape);
             battle.Shapes.Register(shape, new ShapeEntry(ship.Handle, id, ShapeHitPriority.Hull, 0));
             battle.World.SetPose(body, new Vec2(20f + rosterId / 10f, 20f), 0f);
-            var drones = Field<List<ShipEntity>>(battle, "_drones");
+            var drones = Field<BattleWorld>(battle, "_world").Drones;
             drones.Add(ship);
             drones.Sort((a, b) => a.Id.Value.CompareTo(b.Id.Value));
             bay.RecordLaunch();
-            var events = Field<BattleEventBuffer>(battle, "_events");
+            var events = Field<BattleWorld>(battle, "_world").Events;
             events.Add(BattleEvent.Spawn(battle.BattleId, battle.Tick, events.Count, ship, battle.Authority(ship.Owner)));
             return ship;
         }
