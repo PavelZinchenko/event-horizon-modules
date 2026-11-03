@@ -7,14 +7,17 @@ namespace CombatSimulation.Core
     // corrections, predicted damage, received hits and bullet contacts. Battle keeps the public API and calls it in
     // stage order. It calls back into Battle for the changes that other systems react to (ship removal, bullet
     // release, roster transitions) and for devices, which take the battle until DeviceContext (decision 1).
+    // Battle creates it only with remote owners (decision 3b); a local battle has no network part.
     internal sealed partial class BattleNetwork
     {
-        public BattleNetwork(BattleWorld world, Battle battle, WormTails tails, BulletTriggers triggers)
+        public BattleNetwork(BattleWorld world, Battle battle, WormTails tails, BulletTriggers triggers,
+            BulletContactLedger contacts)
         {
             _world = world;
             _battle = battle;
             _tails = tails;
             _triggers = triggers;
+            _contacts = contacts;
             _replayDamage = new float[world.Setup.DamageTypes.Count];
         }
 
@@ -72,6 +75,7 @@ namespace CombatSimulation.Core
         private readonly Battle _battle;
         private readonly WormTails _tails;
         private readonly BulletTriggers _triggers;
+        private readonly BulletContactLedger _contacts;
         private readonly OutgoingHitBuffer _outgoingHits = new OutgoingHitBuffer();
     }
 }

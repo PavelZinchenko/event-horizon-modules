@@ -122,7 +122,7 @@ namespace CombatSimulation.Core
                     if (!bullet.Definition.CanBeDisarmed)
                     {
                         // The zap still counts as a contact; the bullet flies on.
-                        if (RecordBulletContact(hit.AttackerId, hit.TargetId, hit.Tick)) _triggers.AddPendingHit(index);
+                        if (_contacts.Record(hit.AttackerId, hit.TargetId, hit.Tick)) _triggers.AddPendingHit(index);
                         _world.Events.Add(BattleEvent.RemoteDisarm(BattleId, Tick, _world.Events.Count, hit));
                         break;
                     }
@@ -135,7 +135,7 @@ namespace CombatSimulation.Core
                     _world.Bullets.MarkRemoval(handle, RemovalReason.Death);
                     break;
                 default:
-                    if (!RecordBulletContact(hit.AttackerId, hit.TargetId,
+                    if (!_contacts.Record(hit.AttackerId, hit.TargetId,
                         hit.ImpactKind == HitImpactKind.DamageOverTime ? hit.Tick : -1)) break;
                     _world.Bullets.AddDamage(handle, hit.Amount);
                     _triggers.AddPendingHit(index);
@@ -144,34 +144,8 @@ namespace CombatSimulation.Core
             }
         }
 
-        // False when the contact of this attacker on this local bullet (at this tick, for a ray; tick -1 otherwise) already
-        // dealt its damage. Entries leave with their bullet.
-        internal bool RecordBulletContact(EntityId attacker, EntityId target, long tick)
-        {
-            foreach (var contact in _bulletContacts)
-                if (contact.Attacker == attacker && contact.Target == target && contact.Tick == tick) return false;
-            _bulletContacts.Add(new BulletContact(attacker, target, tick));
-            return true;
-        }
-
         // A local attacker's contact on a remote bullet or segment goes to the target's owner.
         internal void SendBulletContact(in ResolvedHit hit) => _outgoingHits.AddBulletContact(hit);
-
-        internal void ForgetBulletContacts(EntityId target)
-        {
-            if (_bulletContacts.Count == 0) return;
-            for (var i = _bulletContacts.Count - 1; i >= 0; --i)
-                if (_bulletContacts[i].Target == target) _bulletContacts.RemoveAt(i);
-        }
-
-        private readonly struct BulletContact
-        {
-            public readonly EntityId Attacker, Target;
-            public readonly long Tick;
-            public BulletContact(EntityId attacker, EntityId target, long tick) { Attacker = attacker; Target = target; Tick = tick; }
-        }
-
-        private readonly List<BulletContact> _bulletContacts = new List<BulletContact>();
 
         // The last hit sequence of the sender that this stage has processed; corrections acknowledge it (step 5).
         // Records refused at Submit leave gaps; the next processed record covers them.

@@ -33,7 +33,7 @@ namespace CombatSimulation.Core
             _targets = new TargetGrid(World.Torus);
             _tails = new WormTails(_world, this);
             _triggers = new BulletTriggers(_world, this);
-            _network = new BattleNetwork(_world, this, _tails, _triggers);
+            if (setup.HasRemoteOwners) _network = new BattleNetwork(_world, this, _tails, _triggers, _bulletContacts);
 
             _published = new BattleSnapshot(BattleId, Roster.Slots.Count);
             _writing = new BattleSnapshot(BattleId, Roster.Slots.Count);
@@ -92,13 +92,13 @@ namespace CombatSimulation.Core
         public bool Submit(int senderOwner, in OwnerOperation operation)
         {
             RequireRunning();
-            return _network.Submit(senderOwner, operation);
+            return _network != null && _network.Submit(senderOwner, operation);
         }
 
         public bool Submit(in InboundHit record)
         {
             RequireRunning();
-            return _network.Submit(record);
+            return _network != null && _network.Submit(record);
         }
 
         // Call after the operations the watermark covers. It takes effect once every operation sequence up to
@@ -106,7 +106,7 @@ namespace CombatSimulation.Core
         public bool Submit(int senderOwner, in OwnerWatermark watermark)
         {
             RequireRunning();
-            return _network.Submit(senderOwner, watermark);
+            return _network != null && _network.Submit(senderOwner, watermark);
         }
 
         // Holds each valid correction on its remote entity until stage 1 after its tick. A correction that is not
@@ -114,13 +114,24 @@ namespace CombatSimulation.Core
         public int Submit(int senderOwner, CorrectionBatch batch)
         {
             RequireRunning();
-            return _network.Submit(senderOwner, batch);
+            if (_network != null) return _network.Submit(senderOwner, batch);
+            if (batch == null) throw new ArgumentNullException(nameof(batch));
+            return 0;
         }
 
         // Call after Step: the batch describes the last completed tick. AppliedHitSequence acknowledges the hits
         // of peerOwner that this device has applied by then.
-        public void WriteCorrections(int owner, int peerOwner, CorrectionBatch batch) =>
-            _network.WriteCorrections(owner, peerOwner, batch);
+        public void WriteCorrections(int owner, int peerOwner, CorrectionBatch batch)
+        {
+            if (_network != null)
+            {
+                _network.WriteCorrections(owner, peerOwner, batch);
+                return;
+            }
+            if (batch == null) throw new ArgumentNullException(nameof(batch));
+            if (!Setup.IsLocalOwner(owner)) throw new ArgumentException("The owner is not local.", nameof(owner));
+            throw new ArgumentException("The peer is not a remote owner.", nameof(peerOwner));
+        }
 
         private void RequireRunning()
         {
@@ -133,8 +144,8 @@ namespace CombatSimulation.Core
             if (Tick == long.MaxValue)
                 throw new InvalidOperationException("Battle tick counter exhausted.");
 
-            _network.ApplyRemoteOperations();
-            _network.ApplyCorrections();
+            _network?.ApplyRemoteOperations();
+            _network?.ApplyCorrections();
             ApplyCommands();
             UpdateSystems();
             EvaluateModifiers();
@@ -145,7 +156,7 @@ namespace CombatSimulation.Core
             StepPhysics();
             CollectContacts();
             ResolveContacts();
-            _network.AccumulateRemoteDamage();
+            _network?.AccumulateRemoteDamage();
             ApplyDamage();
             MarkDeaths();
             ApplyStructureChanges();
@@ -184,34 +195,40 @@ namespace CombatSimulation.Core
             _tails.QueueSegmentHit(segment, damage, impulse);
         internal int TriggerParentCount => _triggers.TriggerParentCount;
 
-        // Network members for devices, tails, triggers, the snapshot, Runtime and tests (8b, decision 1).
-        internal List<OwnerOperation> OutgoingOperations => _network.OutgoingOperations;
-        internal List<OwnerOperation> AppliedOperations => _network.AppliedOperations;
-        internal List<ResolvedHit> OutgoingHits => _network.OutgoingHits.Records;
-        internal bool AcceptsInputFrom(EntityId entity, int owner) => _network.AcceptsInputFrom(entity, owner);
-        internal long ConfirmedThrough(int owner) => _network.ConfirmedThrough(owner);
-        internal int PredictedRemovalCount => _network.PredictedRemovalCount;
-        internal int PredictedHitCount => _network.PredictedHitCount;
-        internal ulong AppliedHitSequence(int sender) => _network.AppliedHitSequence(sender);
-        internal void MissileCorrectionSent(EntityId id, long tick) => _network.MissileCorrectionSent(id, tick);
+        // Network members for devices, tails, triggers, the snapshot, Runtime and tests (8b, decision 1). Without remote
+        // owners there is no network part (decision 3b): each member gives the value of a network part that received
+        // and sent nothing.
+        internal List<OwnerOperation> OutgoingOperations => _network?.OutgoingOperations ?? NoOperations;
+        internal List<OwnerOperation> AppliedOperations => _network?.AppliedOperations ?? NoOperations;
+        internal List<ResolvedHit> OutgoingHits => _network?.OutgoingHits.Records ?? NoHits;
+        internal bool AcceptsInputFrom(EntityId entity, int owner) =>
+            _network != null ? _network.AcceptsInputFrom(entity, owner) : _world.FindShip(entity)?.Owner == owner;
+        internal long ConfirmedThrough(int owner) => _network?.ConfirmedThrough(owner) ?? -1;
+        internal int PredictedRemovalCount => _network?.PredictedRemovalCount ?? 0;
+        internal int PredictedHitCount => _network?.PredictedHitCount ?? 0;
+        internal ulong AppliedHitSequence(int sender) => _network?.AppliedHitSequence(sender) ?? 0;
+        internal void MissileCorrectionSent(EntityId id, long tick) => _network?.MissileCorrectionSent(id, tick);
         internal void CaptureDeviceUse(ShipEntity ship, int deviceIndex, bool started, long tick) =>
-            _network.CaptureDeviceUse(ship, deviceIndex, started, tick);
+            _network?.CaptureDeviceUse(ship, deviceIndex, started, tick);
         internal void CaptureMissileTarget(in BulletEntity bullet, EntityId target) =>
-            _network.CaptureMissileTarget(bullet, target);
+            _network?.CaptureMissileTarget(bullet, target);
         internal void CaptureRemoval(EntityId id, int owner, RemovalReason reason, DroneBayKey? bay = null) =>
-            _network.CaptureRemoval(id, owner, reason, bay);
+            _network?.CaptureRemoval(id, owner, reason, bay);
         internal void CaptureBulletSpawn(in BulletEntity bullet, int source, int barrelIndex, uint sequence, long spawnTick,
             bool sendLaunch = false, Vec2 muzzle = default, float angle = 0f) =>
-            _network.CaptureBulletSpawn(bullet, source, barrelIndex, sequence, spawnTick, sendLaunch, muzzle, angle);
+            _network?.CaptureBulletSpawn(bullet, source, barrelIndex, sequence, spawnTick, sendLaunch, muzzle, angle);
         internal void CaptureSegmentSpawn(ShipEntity ship, int deviceIndex, int number, EntityId id) =>
-            _network.CaptureSegmentSpawn(ship, deviceIndex, number, id);
-        internal bool HasDueRemoval(EntityId id) => _network.HasDueRemoval(id);
+            _network?.CaptureSegmentSpawn(ship, deviceIndex, number, id);
+        internal bool HasDueRemoval(EntityId id) => _network != null && _network.HasDueRemoval(id);
         internal bool RecordBulletContact(EntityId attacker, EntityId target, long tick) =>
-            _network.RecordBulletContact(attacker, target, tick);
+            _bulletContacts.Record(attacker, target, tick);
         internal void ClaimBulletContact(EntityId attacker, int attackerOwner, int deviceIndex, in BulletEntity target,
             HitImpactKind kind, float amount) =>
-            _network.ClaimBulletContact(attacker, attackerOwner, deviceIndex, target, kind, amount);
-        internal void SendBulletContact(in ResolvedHit hit) => _network.SendBulletContact(hit);
+            _network?.ClaimBulletContact(attacker, attackerOwner, deviceIndex, target, kind, amount);
+        internal void SendBulletContact(in ResolvedHit hit) => _network?.SendBulletContact(hit);
+
+        // True while received records apply: their changes are commits and send no records.
+        private bool ApplyingRemoteOperation => _network != null && _network.ApplyingRemoteOperation;
 
         // The reasons an owner sends: Unconfirmed is local to a receiver.
         internal static bool IsSentRemovalReason(RemovalReason reason) =>
@@ -356,7 +373,7 @@ namespace CombatSimulation.Core
 
             // Each missile reads only its own state and the grid, so the storage order has no effect. Owner target
             // records of this tick apply first (P3).
-            _network.ApplyRemoteOperations(4);
+            _network?.ApplyRemoteOperations(4);
             for (var i = 0; i < _world.Bullets.Capacity; ++i)
             {
                 if (!_world.Bullets.IsAlive(i)) continue;
@@ -371,8 +388,8 @@ namespace CombatSimulation.Core
         // Fire confirmations of this tick follow the local spawns (operation stage 6), then unconfirmed bullets leave.
         private void ApplySpawnRequests()
         {
-            _network.RecordSpawnSamples();
-            _network.ApplyRemoteOperations(5);
+            _network?.RecordSpawnSamples();
+            _network?.ApplyRemoteOperations(5);
             for (var i = 0; i < _spawnRequests.Count; ++i)
             {
                 var request = _spawnRequests[i];
@@ -384,8 +401,8 @@ namespace CombatSimulation.Core
             }
 
             _spawnRequests.Clear();
-            _network.ApplyRemoteOperations(6);
-            _network.RemoveUnconfirmedBullets();
+            _network?.ApplyRemoteOperations(6);
+            _network?.RemoveUnconfirmedBullets();
             _triggers.PruneTriggerParents();
         }
 
@@ -420,7 +437,7 @@ namespace CombatSimulation.Core
             _world.AddDrone(ship);
             bay.RecordLaunch();
             _world.Events.Add(BattleEvent.Spawn(BattleId, Tick, _world.Events.Count, ship, _world.Authority(ship.Owner)));
-            _network.CaptureDroneSpawn(ship, parent.Id);
+            _network?.CaptureDroneSpawn(ship, parent.Id);
             parent.GetDevice(request.DeviceIndex).OnShipLaunched(this, parent, id, Tick);
         }
 
@@ -497,7 +514,7 @@ namespace CombatSimulation.Core
         {
             _contacts.Resolve();
             _beams.Complete(this, _contacts);
-            _network.OutgoingHits.BeginContacts();
+            _network?.OutgoingHits.BeginContacts();
 
             var accepted = _contacts.Accepted;
             for (var i = 0; i < accepted.Length; ++i)
@@ -661,7 +678,7 @@ namespace CombatSimulation.Core
 
                 _world.Events.Add(BattleEvent.HitEvent(BattleId, Tick, _world.Events.Count, hit, authority));
             }
-            _network.OutgoingHits.CompleteContacts(Tick);
+            _network?.OutgoingHits.CompleteContacts(Tick);
         }
 
         // Legacy PushAction: the impulse acts at the target's origin, so it never turns the target.
@@ -823,7 +840,7 @@ namespace CombatSimulation.Core
         // their ship.
         private void ApplyStructureChanges()
         {
-            _network.ApplyRemoteOperations(12);
+            _network?.ApplyRemoteOperations(12);
             var slots = Roster.Slots;
             for (var i = 0; i < slots.Count; ++i)
             {
@@ -896,7 +913,7 @@ namespace CombatSimulation.Core
                 _triggers.RunStructureTriggers(index);
                 ref readonly var bullet = ref _world.Bullets[index];
                 if (bullet.PendingRemoval == RemovalReason.None) continue;
-                _network.OutgoingHits.RemoveAttacker(bullet.Id, Tick + 1);
+                _network?.OutgoingHits.RemoveAttacker(bullet.Id, Tick + 1);
                 _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet, _world.Authority(bullet.Owner)));
                 CaptureRemoval(bullet.Id, bullet.Owner, bullet.PendingRemoval);
                 if (!bullet.Confirmed && Setup.HasRemoteOwners && !Setup.IsLocalOwner(bullet.Owner))
@@ -909,7 +926,7 @@ namespace CombatSimulation.Core
         internal void ForgetContacts(EntityId id)
         {
             _ramming.Forget(id);
-            _network.ForgetBulletContacts(id);
+            _bulletContacts.Forget(id);
         }
 
         internal void ReleaseBullet(int index)
@@ -917,7 +934,7 @@ namespace CombatSimulation.Core
             ref readonly var bullet = ref _world.Bullets[index];
             if (!Setup.IsLocalOwner(bullet.Owner)) _triggers.ForgetTriggerParentCopy(bullet);
             if (!bullet.IsBeam) World.DestroyBullet(bullet.Body);
-            _network.ForgetBulletContacts(bullet.Id);
+            _bulletContacts.Forget(bullet.Id);
             _world.Entities.Remove(bullet.Id);
             _world.Bullets.Release(index);
         }
@@ -932,7 +949,7 @@ namespace CombatSimulation.Core
 
         private void EvaluateResult()
         {
-            Result = _flow.Evaluate(Tick, _network.ResultFrontier(), out var candidate, out var elapsed);
+            Result = _flow.Evaluate(Tick, _network?.ResultFrontier() ?? Tick, out var candidate, out var elapsed);
             CandidateResult = candidate;
             TimerElapsedTicks = elapsed;
         }
@@ -940,11 +957,11 @@ namespace CombatSimulation.Core
         // Stage 14. Writes the snapshot and the event batch of this tick, then swaps the buffers.
         private void Publish()
         {
-            _network.RecordBodySamples();
-            _network.RecordPredictedHits();
+            _network?.RecordBodySamples();
+            _network?.RecordPredictedHits();
             _writing.Write(this, Tick, World, Roster, _world.Events);
             _world.Events.Clear();
-            _network.ClearTickRecords();
+            _network?.ClearTickRecords();
 
             var published = _writing;
             _writing = _published;
@@ -1018,7 +1035,7 @@ namespace CombatSimulation.Core
             if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) { Reject(command, "already retreating"); return; }
 
             ship.RetreatCompletionTick = Tick + RetreatTicks;
-            _network.CaptureRetreat(ship);
+            _network?.CaptureRetreat(ship);
         }
 
         // Legacy Scene.FindFreePlace and ShipInfo.Create, with counter-based random.
@@ -1102,15 +1119,15 @@ namespace CombatSimulation.Core
         {
             if (ship.Allegiance == allegiance) return;
             _world.SetAllegiance(ship, allegiance);
-            _network.CaptureAllegiance(ship, allegiance);
+            _network?.CaptureAllegiance(ship, allegiance);
         }
 
         internal void AddTransition(RosterSlot slot, RosterStatus previousStatus, RosterTransitionReason reason, EntityId id)
         {
             _world.Events.Add(BattleEvent.Transition(BattleId, Tick, _world.Events.Count, slot, previousStatus, reason, id,
-                _network.ApplyingRemoteOperation ? BattleEventAuthority.Committed : _world.Authority(slot.Owner)));
-            if (!_network.ApplyingRemoteOperation) _flow.Add(Tick, slot.Side, previousStatus, slot.Status);
-            _network.CaptureRoster(slot, previousStatus, reason, id);
+                ApplyingRemoteOperation ? BattleEventAuthority.Committed : _world.Authority(slot.Owner)));
+            if (!ApplyingRemoteOperation) _flow.Add(Tick, slot.Side, previousStatus, slot.Status);
+            _network?.CaptureRoster(slot, previousStatus, reason, id);
         }
 
         private bool Reject(in RosterCommand command, string reason)
@@ -1151,7 +1168,9 @@ namespace CombatSimulation.Core
         private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();
         private readonly List<SpawnRequest> _spawnRequests = new List<SpawnRequest>();
         private readonly List<int> _bulletRemovals = new List<int>();
+        // Null without remote owners (decision 3b).
         private readonly BattleNetwork _network;
+        private readonly BulletContactLedger _bulletContacts = new BulletContactLedger();
         private readonly WormTails _tails;
         private readonly BulletTriggers _triggers;
         private readonly ContactResolver _contacts = new ContactResolver();
@@ -1161,5 +1180,9 @@ namespace CombatSimulation.Core
         private readonly bool[] _destroySide = new bool[BattleSetup.SideCount];
         private BattleSnapshot _published;
         private BattleSnapshot _writing;
+
+        // The records of a battle without a network part. Nothing writes them.
+        private static readonly List<OwnerOperation> NoOperations = new List<OwnerOperation>();
+        private static readonly List<ResolvedHit> NoHits = new List<ResolvedHit>();
     }
 }
