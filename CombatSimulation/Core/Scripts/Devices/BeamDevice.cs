@@ -43,7 +43,7 @@ namespace CombatSimulation.Core
             var barrel = DeviceState.Remaining(tick + 1 - ship.GetBarrelShotTick(Definition.BarrelIndex),
                 ShipEntity.BarrelCooldownTicks);
             var beam = _active && context.Bullets.TryGet(_handle, out var index) ? context.Bullets[index].Id : default;
-            return new DeviceState(_active || IsReady(ship, tick + 1), IsActive, Math.Max(weapon, barrel), beam: beam);
+            return new DeviceState(_active || IsReady(ship, tick + 1), IsActive, Math.Max(weapon, barrel), activeBullet: beam);
         }
 
         private bool IsReady(ShipEntity ship, long tick) =>

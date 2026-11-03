@@ -12,7 +12,8 @@ namespace CombatSimulation.Core
 
     internal enum ContactSource : byte
     {
-        // Point-defense overlap and beam ray: queried on the poses at the start of the step (time 0).
+        // Point-defense overlap and beam ray: queried on the poses at the start of the step (time 0). A stuck sticky
+        // bullet's damage over time is an overlap too (phase 5, step 4b).
         Overlap,
         Ray,
 

@@ -275,8 +275,14 @@ namespace CombatSimulation.Ai
 
         public INode Create(BehaviorTreeNode_DefendWithFronalShield content) =>
             HasDevice(DeviceClass.PartialShield) ? Stub(content) : EmptyNode.Failure;
-        public INode Create(BehaviorTreeNode_TrackControllableAmmo content) =>
-            HasWeapon(IsControllable) ? Stub(content) : EmptyNode.Failure;
+        // Legacy NodeBuilder: TrackControllableAmmo.Create(Ship, true).
+        public INode Create(BehaviorTreeNode_TrackControllableAmmo content)
+        {
+            var weapons = new List<AiWeapon>();
+            foreach (var weapon in _profile.Weapons)
+                if (IsControllable(weapon)) weapons.Add(weapon);
+            return weapons.Count > 0 ? new TrackControllableAmmoNode(weapons, true) : EmptyNode.Failure;
+        }
         public INode Create(BehaviorTreeNode_KeepDistance content) => new KeepDistanceNode(content.MinDistance, content.MaxDistance);
         public INode Create(BehaviorTreeNode_EscapeTargetAttackRadius content) => new EscapeTargetAttackRadiusNode();
         public INode Create(BehaviorTreeNode_AttackAdditionalTargets content) =>

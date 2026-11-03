@@ -51,10 +51,14 @@ namespace CombatSimulation.Core
         // Legacy MachineGun: Magazine shots at the barrel cooldown, then the weapon cooldown. A released key keeps the
         // count of the magazine.
         MachineGun,
+
+        // Legacy ManageableCannon (phase 5, step 4b): one bullet at a time. Releasing the key detonates it; the barrel
+        // and the weapon cooldown start in the tick after its loss.
+        Manageable,
     }
 
     // Legacy CommonCannon (Q1): fires while the control bit is held, every cooldown, while energy allows. Phase 5, step
-    // 4a adds the multi-shot and machine gun modes.
+    // 4a adds the multi-shot and machine gun modes; step 4b the manageable mode.
     public sealed class CannonDefinition : DeviceDefinition
     {
         public CannonDefinition(int barrelIndex, float cooldown, float energyCost, float spread, BulletDefinition bullet,
@@ -68,10 +72,11 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(energyCost), "Energy cost must be finite and not negative.");
             if (!(spread >= 0f) || float.IsInfinity(spread))
                 throw new ArgumentOutOfRangeException(nameof(spread), "Spread must be finite and not negative.");
-            if (mode < CannonMode.Single || mode > CannonMode.MachineGun)
+            if (mode < CannonMode.Single || mode > CannonMode.Manageable)
                 throw new ArgumentOutOfRangeException(nameof(mode), "Unknown cannon mode.");
-            if (mode == CannonMode.Single ? magazine != 1 : magazine < 1)
-                throw new ArgumentOutOfRangeException(nameof(magazine), "A single cannon has a magazine of 1; others need at least 1.");
+            if (HasMagazine(mode) ? magazine < 1 : magazine != 1)
+                throw new ArgumentOutOfRangeException(nameof(magazine),
+                    "A multi-shot or machine gun needs a magazine of at least 1; other cannons have 1.");
 
             BarrelIndex = barrelIndex;
             Cooldown = cooldown;
@@ -97,7 +102,7 @@ namespace CombatSimulation.Core
 
         public CannonMode Mode { get; }
 
-        // Bullets per shot (multi-shot) or shots per burst (machine gun); 1 for a single cannon.
+        // Bullets per shot (multi-shot) or shots per burst (machine gun); 1 for other cannons.
         public int Magazine { get; }
 
         // Legacy SystemBase.CanBeActivated: TimeFromLastUse >= MaxCooldown. A machine gun waits it after each burst.
@@ -109,6 +114,8 @@ namespace CombatSimulation.Core
 
         // The energy of one shot: a multi-shot pays for its whole volley at once.
         public float ShotEnergyCost => Mode == CannonMode.MultiShot ? EnergyCost * Magazine : EnergyCost;
+
+        private static bool HasMagazine(CannonMode mode) => mode == CannonMode.MultiShot || mode == CannonMode.MachineGun;
 
         internal override void Validate(int barrelCount)
         {

@@ -64,7 +64,8 @@ namespace CombatSimulation.Core
     // Legacy CommonCannon on a FixedPlatform (Q1). A shot needs the held bit, the weapon cooldown, the barrel
     // cooldown and the energy cost, in that order; a failed check spends nothing. Phase 5, step 4a: legacy
     // MultishotCannon fires its whole magazine in one shot; legacy MachineGun fires its magazine at the barrel cooldown,
-    // and its weapon cooldown starts in the tick after the last shot.
+    // and its weapon cooldown starts in the tick after the last shot. Step 4b: legacy ManageableCannon holds one bullet
+    // until its loss.
     internal sealed class CannonDevice : ShipDevice
     {
         // Legacy TimeFromLastUse starts at 3600 s: the weapon is ready at once.
@@ -82,20 +83,42 @@ namespace CombatSimulation.Core
 
         internal override bool IsShotWeapon => true;
 
+        // Legacy ManageableCannon calls Platform.OnShot at the loss of its bullet, not at the shot.
+        internal bool ShotUsesBarrel => Definition.Mode != CannonMode.Manageable;
+
         public override void Reset(long tick)
         {
             base.Reset(tick);
             LastShotTick = NeverFired;
             Shots = 0;
+            _holdsBullet = false;
+            _bullet = default;
+            _lossTick = NoLoss;
         }
 
         // A confirmed shot at tick T re-syncs the copy's cooldown phase (network plan, G1), unless the copy already
-        // fired a later predicted shot at or after T + cooldown. A machine gun's cooldown follows its bursts, not its
-        // shots; the barrel record re-syncs its shots.
+        // fired a later predicted shot at or after T + cooldown. A machine gun's cooldown follows its bursts, and a
+        // manageable cannon's the loss of its bullet, not their shots; the barrel record re-syncs a machine gun's shots.
         internal void ConfirmShot(long tick)
         {
-            if (Definition.Mode == CannonMode.MachineGun) return;
+            if (Definition.Mode == CannonMode.MachineGun || Definition.Mode == CannonMode.Manageable) return;
             if (LastShotTick < tick + Definition.CooldownTicks) LastShotTick = tick;
+        }
+
+        // Manageable: stage 5 created the bullet of this device's shot, or a copy took the owner's record of it.
+        internal void Hold(EntityHandle bullet)
+        {
+            _bullet = bullet;
+            _holdsBullet = true;
+            _lossTick = NoLoss;
+        }
+
+        // Manageable copy: the owner removed the held bullet at the tick (its removal record). The owner's device sees
+        // the loss in the next tick, so the copy starts the cooldown there, however late the record arrives.
+        internal void OnRemoteRemoval(EntityHandle bullet, long tick)
+        {
+            if (_holdsBullet && _bullet.Index == bullet.Index && _bullet.Generation == bullet.Generation)
+                _lossTick = tick + 1;
         }
 
         // The shortest spacing of two shots of one spawn slot (the copy window of a confirmed shot).
@@ -110,6 +133,11 @@ namespace CombatSimulation.Core
             if (Definition.Mode == CannonMode.MachineGun)
             {
                 UpdateMachineGun(context, ship, tick);
+                return;
+            }
+            if (Definition.Mode == CannonMode.Manageable)
+            {
+                UpdateManageable(context, ship, tick, IsControlOn(ship));
                 return;
             }
 
@@ -143,6 +171,53 @@ namespace CombatSimulation.Core
             }
         }
 
+        // Legacy ShipRetreatEffect releases the key: a manageable cannon's bullet detonates, and its loss still counts.
+        internal override void UpdateRetreating(DeviceContext context, ShipEntity ship)
+        {
+            if (Definition.Mode != CannonMode.Manageable)
+            {
+                base.UpdateRetreating(context, ship);
+                return;
+            }
+            IsActive = false;
+            UpdateManageable(context, ship, context.Tick, false);
+        }
+
+        // Legacy ManageableCannon.OnUpdatePhysics. While the bullet flies, Active needs only the key; a released key
+        // detonates the bullet, on its owner only (H8). Legacy also needs a ready barrel, so another weapon's shot on the
+        // barrel detonated the bullet: a defect, fixed (owner, 2026-11-03). The
+        // update that sees the bullet gone records the barrel shot and starts the weapon cooldown; it fires nothing.
+        private void UpdateManageable(DeviceContext context, ShipEntity ship, long tick, bool controlOn)
+        {
+            if (_holdsBullet)
+            {
+                if (!context.Bullets.TryGet(_bullet, out var index))
+                {
+                    var lossTick = _lossTick != NoLoss ? _lossTick : tick;
+                    _holdsBullet = false;
+                    _bullet = default;
+                    _lossTick = NoLoss;
+                    LastShotTick = lossTick;
+                    ship.RecordBarrelShot(Definition.BarrelIndex,
+                        Math.Max(ship.GetBarrelShotTick(Definition.BarrelIndex), lossTick));
+                    return;
+                }
+
+                IsActive = controlOn;
+                if (!IsActive && context.Setup.IsLocalOwner(context.Bullets[index].Owner))
+                    context.Bullets.MarkDetonation(index);
+                return;
+            }
+
+            if (!controlOn || tick - LastShotTick < Definition.CooldownTicks) return;
+            if (!ship.IsBarrelReady(Definition.BarrelIndex, tick)) return;
+            if (!ship.Energy.TryConsume(Definition.EnergyCost)) return;
+
+            IsActive = true;
+            context.RequestSpawn(new SpawnRequest(ship, Index, Definition.BarrelIndex, Definition.Spread,
+                Definition.Bullet));
+        }
+
         private bool CanStartBurst(ShipEntity ship, long tick) =>
             tick - LastShotTick >= Definition.CooldownTicks && ship.Energy.Value > Definition.EnergyCost;
 
@@ -156,18 +231,26 @@ namespace CombatSimulation.Core
                     Definition.Bullet, Definition.RandomFactor));
         }
 
-        // Legacy CanBeActivated adds the energy cost (the barrel too, but not for a machine gun); Cooldown is the larger
-        // timer.
+        // Legacy CanBeActivated adds the energy cost (the barrel too, but not for a machine gun; a manageable cannon
+        // with a bullet in flight is ready, whatever the barrel and the energy); Cooldown is the larger timer.
         internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick)
         {
             var weapon = DeviceState.Remaining(tick + 1 - LastShotTick, Definition.CooldownTicks);
             var barrel = DeviceState.Remaining(tick + 1 - ship.GetBarrelShotTick(Definition.BarrelIndex),
                 ShipEntity.BarrelCooldownTicks);
+            var bullet = _holdsBullet && context.Bullets.TryGet(_bullet, out var index) ? context.Bullets[index].Id : default;
             var ready = Definition.Mode == CannonMode.MachineGun
                 ? weapon == 0f && ship.Energy.Value > Definition.EnergyCost
-                : weapon == 0f && barrel == 0f && ship.Energy.CanConsume(Definition.ShotEnergyCost);
-            return new DeviceState(ready, IsActive, Math.Max(weapon, barrel));
+                : !bullet.IsNull || weapon == 0f && barrel == 0f && ship.Energy.CanConsume(Definition.ShotEnergyCost);
+            return new DeviceState(ready, IsActive, Math.Max(weapon, barrel), activeBullet: bullet);
         }
+
+        private const long NoLoss = long.MinValue;
+
+        // Manageable: the bullet in flight (legacy ManageableCannon._activeBullet).
+        private EntityHandle _bullet;
+        private bool _holdsBullet;
+        private long _lossTick = NoLoss;
     }
 
     // InertDeviceDefinition: ignores its control bit.

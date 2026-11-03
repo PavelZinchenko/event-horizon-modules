@@ -19,18 +19,19 @@ namespace CombatSimulation.Core
         public readonly int InHangar;
         public readonly int ActiveDrones;
 
-        // Beams only: the attached beam, or null.
-        public readonly EntityId Beam;
+        // Legacy IWeapon.ActiveBullet: a beam's attached beam, or a manageable cannon's bullet in flight (phase 5, step
+        // 4b); null otherwise.
+        public readonly EntityId ActiveBullet;
 
         internal DeviceState(bool ready, bool active, float cooldown, int inHangar = 0, int activeDrones = 0,
-            EntityId beam = default)
+            EntityId activeBullet = default)
         {
             Ready = ready;
             Active = active;
             Cooldown = cooldown;
             InHangar = inHangar;
             ActiveDrones = activeDrones;
-            Beam = beam;
+            ActiveBullet = activeBullet;
         }
 
         // The share of a timer of the given length that is still to run after the elapsed ticks.

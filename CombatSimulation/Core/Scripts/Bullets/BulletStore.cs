@@ -50,7 +50,7 @@ namespace CombatSimulation.Core
         public float HitPoints;
         public float PendingDamage;
 
-        // Homing target or the beam's selected ray target (null without one).
+        // Homing target, the beam's selected ray target, or a sticky bullet's target (null without one).
         public EntityId TargetId;
         // Homing only: the tick of the next scheduled search.
         public long NextSearchTick;
@@ -60,6 +60,15 @@ namespace CombatSimulation.Core
 
         // An attached bullet that leaves with its ship runs no triggers (phase 5, step 3; owner, 2026-11-02).
         public bool SkipTriggers;
+
+        // Legacy Bullet.Detonate (phase 5, step 4b): a Death that runs the Detonated triggers whatever
+        // DetonateWhenDestroyed.
+        public bool Detonates;
+
+        // A sticky bullet rides on its TargetId's body (phase 5, step 4b); the owner detonates it at stage 4 of
+        // DetonationTick.
+        public bool Stuck;
+        public long DetonationTick;
 
         // The owner's spawn tick. A remote bullet is Confirmed once its owner's fire record arrives; local bullets
         // are confirmed at creation.
@@ -156,10 +165,23 @@ namespace CombatSimulation.Core
                 _items[index].PendingRemoval = reason;
         }
 
+        // Owner only, before the physics step (phase 5, step 4b): a manageable weapon's released key (stage 2) or a sticky
+        // bullet's timer (stage 4). Legacy Bullet.Detonate destroys the bullet at once, so it takes no contacts in this
+        // tick; stage 12 runs its Destroyed and Detonated triggers and removes it.
+        public void MarkDetonation(int index)
+        {
+            ref var bullet = ref _items[index];
+            if (bullet.PendingRemoval != RemovalReason.None) return;
+            bullet.PendingRemoval = RemovalReason.Death;
+            bullet.Detonates = true;
+        }
+
         // Stage 8. Each physics hit on a live ship or missile becomes a candidate. Every physics bullet is
         // pass-through, so physics reports the first hit on each target unit; the resolver keeps the first valid one
         // (contact ordering). Phase 5, step 3: an AllTargets bullet takes a unit only when it enters (physics Begin);
-        // an OverTime bullet takes every touching unit, with one tick of its damage. Neither stops at a hit.
+        // an OverTime bullet takes every touching unit, with one tick of its damage. Neither stops at a hit. Step 4b: a
+        // bullet marked for removal before the step (a detonation) takes no contacts and is no target; a sticky bullet
+        // records the first ship, drone or tail segment it touches.
         public void CollectHits(PhysicsWorld world, ShapeTable shapes, ShipStore ships, TailSegmentStore segments,
             ContactResolver resolver)
         {
@@ -169,7 +191,11 @@ namespace CombatSimulation.Core
                 ref readonly var hit = ref hits[i];
                 if (!TryGetByBody(hit.Bullet, out var index)) continue;
                 ref readonly var bullet = ref _items[index];
+                if (bullet.PendingRemoval != RemovalReason.None) continue;
                 var definition = bullet.Definition;
+                if (definition.IsSticky && !bullet.Stuck && bullet.TargetId.IsNull && !hit.Target.IsBullet &&
+                    shapes.TryGet(hit.Target.Shape, out var caught))
+                    _items[index].TargetId = caught.OwnerId;
                 if (definition.Impact == BulletImpact.AllTargets && !hit.Begin) continue;
 
                 var candidate = new ContactCandidate
@@ -196,7 +222,7 @@ namespace CombatSimulation.Core
                     // detonate on an energy bolt (DetonateAtTargetAction). A missile flies through bolts unharmed.
                     if (!TryGetByBody(hit.Target.Bullet, out var targetIndex)) continue;
                     ref readonly var targetBullet = ref _items[targetIndex];
-                    if (!targetBullet.Definition.IsMissile) continue;
+                    if (!targetBullet.Definition.IsMissile || targetBullet.PendingRemoval != RemovalReason.None) continue;
 
                     candidate.TargetPriority = ShapeHitPriority.Hull;
                     candidate.Target = targetBullet.Id;
@@ -227,6 +253,48 @@ namespace CombatSimulation.Core
                     : 1f;
                 candidate.Damage = TotalDamage(definition, candidate.Falloff);
                 resolver.Add(candidate);
+            }
+        }
+
+        // Stage 8 (phase 5, step 4b). Physics never hits the body a bullet rides on, but legacy keeps a stuck sticky bullet
+        // inside its target's collider, so its damage over time goes on. Each step a stuck OverTime bullet adds one
+        // contact on its target's first shape, at time 0, without a physics query.
+        public void CollectStuckHits(PhysicsWorld world, EntityRegistry entities, ShapeTable shapes, ShipStore ships,
+            TailSegmentStore segments, ContactResolver resolver)
+        {
+            for (var i = 0; i < _count; ++i)
+            {
+                ref readonly var bullet = ref _items[i];
+                if (!bullet.IsAlive || !bullet.Stuck || bullet.PendingRemoval != RemovalReason.None ||
+                    bullet.Definition.Impact != BulletImpact.OverTime || !entities.TryGet(bullet.TargetId, out var handle))
+                    continue;
+
+                var ship = ships.Get(handle);
+                var segment = ship == null ? segments.Get(handle) : null;
+                ShapeId shape;
+                if (ship != null && ship.ShapeCount > 0) shape = ship.GetShape(0);
+                else if (segment != null) shape = segment.Shape;
+                else continue;
+                if (!shapes.TryGet(shape, out var target)) continue;
+
+                resolver.Add(new ContactCandidate
+                {
+                    Time = 0f,
+                    Kind = ContactKind.Hit,
+                    Attacker = bullet.Id,
+                    Source = ContactSource.Overlap,
+                    AttackerHandle = GetHandle(i),
+                    AttackerPassThrough = true,
+                    OncePerTargetEntity = true,
+                    DamageType = bullet.Definition.DamageType,
+                    Point = world.GetBulletPosition(bullet.Body),
+                    TargetPriority = target.Priority,
+                    Target = target.OwnerId,
+                    TargetShapeOrder = target.Order,
+                    TargetHandle = target.Owner,
+                    Falloff = 1f,
+                    Damage = TotalDamage(bullet.Definition, 1f),
+                });
             }
         }
 

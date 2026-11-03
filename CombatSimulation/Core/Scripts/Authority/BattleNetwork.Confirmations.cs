@@ -75,7 +75,8 @@ namespace CombatSimulation.Core
             if (cannon != null ? cannon.Definition.BarrelIndex != operation.BarrelIndex :
                 beamDevice == null || beamDevice.Definition.BarrelIndex != operation.BarrelIndex) return false;
             cannon?.ConfirmShot(operation.Tick);
-            ship.RecordBarrelShot(operation.BarrelIndex, Math.Max(ship.GetBarrelShotTick(operation.BarrelIndex), operation.Tick));
+            if (cannon == null || cannon.ShotUsesBarrel)
+                ship.RecordBarrelShot(operation.BarrelIndex, Math.Max(ship.GetBarrelShotTick(operation.BarrelIndex), operation.Tick));
 
             if (_world.Entities.TryGet(operation.EntityId, out var handle))
             {

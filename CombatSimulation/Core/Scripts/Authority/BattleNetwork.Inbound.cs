@@ -130,13 +130,14 @@ namespace CombatSimulation.Core
                         (_world.EntityOwner(handle) == operation.Owner &&
                          (IsContactTarget(handle.Kind) ? !operation.BayKey.HasValue :
                           _world.Ships.Get(handle)?.Bay?.Key == operation.BayKey && operation.BayKey.HasValue));
-                // The missile or its target may be gone; a live missile must be the owner's homing projectile.
+                // The missile or its target may be gone; a live missile must be the owner's homing or sticky projectile.
                 case OwnerOperationKind.MissileTarget:
                     if (operation.EntityId.IsNull) return false;
                     if (_world.Entities.TryGet(operation.TargetId, out handle) && handle.Kind == EntityKind.Bullet) return false;
                     return !_world.Entities.TryGet(operation.EntityId, out handle) ||
                         (_world.Bullets.TryGet(handle, out var missile) && _world.Bullets[missile].Owner == operation.Owner &&
-                         !_world.Bullets[missile].IsBeam && _world.Bullets[missile].Definition.IsHoming);
+                         !_world.Bullets[missile].IsBeam &&
+                         (_world.Bullets[missile].Definition.IsHoming || _world.Bullets[missile].Definition.IsSticky));
                 // The ship may be gone; a live ship must be the owner's.
                 case OwnerOperationKind.Allegiance:
                     return !operation.EntityId.IsNull && Allegiances.IsValid(operation.Allegiance) &&
@@ -291,11 +292,17 @@ namespace CombatSimulation.Core
         }
 
         // P3: the copy takes the owner's target and search schedule. A copy that is already gone needs nothing; the
-        // record still commits. A target that is gone here makes the copy search at once (HomingSteering).
+        // record still commits. A target that is gone here makes the copy search at once (HomingSteering). Phase 5,
+        // step 4b: a sticky copy sticks to the owner's target, unless that target is gone here.
         private void ApplyRemoteMissileTarget(in OwnerOperation operation)
         {
             if (!_world.Entities.TryGet(operation.EntityId, out var handle) || !_world.Bullets.TryGet(handle, out var index)) return;
             ref var bullet = ref _world.Bullets[index];
+            if (bullet.Definition.IsSticky)
+            {
+                if (!bullet.Stuck) StickyMine.Stick(_battle, index, operation.TargetId, operation.Tick);
+                return;
+            }
             bullet.TargetId = operation.TargetId;
             bullet.NextSearchTick = operation.Tick + HomingSteering.SearchTicks;
         }
@@ -342,6 +349,8 @@ namespace CombatSimulation.Core
                 ref var bullet = ref _world.Bullets[index];
                 bullet.PendingRemoval = operation.RemovalReason;
                 if (bullet.IsBeam) DetachBeam(bullet, handle, operation.Tick);
+                else if (_world.FindShip(bullet.ParentId)?.GetDevice(bullet.DeviceIndex) is CannonDevice cannon)
+                    cannon.OnRemoteRemoval(handle, operation.Tick);
                 _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet));
                 _battle.ReleaseBullet(index);
                 _triggers.MarkTriggerParentRemoved(operation.EntityId, operation.Tick);

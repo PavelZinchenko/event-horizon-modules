@@ -43,6 +43,7 @@ namespace CombatSimulation.Core
             _beams.Collect(_resolver);
             _pointDefense.Collect(_resolver);
             _world.Bullets.CollectHits(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver);
+            _world.Bullets.CollectStuckHits(Physics, _world.Entities, _world.Shapes, _world.Ships, _world.Segments, _resolver);
             _ramming.Collect(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver, Setup.DamageTypes.RammingDamageType);
 
             var duplicates = _resolver.Sort();

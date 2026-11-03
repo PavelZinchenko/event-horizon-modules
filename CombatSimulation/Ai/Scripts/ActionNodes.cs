@@ -338,6 +338,61 @@ namespace CombatSimulation.Ai
         private readonly bool _onlyDirectWeapon;
     }
 
+    // Legacy TrackControllableAmmo (phase 5, step 4b): holds the key of each active weapon whose bullet closes on the
+    // main target, or with secondaryTargets on any target of the list, at a closing speed of at least -0.1 u/s. A
+    // released key detonates a manageable weapon's bullet. Running while it holds a key.
+    internal sealed class TrackControllableAmmoNode : INode
+    {
+        private const float MinClosingSpeed = -0.1f;
+
+        public TrackControllableAmmoNode(IReadOnlyList<AiWeapon> weapons, bool secondaryTargets)
+        {
+            _weapons = weapons;
+            _secondaryTargets = secondaryTargets;
+        }
+
+        public NodeState Evaluate(AiContext context)
+        {
+            var result = NodeState.Failure;
+            foreach (var weapon in _weapons)
+            {
+                if (ShouldActivate(context, weapon, context.TargetShip))
+                {
+                    context.Controls.ActivateSystem(weapon.DeviceIndex);
+                    result = NodeState.Running;
+                    continue;
+                }
+
+                var targets = context.SecondaryTargets;
+                if (!_secondaryTargets || targets.Count == 0) continue;
+
+                var activate = false;
+                for (var j = 0; j < targets.Count; ++j)
+                    activate |= ShouldActivate(context, weapon, targets[j]);
+                if (!activate) continue;
+
+                context.Controls.ActivateSystem(weapon.DeviceIndex);
+                result = NodeState.Running;
+            }
+
+            return result;
+        }
+
+        // The bullet's speed toward the enemy minus the enemy's speed away from it.
+        private static bool ShouldActivate(AiContext context, AiWeapon weapon, EntityId id)
+        {
+            if (!context.TryGetShip(id, out var enemy)) return false;
+            var device = context.DeviceOf(weapon.DeviceIndex);
+            if (!device.Active || !context.TryGetBullet(device.ActiveBullet, out var bullet)) return false;
+
+            var direction = context.Delta(bullet.Position, enemy.Position).Normalized;
+            return Vec2.Dot(bullet.LinearVelocity, direction) - Vec2.Dot(enemy.LinearVelocity, direction) >= MinClosingSpeed;
+        }
+
+        private readonly IReadOnlyList<AiWeapon> _weapons;
+        private readonly bool _secondaryTargets;
+    }
+
     // Legacy AvoidThreatsNode: turns away from the threats that are not much faster than the ship, at full thrust.
     // Threats that left the battle since the list update are skipped; legacy reads their last state.
     internal sealed class AvoidThreatsNode : INode

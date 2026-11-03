@@ -266,6 +266,50 @@ namespace CombatSimulation.Ai.Tests
             Assert.AreEqual(F, Builder(context).Build(Node(inRange)).Evaluate(context), "no target");
         }
 
+        // Phase 5, step 4b: legacy TrackControllableAmmo holds the key of an active manageable weapon while its bullet
+        // closes on the target at a closing speed of at least -0.1 u/s.
+        [Test]
+        public void TrackControllableAmmoHoldsTheKeyWhileTheBulletCloses()
+        {
+            var leaf = Leaf(BehaviorNodeType.TrackControllableAmmo);
+            Assert.AreSame(EmptyNode.Failure, Builder(Context(out _)).Build(Node(leaf)), "no controllable weapon");
+
+            var bomber = new ShipDefinition(1f, 1f, AiFixtures.Engine, 1000f, new ResourceDefinition(0f), new ResourceDefinition(300f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[]
+                {
+                    new CannonDefinition(0, 3f, 25f, 0f, new BulletDefinition(0.3f, 6f, 50f, 1f), CannonMode.Manageable),
+                });
+            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+            {
+                new RosterSlotSetup(new RosterId(1), 0, bomber),
+                new RosterSlotSetup(new RosterId(101), 1, AiFixtures.Ship),
+            }), new FirePilots());
+            runner.Deploy(new RosterId(1), runner.Tick);
+            runner.Deploy(new RosterId(101), runner.Tick);
+            for (var i = 0; i < 5; ++i) runner.Step();
+
+            var context = new AiContext(WithWeapon(new AiWeapon(0, AiWeaponClass.Manageable, AiBulletBehavior.Projectile,
+                AiWeaponCapability.DamageEnemy, 50f, 0f)), AiSettings.Default, 0.02f, default, BattleData());
+            context.Update(runner.Snapshot, runner.Snapshot.Ships[0]);
+            var device = context.DeviceOf(0);
+            Assert.IsTrue(device.Active);
+            Assert.IsTrue(context.TryGetBullet(device.ActiveBullet, out var bullet));
+            var node = Builder(context).Build(Node(leaf));
+
+            // The bullet flies away from its own ship at 6 u/s.
+            context.TargetShip = context.Ship.Id;
+            Assert.AreEqual(F, node.Evaluate(context));
+            Assert.IsFalse(context.Controls.IsSystemActivated(0));
+
+            context.TargetShip = runner.Snapshot.Ships[1].Id;
+            Assert.IsTrue(context.TryGetShip(context.TargetShip, out var target));
+            var direction = context.Delta(bullet.Position, target.Position).Normalized;
+            var closes = Vec2.Dot(bullet.LinearVelocity, direction) - Vec2.Dot(target.LinearVelocity, direction) >= -0.1f;
+            Assert.AreEqual(closes ? R : F, node.Evaluate(context));
+            Assert.AreEqual(closes, context.Controls.IsSystemActivated(0));
+        }
+
         // Phase 5, step 7c: legacy KeepDistance succeeds between the distances plus a third of both model scales; it
         // flies toward a target that is too far and away from one that is too near. It swaps reversed bounds.
         [Test]

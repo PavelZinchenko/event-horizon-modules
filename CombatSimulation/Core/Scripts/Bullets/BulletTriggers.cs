@@ -55,7 +55,7 @@ namespace CombatSimulation.Core
             {
                 case RemovalReason.Death:
                     FireTriggers(index, BulletTriggerConditions.Destroyed, spawnTick);
-                    if (_world.Bullets[index].Definition.DetonateWhenDestroyed)
+                    if (_world.Bullets[index].Definition.DetonateWhenDestroyed || _world.Bullets[index].Detonates)
                         FireTriggers(index, BulletTriggerConditions.Detonated, spawnTick);
                     break;
                 case RemovalReason.Expiry:

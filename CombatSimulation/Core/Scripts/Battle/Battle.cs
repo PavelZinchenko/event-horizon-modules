@@ -370,7 +370,8 @@ namespace CombatSimulation.Core
             _tails.UpdateSegmentMotion();
 
             // Each missile reads only its own state and the grid, so the storage order has no effect. Owner target
-            // records of this tick apply first (P3). A rocket reads only its own state (phase 5, step 4a).
+            // records of this tick apply first (P3). A rocket reads only its own state (phase 5, step 4a); a sticky
+            // bullet its own state and its target (step 4b).
             _network?.ApplyRemoteOperations(4);
             for (var i = 0; i < _world.Bullets.Capacity; ++i)
             {
@@ -380,6 +381,7 @@ namespace CombatSimulation.Core
                 if (bullet.IsBeam || bullet.SpawnTick >= Tick) continue;
                 if (bullet.Definition.IsHoming) HomingSteering.Update(this, ref bullet);
                 else if (bullet.Definition.IsRocket) RocketSteering.Update(World, ref bullet);
+                else if (bullet.Definition.IsSticky) StickyMine.Update(this, i);
             }
         }
 

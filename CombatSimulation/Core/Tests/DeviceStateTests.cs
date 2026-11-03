@@ -73,14 +73,14 @@ namespace CombatSimulation.Core.Tests
             var snapshot = driver.Battle.Snapshot;
             var state = State(driver);
             Assert.AreEqual(1, snapshot.Bullets.Length);
-            Assert.AreEqual(snapshot.Bullets[0].Id, state.Beam);
+            Assert.AreEqual(snapshot.Bullets[0].Id, state.ActiveBullet);
             Assert.IsTrue(state.Ready);
             Assert.IsTrue(state.Active);
 
             driver.Control(1, systems: 0);
             driver.Step();
             state = State(driver);
-            Assert.IsTrue(state.Beam.IsNull);
+            Assert.IsTrue(state.ActiveBullet.IsNull);
             Assert.IsFalse(state.Active);
             Assert.IsFalse(state.Ready);
             Assert.AreEqual(0.8f, state.Cooldown, Tolerance);

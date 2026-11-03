@@ -42,7 +42,7 @@ namespace CombatSimulation.Core
             IReadOnlyList<DamageAmount> extraDamage = null, IReadOnlyList<BulletTriggerDefinition> triggers = null,
             bool detonateWhenDestroyed = true, bool canBeDisarmed = true, BulletImpact impact = BulletImpact.FirstTarget,
             bool damageFalloff = false, float radialPush = 0f, float radialPushWithFalloff = 0f, float lifetime = 0f,
-            float scale = 0f, bool attachedToParent = false, bool rocket = false)
+            float scale = 0f, bool attachedToParent = false, bool rocket = false, float stickyLifetime = 0f)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -65,6 +65,10 @@ namespace CombatSimulation.Core
                 throw new ArgumentException("An attached bullet cannot home.", nameof(attachedToParent));
             if (rocket && (homing || attachedToParent))
                 throw new ArgumentException("A rocket neither homes nor rides on its parent.", nameof(rocket));
+            if (!(stickyLifetime >= 0f) || float.IsInfinity(stickyLifetime))
+                throw new ArgumentOutOfRangeException(nameof(stickyLifetime), "Sticky lifetime must be finite and not negative.");
+            if (stickyLifetime > 0f && (homing || rocket || attachedToParent))
+                throw new ArgumentException("A sticky bullet neither steers nor rides on its parent.", nameof(stickyLifetime));
             if (!(damage >= 0f) || float.IsInfinity(damage))
                 throw new ArgumentOutOfRangeException(nameof(damage), "Damage must be finite and not negative.");
             if (!(weight >= 0f) || float.IsInfinity(weight))
@@ -149,6 +153,8 @@ namespace CombatSimulation.Core
             HasSpawnTriggers = spawns;
             DetonateWhenDestroyed = detonateWhenDestroyed;
             CanBeDisarmed = canBeDisarmed;
+            StickyLifetime = stickyLifetime;
+            StickyTicks = stickyLifetime > 0f ? TickTime.AtLeast(stickyLifetime) : 0;
 
             // Legacy BulletFactory.CreateController: both scale with 1 / (0.2 + 2 x weight); a rocket accelerates at
             // speed / (0.1 + weight).
@@ -194,6 +200,14 @@ namespace CombatSimulation.Core
         // Legacy RocketController (phase 5, step 4a): thrust along the heading up to Speed, which also removes the
         // sideways speed. It never turns.
         public bool IsRocket { get; }
+
+        // Legacy StickyController (phase 5, step 4b): above zero, the bullet sticks to the first ship, drone or tail
+        // segment it touches and detonates this many seconds later (StickyMine).
+        public float StickyLifetime { get; }
+        public bool IsSticky => StickyLifetime > 0f;
+
+        // Legacy cooldown -= dt, detonation at <= 0: the ticks from the stick tick to the detonation tick, both counted.
+        public int StickyTicks { get; }
 
         // The share of Speed the bullet starts with (legacy StartingVelocityMultiplier).
         public float StartingVelocityMultiplier { get; }

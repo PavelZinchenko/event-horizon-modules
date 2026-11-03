@@ -214,6 +214,11 @@ namespace CombatSimulation.Core
             // Legacy runs no search at creation (its timer check is strict); the first one is in the next tick.
             bullet.NextSearchTick = spawnTick + 1;
             Bullets.SetBody(index, body);
+
+            // A manageable cannon holds its bullet (phase 5, step 4b), as a beam device holds its beam.
+            if (barrelIndex != SpawnRequest.ShipCentre && ship.GetDevice(deviceIndex) is CannonDevice cannon &&
+                cannon.Definition.Mode == CannonMode.Manageable)
+                cannon.Hold(Bullets.GetHandle(index));
             return index;
         }
 
