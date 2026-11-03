@@ -321,7 +321,7 @@ namespace CombatSimulation.Core
                 _velocity - other._velocity, _angularVelocity - other._angularVelocity);
         }
 
-        private static float WrapAngle(float angle)
+        internal static float WrapAngle(float angle)
         {
             const float twoPi = (float)(2.0 * Math.PI);
             angle %= twoPi;

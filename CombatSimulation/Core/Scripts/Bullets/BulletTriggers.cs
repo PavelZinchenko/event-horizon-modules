@@ -8,10 +8,22 @@ namespace CombatSimulation.Core
     // Bullet triggers (phase 5, step 2): child bullets and detonation. Only the owner of a bullet runs its triggers
     // (H8). It sends one spawn record per child, with the parent named as a bullet, the trigger index as the spawn
     // source and the child's launch pose. A receiver never derives children; it adds each child from its record.
-    public sealed partial class Battle
+    //
+    // The spawn records and the due removals stay with Battle until the network part moves (phase 5, step 8b, item 5).
+    internal sealed class BulletTriggers
     {
+        public BulletTriggers(BattleWorld world, Battle battle)
+        {
+            _world = world;
+            _battle = battle;
+        }
+
+        private BattleSetup Setup => _world.Setup;
+        private long Tick => _world.Tick;
+        private PhysicsWorld Physics => _world.Physics;
+
         // Legacy Bullet: Created triggers run when the bullet is made, at its spawn tick.
-        private void RunCreatedTriggers(int index)
+        public void RunCreatedTriggers(int index)
         {
             ref readonly var bullet = ref _world.Bullets[index];
             if ((bullet.Definition.TriggerConditions & BulletTriggerConditions.Created) == 0 ||
@@ -22,7 +34,7 @@ namespace CombatSimulation.Core
         // Stage 12, before the bullet leaves: one Hit run per pending contact, then the conditions of its removal
         // (legacy Bullet.OnCollision, Detonate, Destroy, Expire and Disarm). Children of stage 12 start to move in the
         // next tick, so that tick is their spawn tick.
-        private void RunStructureTriggers(int index)
+        public void RunStructureTriggers(int index)
         {
             ref var bullet = ref _world.Bullets[index];
             var hits = bullet.PendingHits;
@@ -59,7 +71,7 @@ namespace CombatSimulation.Core
         }
 
         // Owner only: counts a contact of a local projectile for its Hit triggers (stage 12).
-        private void AddPendingHit(int index)
+        public void AddPendingHit(int index)
         {
             ref var bullet = ref _world.Bullets[index];
             if (!bullet.IsBeam && Setup.IsLocalOwner(bullet.Owner) &&
@@ -89,9 +101,9 @@ namespace CombatSimulation.Core
         private void SpawnChildren(int parentIndex, int triggerIndex, BulletTriggerDefinition trigger, long spawnTick)
         {
             var parent = _world.Bullets[parentIndex];
-            var position = World.GetBulletPosition(parent.Body);
-            var parentAngle = World.GetBulletRotation(parent.Body).Angle;
-            var parentVelocity = World.GetBulletVelocity(parent.Body);
+            var position = Physics.GetBulletPosition(parent.Body);
+            var parentAngle = Physics.GetBulletRotation(parent.Body).Angle;
+            var parentVelocity = Physics.GetBulletVelocity(parent.Body);
             var definition = trigger.Bullet;
             var pattern = trigger.Pattern;
             for (var i = 0; i < pattern.Count; ++i)
@@ -112,13 +124,13 @@ namespace CombatSimulation.Core
                 var rotation = Rot.FromAngle(angle);
                 var offset = new Vec2(slot.Offset.X + slot.OffsetSpan.X * draw.OffsetX,
                     slot.Offset.Y + slot.OffsetSpan.Y * draw.OffsetY);
-                var start = World.Torus.Wrap(position + rotation.Rotate(offset));
+                var start = Physics.Torus.Wrap(position + rotation.Rotate(offset));
 
                 var index = CreateChild(id, parent, parentVelocity, definition, draw, spawnTick, start, angle);
                 if (index < 0) continue;
                 ref readonly var child = ref _world.Bullets[index];
-                _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, child, _world.Authority(child.Owner)));
-                CaptureBulletSpawn(child, triggerIndex, 0, sequence, spawnTick, true, start, angle);
+                _world.Events.Add(BattleEvent.BulletSpawn(_world.BattleId, Tick, _world.Events.Count, child, _world.Authority(child.Owner)));
+                _battle.CaptureBulletSpawn(child, triggerIndex, 0, sequence, spawnTick, true, start, angle);
                 RunCreatedTriggers(index);
             }
         }
@@ -140,10 +152,10 @@ namespace CombatSimulation.Core
                            definition.ParentVelocityEffect * parentVelocity;
             var position = launch;
             for (var tick = spawnTick; tick < Tick; ++tick)
-                position = World.Torus.Wrap(position + TickDuration * velocity);
+                position = Physics.Torus.Wrap(position + Battle.TickDuration * velocity);
 
             var ship = _world.FindShip(parent.ShipId);
-            var body = World.CreateBullet(new BulletDef
+            var body = Physics.CreateBullet(new BulletDef
             {
                 Position = position,
                 Angle = angle,
@@ -203,7 +215,7 @@ namespace CombatSimulation.Core
 
         // A receiver adds the owner's child at its launch pose. The parent is the live copy, or a remote bullet that this
         // device has removed already (prediction, expiry) but whose owner may still send children.
-        private bool ApplyRemoteChildSpawn(in OwnerOperation operation)
+        public bool ApplyRemoteChildSpawn(in OwnerOperation operation)
         {
             if (!operation.HasLaunchPose || operation.BarrelIndex != 0) return false;
 
@@ -212,7 +224,7 @@ namespace CombatSimulation.Core
             {
                 ref readonly var copy = ref _world.Bullets[parentIndex];
                 if (copy.IsBeam) return false;
-                parent = new TriggerParent(copy, World.GetBulletVelocity(copy.Body));
+                parent = new TriggerParent(copy, Physics.GetBulletVelocity(copy.Body));
             }
             else if (!_triggerParents.TryGetValue(operation.ParentId, out parent)) return false;
 
@@ -222,7 +234,7 @@ namespace CombatSimulation.Core
 
             var trigger = triggers[operation.DeviceIndex];
             var draw = DrawChild(operation.EntityId, operation.Tick, trigger);
-            if (operation.Tick + draw.LifetimeTicks - 1 < Tick || HasDueRemoval(operation.EntityId))
+            if (operation.Tick + draw.LifetimeTicks - 1 < Tick || _battle.HasDueRemoval(operation.EntityId))
             {
                 // The child is gone already; its own children may still arrive.
                 RememberTriggerParent(operation.EntityId, parent.Bullet, trigger.Bullet, draw.SpeedScale, Vec2.Zero);
@@ -230,17 +242,17 @@ namespace CombatSimulation.Core
             }
 
             var index = CreateChild(operation.EntityId, parent.Bullet, parent.Velocity, trigger.Bullet, draw,
-                operation.Tick, World.Torus.Wrap(operation.Pose.Position), operation.Pose.Angle);
+                operation.Tick, Physics.Torus.Wrap(operation.Pose.Position), operation.Pose.Angle);
             if (index < 0) return false;
             ref readonly var child = ref _world.Bullets[index];
             RememberTriggerParent(child);
-            _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, child));
+            _world.Events.Add(BattleEvent.BulletSpawn(_world.BattleId, Tick, _world.Events.Count, child));
             return true;
         }
 
         // Receiver: a remote bullet that can spawn children, from its spawn record until a tick after its owner's removal
         // record. Its children's records come before that removal, but a late batch applies them in tick order, after it.
-        private void RememberTriggerParent(in BulletEntity bullet)
+        public void RememberTriggerParent(in BulletEntity bullet)
         {
             if (!bullet.IsBeam && bullet.Definition.HasSpawnTriggers && !Setup.IsLocalOwner(bullet.Owner))
                 _triggerParents[bullet.Id] = new TriggerParent(bullet, Vec2.Zero);
@@ -260,7 +272,7 @@ namespace CombatSimulation.Core
         }
 
         // A skipped ship shot whose bullet can spawn children, with its launch velocity.
-        private void RememberTriggerParent(ShipEntity ship, int deviceIndex, BulletDefinition definition, EntityId id,
+        public void RememberTriggerParent(ShipEntity ship, int deviceIndex, BulletDefinition definition, EntityId id,
             Vec2 velocity)
         {
             if (!definition.HasSpawnTriggers) return;
@@ -280,16 +292,16 @@ namespace CombatSimulation.Core
         }
 
         // A released copy keeps its last velocity for the children that its owner still sends.
-        private void ForgetTriggerParentCopy(in BulletEntity bullet)
+        public void ForgetTriggerParentCopy(in BulletEntity bullet)
         {
             if (_triggerParents.Count == 0 || bullet.IsBeam || !_triggerParents.TryGetValue(bullet.Id, out var parent))
                 return;
-            parent.Velocity = World.GetBulletVelocity(bullet.Body);
+            parent.Velocity = Physics.GetBulletVelocity(bullet.Body);
             parent.Bullet.Allegiance = bullet.Allegiance;
             _triggerParents[bullet.Id] = parent;
         }
 
-        private void MarkTriggerParentRemoved(EntityId id, long tick)
+        public void MarkTriggerParentRemoved(EntityId id, long tick)
         {
             if (!_triggerParents.TryGetValue(id, out var parent)) return;
             parent.RemovedTick = tick;
@@ -297,7 +309,7 @@ namespace CombatSimulation.Core
         }
 
         // After the bullet spawns of stage 5: a parent removed before this tick can have no more children.
-        private void PruneTriggerParents()
+        public void PruneTriggerParents()
         {
             if (_triggerParents.Count == 0) return;
             _prunedTriggerParents.Clear();
@@ -307,7 +319,7 @@ namespace CombatSimulation.Core
                 _triggerParents.Remove(id);
         }
 
-        internal int TriggerParentCount => _triggerParents.Count;
+        public int TriggerParentCount => _triggerParents.Count;
 
         private struct TriggerParent
         {
@@ -323,6 +335,8 @@ namespace CombatSimulation.Core
             }
         }
 
+        private readonly BattleWorld _world;
+        private readonly Battle _battle;
         private readonly Dictionary<EntityId, TriggerParent> _triggerParents = new Dictionary<EntityId, TriggerParent>();
         private readonly List<EntityId> _prunedTriggerParents = new List<EntityId>();
     }

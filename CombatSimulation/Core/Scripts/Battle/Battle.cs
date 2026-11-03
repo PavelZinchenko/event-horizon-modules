@@ -32,6 +32,8 @@ namespace CombatSimulation.Core
             _commands = new CommandQueue(setup.BattleId);
             _flow = new CommittedBattleFlow(setup);
             _targets = new TargetGrid(World.Torus);
+            _tails = new WormTails(_world, this);
+            _triggers = new BulletTriggers(_world, this);
 
             _published = new BattleSnapshot(BattleId, Roster.Slots.Count);
             _writing = new BattleSnapshot(BattleId, Roster.Slots.Count);
@@ -134,6 +136,14 @@ namespace CombatSimulation.Core
         internal bool TryRegister(EntityId id, EntityHandle handle) => _world.TryRegister(id, handle);
         internal BattleEventAuthority Authority(int owner) => _world.Authority(owner);
 
+        // Tail and trigger members for devices, beam queries and tests (8b, decision 1).
+        internal TailSegment FindSegment(EntityId id) => _tails.FindSegment(id);
+        internal int CountAttachedSegments(WormTailDevice device) => _tails.CountAttachedSegments(device);
+        internal void GrowTail(ShipEntity ship, WormTailDevice device) => _tails.GrowTail(ship, device);
+        internal void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse) =>
+            _tails.QueueSegmentHit(segment, damage, impulse);
+        internal int TriggerParentCount => _triggers.TriggerParentCount;
+
         public bool Submit(in SelfDestructCommand command)
         {
             if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
@@ -212,7 +222,7 @@ namespace CombatSimulation.Core
                 }
             }
 
-            UpdateDetachedSegments();
+            _tails.UpdateDetachedSegments();
         }
 
         // Stage 3 (phase 5, step 7). Collects the status of each ship's running device uses. A change of NoContacts
@@ -260,7 +270,7 @@ namespace CombatSimulation.Core
                 // Physics reports a touch after the solve, so ramming uses the velocity from before the step.
                 ship.PreStepVelocity = World.GetLinearVelocity(ship.Body);
             }
-            UpdateSegmentMotion();
+            _tails.UpdateSegmentMotion();
 
             // Each missile reads only its own state and the grid, so the storage order has no effect. Owner target
             // records of this tick apply first (P3).
@@ -294,7 +304,7 @@ namespace CombatSimulation.Core
             _spawnRequests.Clear();
             ApplyRemoteOperations(6);
             RemoveUnconfirmedBullets();
-            PruneTriggerParents();
+            _triggers.PruneTriggerParents();
         }
 
         // A ship of the parent's bay inventory: a drone, or a clone (phase 5, step 7c).
@@ -367,7 +377,7 @@ namespace CombatSimulation.Core
             _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, bullet, _world.Authority(bullet.Owner)));
             CaptureBulletSpawn(bullet, bullet.DeviceIndex, (int)SpawnRequest.SpawnSlot(request.BarrelIndex), sequence, Tick,
                 !definition.IsHoming, muzzle, angle);
-            RunCreatedTriggers(index);
+            _triggers.RunCreatedTriggers(index);
         }
 
         private void SpawnBeam(in SpawnRequest request, uint sequence)
@@ -419,11 +429,11 @@ namespace CombatSimulation.Core
                     // be disarmed counts each zap once, whether this device or a remote one saw it.
                     if (hit.TargetKeepsFlying)
                     {
-                        if (RecordBulletContact(hit.Attacker, hit.Target, Tick)) AddPendingHit(disarmed);
+                        if (RecordBulletContact(hit.Attacker, hit.Target, Tick)) _triggers.AddPendingHit(disarmed);
                     }
                     else
                     {
-                        if (_world.Bullets[disarmed].PendingRemoval == RemovalReason.None) AddPendingHit(disarmed);
+                        if (_world.Bullets[disarmed].PendingRemoval == RemovalReason.None) _triggers.AddPendingHit(disarmed);
                         _world.Bullets.MarkRemoval(hit.TargetHandle, RemovalReason.Disposal);
                     }
                     _world.Events.Add(BattleEvent.DisarmEvent(BattleId, Tick, _world.Events.Count, hit,
@@ -439,7 +449,7 @@ namespace CombatSimulation.Core
                 // A projectile stops on either copy. Its removal has its own authority flag.
                 if (hit.Source != ContactSource.Ray && _world.Bullets.TryGet(hit.AttackerHandle, out var stopped))
                 {
-                    if (_world.Bullets[stopped].PendingRemoval == RemovalReason.None) AddPendingHit(stopped);
+                    if (_world.Bullets[stopped].PendingRemoval == RemovalReason.None) _triggers.AddPendingHit(stopped);
                     if (!hit.AttackerPassThrough) _world.Bullets.MarkRemoval(hit.AttackerHandle, RemovalReason.Death);
                 }
 
@@ -461,7 +471,7 @@ namespace CombatSimulation.Core
                         if (Setup.IsLocalOwner(attackerOwner) || RecordBulletContact(hit.Attacker, hit.Target, perTick ? Tick : -1))
                         {
                             _world.Bullets.AddDamage(hit.TargetHandle, hit.Damage);
-                            AddPendingHit(index);
+                            _triggers.AddPendingHit(index);
                         }
                         // A remote projectile that stops at a local bullet stops on its owner too.
                         if (attackerBullet && !hit.AttackerPassThrough && !ray)
@@ -483,7 +493,7 @@ namespace CombatSimulation.Core
                     var segment = _world.Segments.Get(hit.TargetHandle);
                     if (segment == null) continue;
                     authority = _world.Authority(segment.Owner);
-                    ResolveSegmentHit(hit, segment);
+                    _tails.ResolveSegmentHit(hit, segment);
                 }
                 else
                 {
@@ -579,7 +589,7 @@ namespace CombatSimulation.Core
         // Legacy PushAction (Push x the bullet velocity) plus RadialPushAction (phase 5, step 3): away from the bullet
         // centre toward the target's origin. Legacy applies the radial impulse at the bullet centre; that point lies on
         // the same line through the origin, so the torque is the same.
-        private Vec2 PushImpulse(in BulletEntity bullet, Vec2 target, float falloff)
+        internal Vec2 PushImpulse(in BulletEntity bullet, Vec2 target, float falloff)
         {
             var definition = bullet.Definition;
             var impulse = Vec2.Zero;
@@ -596,7 +606,7 @@ namespace CombatSimulation.Core
         // this device sent it (N3): a prediction that corrections replace.
         private void ApplyDamage()
         {
-            ApplySegmentHits();
+            _tails.ApplySegmentHits();
             for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
                 var ship = _world.GetShipEntry(i);
@@ -729,7 +739,7 @@ namespace CombatSimulation.Core
                 _world.Drones.RemoveAt(i);
             }
 
-            RemoveDeadSegments();
+            _tails.RemoveDeadSegments();
             RemoveBullets();
         }
 
@@ -741,7 +751,7 @@ namespace CombatSimulation.Core
             for (var i = 0; i < _bulletRemovals.Count; ++i)
             {
                 var index = _bulletRemovals[i];
-                RunStructureTriggers(index);
+                _triggers.RunStructureTriggers(index);
                 ref readonly var bullet = ref _world.Bullets[index];
                 if (bullet.PendingRemoval == RemovalReason.None) continue;
                 _outgoingHits.RemoveAttacker(bullet.Id, Tick + 1);
@@ -753,10 +763,17 @@ namespace CombatSimulation.Core
             }
         }
 
+        // A removed segment leaves the ramming tracker and the bullet contact list.
+        internal void ForgetContacts(EntityId id)
+        {
+            _ramming.Forget(id);
+            if (_bulletContacts.Count > 0) ForgetBulletContacts(id);
+        }
+
         private void ReleaseBullet(int index)
         {
             ref readonly var bullet = ref _world.Bullets[index];
-            if (!Setup.IsLocalOwner(bullet.Owner)) ForgetTriggerParentCopy(bullet);
+            if (!Setup.IsLocalOwner(bullet.Owner)) _triggers.ForgetTriggerParentCopy(bullet);
             if (!bullet.IsBeam) World.DestroyBullet(bullet.Body);
             if (_bulletContacts.Count > 0) ForgetBulletContacts(bullet.Id);
             _world.Entities.Remove(bullet.Id);
@@ -918,7 +935,7 @@ namespace CombatSimulation.Core
 
         private void RemoveShip(ShipEntity ship, RemovalReason reason)
         {
-            RemoveShipSegments(ship, reason);
+            _tails.RemoveShipSegments(ship, reason);
             for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Stop(this);
             RemoveAttachedBullets(ship);
             _world.Events.Add(BattleEvent.Removal(BattleId, Tick, _world.Events.Count, ship, reason));
@@ -1009,6 +1026,8 @@ namespace CombatSimulation.Core
         private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();
         private readonly List<SpawnRequest> _spawnRequests = new List<SpawnRequest>();
         private readonly List<int> _bulletRemovals = new List<int>();
+        private readonly WormTails _tails;
+        private readonly BulletTriggers _triggers;
         private readonly ContactResolver _contacts = new ContactResolver();
         private readonly RammingTracker _ramming = new RammingTracker();
         private readonly TargetGrid _targets;

@@ -343,14 +343,14 @@ namespace CombatSimulation.Core
             {
                 // A projectile may already have disappeared through prediction. Its owner removal is still a commit.
                 if (operation.BayKey.HasValue) return false;
-                MarkTriggerParentRemoved(operation.EntityId, operation.Tick);
+                _triggers.MarkTriggerParentRemoved(operation.EntityId, operation.Tick);
                 return true;
             }
             if (EntityOwner(handle) != operation.Owner) return false;
             if (handle.Kind == EntityKind.Segment)
             {
                 if (operation.BayKey.HasValue) return false;
-                RemoveSegment(_world.Segments.Get(handle), operation.RemovalReason);
+                _tails.RemoveSegment(_world.Segments.Get(handle), operation.RemovalReason);
             }
             else if (handle.Kind == EntityKind.Bullet)
             {
@@ -360,7 +360,7 @@ namespace CombatSimulation.Core
                 if (bullet.IsBeam) DetachBeam(bullet, handle, operation.Tick);
                 _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet));
                 ReleaseBullet(index);
-                MarkTriggerParentRemoved(operation.EntityId, operation.Tick);
+                _triggers.MarkTriggerParentRemoved(operation.EntityId, operation.Tick);
             }
             else
             {
@@ -426,10 +426,18 @@ namespace CombatSimulation.Core
                     NextOperationSequence(bullet.Owner), Tick, bullet.Id, target));
         }
 
-        private void CaptureRemoval(EntityId id, int owner, RemovalReason reason, DroneBayKey? bay = null)
+        internal void CaptureRemoval(EntityId id, int owner, RemovalReason reason, DroneBayKey? bay = null)
         {
             if (ShouldCapture(owner))
                 _outgoingOperations.Add(OwnerOperation.Remove(BattleId, owner, NextOperationSequence(owner), Tick, id, reason, bay));
+        }
+
+        // A tail segment is a bullet spawn with the device index as source and the segment number as spawn slot (H8).
+        internal void CaptureSegmentSpawn(ShipEntity ship, int deviceIndex, int number, EntityId id)
+        {
+            if (ShouldCapture(ship.Owner))
+                _outgoingOperations.Add(OwnerOperation.BulletFired(BattleId, ship.Owner, NextOperationSequence(ship.Owner),
+                    Tick, id, ship.Id, deviceIndex, number, 0));
         }
 
         // Reliable streams normally arrive in order. The sparse set also handles repeated/out-of-order submissions

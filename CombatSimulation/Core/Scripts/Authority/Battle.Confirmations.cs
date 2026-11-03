@@ -51,7 +51,7 @@ namespace CombatSimulation.Core
         // A plain projectile sends its launch (P1): the receiver's copy of the shooter aims a little differently, and
         // the error grows with flight time.
         // The source is the device index, or the trigger index for a child bullet; a child always sends its launch.
-        private void CaptureBulletSpawn(in BulletEntity bullet, int source, int barrelIndex, uint sequence, long spawnTick,
+        internal void CaptureBulletSpawn(in BulletEntity bullet, int source, int barrelIndex, uint sequence, long spawnTick,
             bool sendLaunch = false, Vec2 muzzle = default, float angle = 0f)
         {
             if (!ShouldCapture(bullet.Owner)) return;
@@ -71,11 +71,11 @@ namespace CombatSimulation.Core
         private bool ApplyRemoteBulletSpawn(in OwnerOperation operation)
         {
             var ship = _world.FindShip(operation.ParentId);
-            if (ship == null) return ApplyRemoteChildSpawn(operation);
+            if (ship == null) return _triggers.ApplyRemoteChildSpawn(operation);
             if (ship.Owner != operation.Owner || operation.DeviceIndex >= ship.DeviceCount) return false;
             var device = ship.GetDevice(operation.DeviceIndex);
             if (device is DetonatorDevice detonator) return ApplyRemoteExplosion(ship, detonator, operation);
-            if (device is WormTailDevice tail) return ApplyRemoteSegment(ship, tail, operation);
+            if (device is WormTailDevice tail) return _tails.ApplyRemoteSegment(ship, tail, operation);
             var cannon = device as CannonDevice;
             var beamDevice = device as BeamDevice;
             if (cannon != null ? cannon.Definition.BarrelIndex != operation.BarrelIndex :
@@ -87,7 +87,7 @@ namespace CombatSimulation.Core
             {
                 if (!_world.Bullets.TryGet(handle, out var existing) || _world.Bullets[existing].Owner != operation.Owner) return false;
                 _world.Bullets[existing].Confirmed = true;
-                RememberTriggerParent(_world.Bullets[existing]);
+                _triggers.RememberTriggerParent(_world.Bullets[existing]);
                 if (cannon != null && operation.HasLaunchPose) Reaim(ship, cannon, existing, operation);
                 return true;
             }
@@ -103,7 +103,7 @@ namespace CombatSimulation.Core
                     _world.Launch(ship, operation.BarrelIndex, operation.EntityId, cannon.Definition.Bullet, cannon.Definition.Spread,
                         operation.Tick, shot, operation.HasLaunchPose ? operation : default, out _, out _, out _,
                         out var velocity, out _);
-                    RememberTriggerParent(ship, operation.DeviceIndex, cannon.Definition.Bullet, operation.EntityId, velocity);
+                    _triggers.RememberTriggerParent(ship, operation.DeviceIndex, cannon.Definition.Bullet, operation.EntityId, velocity);
                 }
                 return true;
             }
@@ -112,7 +112,7 @@ namespace CombatSimulation.Core
             if (copy >= 0)
             {
                 Adopt(ship, cannon, copy, operation);
-                RememberTriggerParent(_world.Bullets[copy]);
+                _triggers.RememberTriggerParent(_world.Bullets[copy]);
                 return true;
             }
 
@@ -138,7 +138,7 @@ namespace CombatSimulation.Core
 
             if (index < 0) return false;
             _world.Bullets[index].Confirmed = true;
-            RememberTriggerParent(_world.Bullets[index]);
+            _triggers.RememberTriggerParent(_world.Bullets[index]);
             _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, _world.Bullets[index]));
             return true;
         }
@@ -238,7 +238,7 @@ namespace CombatSimulation.Core
         }
 
         // A bullet that spawned and died between two deliveries: its owner removal is in the same batch.
-        private bool HasDueRemoval(EntityId id)
+        internal bool HasDueRemoval(EntityId id)
         {
             for (var i = 0; i < _remoteOperations.Count; ++i)
             {

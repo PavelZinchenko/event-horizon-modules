@@ -14,13 +14,26 @@ namespace CombatSimulation.Core
     // owner sends a bullet spawn record per segment and a removal record per segment that leaves; the copy builds and
     // removes its segments from them and never decides a segment's growth or damage. A contact on a segment counts if
     // either the attacker's or the owner's device sees it, as a contact on a bullet does (network plan 9d).
-    public sealed partial class Battle
+    //
+    // The network records, the bullet contact list and the ramming tracker stay with Battle until they get their own
+    // systems (phase 5, step 8b, items 5 and 7).
+    internal sealed class WormTails
     {
-        internal TailSegment FindSegment(EntityId id) =>
+        public WormTails(BattleWorld world, Battle battle)
+        {
+            _world = world;
+            _battle = battle;
+        }
+
+        private BattleSetup Setup => _world.Setup;
+        private long Tick => _world.Tick;
+        private PhysicsWorld Physics => _world.Physics;
+
+        public TailSegment FindSegment(EntityId id) =>
             _world.Entities.TryGet(id, out var handle) ? _world.Segments.Get(handle) : null;
 
         // Stage 3: legacy Length counts the segments of the chain from the head.
-        internal int CountAttachedSegments(WormTailDevice device)
+        public int CountAttachedSegments(WormTailDevice device)
         {
             var count = 0;
             for (var segment = _world.Segments.Get(device.Head); segment != null; segment = _world.Segments.Get(segment.Next))
@@ -30,7 +43,7 @@ namespace CombatSimulation.Core
 
         // Stage 2, from WormTailDevice.Update. The owner grows the head at the first update after deployment, then each
         // segment grows the next one when its delay has passed and the place is free (P4 rule). Recent damage falls.
-        internal void GrowTail(ShipEntity ship, WormTailDevice device)
+        public void GrowTail(ShipEntity ship, WormTailDevice device)
         {
             if (!Setup.IsLocalOwner(ship.Owner)) return;
 
@@ -51,7 +64,7 @@ namespace CombatSimulation.Core
         }
 
         // Stage 2, on the owner: legacy InitiateSelfDestruct runs out; the recent damage of a detached segment falls too.
-        private void UpdateDetachedSegments()
+        public void UpdateDetachedSegments()
         {
             for (var i = 0; i < _world.Segments.Capacity; ++i)
             {
@@ -66,7 +79,7 @@ namespace CombatSimulation.Core
         {
             if (segment.RecentDamage > 0f)
                 segment.RecentDamage = Math.Max(0f, segment.RecentDamage -
-                    WormTailDefinition.TearRecoveryRate * TickDuration * segment.MaxHitPoints);
+                    WormTailDefinition.TearRecoveryRate * Battle.TickDuration * segment.MaxHitPoints);
         }
 
         // The place behind the parent is checked against every body the segment would touch; own bodies never count.
@@ -76,7 +89,7 @@ namespace CombatSimulation.Core
             var scale = (parent?.Scale ?? ship.Definition.Scale) * WormTailDefinition.ScaleFactor;
             var pose = HeldPose(ship, definition, parent, scale);
             var radius = definition.Radius * scale;
-            var count = World.OverlapCircle(pose.P, radius, CollisionFilters.Missile(ship.Allegiance), _segmentOverlaps, out _);
+            var count = Physics.OverlapCircle(pose.P, radius, CollisionFilters.Missile(ship.Allegiance), _segmentOverlaps, out _);
             for (var i = 0; i < count; ++i)
                 if (!_segmentOverlaps[i].Target.IsBullet && _segmentOverlaps[i].Distance < radius) return false;
 
@@ -89,9 +102,7 @@ namespace CombatSimulation.Core
             // delay; the first tail of a deployment grows fast.
             segment.NextGrowthTick = Tick + (segment.GrowsSlowly ? WormTailDefinition.RegrowthTicks : WormTailDefinition.FirstGrowthTicks);
             if (parent != null) parent.HasGrown = true;
-            if (ShouldCapture(ship.Owner))
-                _outgoingOperations.Add(OwnerOperation.BulletFired(BattleId, ship.Owner, NextOperationSequence(ship.Owner),
-                    Tick, id, ship.Id, device.Index, number, 0));
+            _battle.CaptureSegmentSpawn(ship, device.Index, number, id);
             return true;
         }
 
@@ -109,11 +120,11 @@ namespace CombatSimulation.Core
             }
 
             var mass = parent?.Mass * WormTailDefinition.ScaleFactor ?? ship.Definition.Mass / definition.Size;
-            var body = World.CreateBody(new BodyDef { Mass = mass });
+            var body = Physics.CreateBody(new BodyDef { Mass = mass });
             var shapeDef = ShapeDef.Default;
             shapeDef.Filter = CollisionFilters.Missile(ship.Allegiance);
-            var shape = World.AddCircle(body, new Circle(Vec2.Zero, definition.Radius * scale), shapeDef);
-            World.SetPose(body, pose.P, pose.Q.Angle);
+            var shape = Physics.AddCircle(body, new Circle(Vec2.Zero, definition.Radius * scale), shapeDef);
+            Physics.SetPose(body, pose.P, pose.Q.Angle);
 
             var growsSlowly = parent != null && (parent.GrowsSlowly || parent.HasGrown);
             segment.Initialize(id, ship, device.Index, definition, (parent?.Number ?? 0) + 1, body, shape, scale, mass,
@@ -121,7 +132,7 @@ namespace CombatSimulation.Core
             _world.Shapes.Register(shape, new ShapeEntry(segment.Handle, id, ShapeHitPriority.Hull, 0));
 
             var limit = parent == null ? WormTailDefinition.HeadLimit : WormTailDefinition.SegmentLimit;
-            segment.Joint = World.CreateHinge(new HingeDef
+            segment.Joint = Physics.CreateHinge(new HingeDef
             {
                 BodyA = parent?.Body ?? ship.Body,
                 BodyB = body,
@@ -151,20 +162,20 @@ namespace CombatSimulation.Core
             var parentBody = parent?.Body ?? ship.Body;
             var anchorA = new Vec2(-ParentOffset(definition, parent) * (parent?.Scale ?? ship.Definition.Scale), 0f);
             var anchorB = new Vec2(definition.JointOffset * scale, 0f);
-            var rotation = World.GetRotation(parentBody);
-            return new Pose(World.Torus.Wrap(World.GetPosition(parentBody) + rotation.Rotate(anchorA - anchorB)), rotation);
+            var rotation = Physics.GetRotation(parentBody);
+            return new Pose(Physics.Torus.Wrap(Physics.GetPosition(parentBody) + rotation.Rotate(anchorA - anchorB)), rotation);
         }
 
         // Stage 4, on both sides. Legacy WormSegmentBase.OnUpdatePhysics for an attached segment: a segment too far from
         // its parent (squared distance at least 5 x its scale) or turned by 90° or more goes back behind it with the
         // parent's velocity and no spin, and skips the damping; else it loses 5 x its sideways speed per second.
-        private void UpdateSegmentMotion()
+        public void UpdateSegmentMotion()
         {
             for (var i = 0; i < _world.Segments.Capacity; ++i)
             {
                 var segment = _world.Segments[i];
                 if (!segment.IsAlive) continue;
-                segment.PreStepVelocity = World.GetLinearVelocity(segment.Body);
+                segment.PreStepVelocity = Physics.GetLinearVelocity(segment.Body);
                 if (segment.Detached) continue;
 
                 var parent = _world.Segments.Get(segment.Parent);
@@ -172,29 +183,29 @@ namespace CombatSimulation.Core
                 if (parent == null && ship == null) continue;
                 var parentBody = parent?.Body ?? ship.Body;
 
-                var delta = World.Torus.Delta(World.GetPosition(parentBody), World.GetPosition(segment.Body));
-                var turn = WrapAngle(World.GetAngle(segment.Body) - World.GetAngle(parentBody));
+                var delta = Physics.Torus.Delta(Physics.GetPosition(parentBody), Physics.GetPosition(segment.Body));
+                var turn = Battle.WrapAngle(Physics.GetAngle(segment.Body) - Physics.GetAngle(parentBody));
                 if (delta.LengthSquared >= segment.Scale * 5f || Math.Abs(turn) >= 0.5f * (float)Math.PI)
                 {
                     var pose = HeldPose(ship, segment.Definition, parent, segment.Scale);
-                    World.SetPose(segment.Body, pose.P, pose.Q.Angle);
-                    World.SetLinearVelocity(segment.Body, World.GetLinearVelocity(parentBody));
-                    World.SetAngularVelocity(segment.Body, 0f);
+                    Physics.SetPose(segment.Body, pose.P, pose.Q.Angle);
+                    Physics.SetLinearVelocity(segment.Body, Physics.GetLinearVelocity(parentBody));
+                    Physics.SetAngularVelocity(segment.Body, 0f);
                     continue;
                 }
 
-                var direction = World.GetRotation(segment.Body).Rotate(new Vec2(1f, 0f));
+                var direction = Physics.GetRotation(segment.Body).Rotate(new Vec2(1f, 0f));
                 var side = new Vec2(direction.Y, -direction.X);
-                var sideSpeed = Vec2.Dot(World.GetLinearVelocity(segment.Body), side);
-                World.ApplyImpulseToCenter(segment.Body,
-                    segment.Mass * (-WormTailDefinition.SideDamping * sideSpeed * TickDuration) * side);
+                var sideSpeed = Vec2.Dot(Physics.GetLinearVelocity(segment.Body), side);
+                Physics.ApplyImpulseToCenter(segment.Body,
+                    segment.Mass * (-WormTailDefinition.SideDamping * sideSpeed * Battle.TickDuration) * side);
             }
         }
 
         // Stage 9. A hit counts on the owner's device when the attacker is local or no copy of this contact counted
         // yet; a local attacker on a remote segment sends the contact to the owner. A ray, damage over time and a ram
         // count once per tick; a projectile once per target.
-        private void ResolveSegmentHit(in ContactCandidate hit, TailSegment segment)
+        public void ResolveSegmentHit(in ContactCandidate hit, TailSegment segment)
         {
             int attackerOwner, deviceIndex;
             HitImpactKind kind;
@@ -212,7 +223,7 @@ namespace CombatSimulation.Core
                 {
                     kind = attacker.Definition.IsMissile ? HitImpactKind.Impact : HitImpactKind.Energy;
                     perTick = false;
-                    impulse = PushImpulse(attacker, World.GetPosition(segment.Body),
+                    impulse = _battle.PushImpulse(attacker, Physics.GetPosition(segment.Body),
                         attacker.Definition.HasFalloff ? hit.Falloff : 1f);
                 }
             }
@@ -227,44 +238,44 @@ namespace CombatSimulation.Core
 
             if (Setup.IsLocalOwner(segment.Owner))
             {
-                if (!Setup.IsLocalOwner(attackerOwner) && !RecordBulletContact(hit.Attacker, hit.Target, perTick ? Tick : -1))
+                if (!Setup.IsLocalOwner(attackerOwner) && !_battle.RecordBulletContact(hit.Attacker, hit.Target, perTick ? Tick : -1))
                     return;
                 QueueSegmentHit(segment, hit.Damage, impulse);
                 // A remote projectile that stops at a local segment stops on its owner too.
                 if (isBullet && !hit.AttackerPassThrough && hit.Source != ContactSource.Ray &&
                     !Setup.IsLocalOwner(attackerOwner))
-                    ClaimBulletContact(segment.Id, segment.Owner, -1, _world.Bullets[index], HitImpactKind.Stop, 0f);
+                    _battle.ClaimBulletContact(segment.Id, segment.Owner, -1, _world.Bullets[index], HitImpactKind.Stop, 0f);
             }
             else if (Setup.IsLocalOwner(attackerOwner) && Setup.HasRemoteOwners)
             {
-                _outgoingHits.AddBulletContact(new ResolvedHit(BattleId, Tick, hit.Attacker, attackerOwner, deviceIndex,
+                _battle.SendBulletContact(new ResolvedHit(_world.BattleId, Tick, hit.Attacker, attackerOwner, deviceIndex,
                     segment.Id, segment.Owner, 0, HitContactState.Start, kind, hit.Damage, targetIsBullet: true));
             }
         }
 
         // The owner applies a received contact on its segment once, as ApplyBulletContact does for a bullet.
-        private void ApplySegmentContact(in ResolvedHit hit, TailSegment segment)
+        public void ApplySegmentContact(in ResolvedHit hit, TailSegment segment)
         {
             if (segment == null || segment.Owner != hit.TargetOwner || !Setup.IsLocalOwner(segment.Owner) ||
                 hit.ImpactKind == HitImpactKind.Disarm || hit.ImpactKind == HitImpactKind.Stop) return;
             var perTick = hit.ImpactKind == HitImpactKind.DamageOverTime || hit.DeviceIndex < 0;
-            if (!RecordBulletContact(hit.AttackerId, hit.TargetId, perTick ? hit.Tick : -1)) return;
+            if (!_battle.RecordBulletContact(hit.AttackerId, hit.TargetId, perTick ? hit.Tick : -1)) return;
             QueueSegmentHit(segment, hit.Amount, Vec2.Zero);
-            _world.Events.Add(BattleEvent.RemoteHit(BattleId, Tick, _world.Events.Count, hit, hit.Amount));
+            _world.Events.Add(BattleEvent.RemoteHit(_world.BattleId, Tick, _world.Events.Count, hit, hit.Amount));
         }
 
         // Stage 9 (and tests). Legacy segments take a tenth of the push at once (Impulse.Apply with the reaction factor).
-        internal void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse)
+        public void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse)
         {
             _segmentHits.Add(new SegmentHit(segment.Handle, damage));
             if (impulse.X != 0f || impulse.Y != 0f)
-                World.ApplyImpulse(segment.Body, WormTailDefinition.ImpulseShare * impulse, World.GetPosition(segment.Body));
+                Physics.ApplyImpulse(segment.Body, WormTailDefinition.ImpulseShare * impulse, Physics.GetPosition(segment.Body));
         }
 
         // Stage 10, on the owner, in the order stage 9 accepted the hits. Legacy WormSegmentDestroyable.Affect: a hit
         // that brings the recent damage above the hit points tears the segment off. Otherwise the damage goes to the tip
         // first. Legacy FixedWormSegment.Affect: the damage the tail cannot take passes to the ship as impact damage.
-        private void ApplySegmentHits()
+        public void ApplySegmentHits()
         {
             for (var i = 0; i < _segmentHits.Count; ++i)
             {
@@ -330,7 +341,7 @@ namespace CombatSimulation.Core
             segment.Next = default;
             if (next == null) return;
 
-            if (World.IsAlive(next.Joint)) World.DestroyJoint(next.Joint);
+            if (Physics.IsAlive(next.Joint)) Physics.DestroyJoint(next.Joint);
             next.Joint = default;
             next.Parent = default;
             for (; next != null; next = _world.Segments.Get(next.Next))
@@ -341,7 +352,7 @@ namespace CombatSimulation.Core
         }
 
         // Stage 12, after the drones. The parent regrows the lost segment after the cooldown (legacy UpdateChildren).
-        private void RemoveDeadSegments()
+        public void RemoveDeadSegments()
         {
             for (var i = 0; i < _world.Segments.Capacity; ++i)
             {
@@ -351,7 +362,7 @@ namespace CombatSimulation.Core
             }
         }
 
-        private void RemoveSegment(TailSegment segment, RemovalReason reason)
+        public void RemoveSegment(TailSegment segment, RemovalReason reason)
         {
             // On a copy, the record detaches the rest; the owner sends their removals.
             DetachNext(segment, Setup.IsLocalOwner(segment.Owner)
@@ -372,16 +383,15 @@ namespace CombatSimulation.Core
                 device.Head = default;
             }
 
-            CaptureRemoval(segment.Id, segment.Owner, reason);
+            _battle.CaptureRemoval(segment.Id, segment.Owner, reason);
             ReleaseSegment(segment);
         }
 
         private void ReleaseSegment(TailSegment segment)
         {
             _world.Shapes.Release(segment.Shape);
-            _ramming.Forget(segment.Id);
-            if (_bulletContacts.Count > 0) ForgetBulletContacts(segment.Id);
-            World.DestroyBody(segment.Body);
+            _battle.ForgetContacts(segment.Id);
+            Physics.DestroyBody(segment.Body);
             _world.Entities.Remove(segment.Id);
             _world.Segments.Release(segment);
         }
@@ -390,7 +400,7 @@ namespace CombatSimulation.Core
         // behind it detach and destroy themselves after 5 s, as after a tear (legacy: the head finds its ship destroyed
         // first and calls Destroy). On a copy they wait for the owner's removal records. A ship that retreats or
         // vanishes takes every attached segment (legacy Vanish detaches nothing). Detached segments run out their timers.
-        private void RemoveShipSegments(ShipEntity ship, RemovalReason reason)
+        public void RemoveShipSegments(ShipEntity ship, RemovalReason reason)
         {
             for (var d = 0; d < ship.DeviceCount; ++d)
             {
@@ -404,7 +414,7 @@ namespace CombatSimulation.Core
                 for (var segment = head; segment != null;)
                 {
                     var next = _world.Segments.Get(segment.Next);
-                    CaptureRemoval(segment.Id, segment.Owner, reason);
+                    _battle.CaptureRemoval(segment.Id, segment.Owner, reason);
                     ReleaseSegment(segment);
                     segment = next;
                 }
@@ -413,7 +423,7 @@ namespace CombatSimulation.Core
         }
 
         // The copy builds a segment from its owner's spawn record, behind the end of its own chain.
-        private bool ApplyRemoteSegment(ShipEntity ship, WormTailDevice device, in OwnerOperation operation)
+        public bool ApplyRemoteSegment(ShipEntity ship, WormTailDevice device, in OwnerOperation operation)
         {
             if (_world.Entities.TryGet(operation.EntityId, out _) || operation.SpawnSequence != 0) return false;
             TailSegment parent = null;
@@ -438,6 +448,8 @@ namespace CombatSimulation.Core
             }
         }
 
+        private readonly BattleWorld _world;
+        private readonly Battle _battle;
         private readonly List<SegmentHit> _segmentHits = new List<SegmentHit>();
         private readonly OverlapHit[] _segmentOverlaps = new OverlapHit[4];
     }

@@ -93,7 +93,7 @@ namespace CombatSimulation.Core
 
         // Network plan 9d (owner, 2026-10-26): a contact between bullets, or between point defense and a bullet, counts if
         // either owner's device sees it. The device that saw it sends the contact on a remote bullet to that bullet's owner.
-        private void ClaimBulletContact(EntityId attacker, int attackerOwner, int deviceIndex, in BulletEntity target,
+        internal void ClaimBulletContact(EntityId attacker, int attackerOwner, int deviceIndex, in BulletEntity target,
             HitImpactKind kind, float amount)
         {
             if (!Setup.HasRemoteOwners || !Setup.IsLocalOwner(attackerOwner) || Setup.IsLocalOwner(target.Owner)) return;
@@ -108,7 +108,7 @@ namespace CombatSimulation.Core
             if (!_world.Entities.TryGet(hit.TargetId, out var handle)) return;
             if (handle.Kind == EntityKind.Segment)
             {
-                ApplySegmentContact(hit, _world.Segments.Get(handle));
+                _tails.ApplySegmentContact(hit, _world.Segments.Get(handle));
                 return;
             }
             if (!_world.Bullets.TryGet(handle, out var index)) return;
@@ -122,23 +122,23 @@ namespace CombatSimulation.Core
                     if (!bullet.Definition.CanBeDisarmed)
                     {
                         // The zap still counts as a contact; the bullet flies on.
-                        if (RecordBulletContact(hit.AttackerId, hit.TargetId, hit.Tick)) AddPendingHit(index);
+                        if (RecordBulletContact(hit.AttackerId, hit.TargetId, hit.Tick)) _triggers.AddPendingHit(index);
                         _world.Events.Add(BattleEvent.RemoteDisarm(BattleId, Tick, _world.Events.Count, hit));
                         break;
                     }
-                    if (stops) AddPendingHit(index);
+                    if (stops) _triggers.AddPendingHit(index);
                     _world.Bullets.MarkRemoval(handle, RemovalReason.Disposal);
                     _world.Events.Add(BattleEvent.RemoteDisarm(BattleId, Tick, _world.Events.Count, hit));
                     break;
                 case HitImpactKind.Stop:
-                    if (stops) AddPendingHit(index);
+                    if (stops) _triggers.AddPendingHit(index);
                     _world.Bullets.MarkRemoval(handle, RemovalReason.Death);
                     break;
                 default:
                     if (!RecordBulletContact(hit.AttackerId, hit.TargetId,
                         hit.ImpactKind == HitImpactKind.DamageOverTime ? hit.Tick : -1)) break;
                     _world.Bullets.AddDamage(handle, hit.Amount);
-                    AddPendingHit(index);
+                    _triggers.AddPendingHit(index);
                     _world.Events.Add(BattleEvent.RemoteHit(BattleId, Tick, _world.Events.Count, hit, hit.Amount));
                     break;
             }
@@ -146,13 +146,16 @@ namespace CombatSimulation.Core
 
         // False when the contact of this attacker on this local bullet (at this tick, for a ray; tick -1 otherwise) already
         // dealt its damage. Entries leave with their bullet.
-        private bool RecordBulletContact(EntityId attacker, EntityId target, long tick)
+        internal bool RecordBulletContact(EntityId attacker, EntityId target, long tick)
         {
             foreach (var contact in _bulletContacts)
                 if (contact.Attacker == attacker && contact.Target == target && contact.Tick == tick) return false;
             _bulletContacts.Add(new BulletContact(attacker, target, tick));
             return true;
         }
+
+        // A local attacker's contact on a remote bullet or segment goes to the target's owner.
+        internal void SendBulletContact(in ResolvedHit hit) => _outgoingHits.AddBulletContact(hit);
 
         private void ForgetBulletContacts(EntityId target)
         {
