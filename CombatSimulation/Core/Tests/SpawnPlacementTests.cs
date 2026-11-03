@@ -23,7 +23,7 @@ namespace CombatSimulation.Core.Tests
             foreach (var enemy in new uint[] { 101, 102, 103 })
             {
                 var distance = world.Torus.Delta(position, world.GetPosition(driver.Slot(enemy).ActiveShip.Body)).Length;
-                Assert.GreaterOrEqual(distance, Battle.SpawnMinEnemyDistance);
+                Assert.GreaterOrEqual(distance, SpawnSystem.MinEnemyDistance);
             }
             Assert.LessOrEqual(world.GetOverlap(ship.Body, position, world.GetAngle(ship.Body)), 0f);
         }

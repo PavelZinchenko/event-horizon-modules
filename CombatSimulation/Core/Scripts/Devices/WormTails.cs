@@ -15,8 +15,8 @@ namespace CombatSimulation.Core
     // removes its segments from them and never decides a segment's growth or damage. A contact on a segment counts if
     // either the attacker's or the owner's device sees it, as a contact on a bullet does (network plan 9d).
     //
-    // The network records, the bullet contact list and the ramming tracker stay with Battle until they get their own
-    // systems (phase 5, step 8b, items 5 and 7).
+    // Pushes, the bullet contact ledger and the ramming tracker belong to ContactSystem; the tails reach them through
+    // Battle (phase 5, step 8b, decision 1).
     internal sealed class WormTails
     {
         public WormTails(BattleWorld world, Battle battle)

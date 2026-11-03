@@ -362,7 +362,7 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(998f, driver.Ship(1).Energy.Value);
             Assert.AreEqual(0, driver.Slot(1).GetBay(0).InHangar);
             Assert.IsFalse(driver.Battle.World.TryFindFreePosition(drone.Body,
-                driver.Battle.World.GetPosition(driver.Ship(1).Body), Battle.SpawnSearchDistance, out _));
+                driver.Battle.World.GetPosition(driver.Ship(1).Body), SpawnSystem.SearchDistance, out _));
             Assert.IsNotNull(driver.Battle.FindShip(drone.Id));
         }
 

@@ -12,7 +12,7 @@ using static CombatSimulation.Ai.Tests.AiFixtures;
 namespace CombatSimulation.Ai.Tests
 {
     // Movement, aiming and attack nodes against the legacy rules (phase 4, step 7d). Fixture ships spawn far apart
-    // (Battle.SpawnMinEnemyDistance), at random headings.
+    // (SpawnSystem.MinEnemyDistance), at random headings.
     public class ActionNodeTests
     {
         private const NodeState S = NodeState.Success;

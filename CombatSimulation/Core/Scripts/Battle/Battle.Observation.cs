@@ -16,7 +16,7 @@ namespace CombatSimulation.Core
             }
         }
 
-        private void ObserveContact(in ContactCandidate hit)
+        internal void ObserveContact(in ContactCandidate hit)
         {
             var observer = Observer;
             if (observer == null) return;

@@ -1,0 +1,263 @@
+using CombatSimulation.Physics;
+
+namespace CombatSimulation.Core
+{
+    // Contacts (phase 5, step 8b, item 7). Stage 6: the beam and point-defense queries. Stage 8: every source adds its
+    // contact candidates. Stage 9: the resolver accepts them in key order, and each accepted contact reaches its
+    // target: pending damage and a push on a ship, damage or removal on a bullet, a queued hit on a tail segment.
+    // Stage 10 applies the damage (DamageSystem).
+    internal sealed class ContactSystem
+    {
+        public ContactSystem(BattleWorld world, Battle battle, WormTails tails, BulletTriggers triggers,
+            BattleNetwork network, BulletContactLedger ledger)
+        {
+            _world = world;
+            _battle = battle;
+            _tails = tails;
+            _triggers = triggers;
+            _network = network;
+            _ledger = ledger;
+        }
+
+        private BattleSetup Setup => _world.Setup;
+        private BattleId BattleId => _world.BattleId;
+        private long Tick => _world.Tick;
+        private PhysicsWorld Physics => _world.Physics;
+
+        public ContactResolver Resolver => _resolver;
+        public RammingTracker Ramming => _ramming;
+        public BeamQueries Beams => _beams;
+        public BulletContactLedger Ledger => _ledger;
+
+        // Stage 6.
+        public void RunQueries()
+        {
+            _beams.Run(_battle);
+            _pointDefense.Run(_battle);
+        }
+
+        // Stage 8. Every source adds its candidates; the resolver sorts them by the contact key.
+        public void Collect()
+        {
+            _resolver.BeginStep();
+            _beams.Collect(_resolver);
+            _pointDefense.Collect(_resolver);
+            _world.Bullets.CollectHits(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver);
+            _ramming.Collect(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver, Setup.DamageTypes.RammingDamageType);
+
+            var duplicates = _resolver.Sort();
+            if (duplicates > 0)
+                _world.ReportDefect($"Battle {BattleId}, tick {Tick}: {duplicates} contact candidates share a key.");
+        }
+
+        // Stage 9. Ship contacts belong to the attacker; bullet damage belongs to the target bullet.
+        public void Resolve()
+        {
+            _resolver.Resolve();
+            _beams.Complete(_battle, _resolver);
+            _network?.OutgoingHits.BeginContacts();
+
+            var accepted = _resolver.Accepted;
+            for (var i = 0; i < accepted.Length; ++i)
+            {
+                ref readonly var hit = ref accepted[i];
+                _battle.ObserveContact(hit);
+                if (hit.Kind == ContactKind.Disarm)
+                {
+                    if (!_world.Bullets.TryGet(hit.TargetHandle, out var disarmed)) continue;
+                    // Legacy: point defense is a contact, so Hit triggers run before Disarmed ones. A bullet that cannot
+                    // be disarmed counts each zap once, whether this device or a remote one saw it.
+                    if (hit.TargetKeepsFlying)
+                    {
+                        if (_ledger.Record(hit.Attacker, hit.Target, Tick)) _triggers.AddPendingHit(disarmed);
+                    }
+                    else
+                    {
+                        if (_world.Bullets[disarmed].PendingRemoval == RemovalReason.None) _triggers.AddPendingHit(disarmed);
+                        _world.Bullets.MarkRemoval(hit.TargetHandle, RemovalReason.Disposal);
+                    }
+                    _world.Events.Add(BattleEvent.DisarmEvent(BattleId, Tick, _world.Events.Count, hit,
+                        _world.Authority(_world.Bullets[disarmed].Owner)));
+                    var defender = _world.Ships.Get(hit.AttackerHandle);
+                    if (defender != null)
+                        _network?.ClaimBulletContact(hit.Attacker, defender.Owner, hit.AttackerDeviceIndex,
+                            _world.Bullets[disarmed], HitImpactKind.Disarm, 0f);
+                    continue;
+                }
+                if (hit.Kind != ContactKind.Hit) continue;
+
+                // A projectile stops on either copy. Its removal has its own authority flag.
+                if (hit.Source != ContactSource.Ray && _world.Bullets.TryGet(hit.AttackerHandle, out var stopped))
+                {
+                    if (_world.Bullets[stopped].PendingRemoval == RemovalReason.None) _triggers.AddPendingHit(stopped);
+                    if (!hit.AttackerPassThrough) _world.Bullets.MarkRemoval(hit.AttackerHandle, RemovalReason.Death);
+                }
+
+                BattleEventAuthority authority;
+                if (hit.TargetHandle.Kind == EntityKind.Bullet)
+                {
+                    if (!_world.Bullets.TryGet(hit.TargetHandle, out var index)) continue;
+                    ref readonly var targetBullet = ref _world.Bullets[index];
+                    authority = _world.Authority(targetBullet.Owner);
+                    var attackerBullet = _world.Bullets.TryGet(hit.AttackerHandle, out var attackerIndex);
+                    var attackerOwner = attackerBullet ? _world.Bullets[attackerIndex].Owner : _world.Ships.Get(hit.AttackerHandle)?.Owner ?? -1;
+                    var ray = hit.Source == ContactSource.Ray;
+                    // A ray and damage over time deal one tick per contact; any other contact deals its damage once.
+                    var perTick = ray || (attackerBullet && !_world.Bullets[attackerIndex].IsBeam &&
+                                          _world.Bullets[attackerIndex].Definition.Impact == BulletImpact.OverTime);
+                    if (authority == BattleEventAuthority.Committed)
+                    {
+                        // A remote attacker's contact counts once, whether this device or the attacker's owner saw it.
+                        if (Setup.IsLocalOwner(attackerOwner) || _ledger.Record(hit.Attacker, hit.Target, perTick ? Tick : -1))
+                        {
+                            _world.Bullets.AddDamage(hit.TargetHandle, hit.Damage);
+                            _triggers.AddPendingHit(index);
+                        }
+                        // A remote projectile that stops at a local bullet stops on its owner too.
+                        if (attackerBullet && !hit.AttackerPassThrough && !ray)
+                            _network?.ClaimBulletContact(hit.Target, targetBullet.Owner, -1, _world.Bullets[attackerIndex],
+                                HitImpactKind.Stop, 0f);
+                    }
+                    else
+                    {
+                        // Resolver walk damage decides predicted removal without changing remote hit points.
+                        if (_resolver.GetStopTime(hit.TargetHandle) < float.PositiveInfinity)
+                            _world.Bullets.MarkRemoval(hit.TargetHandle, RemovalReason.Death);
+                        if (attackerOwner >= 0)
+                            _network?.ClaimBulletContact(hit.Attacker, attackerOwner, hit.AttackerDeviceIndex, targetBullet,
+                                perTick ? HitImpactKind.DamageOverTime : HitImpactKind.Impact, hit.Damage);
+                    }
+                }
+                else if (hit.TargetHandle.Kind == EntityKind.Segment)
+                {
+                    var segment = _world.Segments.Get(hit.TargetHandle);
+                    if (segment == null) continue;
+                    authority = _world.Authority(segment.Owner);
+                    _tails.ResolveSegmentHit(hit, segment);
+                }
+                else
+                {
+                    var target = _world.Ships.Get(hit.TargetHandle);
+                    if (target == null) continue;
+                    int owner, deviceIndex;
+                    HitImpactKind kind;
+                    var amount = hit.Damage;
+                    var damage = hit.Damage;
+                    var damageType = hit.DamageType;
+                    BulletDefinition projectile = null;
+                    var impulse = Vec2.Zero;
+                    var falloff = 1f;
+                    var shape = hit.TargetShapeOrder;
+                    if (_world.Bullets.TryGet(hit.AttackerHandle, out var index))
+                    {
+                        ref readonly var attacker = ref _world.Bullets[index];
+                        owner = attacker.Owner;
+                        deviceIndex = attacker.DeviceIndex;
+                        kind = attacker.IsBeam ? HitImpactKind.DamageOverTime :
+                            attacker.Definition.IsMissile ? HitImpactKind.Impact : HitImpactKind.Energy;
+                        if (attacker.IsBeam)
+                        {
+                            amount = attacker.BeamDefinition.DamagePerSecond;
+                        }
+                        else if (attacker.Definition.Impact == BulletImpact.OverTime)
+                        {
+                            // One damage type at a fixed rate (BulletDefinition). The record names shape 0, so the
+                            // interval stays one contact while the bullet moves over the hull parts.
+                            kind = HitImpactKind.DamageOverTime;
+                            amount = attacker.Definition.Damage;
+                            damage = amount * Battle.TickDuration;
+                            damageType = attacker.Definition.DamageType;
+                            shape = 0;
+                        }
+                        else
+                        {
+                            // The candidate holds the total; a ship takes each damage effect with its own type.
+                            projectile = attacker.Definition;
+                            if (projectile.HasFalloff) falloff = hit.Falloff;
+                            amount = damage = BulletStore.EffectDamage(projectile, projectile.Damage,
+                                projectile.DamageFalloff, falloff);
+                            damageType = projectile.DamageType;
+                            impulse = PushImpulse(attacker, Physics.GetPosition(target.Body), falloff);
+                        }
+                    }
+                    else
+                    {
+                        var attacker = _world.Ships.Get(hit.AttackerHandle);
+                        if (attacker == null) continue;
+                        owner = attacker.Owner;
+                        deviceIndex = hit.AttackerDeviceIndex;
+                        kind = hit.PointDefense != null ? HitImpactKind.Energy : HitImpactKind.Impact;
+                    }
+                    authority = _world.Authority(owner);
+                    if (authority == BattleEventAuthority.Committed)
+                    {
+                        // A remote target's copy takes the same damage and push as a prediction (N3); it never dies of
+                        // it. The push on a remote target travels in the first record (phase 4 E4).
+                        var remote = !Setup.IsLocalOwner(target.Owner);
+                        target.AddPendingDamage(damageType, damage);
+                        if (remote)
+                            _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
+                                hit.Target, target.Owner, shape, HitContactState.Start, kind, amount,
+                                damageType: (byte)damageType, impulse: impulse));
+                        if (projectile != null)
+                        {
+                            var extra = projectile.ExtraDamage;
+                            for (var e = 0; e < extra.Count; ++e)
+                            {
+                                var extraAmount = BulletStore.EffectDamage(projectile, extra[e].Amount, extra[e].Falloff,
+                                    falloff);
+                                target.AddPendingDamage(extra[e].DamageType, extraAmount);
+                                if (remote)
+                                    _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
+                                        hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind,
+                                        extraAmount, damageType: (byte)extra[e].DamageType));
+                            }
+                            if (impulse.X != 0f || impulse.Y != 0f) ApplyPush(target, impulse);
+                        }
+                    }
+                }
+
+                _world.Events.Add(BattleEvent.HitEvent(BattleId, Tick, _world.Events.Count, hit, authority));
+            }
+            _network?.OutgoingHits.CompleteContacts(Tick);
+        }
+
+        // Legacy PushAction: the impulse acts at the target's origin, so it never turns the target.
+        public void ApplyPush(ShipEntity target, Vec2 impulse) =>
+            Physics.ApplyImpulse(target.Body, impulse, Physics.GetPosition(target.Body));
+
+        // Legacy PushAction (Push x the bullet velocity) plus RadialPushAction (phase 5, step 3): away from the bullet
+        // centre toward the target's origin. Legacy applies the radial impulse at the bullet centre; that point lies on
+        // the same line through the origin, so the torque is the same.
+        public Vec2 PushImpulse(in BulletEntity bullet, Vec2 target, float falloff)
+        {
+            var definition = bullet.Definition;
+            var impulse = Vec2.Zero;
+            if (definition.Push != 0f) impulse = definition.Push * Physics.GetBulletVelocity(bullet.Body);
+            var radial = definition.RadialPush + definition.RadialPushWithFalloff * falloff;
+            if (radial != 0f)
+                impulse += radial * Physics.Torus.Delta(Physics.GetBulletPosition(bullet.Body), target).Normalized;
+            return impulse;
+        }
+
+        // A removed segment leaves the ramming tracker and the bullet contact ledger.
+        public void Forget(EntityId id)
+        {
+            _ramming.Forget(id);
+            _ledger.Forget(id);
+        }
+
+        private readonly BattleWorld _world;
+        private readonly Battle _battle;
+        private readonly WormTails _tails;
+        private readonly BulletTriggers _triggers;
+        // Null without remote owners (decision 3b).
+        private readonly BattleNetwork _network;
+        // Shared with the network part, which records the contacts of received hits.
+        private readonly BulletContactLedger _ledger;
+        private readonly ContactResolver _resolver = new ContactResolver();
+        private readonly RammingTracker _ramming = new RammingTracker();
+        private readonly BeamQueries _beams = new BeamQueries();
+        private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();
+    }
+}
