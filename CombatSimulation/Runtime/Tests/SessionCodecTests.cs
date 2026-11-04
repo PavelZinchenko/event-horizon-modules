@@ -220,6 +220,38 @@ namespace CombatSimulation.Runtime.Tests
             Assert.LessOrEqual(Math.Abs(error), Math.PI / (1 << CorrectionCodec.AngleBits) + 1e-6);
         }
 
+        // Phase 5, step 4f (version 10): a charging weapon's spawn carries its charge ticks behind a flag; other spawns
+        // add the flag only.
+        [Test]
+        public void ChargeTicksTravelWithABulletSpawn()
+        {
+            var link = new Link(); var ship = new EntityId(1234);
+            var plain = SpawnIdentity.CreateChild(ship, 10, 0, 0, 0);
+            var charged = SpawnIdentity.CreateChild(ship, 10, 1, 0, 0);
+            var launched = SpawnIdentity.CreateChild(ship, 10, 2, 0, 0);
+            var operations = new[]
+            {
+                OwnerOperation.RosterChange(link.Battle, 20, 1, 10, ship, new RosterRecord(new RosterId(99), 1,
+                    RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0)),
+                OwnerOperation.BulletFired(link.Battle, 20, 2, 10, plain, ship, 0, 0, 0),
+                OwnerOperation.BulletFired(link.Battle, 20, 3, 10, charged, ship, 1, 0, 0, 1000),
+                OwnerOperation.BulletFired(link.Battle, 20, 4, 10, launched, ship, 2, 0, 0, new Vec2(5f, 6f), GridAngle(10), 6),
+            };
+            var scan = new List<SessionCodec.ScannedRecord>();
+            link.Read(link.Write(10, operations, Array.Empty<ResolvedHit>()), out var read, out _, scan);
+            CollectionAssert.AreEqual(operations, read);
+            Assert.AreEqual(0, read[1].ChargeTicks);
+            Assert.AreEqual(1000, read[2].ChargeTicks);
+            Assert.AreEqual(6, read[3].ChargeTicks);
+            // 1000 charge ticks are three nibbles (16 bits); device index 1 instead of 0 adds 5 bits.
+            Assert.AreEqual(16 + 5, scan[2].Bits - scan[1].Bits);
+
+            Assert.Throws<InvalidOperationException>(() => new Link().Write(10, new[]
+            {
+                operations[0], OwnerOperation.BulletFired(link.Battle, 20, 2, 10, plain, ship, 0, 0, 0, -1),
+            }, Array.Empty<ResolvedHit>()));
+        }
+
         private static float GridAngle(int cell) => (float)(cell * (2 * Math.PI / (1 << CorrectionCodec.AngleBits)));
 
         private static readonly CorrectionCodec.Arena Arena = new CorrectionCodec.Arena(200, 200);

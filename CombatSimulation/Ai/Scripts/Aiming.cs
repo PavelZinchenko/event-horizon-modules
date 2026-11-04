@@ -171,12 +171,16 @@ namespace CombatSimulation.Ai
             switch (definition.Devices[weapon.DeviceIndex])
             {
                 case CannonDefinition cannon:
+                    // Legacy WeaponInfo.Firerate of a charging weapon: 1 / the charge time (phase 5, step 4f).
                     return Create(ship, definition.Barrels[cannon.BarrelIndex], cannon.Bullet.Speed,
-                        cannon.Bullet.ParentVelocityEffect, cannon.EnergyCost, FireRateOf(cannon.Cooldown));
+                        cannon.Bullet.ParentVelocityEffect, cannon.EnergyCost,
+                        FireRateOf(cannon.Mode == CannonMode.Charging ? cannon.ChargeTime : cannon.Cooldown));
                 case BeamDefinition beam:
-                    // Legacy WeaponInfo.EnergyCost: per second for a continuous beam, per shot for a shot beam.
+                    // Legacy WeaponInfo.EnergyCost: per second for a continuous beam, per shot for a shot beam, per full
+                    // charge for a charged beam.
                     return Create(ship, definition.Barrels[beam.BarrelIndex], 0f, 0f,
-                        beam.IsShot ? beam.ActivationCost : beam.EnergyPerSecond, FireRateOf(beam.Cooldown));
+                        beam.IsShot ? beam.ActivationCost : beam.EnergyPerSecond,
+                        FireRateOf(beam.IsCharged ? beam.ChargeTime : beam.Cooldown));
                 default:
                     throw new InvalidOperationException($"AI weapon at device {weapon.DeviceIndex} is not a cannon or a beam");
             }
@@ -341,12 +345,13 @@ namespace CombatSimulation.Ai
             return context.Distance(context.Ship, enemy) > 5 + profile.ModelScale;
         }
 
-        // Legacy WeaponWrapperExtensions.IsReadyToFire on the device state (step 3b). Charging weapons wait for phase 5
-        // (no charge in the snapshot); harpoons are inert in phase 4, so no harpoon has a bullet out.
+        // Legacy WeaponWrapperExtensions.IsReadyToFire on the device state (step 3b). A charging weapon needs a full
+        // charge (phase 5, step 4f). Harpoons are inert until step 6, so no harpoon has a bullet out.
         public static bool IsReadyToFire(AiContext context, AiWeapon weapon)
         {
-            if (!context.DeviceOf(weapon.DeviceIndex).Ready) return false;
-            if (weapon.WeaponClass == AiWeaponClass.RequiredCharging) return false;
+            var device = context.DeviceOf(weapon.DeviceIndex);
+            if (!device.Ready) return false;
+            if (weapon.WeaponClass == AiWeaponClass.RequiredCharging && device.Charge < 1f) return false;
             return true;
         }
 

@@ -215,10 +215,10 @@ namespace CombatSimulation.Core
             bullet.NextSearchTick = spawnTick + 1;
             Bullets.SetBody(index, body);
 
-            // A manageable cannon holds its bullet (phase 5, step 4b), as a beam device holds its beam.
-            if (barrelIndex != SpawnRequest.ShipCentre && ship.GetDevice(deviceIndex) is CannonDevice cannon &&
-                cannon.Definition.Mode == CannonMode.Manageable)
-                cannon.Hold(Bullets.GetHandle(index));
+            // A manageable cannon holds its bullet (phase 5, step 4b), as a beam device holds its beam; a charging cannon
+            // shows it (step 4f).
+            if (barrelIndex != SpawnRequest.ShipCentre && ship.GetDevice(deviceIndex) is CannonDevice cannon)
+                cannon.OnBulletCreated(Bullets.GetHandle(index));
             return index;
         }
 
@@ -286,8 +286,8 @@ namespace CombatSimulation.Core
                             definition.GrowthTicks(speedScale);
         }
 
-        // Returns -1 on an ID collision.
-        public int CreateBeam(ShipEntity ship, BeamDevice device, uint sequence, long spawnTick)
+        // Returns -1 on an ID collision. The definition is the device's, or its charged copy (phase 5, step 4f).
+        public int CreateBeam(ShipEntity ship, BeamDevice device, BeamDefinition definition, uint sequence, long spawnTick)
         {
             var id = SpawnIdentity.CreateChild(ship.Id, spawnTick, (uint)device.Index,
                 (uint)device.Definition.BarrelIndex, sequence);
@@ -307,13 +307,14 @@ namespace CombatSimulation.Core
             beam.Allegiance = ship.Allegiance;
             beam.Owner = ship.Owner;
             beam.DeviceIndex = device.Index;
-            beam.BeamDefinition = device.Definition;
+            beam.BeamDefinition = definition;
             beam.SpawnTick = spawnTick;
             beam.Confirmed = Setup.IsLocalOwner(ship.Owner);
-            if (device.Definition.IsShot)
+            if (definition.IsShot)
             {
                 // Phase 5, step 4d: a shot beam expires after its lifetime, as a projectile does.
-                beam.ExpiryTick = spawnTick + device.Definition.LifetimeTicks - 1;
+                beam.ExpiryTick = spawnTick + definition.LifetimeTicks - 1;
+                device.OnShotCreated(handle);
                 return index;
             }
 

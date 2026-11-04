@@ -18,8 +18,8 @@ namespace CombatSimulation.Core
         public static int After(float seconds) =>
             Clamp(Math.Floor(Ticks(seconds) + Tolerance) + 1.0);
 
-        // 0.02f is not exact in binary, so the rate is rounded to the intended 50 Hz.
-        private static double Ticks(float seconds) => seconds * Math.Round(TicksPerSecond);
+        // The exact tick count of a duration. 0.02f is not exact in binary, so the rate is rounded to the intended 50 Hz.
+        public static double Ticks(float seconds) => seconds * Math.Round(TicksPerSecond);
 
         private static int Clamp(double ticks) => ticks < 1.0 ? 1 : ticks > int.MaxValue ? int.MaxValue : (int)ticks;
     }

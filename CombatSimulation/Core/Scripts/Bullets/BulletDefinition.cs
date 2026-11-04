@@ -44,6 +44,21 @@ namespace CombatSimulation.Core
             bool damageFalloff = false, float radialPush = 0f, float radialPushWithFalloff = 0f, float lifetime = 0f,
             float scale = 0f, bool attachedToParent = false, bool rocket = false, float stickyLifetime = 0f,
             bool magnetic = false, bool hasDirection = true, float beamLength = 0f, bool piercing = false)
+            : this(radius, speed, range, damage, weight, parentVelocityEffect, hitPoints, homing, startingVelocityMultiplier,
+                damageType, recoil, push, extraDamage, triggers, detonateWhenDestroyed, canBeDisarmed, impact, damageFalloff,
+                radialPush, radialPushWithFalloff, lifetime, scale, attachedToParent, rocket, stickyLifetime, magnetic,
+                hasDirection, beamLength, piercing, null, 1f)
+        {
+        }
+
+        // A charged copy (phase 5, step 4f) names its uncharged definition and its charge.
+        private BulletDefinition(float radius, float speed, float range, float damage, float weight,
+            float parentVelocityEffect, float hitPoints, bool homing, float startingVelocityMultiplier, int damageType,
+            float recoil, float push, IReadOnlyList<DamageAmount> extraDamage, IReadOnlyList<BulletTriggerDefinition> triggers,
+            bool detonateWhenDestroyed, bool canBeDisarmed, BulletImpact impact, bool damageFalloff, float radialPush,
+            float radialPushWithFalloff, float lifetime, float scale, bool attachedToParent, bool rocket,
+            float stickyLifetime, bool magnetic, bool hasDirection, float beamLength, bool piercing,
+            BulletDefinition uncharged, float charge)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -53,7 +68,8 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(range), "Range must be finite and not negative.");
             if (!(lifetime >= 0f) || float.IsInfinity(lifetime))
                 throw new ArgumentOutOfRangeException(nameof(lifetime), "Lifetime must be finite and not negative.");
-            if (!(lifetime > 0f) && !(speed > 0f && range > 0f))
+            // Legacy RangeMultiplier is 0 at a charge of 0.1 or less: such a bullet expires after its first step.
+            if (!(lifetime > 0f) && !(speed > 0f && (range > 0f || uncharged != null)))
                 throw new ArgumentException("A bullet needs a lifetime, or a positive speed and range.", nameof(lifetime));
             if (!(scale >= 0f) || float.IsInfinity(scale))
                 throw new ArgumentOutOfRangeException(nameof(scale), "Scale must be finite and not negative.");
@@ -160,6 +176,7 @@ namespace CombatSimulation.Core
             AttachedToParent = attachedToParent;
             BeamLength = beamLength;
             Piercing = piercing;
+            BodyLifetime = lifetime;
             Lifetime = lifetime > 0f ? lifetime : range / speed;
             LifetimeTicks = TickTime.After(Lifetime) + GrowthTicks(1f);
             Triggers = triggerList;
@@ -169,6 +186,8 @@ namespace CombatSimulation.Core
             CanBeDisarmed = canBeDisarmed;
             StickyLifetime = stickyLifetime;
             StickyTicks = stickyLifetime > 0f ? TickTime.AtLeast(stickyLifetime) : 0;
+            Uncharged = uncharged ?? this;
+            Charge = charge;
 
             // Legacy BulletFactory.CreateController: both scale with 1 / (0.2 + 2 x weight); a rocket accelerates at
             // speed / (0.1 + weight), a magnetic bullet at twice the homing thrust.
@@ -316,5 +335,51 @@ namespace CombatSimulation.Core
         // Legacy Body.CanBeDisarmed. Otherwise point defense still zaps the bullet (energy, cooldown, Hit triggers), and
         // the bullet flies on (legacy Bullet.OnCollision ignores the Disarm effect).
         public bool CanBeDisarmed { get; }
+
+        // Phase 5, step 4f (H7): the definition a charging weapon scales, and the charge of this copy (legacy
+        // PowerLevel). An uncharged definition is its own, with charge 1.
+        public BulletDefinition Uncharged { get; }
+        public float Charge { get; }
+
+        // Legacy BulletStats with PowerLevel c: damage and effect powers x c; range x c, or 0 at c <= 0.1; body size,
+        // weight, recoil and beam length x (0.5 + 0.5c). A body lifetime stays (G9 reaches beams only); a lifetime of
+        // range / speed follows the range. Each child takes the charge of its parent (behaviour change "Charged child
+        // bullets"; legacy keeps the first shot's charge). A full charge is the uncharged definition.
+        internal BulletDefinition WithCharge(float charge) =>
+            charge >= 1f ? Uncharged : Uncharged.Charged(charge, new Dictionary<BulletDefinition, BulletDefinition>());
+
+        private BulletDefinition Charged(float charge, Dictionary<BulletDefinition, BulletDefinition> scaled)
+        {
+            if (scaled.TryGetValue(this, out var result)) return result;
+
+            var size = 0.5f + 0.5f * charge;
+            var rangeScale = charge > 0.1f ? charge : 0f;
+            var extra = new DamageAmount[ExtraDamage.Count];
+            for (var i = 0; i < extra.Length; ++i)
+            {
+                var item = ExtraDamage[i];
+                extra[i] = new DamageAmount(item.DamageType, item.Amount * charge, item.Falloff);
+            }
+
+            var triggers = new BulletTriggerDefinition[Triggers.Count];
+            for (var i = 0; i < triggers.Length; ++i)
+            {
+                var trigger = Triggers[i];
+                triggers[i] = trigger.IsDetonate ? trigger
+                    : BulletTriggerDefinition.Spawn(trigger.Conditions, trigger.Bullet.Charged(charge, scaled), trigger.Pattern,
+                        trigger.RandomFactor);
+            }
+
+            result = new BulletDefinition(Radius * size, Speed, Range * rangeScale, Damage * charge, Weight * size,
+                ParentVelocityEffect, HitPoints, IsHoming, StartingVelocityMultiplier, DamageType, Recoil * size,
+                Push * charge, extra, triggers, DetonateWhenDestroyed, CanBeDisarmed, Impact, DamageFalloff,
+                RadialPush * charge, RadialPushWithFalloff * charge, BodyLifetime, Scale * size, AttachedToParent, IsRocket,
+                StickyLifetime, IsMagnetic, HasDirection, BeamLength * size, Piercing, this, charge);
+            scaled.Add(this, result);
+            return result;
+        }
+
+        // Legacy Body.Lifetime: 0 when the lifetime is range / speed.
+        private float BodyLifetime { get; }
     }
 }

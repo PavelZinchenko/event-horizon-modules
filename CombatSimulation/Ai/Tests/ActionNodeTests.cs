@@ -310,6 +310,49 @@ namespace CombatSimulation.Ai.Tests
             Assert.AreEqual(closes, context.Controls.IsSystemActivated(0));
         }
 
+        // Phase 5, step 4f: legacy ChargeWeaponsNode holds the key of a charging weapon and reserves the energy its charge
+        // still needs; Running while it charges, Success once charged. IsReadyToFire waits for the full charge, and
+        // SustainAim tracks the weapon's bullet while it lives.
+        [Test]
+        public void ChargeWeaponsHoldsTheKeyUntilTheChargeIsFull()
+        {
+            var leaf = Leaf(BehaviorNodeType.ChargeWeapons);
+            Assert.AreSame(EmptyNode.Failure, Builder(Context(out _)).Build(Node(leaf)), "no charging weapon");
+
+            // ChargedLaser_M_1 with a charge time of 0.2 s (10 ticks) and 50 energy.
+            var laser = new ShipDefinition(1f, 1f, AiFixtures.Engine, 1000f, new ResourceDefinition(0f), new ResourceDefinition(300f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[] { BeamDefinition.Charged(0, 0.2f, 50f, 25f, 200f, 1f) });
+            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+            {
+                new RosterSlotSetup(new RosterId(1), 0, laser),
+                new RosterSlotSetup(new RosterId(101), 1, AiFixtures.Ship),
+            }), new FirePilots());
+            runner.Deploy(new RosterId(1), runner.Tick);
+            runner.Deploy(new RosterId(101), runner.Tick);
+            for (var i = 0; i < 6; ++i) runner.Step();
+
+            var weapon = new AiWeapon(0, AiWeaponClass.RequiredCharging, AiBulletBehavior.Beam, AiWeaponCapability.DamageEnemy,
+                25f, 0f);
+            var context = new AiContext(WithWeapon(weapon), AiSettings.Default, 0.02f, default, BattleData());
+            context.Update(runner.Snapshot, runner.Snapshot.Ships[0]);
+            var charge = context.DeviceOf(0).Charge;
+            Assert.That(charge, Is.GreaterThan(0f).And.LessThan(1f));
+            Assert.IsFalse(AimAndAttack.IsReadyToFire(context, weapon));
+
+            var node = Builder(context).Build(Node(leaf));
+            Assert.AreEqual(R, node.Evaluate(context));
+            Assert.IsTrue(context.Controls.IsSystemActivated(0));
+            Assert.AreEqual(50f * (1f - charge), context.LockedEnergy, 1e-3f);
+
+            for (var i = 0; i < 10; ++i) runner.Step();
+            context.Update(runner.Snapshot, runner.Snapshot.Ships[0]);
+            Assert.AreEqual(1f, context.DeviceOf(0).Charge);
+            Assert.IsTrue(AimAndAttack.IsReadyToFire(context, weapon));
+            Assert.AreEqual(S, node.Evaluate(context));
+            Assert.AreEqual(0f, context.LockedEnergy);
+        }
+
         // Phase 5, step 7c: legacy KeepDistance succeeds between the distances plus a third of both model scales; it
         // flies toward a target that is too far and away from one that is too near. It swaps reversed bounds.
         [Test]

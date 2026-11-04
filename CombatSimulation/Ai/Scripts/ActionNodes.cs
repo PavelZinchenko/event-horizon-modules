@@ -309,8 +309,8 @@ namespace CombatSimulation.Ai
             return true;
         }
 
-        // Legacy ShouldTrack on the device state: the weapon fired in the last tick. Charging weapons have no bullet in
-        // phase 4.
+        // Legacy ShouldTrack on the device state: the weapon fired in the last tick; a charging weapon's last bullet still
+        // lives (phase 5, step 4f).
         private bool ShouldTrack(AiContext context, AiWeapon weapon)
         {
             switch (weapon.WeaponClass)
@@ -320,8 +320,10 @@ namespace CombatSimulation.Ai
                     if (!context.DeviceOf(weapon.DeviceIndex).Active) return false;
                     break;
                 case AiWeaponClass.Manageable:
-                case AiWeaponClass.RequiredCharging:
                     return false;
+                case AiWeaponClass.RequiredCharging:
+                    if (context.DeviceOf(weapon.DeviceIndex).ActiveBullet.IsNull) return false;
+                    break;
             }
 
             switch (weapon.BulletBehavior)
@@ -336,6 +338,42 @@ namespace CombatSimulation.Ai
         }
 
         private readonly bool _onlyDirectWeapon;
+    }
+
+    // Legacy ChargeWeaponsNode (phase 5, step 4f): holds the key of every charging weapon whose remaining charge cost
+    // the free energy covers, or while the energy is at least 99%. A weapon below full charge reserves that cost.
+    // Running while any weapon charges; Success when the held weapons are all charged; else Failure.
+    internal sealed class ChargeWeaponsNode : INode
+    {
+        private const float FullEnergy = 0.99f;
+
+        public ChargeWeaponsNode(IReadOnlyList<AiWeapon> weapons) => _weapons = weapons;
+
+        public NodeState Evaluate(AiContext context)
+        {
+            var charging = 0;
+            var charged = 0;
+            foreach (var weapon in _weapons)
+            {
+                var charge = context.DeviceOf(weapon.DeviceIndex).Charge;
+                var energyCost = WeaponMount.Of(context.Ship, weapon).EnergyCost * (1f - charge);
+                if (context.EnergyLevel < energyCost && context.EnergyLevelPercentage < FullEnergy) continue;
+
+                context.Controls.ActivateSystem(weapon.DeviceIndex);
+                if (charge < 1f)
+                {
+                    context.LockedEnergy += energyCost;
+                    charging++;
+                }
+                else
+                    charged++;
+            }
+
+            if (charging > 0) return NodeState.Running;
+            return charged > 0 ? NodeState.Success : NodeState.Failure;
+        }
+
+        private readonly IReadOnlyList<AiWeapon> _weapons;
     }
 
     // Legacy TrackControllableAmmo (phase 5, step 4b): holds the key of each active weapon whose bullet closes on the

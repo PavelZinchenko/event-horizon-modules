@@ -49,6 +49,9 @@ namespace CombatSimulation.Ai
             set => _selectedWeapons = value;
         }
 
+        // Legacy Context.EnergyLevel: the energy that nodes have not reserved in this think.
+        public float EnergyLevel => Math.Max(0f, _ship.Energy.Value - LockedEnergy);
+
         // Legacy Mathf.Clamp01 keeps NaN, so a ship without energy reads NaN and passes every "less than" check.
         public float EnergyLevelPercentage
         {

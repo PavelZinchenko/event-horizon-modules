@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace CombatSimulation.Core
 {
@@ -65,13 +66,17 @@ namespace CombatSimulation.Core
     // cooldown and the energy cost, in that order; a failed check spends nothing. Phase 5, step 4a: legacy
     // MultishotCannon fires its whole magazine in one shot; legacy MachineGun fires its magazine at the barrel cooldown,
     // and its weapon cooldown starts in the tick after the last shot. Step 4b: legacy ManageableCannon holds one bullet
-    // until its loss.
+    // until its loss. Step 4f: legacy ChargeableCannon fires its charge at the release.
     internal sealed class CannonDevice : ShipDevice
     {
         // Legacy TimeFromLastUse starts at 3600 s: the weapon is ready at once.
         private const long NeverFired = long.MinValue / 2;
 
-        public CannonDevice(CannonDefinition definition, int index) : base(index) => Definition = definition;
+        public CannonDevice(CannonDefinition definition, int index) : base(index)
+        {
+            Definition = definition;
+            if (definition.Mode == CannonMode.Charging) _charge = new WeaponCharge(definition.ChargeTime, definition.EnergyCost);
+        }
 
         public CannonDefinition Definition { get; }
 
@@ -81,7 +86,8 @@ namespace CombatSimulation.Core
         // Machine gun: shots of the current magazine.
         public int Shots { get; private set; }
 
-        internal override bool IsShotWeapon => true;
+        // Legacy WarpDrive blocks every weapon type except Continuous and RequiredCharging.
+        internal override bool IsShotWeapon => Definition.Mode != CannonMode.Charging;
 
         // Legacy ManageableCannon calls Platform.OnShot at the loss of its bullet, not at the shot.
         internal bool ShotUsesBarrel => Definition.Mode != CannonMode.Manageable;
@@ -94,6 +100,7 @@ namespace CombatSimulation.Core
             _holdsBullet = false;
             _bullet = default;
             _lossTick = NoLoss;
+            _charge?.Reset();
         }
 
         // A confirmed shot at tick T re-syncs the copy's cooldown phase (network plan, G1), unless the copy already
@@ -101,16 +108,34 @@ namespace CombatSimulation.Core
         // manageable cannon's the loss of its bullet, not their shots; the barrel record re-syncs a machine gun's shots.
         internal void ConfirmShot(long tick)
         {
-            if (Definition.Mode == CannonMode.MachineGun || Definition.Mode == CannonMode.Manageable) return;
+            _charge?.EndAt(tick);
+            if (Definition.Mode == CannonMode.MachineGun || Definition.Mode == CannonMode.Manageable ||
+                Definition.Mode == CannonMode.Charging) return;
             if (LastShotTick < tick + Definition.CooldownTicks) LastShotTick = tick;
         }
 
-        // Manageable: stage 5 created the bullet of this device's shot, or a copy took the owner's record of it.
-        internal void Hold(EntityHandle bullet)
+        // Stage 5 created the bullet of this device's shot, or a copy took the owner's record of it. A manageable cannon
+        // holds it; a charging cannon shows it as its active bullet while it lives (legacy ChargeableCannon.ActiveBullet).
+        internal void OnBulletCreated(EntityHandle bullet)
         {
+            if (Definition.Mode == CannonMode.Charging)
+            {
+                _bullet = bullet;
+                return;
+            }
+            if (Definition.Mode != CannonMode.Manageable) return;
             _bullet = bullet;
             _holdsBullet = true;
             _lossTick = NoLoss;
+        }
+
+        // A charging cannon's bullet for a shot of the given charge ticks; the uncharged bullet for other cannons or 0.
+        internal BulletDefinition BulletFor(int chargeTicks)
+        {
+            if (_charge == null || chargeTicks <= 0) return Definition.Bullet;
+            if (!_charged.TryGetValue(chargeTicks, out var bullet))
+                _charged.Add(chargeTicks, bullet = Definition.Bullet.WithCharge(_charge.LevelOf(chargeTicks)));
+            return bullet;
         }
 
         // Manageable copy: the owner removed the held bullet at the tick (its removal record). The owner's device sees
@@ -122,8 +147,8 @@ namespace CombatSimulation.Core
         }
 
         // The shortest spacing of two shots of one spawn slot (the copy window of a confirmed shot).
-        internal int ShotSpacingTicks => Definition.Mode == CannonMode.MachineGun
-            ? ShipEntity.BarrelCooldownTicks
+        internal int ShotSpacingTicks => Definition.Mode == CannonMode.MachineGun ? ShipEntity.BarrelCooldownTicks
+            : Definition.Mode == CannonMode.Charging ? WeaponCharge.ShotSpacingTicks
             : Math.Max(Definition.CooldownTicks, ShipEntity.BarrelCooldownTicks);
 
         public override void Update(DeviceContext context, ShipEntity ship)
@@ -138,6 +163,11 @@ namespace CombatSimulation.Core
             if (Definition.Mode == CannonMode.Manageable)
             {
                 UpdateManageable(context, ship, tick, IsControlOn(ship));
+                return;
+            }
+            if (Definition.Mode == CannonMode.Charging)
+            {
+                UpdateCharging(context, ship, tick, IsControlOn(ship));
                 return;
             }
 
@@ -171,16 +201,29 @@ namespace CombatSimulation.Core
             }
         }
 
-        // Legacy ShipRetreatEffect releases the key: a manageable cannon's bullet detonates, and its loss still counts.
+        // Legacy ShipRetreatEffect releases the key: a manageable cannon's bullet detonates, and its loss still counts; a
+        // charging cannon fires its charge.
         internal override void UpdateRetreating(DeviceContext context, ShipEntity ship)
         {
-            if (Definition.Mode != CannonMode.Manageable)
-            {
-                base.UpdateRetreating(context, ship);
-                return;
-            }
             IsActive = false;
-            UpdateManageable(context, ship, context.Tick, false);
+            if (Definition.Mode == CannonMode.Manageable)
+                UpdateManageable(context, ship, context.Tick, false);
+            else if (Definition.Mode == CannonMode.Charging)
+                UpdateCharging(context, ship, context.Tick, false);
+            else
+                base.UpdateRetreating(context, ship);
+        }
+
+        // Legacy ChargeableCannon.OnUpdatePhysics. The shot: Platform.OnShot, then the bullet of the charge.
+        private void UpdateCharging(DeviceContext context, ShipEntity ship, long tick, bool controlOn)
+        {
+            var shot = _charge.Update(ship, Definition.BarrelIndex, controlOn, tick);
+            IsActive = _charge.Ticks > 0;
+            if (shot == 0) return;
+
+            ship.RecordBarrelShot(Definition.BarrelIndex, tick);
+            context.RequestSpawn(new SpawnRequest(ship, Index, Definition.BarrelIndex, Definition.Spread, BulletFor(shot),
+                chargeTicks: shot));
         }
 
         // Legacy ManageableCannon.OnUpdatePhysics. While the bullet flies, Active needs only the key; a released key
@@ -238,6 +281,11 @@ namespace CombatSimulation.Core
             var weapon = DeviceState.Remaining(tick + 1 - LastShotTick, Definition.CooldownTicks);
             var barrel = DeviceState.Remaining(tick + 1 - ship.GetBarrelShotTick(Definition.BarrelIndex),
                 ShipEntity.BarrelCooldownTicks);
+            if (Definition.Mode == CannonMode.Charging)
+                return new DeviceState(_charge.IsReady(ship, Definition.BarrelIndex, tick + 1), IsActive, barrel,
+                    activeBullet: context.Bullets.TryGet(_bullet, out var shot) ? context.Bullets[shot].Id : default,
+                    charge: _charge.Level);
+
             var bullet = _holdsBullet && context.Bullets.TryGet(_bullet, out var index) ? context.Bullets[index].Id : default;
             var ready = Definition.Mode == CannonMode.MachineGun
                 ? weapon == 0f && ship.Energy.Value > Definition.EnergyCost
@@ -247,10 +295,14 @@ namespace CombatSimulation.Core
 
         private const long NoLoss = long.MinValue;
 
-        // Manageable: the bullet in flight (legacy ManageableCannon._activeBullet).
+        // Manageable: the bullet in flight (legacy ManageableCannon._activeBullet). Charging: the last shot's bullet.
         private EntityHandle _bullet;
         private bool _holdsBullet;
         private long _lossTick = NoLoss;
+
+        // Charging only (phase 5, step 4f): the charge, and the bullet of each charge that fired.
+        private readonly WeaponCharge _charge;
+        private readonly Dictionary<int, BulletDefinition> _charged = new Dictionary<int, BulletDefinition>();
     }
 
     // InertDeviceDefinition: ignores its control bit.
@@ -276,10 +328,15 @@ namespace CombatSimulation.Core
         public readonly float RandomFactor;
         public readonly BulletDefinition Bullet;
         public readonly BeamDevice Beam;
+        // A beam device's beam: the device definition, or its charged copy.
+        public readonly BeamDefinition BeamDefinition;
         public readonly bool LaunchesShip;
 
+        // A charging weapon's shot (phase 5, step 4f): the charge ticks that chose Bullet or BeamDefinition; 0 otherwise.
+        public readonly int ChargeTicks;
+
         public SpawnRequest(ShipEntity ship, int deviceIndex, int barrelIndex, float spread, BulletDefinition bullet,
-            float randomFactor = 0f)
+            float randomFactor = 0f, int chargeTicks = 0)
         {
             Ship = ship;
             DeviceIndex = deviceIndex;
@@ -288,14 +345,16 @@ namespace CombatSimulation.Core
             RandomFactor = randomFactor;
             Bullet = bullet;
             Beam = null;
+            BeamDefinition = null;
             LaunchesShip = false;
+            ChargeTicks = chargeTicks;
         }
 
         // A device's bullet at the ship centre, at rotation 0, without spread (legacy SpaceObjectFactory.CreateArea).
         public SpawnRequest(ShipEntity ship, int deviceIndex, BulletDefinition bullet)
             : this(ship, deviceIndex, ShipCentre, 0f, bullet) { }
 
-        public SpawnRequest(ShipEntity ship, BeamDevice beam)
+        public SpawnRequest(ShipEntity ship, BeamDevice beam, int chargeTicks = 0)
         {
             Ship = ship;
             DeviceIndex = beam.Index;
@@ -304,7 +363,9 @@ namespace CombatSimulation.Core
             RandomFactor = 0f;
             Bullet = null;
             Beam = beam;
+            BeamDefinition = beam.BeamFor(chargeTicks);
             LaunchesShip = false;
+            ChargeTicks = chargeTicks;
         }
 
         private SpawnRequest(ShipEntity ship, int deviceIndex)
@@ -316,7 +377,9 @@ namespace CombatSimulation.Core
             RandomFactor = 0f;
             Bullet = null;
             Beam = null;
+            BeamDefinition = null;
             LaunchesShip = true;
+            ChargeTicks = 0;
         }
 
         // The ship of the device's bay inventory: a drone, or a clone.

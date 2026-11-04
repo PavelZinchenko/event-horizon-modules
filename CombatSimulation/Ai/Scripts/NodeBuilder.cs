@@ -257,8 +257,15 @@ namespace CombatSimulation.Ai
 
         public INode Create(BehaviorTreeNode_RechargeEnergy content) => new RechargeEnergyNode(content.FailIfLess, content.RestoreUntil);
         public INode Create(BehaviorTreeNode_SustainAim content) => new SustainAimNode(false);
-        public INode Create(BehaviorTreeNode_ChargeWeapons content) =>
-            HasWeapon(weapon => weapon.WeaponClass == AiWeaponClass.RequiredCharging) ? Stub(content) : EmptyNode.Failure;
+        // Legacy ChargeWeaponsNode.Create: every charging weapon of the ship; none gives Failure.
+        public INode Create(BehaviorTreeNode_ChargeWeapons content)
+        {
+            var weapons = new List<AiWeapon>();
+            foreach (var weapon in _profile.Weapons)
+                if (weapon.WeaponClass == AiWeaponClass.RequiredCharging)
+                    weapons.Add(weapon);
+            return weapons.Count > 0 ? new ChargeWeaponsNode(weapons) : EmptyNode.Failure;
+        }
         public INode Create(BehaviorTreeNode_Chase content) => new ChaseNode(FirstDevice(DeviceClass.TeleporterV2));
         public INode Create(BehaviorTreeNode_AvoidThreats content) => new AvoidThreatsNode();
         public INode Create(BehaviorTreeNode_SlowDown content) => Stub(content);

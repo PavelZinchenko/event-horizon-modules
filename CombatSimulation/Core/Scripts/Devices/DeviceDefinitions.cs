@@ -55,14 +55,26 @@ namespace CombatSimulation.Core
         // Legacy ManageableCannon (phase 5, step 4b): one bullet at a time. Releasing the key detonates it; the barrel
         // and the weapon cooldown start in the tick after its loss.
         Manageable,
+
+        // Legacy ChargeableCannon (phase 5, step 4f): the held key charges the weapon; the release fires one bullet with
+        // the charge (WeaponCharge). Built with CannonDefinition.Charged.
+        Charging,
     }
 
     // Legacy CommonCannon (Q1): fires while the control bit is held, every cooldown, while energy allows. Phase 5, step
-    // 4a adds the multi-shot and machine gun modes; step 4b the manageable mode.
+    // 4a adds the multi-shot and machine gun modes; step 4b the manageable mode; step 4f the charging mode.
     public sealed class CannonDefinition : DeviceDefinition
     {
         public CannonDefinition(int barrelIndex, float cooldown, float energyCost, float spread, BulletDefinition bullet,
             CannonMode mode = CannonMode.Single, int magazine = 1)
+            : this(barrelIndex, cooldown, energyCost, spread, bullet, mode, magazine, 0f)
+        {
+            if (mode == CannonMode.Charging)
+                throw new ArgumentOutOfRangeException(nameof(mode), "A charging cannon is built with Charged.");
+        }
+
+        private CannonDefinition(int barrelIndex, float cooldown, float energyCost, float spread, BulletDefinition bullet,
+            CannonMode mode, int magazine, float chargeTime)
         {
             if (barrelIndex < 0)
                 throw new ArgumentOutOfRangeException(nameof(barrelIndex), "Barrel index must not be negative.");
@@ -72,7 +84,7 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(energyCost), "Energy cost must be finite and not negative.");
             if (!(spread >= 0f) || float.IsInfinity(spread))
                 throw new ArgumentOutOfRangeException(nameof(spread), "Spread must be finite and not negative.");
-            if (mode < CannonMode.Single || mode > CannonMode.Manageable)
+            if (mode < CannonMode.Single || mode > CannonMode.Charging)
                 throw new ArgumentOutOfRangeException(nameof(mode), "Unknown cannon mode.");
             if (HasMagazine(mode) ? magazine < 1 : magazine != 1)
                 throw new ArgumentOutOfRangeException(nameof(magazine),
@@ -86,6 +98,17 @@ namespace CombatSimulation.Core
             Mode = mode;
             Magazine = magazine;
             CooldownTicks = TickTime.AtLeast(cooldown);
+            ChargeTime = chargeTime;
+        }
+
+        // Legacy ChargeableCannon: a full charge takes chargeTime seconds (1 / FireRate) and energyCost energy. It has
+        // no weapon cooldown.
+        public static CannonDefinition Charged(int barrelIndex, float chargeTime, float energyCost, float spread,
+            BulletDefinition bullet)
+        {
+            if (!(chargeTime > 0f) || float.IsInfinity(chargeTime))
+                throw new ArgumentOutOfRangeException(nameof(chargeTime), "Charge time must be finite and positive.");
+            return new CannonDefinition(barrelIndex, 0f, energyCost, spread, bullet, CannonMode.Charging, 1, chargeTime);
         }
 
         public int BarrelIndex { get; }
@@ -104,6 +127,9 @@ namespace CombatSimulation.Core
 
         // Bullets per shot (multi-shot) or shots per burst (machine gun); 1 for other cannons.
         public int Magazine { get; }
+
+        // A charging cannon: the seconds of a full charge; 0 otherwise. EnergyCost is the energy of a full charge.
+        public float ChargeTime { get; }
 
         // Legacy SystemBase.CanBeActivated: TimeFromLastUse >= MaxCooldown. A machine gun waits it after each burst.
         public int CooldownTicks { get; }

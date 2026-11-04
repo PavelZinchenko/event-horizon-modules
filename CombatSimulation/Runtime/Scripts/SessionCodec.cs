@@ -103,8 +103,9 @@ namespace CombatSimulation.Runtime
     //     drone's bay is known from its launch.
     //   Bullet spawn: parent kind (1 bit), parent control index or bullet age (VarUInt), device, barrel and spawn
     //     sequence (VarUInt), launch flag (1 bit); with the flag, the muzzle position per axis on the correction grid
-    //     (CorrectionCodec.Arena) and the launch angle (14 bits), network plan P1. The receiver derives the entity ID
-    //     with SpawnIdentity.CreateChild.
+    //     (CorrectionCodec.Arena) and the launch angle (14 bits), network plan P1; charge flag (1 bit; version 10) and
+    //     with it the charge ticks of a charging weapon's shot (VarUInt; phase 5, step 4f, H7). The receiver derives
+    //     the entity ID with SpawnIdentity.CreateChild.
     //   Retreat: ship control index (VarUInt).
     //   Missile target (P3): missile bullet age (VarUInt), target control index + 1 in the receiver's stream (VarUInt;
     //     0: no target).
@@ -117,7 +118,7 @@ namespace CombatSimulation.Runtime
     {
         internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse }
 
-        internal const byte Version = 9;
+        internal const byte Version = 10;
         internal const int MaxBatchBytes = 1 << 20;
         private const int KindBits = 4, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3, AllegianceBits = 3;
         private const int MaxVarUIntBits = 16 + 1 + 64;
@@ -196,6 +197,10 @@ namespace CombatSimulation.Runtime
                         w.WriteBits((ulong)CorrectionCodec.Position(op.Pose.Position.Y, arena.YCells), arena.YBits);
                         w.WriteBits((ulong)CorrectionCodec.Angle(op.Pose.Angle), CorrectionCodec.AngleBits);
                     }
+                    if (op.ChargeTicks < 0)
+                        throw new InvalidOperationException("A bullet spawn has negative charge ticks.");
+                    w.WriteBool(op.ChargeTicks > 0);
+                    if (op.ChargeTicks > 0) w.WriteVarUInt((ulong)op.ChargeTicks);
                     own.AddBullet(op.EntityId);
                     break;
                 case OwnerOperationKind.Retreat:
@@ -347,7 +352,8 @@ namespace CombatSimulation.Runtime
                             muzzleX = r.Bits(arena.XBits); muzzleY = r.Bits(arena.YBits); angle = r.Bits(CorrectionCodec.AngleBits);
                             Require((long)muzzleX < arena.XCells && (long)muzzleY < arena.YCells);
                         }
-                        Require(spawn <= uint.MaxValue);
+                        var charge = r.Bool() ? r.VarUInt() : 0;
+                        Require(spawn <= uint.MaxValue && charge <= int.MaxValue);
                         if (!resolve) break;
                         parent = parentBullet ? Bullet(peer, parentName) : Body(peer, parentName);
                         entity = SpawnIdentity.CreateChild(parent, r.Tick, (uint)device, (uint)barrel, (uint)spawn);
@@ -356,9 +362,9 @@ namespace CombatSimulation.Runtime
                             ? OwnerOperation.BulletFired(battle, sender, ++peer.LastOperation, r.Tick, entity, parent,
                                 device, barrel, (uint)spawn,
                                 new Vec2((float)(muzzleX / CorrectionCodec.PositionScale), (float)(muzzleY / CorrectionCodec.PositionScale)),
-                                (float)(angle * (2 * Math.PI / (1 << CorrectionCodec.AngleBits))))
+                                (float)(angle * (2 * Math.PI / (1 << CorrectionCodec.AngleBits))), (int)charge)
                             : OwnerOperation.BulletFired(battle, sender, ++peer.LastOperation, r.Tick, entity, parent,
-                                device, barrel, (uint)spawn));
+                                device, barrel, (uint)spawn, (int)charge));
                         break;
                     case RecordKind.Retreat:
                         name = r.VarUInt();

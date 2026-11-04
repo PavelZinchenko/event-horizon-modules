@@ -5,18 +5,20 @@ namespace CombatSimulation.Core
     // Q3: an attached ray. Costs and damage are absolute, without database modifiers. A continuous beam (legacy
     // ContinuousCannon) lives while its device holds it. Phase 5, step 4d: a shot beam (legacy CommonCannon with a beam
     // controller) lives for its lifetime, and the device does not hold it; both forms take the per-tick spread and the
-    // tracking of the legacy beam controllers.
+    // tracking of the legacy beam controllers. Step 4f: a charged beam (legacy ChargeableCannon with a beam controller)
+    // is a shot beam that fires its charge.
     public sealed class BeamDefinition : DeviceDefinition
     {
         public BeamDefinition(int barrelIndex, float cooldown, float activationCost, float energyPerSecond,
             float range, float damagePerSecond, int damageType = 0, float spread = 0f, float trackingAngle = 0f)
             : this(barrelIndex, cooldown, activationCost, energyPerSecond, range, damagePerSecond, damageType, spread,
-                trackingAngle, 0f)
+                trackingAngle, 0f, 0f, null, 1f)
         {
         }
 
         private BeamDefinition(int barrelIndex, float cooldown, float activationCost, float energyPerSecond,
-            float range, float damagePerSecond, int damageType, float spread, float trackingAngle, float lifetime)
+            float range, float damagePerSecond, int damageType, float spread, float trackingAngle, float lifetime,
+            float chargeTime, BeamDefinition uncharged, float charge)
         {
             if (barrelIndex < 0) throw new ArgumentOutOfRangeException(nameof(barrelIndex));
             ValidateAmount(cooldown, nameof(cooldown));
@@ -25,7 +27,10 @@ namespace CombatSimulation.Core
             ValidateAmount(damagePerSecond, nameof(damagePerSecond));
             ValidateAmount(spread, nameof(spread));
             ValidateAmount(lifetime, nameof(lifetime));
-            if (!(range > 0f) || float.IsInfinity(range)) throw new ArgumentOutOfRangeException(nameof(range));
+            ValidateAmount(chargeTime, nameof(chargeTime));
+            // Legacy RangeMultiplier is 0 at a charge of 0.1 or less: the beam hits nothing.
+            if (!(range > 0f || range == 0f && uncharged != null) || float.IsInfinity(range))
+                throw new ArgumentOutOfRangeException(nameof(range));
             if (!(trackingAngle >= 0f) || trackingAngle > (float)Math.PI)
                 throw new ArgumentOutOfRangeException(nameof(trackingAngle));
             DamageTypeTable.ValidateIndex(damageType, nameof(damageType));
@@ -42,6 +47,9 @@ namespace CombatSimulation.Core
             TrackingAngle = trackingAngle;
             Lifetime = lifetime;
             LifetimeTicks = lifetime > 0f ? TickTime.After(lifetime) : 0;
+            ChargeTime = chargeTime;
+            Uncharged = uncharged ?? this;
+            Charge = charge;
         }
 
         // Legacy CommonCannon with a beam controller: one beam per shot for the energy cost; it lives Lifetime seconds.
@@ -50,7 +58,18 @@ namespace CombatSimulation.Core
         {
             if (!(lifetime > 0f)) throw new ArgumentOutOfRangeException(nameof(lifetime));
             return new BeamDefinition(barrelIndex, cooldown, energyCost, 0f, range, damagePerSecond, damageType, spread,
-                trackingAngle, lifetime);
+                trackingAngle, lifetime, 0f, null, 1f);
+        }
+
+        // Legacy ChargeableCannon with a beam controller (phase 5, step 4f): a full charge takes chargeTime seconds
+        // (1 / FireRate) and energyCost energy. The beam lives Lifetime seconds at a full charge.
+        public static BeamDefinition Charged(int barrelIndex, float chargeTime, float energyCost, float range,
+            float damagePerSecond, float lifetime, int damageType = 0, float spread = 0f, float trackingAngle = 0f)
+        {
+            if (!(chargeTime > 0f) || float.IsInfinity(chargeTime)) throw new ArgumentOutOfRangeException(nameof(chargeTime));
+            if (!(lifetime > 0f)) throw new ArgumentOutOfRangeException(nameof(lifetime));
+            return new BeamDefinition(barrelIndex, 0f, energyCost, 0f, range, damagePerSecond, damageType, spread,
+                trackingAngle, lifetime, chargeTime, null, 1f);
         }
 
         public int BarrelIndex { get; }
@@ -81,6 +100,27 @@ namespace CombatSimulation.Core
         public float Lifetime { get; }
         public int LifetimeTicks { get; }
         public bool IsShot => LifetimeTicks > 0;
+
+        // A charged beam: the seconds of a full charge; 0 otherwise. A charged beam is a shot beam without a weapon
+        // cooldown; ActivationCost is the energy of a full charge.
+        public float ChargeTime { get; }
+        public bool IsCharged => ChargeTime > 0f;
+
+        // The definition a charge scales, and the charge of this copy (legacy PowerLevel); 1 when uncharged.
+        public BeamDefinition Uncharged { get; }
+        public float Charge { get; }
+
+        // Legacy BulletStats with PowerLevel c: damage x c, range x c (0 at c <= 0.1), and G9 (owner, 2026-11-03): the
+        // lifetime x (0.5 + 0.5c), as legacy scales the flash of a continuous controller. A full charge is the
+        // uncharged definition.
+        internal BeamDefinition WithCharge(float charge)
+        {
+            var beam = Uncharged;
+            if (charge >= 1f) return beam;
+            return new BeamDefinition(beam.BarrelIndex, beam.Cooldown, beam.ActivationCost, beam.EnergyPerSecond,
+                beam.Range * (charge > 0.1f ? charge : 0f), beam.DamagePerSecond * charge, beam.DamageType, beam.Spread,
+                beam.TrackingAngle, beam.Lifetime * (0.5f + 0.5f * charge), beam.ChargeTime, beam, charge);
+        }
 
         internal override void Validate(int barrelCount)
         {

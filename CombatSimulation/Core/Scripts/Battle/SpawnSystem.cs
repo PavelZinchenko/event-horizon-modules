@@ -117,17 +117,18 @@ namespace CombatSimulation.Core
             ref readonly var bullet = ref _world.Bullets[index];
             _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, bullet, _world.Authority(bullet.Owner)));
             _network?.CaptureBulletSpawn(bullet, bullet.DeviceIndex, (int)SpawnRequest.SpawnSlot(request.BarrelIndex),
-                sequence, Tick, !definition.IsHoming, muzzle, angle);
+                sequence, Tick, !definition.IsHoming, muzzle, angle, request.ChargeTicks);
             _triggers.RunCreatedTriggers(index);
         }
 
         private void SpawnBeam(in SpawnRequest request, uint sequence)
         {
-            var index = _world.CreateBeam(request.Ship, request.Beam, sequence, Tick);
+            var index = _world.CreateBeam(request.Ship, request.Beam, request.BeamDefinition, sequence, Tick);
             if (index < 0) return;
             ref readonly var beam = ref _world.Bullets[index];
             _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, beam, _world.Authority(beam.Owner)));
-            _network?.CaptureBulletSpawn(beam, beam.DeviceIndex, request.BarrelIndex, sequence, Tick);
+            _network?.CaptureBulletSpawn(beam, beam.DeviceIndex, request.BarrelIndex, sequence, Tick,
+                chargeTicks: request.ChargeTicks);
         }
 
         // Legacy Scene.FindFreePlace and ShipInfo.Create, with counter-based random.

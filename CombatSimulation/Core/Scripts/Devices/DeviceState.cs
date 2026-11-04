@@ -19,13 +19,18 @@ namespace CombatSimulation.Core
         public readonly int InHangar;
         public readonly int ActiveDrones;
 
-        // Legacy IWeapon.ActiveBullet: a beam's attached beam, or a manageable cannon's bullet in flight (phase 5, step
-        // 4b); null otherwise.
+        // Legacy IWeapon.ActiveBullet: a beam's attached beam, a manageable cannon's bullet in flight (phase 5, step 4b),
+        // or a charging weapon's last bullet while it lives (step 4f); null otherwise.
         public readonly EntityId ActiveBullet;
 
+        // Legacy IWeapon.PowerLevel of a charging weapon (phase 5, step 4f, H7): its charge from 0 to 1; 0 for other
+        // devices.
+        public readonly float Charge;
+
         internal DeviceState(bool ready, bool active, float cooldown, int inHangar = 0, int activeDrones = 0,
-            EntityId activeBullet = default)
+            EntityId activeBullet = default, float charge = 0f)
         {
+            Charge = charge;
             Ready = ready;
             Active = active;
             Cooldown = cooldown;

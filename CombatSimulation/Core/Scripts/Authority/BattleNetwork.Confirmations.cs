@@ -45,23 +45,25 @@ namespace CombatSimulation.Core
         // A plain projectile sends its launch (P1): the receiver's copy of the shooter aims a little differently, and
         // the error grows with flight time.
         // The source is the device index, or the trigger index for a child bullet; a child always sends its launch.
+        // A charging weapon's shot sends its charge ticks (phase 5, step 4f, H7); a child takes its parent's charge.
         internal void CaptureBulletSpawn(in BulletEntity bullet, int source, int barrelIndex, uint sequence, long spawnTick,
-            bool sendLaunch = false, Vec2 muzzle = default, float angle = 0f)
+            bool sendLaunch = false, Vec2 muzzle = default, float angle = 0f, int chargeTicks = 0)
         {
             if (!ShouldCapture(bullet.Owner)) return;
             var operationSequence = NextOperationSequence(bullet.Owner);
             _outgoingOperations.Add(sendLaunch
                 ? OwnerOperation.BulletFired(BattleId, bullet.Owner, operationSequence, spawnTick, bullet.Id,
-                    bullet.ParentId, source, barrelIndex, sequence, muzzle, angle)
+                    bullet.ParentId, source, barrelIndex, sequence, muzzle, angle, chargeTicks)
                 : OwnerOperation.BulletFired(BattleId, bullet.Owner, operationSequence, spawnTick, bullet.Id,
-                    bullet.ParentId, source, barrelIndex, sequence));
+                    bullet.ParentId, source, barrelIndex, sequence, chargeTicks));
         }
 
         // Confirms the local copy, adopts a copy fired at another tick (P2), or adds the missing bullet at its spawn
         // tick. A bullet this device already removed by prediction, or a projectile that has expired, stays gone. The
         // confirmed shot re-syncs the shooter's cannon and barrel timers (G1): an overdue fire input shifts a held
         // weapon's cooldown phase for the whole burst. Energy and recoil are left to corrections.
-        // A record whose parent is not a ship names a child bullet (phase 5, step 2).
+        // A record whose parent is not a ship names a child bullet (phase 5, step 2). A charging weapon's record names
+        // the charge (step 4f): the copy builds the bullet or beam of the owner's charge, or gives it to its own copy.
         private bool ApplyRemoteBulletSpawn(in OwnerOperation operation)
         {
             var ship = _world.FindShip(operation.ParentId);
@@ -76,12 +78,15 @@ namespace CombatSimulation.Core
                 beamDevice == null || beamDevice.Definition.BarrelIndex != operation.BarrelIndex) return false;
             cannon?.ConfirmShot(operation.Tick);
             beamDevice?.ConfirmShot(operation.Tick);
+            var bulletDefinition = cannon?.BulletFor(operation.ChargeTicks);
+            var beamDefinition = beamDevice?.BeamFor(operation.ChargeTicks);
             if (cannon == null || cannon.ShotUsesBarrel)
                 ship.RecordBarrelShot(operation.BarrelIndex, Math.Max(ship.GetBarrelShotTick(operation.BarrelIndex), operation.Tick));
 
             if (_world.Entities.TryGet(operation.EntityId, out var handle))
             {
                 if (!_world.Bullets.TryGet(handle, out var existing) || _world.Bullets[existing].Owner != operation.Owner) return false;
+                TakeCharge(cannon, existing, bulletDefinition, beamDefinition);
                 _world.Bullets[existing].Confirmed = true;
                 _triggers.RememberTriggerParent(_world.Bullets[existing]);
                 if (cannon != null && operation.HasLaunchPose) Reaim(ship, cannon, existing, operation);
@@ -89,16 +94,16 @@ namespace CombatSimulation.Core
             }
 
             // A copy that is gone here: the owner may still send its children.
-            if (_predictedRemovalIds.Contains(operation.EntityId) || cannon != null && HasExpired(cannon, operation) ||
-                beamDevice != null && HasExpired(beamDevice, operation) || HasDueRemoval(operation.EntityId))
+            if (_predictedRemovalIds.Contains(operation.EntityId) || cannon != null && HasExpired(cannon, bulletDefinition, operation) ||
+                beamDevice != null && HasExpired(beamDefinition, operation) || HasDueRemoval(operation.EntityId))
             {
-                if (cannon != null && cannon.Definition.Bullet.HasSpawnTriggers)
+                if (cannon != null && bulletDefinition.HasSpawnTriggers)
                 {
                     if (!ship.TryGetSpawnSample(operation.Tick, out var shot)) shot = _world.ReadSpawnSample(ship);
-                    _world.Launch(ship, operation.BarrelIndex, operation.EntityId, cannon.Definition.Bullet, cannon.Definition.Spread,
+                    _world.Launch(ship, operation.BarrelIndex, operation.EntityId, bulletDefinition, cannon.Definition.Spread,
                         cannon.Definition.RandomFactor, operation.Tick, shot, operation.HasLaunchPose ? operation : default,
                         out _, out _, out _, out var velocity, out _);
-                    _triggers.RememberTriggerParent(ship, operation.DeviceIndex, cannon.Definition.Bullet, operation.EntityId, velocity);
+                    _triggers.RememberTriggerParent(ship, operation.DeviceIndex, bulletDefinition, operation.EntityId, velocity);
                 }
                 return true;
             }
@@ -106,6 +111,7 @@ namespace CombatSimulation.Core
             var copy = FindCopyOfShot(device, operation);
             if (copy >= 0)
             {
+                TakeCharge(cannon, copy, bulletDefinition, beamDefinition);
                 Adopt(ship, cannon, copy, operation);
                 _triggers.RememberTriggerParent(_world.Bullets[copy]);
                 return true;
@@ -116,7 +122,7 @@ namespace CombatSimulation.Core
             {
                 if (!ship.TryGetSpawnSample(operation.Tick, out var sample)) sample = _world.ReadSpawnSample(ship);
                 index = _world.CreateBullet(ship, operation.DeviceIndex, operation.BarrelIndex, operation.SpawnSequence,
-                    cannon.Definition.Bullet, cannon.Definition.Spread, cannon.Definition.RandomFactor, operation.Tick, sample,
+                    bulletDefinition, cannon.Definition.Spread, cannon.Definition.RandomFactor, operation.Tick, sample,
                     out _, out _, out _, operation.HasLaunchPose ? operation : default);
             }
             else
@@ -129,7 +135,7 @@ namespace CombatSimulation.Core
                         RemoveBulletNow(currentIndex, _world.Bullets[currentIndex].Confirmed ? RemovalReason.Disposal : RemovalReason.Unconfirmed);
                     else beamDevice.Detach(current, Tick);
                 }
-                index = _world.CreateBeam(ship, beamDevice, operation.SpawnSequence, operation.Tick);
+                index = _world.CreateBeam(ship, beamDevice, beamDefinition, operation.SpawnSequence, operation.Tick);
             }
 
             if (index < 0) return false;
@@ -211,23 +217,45 @@ namespace CombatSimulation.Core
             bullet.Id == SpawnIdentity.CreateChild(bullet.ParentId, bullet.SpawnTick, (uint)operation.DeviceIndex,
                 (uint)operation.BarrelIndex, operation.SpawnSequence);
 
-        private bool HasExpired(CannonDevice cannon, in OwnerOperation operation)
+        private bool HasExpired(CannonDevice cannon, BulletDefinition definition, in OwnerOperation operation)
         {
-            _world.DrawShot(operation.EntityId, operation.Tick, cannon.Definition.Bullet, cannon.Definition.RandomFactor,
+            _world.DrawShot(operation.EntityId, operation.Tick, definition, cannon.Definition.RandomFactor,
                 out _, out var lifetimeTicks);
             return operation.Tick + lifetimeTicks - 1 < Tick;
         }
 
-        private bool HasExpired(BeamDevice beam, in OwnerOperation operation) =>
-            beam.Definition.IsShot && operation.Tick + beam.Definition.LifetimeTicks - 1 < Tick;
+        private bool HasExpired(BeamDefinition beam, in OwnerOperation operation) =>
+            beam.IsShot && operation.Tick + beam.LifetimeTicks - 1 < Tick;
 
         // A cannon or a shot beam fires at most once per cooldown and barrel cooldown; a machine gun once per barrel
-        // cooldown.
+        // cooldown; a charging weapon once per barrel cooldown and shortest charge.
         private static long CopyWindow(ShipDevice device)
         {
-            var spacing = device is CannonDevice cannon ? cannon.ShotSpacingTicks
-                : Math.Max(((BeamDevice)device).Definition.CooldownTicks, ShipEntity.BarrelCooldownTicks);
+            var spacing = device is CannonDevice cannon ? cannon.ShotSpacingTicks : ((BeamDevice)device).ShotSpacingTicks;
             return Math.Max(1, spacing) - 1;
+        }
+
+        // Phase 5, step 4f: a copy fired from this device's prediction of the charge takes the owner's charge. Adopt
+        // then sets the expiry of a copy fired at another tick. The body keeps the radius of the predicted charge, and
+        // contacts so far stay.
+        private void TakeCharge(CannonDevice cannon, int index, BulletDefinition bulletDefinition,
+            BeamDefinition beamDefinition)
+        {
+            ref var bullet = ref _world.Bullets[index];
+            if (bullet.IsBeam)
+            {
+                if (beamDefinition == null || !beamDefinition.IsCharged || bullet.BeamDefinition == beamDefinition) return;
+                bullet.BeamDefinition = beamDefinition;
+                bullet.ExpiryTick = bullet.SpawnTick + beamDefinition.LifetimeTicks - 1;
+                return;
+            }
+
+            if (cannon == null || cannon.Definition.Mode != CannonMode.Charging || bullet.Definition == bulletDefinition)
+                return;
+            bullet.Definition = bulletDefinition;
+            _world.DrawShot(bullet.Id, bullet.SpawnTick, bulletDefinition, cannon.Definition.RandomFactor, out _,
+                out var lifetimeTicks);
+            bullet.ExpiryTick = bullet.SpawnTick + lifetimeTicks - 1;
         }
 
         // The copy takes the owner's ID, spawn tick and expiry; a plain projectile also takes the owner's launch (P1).
