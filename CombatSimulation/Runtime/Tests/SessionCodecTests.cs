@@ -39,6 +39,8 @@ namespace CombatSimulation.Runtime.Tests
                 // Phase 5, step 7: a device use starts, another ends.
                 OwnerOperation.DeviceUsed(batch, 20, 11, 126, ship, 3, true),
                 OwnerOperation.DeviceUsed(batch, 20, 12, 125, ship, 0, false),
+                // Phase 5, step 5a: a sticky bullet's tail segment target travels as its entity ID.
+                OwnerOperation.MissileTargetChanged(batch, 20, 13, 126, child, new EntityId(0x1234_5678_9ABC_DEF0), true),
             };
             // A removed bullet can still attack in its own batch. An end record is one tick ahead.
             var hits = new[]
@@ -48,11 +50,14 @@ namespace CombatSimulation.Runtime.Tests
                 new ResolvedHit(batch, 126, ship, 20, -1, link.Target, 10, 0, HitContactState.End, HitImpactKind.DamageOverTime, 40, 2,
                     damageType: 127),
                 new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 1, HitContactState.Start, HitImpactKind.Impact, 0, 3),
+                // Phase 5, step 5a: a drain beside the damage of the same contact.
+                new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 1, HitContactState.Start, HitImpactKind.Impact, 250, 4,
+                    effect: HitEffect.ShieldDrain),
             };
             var bytes = link.Write(125, operations, hits);
             var scan = new List<SessionCodec.ScannedRecord>();
             var watermark = link.Read(bytes, out var actualOperations, out var actualHits, scan);
-            Assert.AreEqual(125, watermark.Tick); Assert.AreEqual(12UL, watermark.OperationSequence);
+            Assert.AreEqual(125, watermark.Tick); Assert.AreEqual(13UL, watermark.OperationSequence);
             Assert.AreEqual(20, watermark.Owner); Assert.AreEqual(batch, watermark.BattleId);
             CollectionAssert.AreEqual(operations, actualOperations);
             CollectionAssert.AreEqual(hits, actualHits);
@@ -68,14 +73,15 @@ namespace CombatSimulation.Runtime.Tests
                 SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.Retreat,
                 SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.MissileTarget,
                 SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Allegiance, SessionCodec.RecordKind.DeviceUse,
-                SessionCodec.RecordKind.DeviceUse, SessionCodec.RecordKind.Hit,
-                SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
+                SessionCodec.RecordKind.DeviceUse, SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Hit,
+                SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
             // A push (phase 4 E4) adds 64 bits to its hit; every hit has the 1-bit flag.
-            // Version 8 widens every record kind to 4 bits (D13).
-            Assert.LessOrEqual(scan[3].Bits, 42); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 33); Assert.LessOrEqual(scan[12].Bits, 90 + 64);
-            Assert.LessOrEqual(scan[14].Bits, 90);
+            // Version 8 widens every record kind to 4 bits (D13). Version 11 adds the 3-bit effect to every hit.
+            Assert.LessOrEqual(scan[3].Bits, 42); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 33); Assert.LessOrEqual(scan[13].Bits, 93 + 64);
+            Assert.LessOrEqual(scan[15].Bits, 93); Assert.AreEqual(scan[15].Bits, scan[16].Bits);
             // A missile target is about 3 bytes in the plan: here 2 bytes, with tick offsets +1 and +2 (0 in a real batch).
-            Assert.AreEqual(17, scan[7].Bits); Assert.AreEqual(12, scan[8].Bits);
+            // Version 11 adds the segment flag; a segment's 64-bit entity ID replaces the 6-bit control index.
+            Assert.AreEqual(18, scan[7].Bits); Assert.AreEqual(13, scan[8].Bits); Assert.AreEqual(18 - 6 + 64, scan[12].Bits);
             // An allegiance change: kind, tick offset 0, control index 0 and allegiance in about 1 byte.
             Assert.AreEqual(9, scan[9].Bits); Assert.AreEqual(RemovalReason.Vanish, scan[5].RemovalReason);
             // A device use: kind, tick offset, control index, device and the start bit in about 2 bytes.
@@ -135,6 +141,17 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, false, HitImpactKind.Disarm)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, true, HitImpactKind.Stop)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 77, 0, true, (HitImpactKind)5)), out _, out _));
+            // Phase 5, step 5a: a drain names a ship, without damage type or push; effect 3 is unknown.
+            Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 1, effect: HitEffect.EnergyDrain), 1), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 77, 1, true, effect: HitEffect.EnergyDrain)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 1, damageType: 1, effect: HitEffect.ShieldDrain)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 1, impulseX: 2f, effect: HitEffect.ShieldDrain)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 1, effect: (HitEffect)3)), out _, out _));
             // Phase 4 E4: a push must be finite.
             Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 1, impulseX: 2f), 1), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
@@ -157,7 +174,10 @@ namespace CombatSimulation.Runtime.Tests
             var withMissile = Deployed();
             var missile = SpawnIdentity.CreateChild(new EntityId(1), 10, 0, 0, 0);
             Assert.Throws<FormatException>(() => withMissile.Read(Raw(10, 7, 0, (ref BitWriter w) =>
-            { w.WriteVarUInt(0); w.WriteVarUInt(3); }, 2), out _, out _));
+            { w.WriteVarUInt(0); w.WriteBool(false); w.WriteVarUInt(3); }, 2), out _, out _));
+            // Version 11: a segment flag with entity ID 0.
+            Assert.Throws<FormatException>(() => withMissile.Read(Raw(10, 7, 0, (ref BitWriter w) =>
+            { w.WriteVarUInt(0); w.WriteBool(true); w.WriteBits(0, 64); }, 2), out _, out _));
 
             // The sender refuses records its streams cannot name, and entity IDs that are not derived from the record.
             var ship = new EntityId(77);
@@ -181,7 +201,7 @@ namespace CombatSimulation.Runtime.Tests
             }
 
             void Hit(ref BitWriter w, ulong target, float amount, bool bullet = false, HitImpactKind impact = HitImpactKind.Impact,
-                ulong damageType = 0, float impulseX = 0f)
+                ulong damageType = 0, float impulseX = 0f, HitEffect effect = HitEffect.Damage)
             {
                 w.WriteBool(false); w.WriteVarUInt(0); w.WriteBool(bullet);
                 if (bullet) w.WriteBits(target, 64); else w.WriteVarUInt(target);
@@ -194,6 +214,7 @@ namespace CombatSimulation.Runtime.Tests
                     w.WriteBits(unchecked((uint)BitConverter.SingleToInt32Bits(impulseX)), 32);
                     w.WriteBits(0, 32);
                 }
+                w.WriteBits((ulong)effect, 3);
             }
         }
 

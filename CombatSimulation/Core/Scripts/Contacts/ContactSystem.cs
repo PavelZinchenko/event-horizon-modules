@@ -152,16 +152,23 @@ namespace CombatSimulation.Core
                     var impulse = Vec2.Zero;
                     var falloff = 1f;
                     var shape = hit.TargetShapeOrder;
+                    // Drains and siphon (phase 5, step 5a): a hit applies them once; over time, per tick.
+                    var effects = default(ImpactEffects);
+                    var effectScale = 1f;
+                    var attackerShip = default(EntityId);
                     if (_world.Bullets.TryGet(hit.AttackerHandle, out var index))
                     {
                         ref readonly var attacker = ref _world.Bullets[index];
                         owner = attacker.Owner;
                         deviceIndex = attacker.DeviceIndex;
+                        attackerShip = attacker.ShipId;
                         kind = attacker.IsBeam ? HitImpactKind.DamageOverTime :
                             attacker.Definition.IsMissile ? HitImpactKind.Impact : HitImpactKind.Energy;
                         if (attacker.IsBeam)
                         {
                             amount = attacker.BeamDefinition.DamagePerSecond;
+                            effects = attacker.BeamDefinition.Effects;
+                            effectScale = Battle.TickDuration;
                         }
                         else if (attacker.Definition.Impact == BulletImpact.OverTime)
                         {
@@ -172,6 +179,8 @@ namespace CombatSimulation.Core
                             damage = amount * Battle.TickDuration;
                             damageType = attacker.Definition.DamageType;
                             shape = 0;
+                            effects = attacker.Definition.Effects;
+                            effectScale = Battle.TickDuration;
                         }
                         else
                         {
@@ -182,6 +191,7 @@ namespace CombatSimulation.Core
                                 projectile.DamageFalloff, falloff);
                             damageType = projectile.DamageType;
                             impulse = PushImpulse(attacker, Physics.GetPosition(target.Body), falloff);
+                            effects = projectile.Effects;
                         }
                     }
                     else
@@ -218,12 +228,45 @@ namespace CombatSimulation.Core
                             }
                             if (impulse.X != 0f || impulse.Y != 0f) ApplyPush(target, impulse);
                         }
+                        if (effects.HasDrain)
+                        {
+                            target.AddPendingDrain(effects.EnergyDrain * effectScale, effects.ShieldDrain * effectScale);
+                            if (remote)
+                            {
+                                AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.EnergyDrain,
+                                    effects.EnergyDrain);
+                                AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.ShieldDrain,
+                                    effects.ShieldDrain);
+                            }
+                        }
+                        if (effects.Siphon > 0f) Siphon(attackerShip, target, damageType, damage * effects.Siphon);
                     }
                 }
 
                 _world.Events.Add(BattleEvent.HitEvent(BattleId, Tick, _world.Events.Count, hit, authority));
             }
             _network?.OutgoingHits.CompleteContacts(Tick);
+        }
+
+        // A drain on a remote target: its own record, or its own interval with the rate as amount (phase 5, step 5a).
+        private void AddEffectRecord(in ContactCandidate hit, int owner, int deviceIndex, ShipEntity target, int shape,
+            HitImpactKind kind, HitEffect effect, float amount)
+        {
+            if (amount > 0f)
+                _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex, hit.Target,
+                    target.Owner, shape, HitContactState.Start, kind, amount, effect: effect));
+        }
+
+        // Legacy SiphonHitPointsAction: the attacker's ship regains the damage less the target's armor resistance of
+        // its type, whatever the target's shield absorbs (finding 7a). The attacker's owner heals its own ship; a copy
+        // follows corrections, so no record travels.
+        private void Siphon(EntityId attackerShip, ShipEntity target, int damageType, float damage)
+        {
+            var ship = _world.FindShip(attackerShip);
+            if (ship == null || !Setup.IsLocalOwner(ship.Owner)) return;
+            var resistance = DamageSystem.ArmorResistance(Setup.DamageTypes, target.Definition, damageType,
+                target.ResistanceShare);
+            ship.AddPendingRepair(damage * (1f - resistance));
         }
 
         // Legacy PushAction: the impulse acts at the target's origin, so it never turns the target.

@@ -10,15 +10,16 @@ namespace CombatSimulation.Core
     public sealed class BeamDefinition : DeviceDefinition
     {
         public BeamDefinition(int barrelIndex, float cooldown, float activationCost, float energyPerSecond,
-            float range, float damagePerSecond, int damageType = 0, float spread = 0f, float trackingAngle = 0f)
+            float range, float damagePerSecond, int damageType = 0, float spread = 0f, float trackingAngle = 0f,
+            ImpactEffects effects = default)
             : this(barrelIndex, cooldown, activationCost, energyPerSecond, range, damagePerSecond, damageType, spread,
-                trackingAngle, 0f, 0f, null, 1f)
+                trackingAngle, 0f, 0f, effects, null, 1f)
         {
         }
 
         private BeamDefinition(int barrelIndex, float cooldown, float activationCost, float energyPerSecond,
             float range, float damagePerSecond, int damageType, float spread, float trackingAngle, float lifetime,
-            float chargeTime, BeamDefinition uncharged, float charge)
+            float chargeTime, ImpactEffects effects, BeamDefinition uncharged, float charge)
         {
             if (barrelIndex < 0) throw new ArgumentOutOfRangeException(nameof(barrelIndex));
             ValidateAmount(cooldown, nameof(cooldown));
@@ -45,6 +46,7 @@ namespace CombatSimulation.Core
             DamageType = damageType;
             Spread = spread;
             TrackingAngle = trackingAngle;
+            Effects = effects;
             Lifetime = lifetime;
             LifetimeTicks = lifetime > 0f ? TickTime.After(lifetime) : 0;
             ChargeTime = chargeTime;
@@ -54,22 +56,24 @@ namespace CombatSimulation.Core
 
         // Legacy CommonCannon with a beam controller: one beam per shot for the energy cost; it lives Lifetime seconds.
         public static BeamDefinition Shot(int barrelIndex, float cooldown, float energyCost, float range,
-            float damagePerSecond, float lifetime, int damageType = 0, float spread = 0f, float trackingAngle = 0f)
+            float damagePerSecond, float lifetime, int damageType = 0, float spread = 0f, float trackingAngle = 0f,
+            ImpactEffects effects = default)
         {
             if (!(lifetime > 0f)) throw new ArgumentOutOfRangeException(nameof(lifetime));
             return new BeamDefinition(barrelIndex, cooldown, energyCost, 0f, range, damagePerSecond, damageType, spread,
-                trackingAngle, lifetime, 0f, null, 1f);
+                trackingAngle, lifetime, 0f, effects, null, 1f);
         }
 
         // Legacy ChargeableCannon with a beam controller (phase 5, step 4f): a full charge takes chargeTime seconds
         // (1 / FireRate) and energyCost energy. The beam lives Lifetime seconds at a full charge.
         public static BeamDefinition Charged(int barrelIndex, float chargeTime, float energyCost, float range,
-            float damagePerSecond, float lifetime, int damageType = 0, float spread = 0f, float trackingAngle = 0f)
+            float damagePerSecond, float lifetime, int damageType = 0, float spread = 0f, float trackingAngle = 0f,
+            ImpactEffects effects = default)
         {
             if (!(chargeTime > 0f) || float.IsInfinity(chargeTime)) throw new ArgumentOutOfRangeException(nameof(chargeTime));
             if (!(lifetime > 0f)) throw new ArgumentOutOfRangeException(nameof(lifetime));
             return new BeamDefinition(barrelIndex, 0f, energyCost, 0f, range, damagePerSecond, damageType, spread,
-                trackingAngle, lifetime, chargeTime, null, 1f);
+                trackingAngle, lifetime, chargeTime, effects, null, 1f);
         }
 
         public int BarrelIndex { get; }
@@ -96,6 +100,10 @@ namespace CombatSimulation.Core
         // it touched in the previous tick, at most this angle from the barrel.
         public float TrackingAngle { get; }
 
+        // Drains and siphon per second on a ship or drone target (phase 5, step 5a); the siphon heals from
+        // DamagePerSecond.
+        public ImpactEffects Effects { get; }
+
         // A shot beam's lifetime in seconds; 0 for a continuous beam.
         public float Lifetime { get; }
         public int LifetimeTicks { get; }
@@ -110,7 +118,7 @@ namespace CombatSimulation.Core
         public BeamDefinition Uncharged { get; }
         public float Charge { get; }
 
-        // Legacy BulletStats with PowerLevel c: damage x c, range x c (0 at c <= 0.1), and G9 (owner, 2026-11-03): the
+        // Legacy BulletStats with PowerLevel c: damage and effect powers x c, range x c (0 at c <= 0.1), and G9 (owner, 2026-11-03): the
         // lifetime x (0.5 + 0.5c), as legacy scales the flash of a continuous controller. A full charge is the
         // uncharged definition.
         internal BeamDefinition WithCharge(float charge)
@@ -119,7 +127,8 @@ namespace CombatSimulation.Core
             if (charge >= 1f) return beam;
             return new BeamDefinition(beam.BarrelIndex, beam.Cooldown, beam.ActivationCost, beam.EnergyPerSecond,
                 beam.Range * (charge > 0.1f ? charge : 0f), beam.DamagePerSecond * charge, beam.DamageType, beam.Spread,
-                beam.TrackingAngle, beam.Lifetime * (0.5f + 0.5f * charge), beam.ChargeTime, beam, charge);
+                beam.TrackingAngle, beam.Lifetime * (0.5f + 0.5f * charge), beam.ChargeTime, beam.Effects.WithCharge(charge),
+                beam, charge);
         }
 
         internal override void Validate(int barrelCount)

@@ -41,20 +41,20 @@ namespace CombatSimulation.Core
         }
 
         private void ApplyShieldFirst(ShipEntity ship) =>
-            ApplyShieldFirst(ref ship.Shield, ref ship.Armor, ref ship.Energy, ship.PendingDamage, ship.Definition,
-                ship.ResistanceShare);
+            ApplyShieldFirst(ref ship.Shield, ref ship.Armor, ref ship.Energy, ship.PendingDamage, ship.PendingEffects,
+                ship.Definition, ship.ResistanceShare);
 
-        // Legacy Impact.ApplyShield and ShipStats.ApplyDamage, by damage type (D4). The shield meets the types group by
-        // group in shield order; each type's load is its damage less its shield resistance. A group larger than the
-        // shield left keeps the same share of each type. Armor then takes what passed, less its armor resistance, and
-        // energy gains its share of what passed. damage holds raw amounts by type; this changes it to what passed. A
-        // resistance share (ShipStatus) moves each armor resistance toward the ceiling of its type.
+        // Legacy Impact.ApplyShield and ShipStats.ApplyDamage, by damage type (D4). A shield drain takes the shield
+        // first (phase 5, step 5a). The shield left meets the types group by group in shield order; each type's load is
+        // its damage less its shield resistance. A group larger than the shield left keeps the same share of each type.
+        // Armor then takes what passed, less its armor resistance and the repair, and energy gains its share of what
+        // passed before the energy drain. damage holds raw amounts by type; this changes it to what passed.
         public void ApplyShieldFirst(ref ResourcePool shield, ref ResourcePool armor, ref ResourcePool energy,
-            float[] damage, ShipDefinition definition, float resistanceShare)
+            float[] damage, in PendingEffects effects, ShipDefinition definition, float resistanceShare)
         {
             var types = Setup.DamageTypes;
             var walk = types.ShieldWalk;
-            var left = shield.Max > 0f && shield.Value > 0f ? shield.Value : 0f;
+            var left = shield.Max > 0f && shield.Value > effects.ShieldDrain ? shield.Value - effects.ShieldDrain : 0f;
             var absorbed = 0f;
             for (var start = 0; start < walk.Length && left > 0f;)
             {
@@ -81,23 +81,29 @@ namespace CombatSimulation.Core
                 }
                 start = end;
             }
-            if (absorbed > 0f) shield.Consume(absorbed);
+            var shieldLoss = absorbed + effects.ShieldDrain;
+            if (shieldLoss > 0f) shield.Consume(shieldLoss);
 
             var armorDamage = 0f;
             var energyGain = 0f;
             for (var type = 0; type < damage.Length; ++type)
             {
                 if (!(damage[type] > 0f)) continue;
-                var resistance = definition.Resistance(type);
-                var armorResistance = resistanceShare > 0f
-                    ? resistance.Armor + resistanceShare * (types[type].ResistanceCeiling - resistance.Armor)
-                    : resistance.Armor;
-                armorDamage += damage[type] * (1f - armorResistance);
-                energyGain += damage[type] * resistance.EnergyGain;
+                armorDamage += damage[type] * (1f - ArmorResistance(types, definition, type, resistanceShare));
+                energyGain += damage[type] * definition.Resistance(type).EnergyGain;
             }
-            armor.Consume(armorDamage);
+            armor.Consume(armorDamage - effects.Repair);
             // A gain does not restart the energy delay (legacy Energy.Get with a negative amount).
             if (energyGain > 0f) energy.Consume(-energyGain);
+            if (effects.EnergyDrain > 0f) energy.Consume(effects.EnergyDrain);
+        }
+
+        // A resistance share (ShipStatus) moves the armor resistance toward the ceiling of its type.
+        public static float ArmorResistance(DamageTypeTable types, ShipDefinition definition, int type,
+            float resistanceShare)
+        {
+            var armor = definition.Resistance(type).Armor;
+            return resistanceShare > 0f ? armor + resistanceShare * (types[type].ResistanceCeiling - armor) : armor;
         }
 
         // End of stage 10 (phase 5, step 7, H3): every hit of the tick counts first. A device may save a local ship

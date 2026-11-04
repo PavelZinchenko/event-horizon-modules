@@ -83,12 +83,24 @@ namespace CombatSimulation.Core
                 hit.TargetShape < ship.ShapeCount ? ship : null;
         }
 
+        // A drain (phase 5, step 5a) joins the target's pending effects; only damage makes a hit event.
         private void AddRemoteDamage(in ResolvedHit hit, float amount)
         {
             var ship = LocalHitTarget(hit);
             if (ship == null || !(amount > 0f)) return;
-            ship.AddPendingDamage(hit.DamageType, amount);
-            _world.Events.Add(BattleEvent.RemoteHit(BattleId, Tick, _world.Events.Count, hit, amount));
+            switch (hit.Effect)
+            {
+                case HitEffect.EnergyDrain:
+                    ship.AddPendingDrain(amount, 0f);
+                    break;
+                case HitEffect.ShieldDrain:
+                    ship.AddPendingDrain(0f, amount);
+                    break;
+                default:
+                    ship.AddPendingDamage(hit.DamageType, amount);
+                    _world.Events.Add(BattleEvent.RemoteHit(BattleId, Tick, _world.Events.Count, hit, amount));
+                    break;
+            }
         }
 
         // Network plan 9d (owner, 2026-10-26): a contact between bullets, or between point defense and a bullet, counts if

@@ -174,8 +174,8 @@ namespace CombatSimulation.Core
         internal Vec2 PushImpulse(in BulletEntity bullet, Vec2 target, float falloff) =>
             _contacts.PushImpulse(bullet, target, falloff);
         internal void ApplyShieldFirst(ref ResourcePool shield, ref ResourcePool armor, ref ResourcePool energy,
-            float[] damage, ShipDefinition definition, float resistanceShare) =>
-            _damage.ApplyShieldFirst(ref shield, ref armor, ref energy, damage, definition, resistanceShare);
+            float[] damage, in PendingEffects effects, ShipDefinition definition, float resistanceShare) =>
+            _damage.ApplyShieldFirst(ref shield, ref armor, ref energy, damage, effects, definition, resistanceShare);
         internal void ForgetContacts(EntityId id) => _contacts.Forget(id);
 
         // World members for the bullet and point-defense queries, the snapshot and tests (8b, decision 1).
@@ -213,8 +213,8 @@ namespace CombatSimulation.Core
         internal int PredictedHitCount => _network?.PredictedHitCount ?? 0;
         internal ulong AppliedHitSequence(int sender) => _network?.AppliedHitSequence(sender) ?? 0;
         internal void MissileCorrectionSent(EntityId id, long tick) => _network?.MissileCorrectionSent(id, tick);
-        internal void CaptureMissileTarget(in BulletEntity bullet, EntityId target) =>
-            _network?.CaptureMissileTarget(bullet, target);
+        internal void CaptureMissileTarget(in BulletEntity bullet, EntityId target, bool targetIsSegment = false) =>
+            _network?.CaptureMissileTarget(bullet, target, targetIsSegment);
         internal void CaptureRemoval(EntityId id, int owner, RemovalReason reason, DroneBayKey? bay = null) =>
             _network?.CaptureRemoval(id, owner, reason, bay);
         internal void CaptureBulletSpawn(in BulletEntity bullet, int source, int barrelIndex, uint sequence, long spawnTick,

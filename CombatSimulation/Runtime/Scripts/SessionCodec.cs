@@ -95,7 +95,8 @@ namespace CombatSimulation.Runtime
     //     sender may know only a predicted copy, which no stream names), target shape (VarUInt), device index + 1
     //     (VarUInt), contact (2), impact (3), amount (32-bit float), damage type (VarUInt, below
     //     DamageTypeTable.MaxTypes; D4), impulse flag (1 bit); with the flag, the push impulse (two 32-bit floats;
-    //     phase 4 E4, a projectile's start record on a ship only). The sequence is the hit's position in the stream.
+    //     phase 4 E4, a projectile's start record on a ship only), effect (3; HitEffect, version 11: a drain names a
+    //     ship target, with damage type 0 and no impulse). The sequence is the hit's position in the stream.
     //   Roster: entity (64), roster ID (32), revision (VarUInt), previous status (2), status (2), reason (3),
     //     deployment count and order (VarUInt), armor deficit, shield deficit, damage fraction (32-bit floats), pose.
     //   Drone launch: entity (64), bay roster ID (32), bay device (VarUInt), parent entity (64), pose.
@@ -107,8 +108,9 @@ namespace CombatSimulation.Runtime
     //     with it the charge ticks of a charging weapon's shot (VarUInt; phase 5, step 4f, H7). The receiver derives
     //     the entity ID with SpawnIdentity.CreateChild.
     //   Retreat: ship control index (VarUInt).
-    //   Missile target (P3): missile bullet age (VarUInt), target control index + 1 in the receiver's stream (VarUInt;
-    //     0: no target).
+    //   Missile target (P3): missile bullet age (VarUInt), segment flag (1 bit; version 11); with the flag, the tail
+    //     segment's entity ID (64; a sticky bullet's target), else the target control index + 1 in the receiver's
+    //     stream (VarUInt; 0: no target).
     //   Allegiance (phase 4, D13; version 8): ship control index (VarUInt), allegiance (3).
     //   Device use (phase 5, step 7; version 9): ship control index (VarUInt), device index (VarUInt), started (1 bit).
     //   Pose: position, angle, linear velocity, angular velocity (six 32-bit floats).
@@ -118,9 +120,10 @@ namespace CombatSimulation.Runtime
     {
         internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse }
 
-        internal const byte Version = 10;
+        internal const byte Version = 11;
         internal const int MaxBatchBytes = 1 << 20;
-        private const int KindBits = 4, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3, AllegianceBits = 3;
+        private const int KindBits = 4, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3, AllegianceBits = 3,
+            EffectBits = 3;
         private const int MaxVarUIntBits = 16 + 1 + 64;
         // Upper bounds for buffer sizing. The largest record, a roster change, needs about 720 bits.
         private const int HeaderBits = 8 + 2 * MaxVarUIntBits, RecordBits = 1024;
@@ -213,14 +216,20 @@ namespace CombatSimulation.Runtime
                     if (!own.TryGetBullet(op.EntityId, out var missile))
                         throw new InvalidOperationException("A missile target names a missile the stream does not know.");
                     var target = 0UL;
-                    if (!op.TargetId.IsNull)
+                    if (op.TargetIsSegment)
+                    {
+                        if (op.TargetId.IsNull) throw new InvalidOperationException("A missile target names a null segment.");
+                    }
+                    else if (!op.TargetId.IsNull)
                     {
                         if (!peer.TryGetBody(op.TargetId, out var targetIndex))
                             throw new InvalidOperationException("A missile target names a ship the peer's stream does not know.");
                         target = (ulong)targetIndex + 1;
                     }
                     Header(ref w, RecordKind.MissileTarget, batchTick, op.Tick);
-                    w.WriteVarUInt(missile); w.WriteVarUInt(target);
+                    w.WriteVarUInt(missile); w.WriteBool(op.TargetIsSegment);
+                    if (op.TargetIsSegment) w.WriteBits(op.TargetId.Value, 64);
+                    else w.WriteVarUInt(target);
                     break;
                 case OwnerOperationKind.Allegiance:
                     if (!own.TryGetBody(op.EntityId, out var changed))
@@ -257,6 +266,7 @@ namespace CombatSimulation.Runtime
             var push = hit.Impulse.X != 0f || hit.Impulse.Y != 0f;
             w.WriteBool(push);
             if (push) { Float(ref w, hit.Impulse.X); Float(ref w, hit.Impulse.Y); }
+            w.WriteBits((ulong)hit.Effect, EffectBits);
             own.Hits = hit.Sequence;
         }
 
@@ -298,15 +308,18 @@ namespace CombatSimulation.Runtime
                         var contact = r.Bits(ContactBits); var impact = r.Bits(ImpactBits); var amount = r.Float();
                         var damageType = r.VarUInt();
                         var impulse = r.Bool() ? new Vec2(r.Float(), r.Float()) : Vec2.Zero;
+                        var effect = r.Bits(EffectBits);
                         Require(contact <= (ulong)HitContactState.End && impact <= (ulong)HitImpactKind.Stop && amount >= 0 &&
                             damageType < DamageTypeTable.MaxTypes &&
-                            (targetBullet ? targetName != 0 : impact <= (ulong)HitImpactKind.DamageOverTime));
+                            (targetBullet ? targetName != 0 : impact <= (ulong)HitImpactKind.DamageOverTime) &&
+                            effect <= (ulong)HitEffect.ShieldDrain && (effect == (ulong)HitEffect.Damage ||
+                                !targetBullet && damageType == 0 && impulse.X == 0f && impulse.Y == 0f));
                         if (!resolve) break;
                         var attacker = attackerBullet ? Bullet(peer, attackerName) : Body(peer, attackerName);
                         hits.Add(new ResolvedHit(battle, r.Tick, attacker, sender, device,
                             targetBullet ? new EntityId(targetName) : Body(own, targetName), receiver, shape,
                             (HitContactState)contact, (HitImpactKind)impact, amount, ++peer.Hits, targetBullet,
-                            (byte)damageType, impulse));
+                            (byte)damageType, impulse, (HitEffect)effect));
                         break;
                     case RecordKind.Roster:
                         var entity = r.Entity(); var id = new RosterId((uint)r.Bits(32)); var revision = r.Int();
@@ -372,10 +385,12 @@ namespace CombatSimulation.Runtime
                         operations.Add(OwnerOperation.RetreatStarted(battle, sender, ++peer.LastOperation, r.Tick, Body(peer, name)));
                         break;
                     case RecordKind.MissileTarget:
-                        name = r.VarUInt(); var targetIndex = r.VarUInt();
+                        name = r.VarUInt(); var segment = r.Bool(); var targetIndex = segment ? r.Bits(64) : r.VarUInt();
+                        Require(!segment || targetIndex != 0);
                         if (!resolve) break;
                         operations.Add(OwnerOperation.MissileTargetChanged(battle, sender, ++peer.LastOperation, r.Tick,
-                            Bullet(peer, name), targetIndex == 0 ? default : Body(own, targetIndex - 1)));
+                            Bullet(peer, name), segment ? new EntityId(targetIndex) : targetIndex == 0 ? default : Body(own, targetIndex - 1),
+                            segment));
                         break;
                     case RecordKind.Allegiance:
                         name = r.VarUInt(); var allegiance = (Allegiance)r.Bits(AllegianceBits);

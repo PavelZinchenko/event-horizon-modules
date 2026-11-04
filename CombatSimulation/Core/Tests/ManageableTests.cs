@@ -355,6 +355,36 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(ChildrenOf(ownerEvents, bomb).Single().EntityId, ChildrenOf(copyEvents, bomb).Single().EntityId);
         }
 
+        // Phase 5, step 5a (4b finding 2): a stick to a tail segment travels with the record's segment flag
+        // (SessionCodec version 11); the copy sticks to the same segment.
+        [Test]
+        public void TheCopyOfAStickyBombSticksToTheOwnersTailSegment()
+        {
+            // Record 20 on a worm of armor 1,000; its head at (66, 50) faces away, so the tail end meets the bomb.
+            var worm = Fixtures.ShipWith(mass: 10f, shield: new ResourceDefinition(0f),
+                devices: new DeviceDefinition[] { new WormTailDefinition(0.3f, 10, 5f, 0.45f, 0.35f, 0.4419455f) });
+            var link = new Link(both: true, StickyShip(), worm);
+            foreach (var driver in new[] { link.Owner, link.Copy })
+            {
+                driver.Battle.World.TeleportGroup(driver.Ship(101).Body, new Vec2(66f, 50f), 0f);
+                driver.Battle.World.SetLinearVelocity(driver.Ship(101).Body, Vec2.Zero);
+            }
+            link.Owner.Control(1, systems: 1);
+
+            var bomb = default(EntityId);
+            for (var i = 0; i < 40 && (bomb.IsNull || !Entry(link.Owner, bomb).Stuck); ++i)
+            {
+                link.Step();
+                if (bomb.IsNull) bomb = link.Owner.Battle.Snapshot.Bullets.ToArray().SingleOrDefault().Id;
+            }
+            var target = Entry(link.Owner, bomb).TargetId;
+            Assert.IsNotNull(link.Owner.Battle.FindSegment(target), "The bomb sticks to a tail segment.");
+
+            link.Step();
+            Assert.IsTrue(Entry(link.Copy, bomb).Stuck);
+            Assert.AreEqual(target, Entry(link.Copy, bomb).TargetId);
+        }
+
         // H8: the copy never detonates; the owner's removal record names the tick, and the copy starts the cooldown at
         // the next tick, as the owner does, though the record arrives late.
         [Test]
@@ -391,10 +421,10 @@ namespace CombatSimulation.Core.Tests
         // The copy's own slot 102 stays in the hangar, so the battle has a network part.
         private sealed class Link
         {
-            public Link(bool both, ShipDefinition shooter)
+            public Link(bool both, ShipDefinition shooter, ShipDefinition enemy = null)
             {
-                Owner = new Driver(Setup(Owner20, both, shooter));
-                Copy = new Driver(Setup(Receiver, both, shooter));
+                Owner = new Driver(Setup(Owner20, both, shooter, enemy ?? Fixtures.Ship));
+                Copy = new Driver(Setup(Receiver, both, shooter, enemy ?? Fixtures.Ship));
                 Owner.Deploy(1);
                 if (both) Owner.Deploy(101);
                 Step();
@@ -437,11 +467,11 @@ namespace CombatSimulation.Core.Tests
                     throw new InvalidOperationException("Rejected watermark.");
             }
 
-            private static BattleSetup Setup(int localOwner, bool both, ShipDefinition shooter) =>
+            private static BattleSetup Setup(int localOwner, bool both, ShipDefinition shooter, ShipDefinition enemy) =>
                 new BattleSetup(new BattleId(77), 13, new[]
                 {
                     new RosterSlotSetup(new RosterId(1), 0, shooter, Owner20),
-                    new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship, both ? Owner20 : Receiver),
+                    new RosterSlotSetup(new RosterId(101), 1, enemy, both ? Owner20 : Receiver),
                     new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship, Receiver),
                 }, localOwners: new[] { localOwner });
 

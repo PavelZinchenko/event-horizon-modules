@@ -28,8 +28,11 @@ namespace CombatSimulation.Core
                 hit.DeviceIndex < -1 || hit.TargetShape < 0 || !Finite(hit.Amount) || hit.Amount < 0f ||
                 hit.ContactState < HitContactState.Start || hit.ContactState > HitContactState.End ||
                 hit.ImpactKind < HitImpactKind.Impact || hit.ImpactKind > HitImpactKind.Stop ||
-                !Setup.DamageTypes.Contains(hit.DamageType))
+                !Setup.DamageTypes.Contains(hit.DamageType) || hit.Effect > HitEffect.ShieldDrain)
                 return false;
+            // A drain names a ship target, without damage type or push (phase 5, step 5a).
+            if (hit.Effect != HitEffect.Damage && (hit.TargetIsBullet || hit.DamageType != 0 ||
+                hit.Impulse.X != 0f || hit.Impulse.Y != 0f)) return false;
             // A bullet target: one record per contact. Disarm and Stop name bullets only.
             if (hit.TargetIsBullet ? hit.TargetShape != 0 || hit.ContactState != HitContactState.Start
                 : hit.ImpactKind > HitImpactKind.DamageOverTime) return false;
@@ -131,13 +134,15 @@ namespace CombatSimulation.Core
                          (IsContactTarget(handle.Kind) ? !operation.BayKey.HasValue :
                           _world.Ships.Get(handle)?.Bay?.Key == operation.BayKey && operation.BayKey.HasValue));
                 // The missile or its target may be gone; a live missile must be the owner's homing or sticky projectile.
+                // A tail segment target is a sticky bullet's (phase 5, step 5a).
                 case OwnerOperationKind.MissileTarget:
-                    if (operation.EntityId.IsNull) return false;
-                    if (_world.Entities.TryGet(operation.TargetId, out handle) && handle.Kind == EntityKind.Bullet) return false;
+                    if (operation.EntityId.IsNull || operation.TargetIsSegment && operation.TargetId.IsNull) return false;
+                    if (_world.Entities.TryGet(operation.TargetId, out handle) && (handle.Kind == EntityKind.Bullet ||
+                        (handle.Kind == EntityKind.Segment) != operation.TargetIsSegment)) return false;
                     return !_world.Entities.TryGet(operation.EntityId, out handle) ||
                         (_world.Bullets.TryGet(handle, out var missile) && _world.Bullets[missile].Owner == operation.Owner &&
-                         !_world.Bullets[missile].IsBeam &&
-                         (_world.Bullets[missile].Definition.IsHoming || _world.Bullets[missile].Definition.IsSticky));
+                         !_world.Bullets[missile].IsBeam && (_world.Bullets[missile].Definition.IsSticky ||
+                         _world.Bullets[missile].Definition.IsHoming && !operation.TargetIsSegment));
                 // The ship may be gone; a live ship must be the owner's.
                 case OwnerOperationKind.Allegiance:
                     return !operation.EntityId.IsNull && Allegiances.IsValid(operation.Allegiance) &&
@@ -409,11 +414,11 @@ namespace CombatSimulation.Core
         }
 
         // P3: an owner search changed a homing projectile's target.
-        internal void CaptureMissileTarget(in BulletEntity bullet, EntityId target)
+        internal void CaptureMissileTarget(in BulletEntity bullet, EntityId target, bool targetIsSegment = false)
         {
             if (ShouldCapture(bullet.Owner))
                 _outgoingOperations.Add(OwnerOperation.MissileTargetChanged(BattleId, bullet.Owner,
-                    NextOperationSequence(bullet.Owner), Tick, bullet.Id, target));
+                    NextOperationSequence(bullet.Owner), Tick, bullet.Id, target, targetIsSegment));
         }
 
         internal void CaptureRemoval(EntityId id, int owner, RemovalReason reason, DroneBayKey? bay = null)

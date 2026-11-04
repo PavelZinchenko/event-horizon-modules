@@ -76,8 +76,10 @@ namespace CombatSimulation.Core
         // Plain projectile spawns only (network plan, P1): Pose holds the owner's muzzle position and launch angle.
         public readonly bool HasLaunchPose;
 
-        // Missile target changes only (network plan, P3): the new homing target, or null.
+        // Missile target changes only (network plan, P3): the new homing target, or null. A sticky bullet may name a
+        // tail segment (phase 5, step 5a).
         public readonly EntityId TargetId;
+        public readonly bool TargetIsSegment;
 
         // Allegiance changes only (D13).
         public readonly Allegiance Allegiance;
@@ -92,8 +94,10 @@ namespace CombatSimulation.Core
             EntityId entityId, RosterRecord roster = default, DroneBayKey? bayKey = null, EntityId parentId = default,
             SpawnPose pose = default, RemovalReason removalReason = RemovalReason.None,
             int deviceIndex = 0, int barrelIndex = 0, uint spawnSequence = 0, bool hasLaunchPose = false,
-            EntityId targetId = default, Allegiance allegiance = default, bool useStarted = false, int chargeTicks = 0)
+            EntityId targetId = default, Allegiance allegiance = default, bool useStarted = false, int chargeTicks = 0,
+            bool targetIsSegment = false)
         {
+            TargetIsSegment = targetIsSegment;
             ChargeTicks = chargeTicks;
             UseStarted = useStarted;
             Allegiance = allegiance;
@@ -155,8 +159,9 @@ namespace CombatSimulation.Core
         // A homing projectile's search at tick chose another target, or none (network plan, P3). The receiver's copy
         // takes it and the owner's search schedule; between the owner's records the copy searches locally.
         public static OwnerOperation MissileTargetChanged(BattleId battleId, int owner, ulong sequence, long tick,
-            EntityId entityId, EntityId targetId) =>
-            new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.MissileTarget, entityId, targetId: targetId);
+            EntityId entityId, EntityId targetId, bool targetIsSegment = false) =>
+            new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.MissileTarget, entityId, targetId: targetId,
+                targetIsSegment: targetIsSegment);
 
         // A ship took another allegiance at stage 1 of tick (D13); its bullets and beams take it too.
         public static OwnerOperation AllegianceChanged(BattleId battleId, int owner, ulong sequence, long tick,

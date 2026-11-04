@@ -210,7 +210,8 @@ namespace CombatSimulation.Core
                 energy.Update(Battle.TickDuration);
             }
             if (ReplayPredictedDamage(ship.Id, tick, correction.AppliedHitSequence))
-                _battle.ApplyShieldFirst(ref shield, ref armor, ref energy, _replayDamage, ship.Definition, ship.ResistanceShare);
+                _battle.ApplyShieldFirst(ref shield, ref armor, ref energy, _replayDamage, _replayEffects, ship.Definition,
+                    ship.ResistanceShare);
             Settle(ref ship.Armor, armor);
             Settle(ref ship.Shield, shield);
             Settle(ref ship.Energy, energy);
@@ -362,12 +363,13 @@ namespace CombatSimulation.Core
         }
 
         // The damage to replay on the target after a correction for the owner's tick with acknowledgement ack, by
-        // damage type in _replayDamage. False: nothing to replay.
+        // damage type in _replayDamage, and the drains in _replayEffects. False: nothing to replay.
         // A discrete hit replays until acknowledged. A beam replays the ticks shown here, [start, end), minus
         // the ticks the owner had applied by its tick, [start + D, end + D), where D is the shooter's delay.
         private bool ReplayPredictedDamage(EntityId target, long tick, ulong ack)
         {
             Array.Clear(_replayDamage, 0, _replayDamage.Length);
+            _replayEffects = default;
             var any = false;
             var kept = 0;
             for (var i = 0; i < _predictedHits.Count; ++i)
@@ -378,7 +380,7 @@ namespace CombatSimulation.Core
                 {
                     if (entry.Hit.ImpactKind != HitImpactKind.DamageOverTime)
                     {
-                        if (entry.Hit.Sequence > ack) any |= AddReplayDamage(entry.Hit.DamageType, entry.Hit.Amount);
+                        if (entry.Hit.Sequence > ack) any |= AddReplayDamage(entry.Hit, entry.Hit.Amount);
                         else keep = false;
                     }
                     else
@@ -394,7 +396,7 @@ namespace CombatSimulation.Core
                             applied = Math.Max(0L, Math.Min(tick + 1, ownerEnd) - (start + delay));
                         }
                         if (shown > applied)
-                            any |= AddReplayDamage(entry.Hit.DamageType, (double)(shown - applied) * entry.Hit.Amount * Battle.TickDuration);
+                            any |= AddReplayDamage(entry.Hit, (double)(shown - applied) * entry.Hit.Amount * Battle.TickDuration);
                         keep = !(endKnown && tick + 1 >= entry.EndTick + delay);
                     }
                 }
@@ -404,10 +406,21 @@ namespace CombatSimulation.Core
             return any;
         }
 
-        private bool AddReplayDamage(int type, double amount)
+        private bool AddReplayDamage(in ResolvedHit hit, double amount)
         {
             if (!(amount > 0.0)) return false;
-            _replayDamage[type] = (float)Math.Min(float.MaxValue, _replayDamage[type] + amount);
+            switch (hit.Effect)
+            {
+                case HitEffect.EnergyDrain:
+                    _replayEffects.EnergyDrain = (float)Math.Min(float.MaxValue, _replayEffects.EnergyDrain + amount);
+                    break;
+                case HitEffect.ShieldDrain:
+                    _replayEffects.ShieldDrain = (float)Math.Min(float.MaxValue, _replayEffects.ShieldDrain + amount);
+                    break;
+                default:
+                    _replayDamage[hit.DamageType] = (float)Math.Min(float.MaxValue, _replayDamage[hit.DamageType] + amount);
+                    break;
+            }
             return true;
         }
 
@@ -439,5 +452,6 @@ namespace CombatSimulation.Core
 
         private readonly List<PredictedHit> _predictedHits = new List<PredictedHit>();
         private readonly float[] _replayDamage;
+        private PendingEffects _replayEffects;
     }
 }

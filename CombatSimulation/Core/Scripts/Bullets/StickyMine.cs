@@ -10,9 +10,8 @@ namespace CombatSimulation.Core
     // a bullet rides on, so BulletStore.CollectStuckHits adds the stuck bullet's damage over time on its target.
     //
     // Only the owner sticks and detonates (H8). It sends the target in a MissileTarget record; the copy sticks to that
-    // target at its own pose when the record applies, so it sits off by its flight in one network delay. The session
-    // stream names no tail segment as a body, so a stick to a segment sends no record: that copy flies on until the
-    // owner's removal record.
+    // target at its own pose when the record applies, so it sits off by its flight in one network delay. A tail segment
+    // travels with the record's segment flag (SessionCodec version 11).
     internal static class StickyMine
     {
         private const float OffsetMultiplier = 0.9f;
@@ -34,7 +33,7 @@ namespace CombatSimulation.Core
 
             if (!isOwner || bullet.TargetId.IsNull) return;
             if (!Stick(battle, index, bullet.TargetId, battle.Tick)) bullet.TargetId = default;
-            else if (battle.FindShip(bullet.TargetId) != null) battle.CaptureMissileTarget(bullet, bullet.TargetId);
+            else battle.CaptureMissileTarget(bullet, bullet.TargetId, battle.FindShip(bullet.TargetId) == null);
         }
 
         // The owner at stage 4, or the copy at the owner's record. False when the target has left.

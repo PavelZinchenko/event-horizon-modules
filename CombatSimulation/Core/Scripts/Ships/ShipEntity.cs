@@ -64,6 +64,16 @@ namespace CombatSimulation.Core
         }
     }
 
+    // The effects on a ship besides damage that stage 9 sums and stage 10 applies with it (phase 5, step 5): the
+    // shield drain takes the shield before it absorbs damage, the repair nets against the armor damage, and the energy
+    // drain comes last (legacy ShipStats.ApplyDamage).
+    internal struct PendingEffects
+    {
+        public float EnergyDrain;
+        public float ShieldDrain;
+        public float Repair;
+    }
+
     // A remote ship's received correction, held until its tick has run here. Arrays are reused across pool cycles.
     internal sealed class PendingCorrection
     {
@@ -164,14 +174,29 @@ namespace CombatSimulation.Core
         // Linear velocity at the end of stage 4, before the physics step (ramming speed).
         public Vec2 PreStepVelocity { get; set; }
 
-        // Damage accumulated at stage 9, by damage type (D4); stage 10 applies it in one pass.
+        // Damage accumulated at stage 9, by damage type (D4), and the other effects; stage 10 applies them in one pass.
         public float[] PendingDamage => _pendingDamage;
+        public PendingEffects PendingEffects;
         public bool HasPendingDamage { get; private set; }
 
         public void AddPendingDamage(int type, float amount)
         {
             if (!(amount > 0f)) return;
-            _pendingDamage[type] = (float)System.Math.Min(float.MaxValue, (double)_pendingDamage[type] + amount);
+            _pendingDamage[type] = Sum(_pendingDamage[type], amount);
+            HasPendingDamage = true;
+        }
+
+        public void AddPendingDrain(float energy, float shield)
+        {
+            if (energy > 0f) PendingEffects.EnergyDrain = Sum(PendingEffects.EnergyDrain, energy);
+            if (shield > 0f) PendingEffects.ShieldDrain = Sum(PendingEffects.ShieldDrain, shield);
+            HasPendingDamage |= energy > 0f || shield > 0f;
+        }
+
+        public void AddPendingRepair(float amount)
+        {
+            if (!(amount > 0f)) return;
+            PendingEffects.Repair = Sum(PendingEffects.Repair, amount);
             HasPendingDamage = true;
         }
 
@@ -179,8 +204,11 @@ namespace CombatSimulation.Core
         {
             if (!HasPendingDamage) return;
             System.Array.Clear(_pendingDamage, 0, _pendingDamage.Length);
+            PendingEffects = default;
             HasPendingDamage = false;
         }
+
+        private static float Sum(float a, float b) => (float)System.Math.Min(float.MaxValue, (double)a + b);
 
         // The owner tick of the last applied correction, or NoCorrection.
         public long LastCorrectionTick { get; set; }
@@ -231,6 +259,7 @@ namespace CombatSimulation.Core
             PreStepVelocity = Vec2.Zero;
             if (_pendingDamage.Length != damageTypes) _pendingDamage = new float[damageTypes];
             else System.Array.Clear(_pendingDamage, 0, damageTypes);
+            PendingEffects = default;
             HasPendingDamage = false;
             _spawnSampleCount = 0;
             _bodySampleCount = 0;
