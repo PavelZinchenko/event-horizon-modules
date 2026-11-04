@@ -35,6 +35,8 @@ namespace CombatSimulation.Core
             if (!(trackingAngle >= 0f) || trackingAngle > (float)Math.PI)
                 throw new ArgumentOutOfRangeException(nameof(trackingAngle));
             DamageTypeTable.ValidateIndex(damageType, nameof(damageType));
+            if (effects.Restore > 0f || effects.LifetimeLoss > 0f)
+                throw new ArgumentOutOfRangeException(nameof(effects), "A beam does not restore its lifetime.");
 
             BarrelIndex = barrelIndex;
             Cooldown = cooldown;

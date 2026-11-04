@@ -177,6 +177,7 @@ namespace CombatSimulation.Core
             bullet.Definition = definition;
             bullet.SpeedScale = draw.SpeedScale;
             bullet.ExpiryTick = spawnTick + draw.LifetimeTicks - 1;
+            bullet.LifetimeCapTicks = draw.CapTicks;
             bullet.HitPoints = definition.HitPoints;
             bullet.SpawnTick = spawnTick;
             bullet.Confirmed = true;
@@ -201,10 +202,9 @@ namespace CombatSimulation.Core
             // Legacy BulletStats.GetBulletSpeed and GetBulletLifetime: each varies by (r - 0.5) x RandomFactor.
             var factor = trigger.RandomFactor;
             draw.SpeedScale = factor > 0f ? 1f + (speed - 0.5f) * factor : 1f;
-            draw.LifetimeTicks = factor > 0f
-                ? TickTime.After(trigger.Bullet.Lifetime * (1f + (lifetime - 0.5f) * factor)) +
-                  trigger.Bullet.GrowthTicks(draw.SpeedScale)
-                : trigger.Bullet.LifetimeTicks;
+            var seconds = trigger.Bullet.Lifetime * (factor > 0f ? 1f + (lifetime - 0.5f) * factor : 1f);
+            draw.LifetimeTicks = trigger.Bullet.SpawnLifetimeTicks(seconds, draw.SpeedScale);
+            draw.CapTicks = TickTime.After(seconds);
             return draw;
         }
 
@@ -213,6 +213,7 @@ namespace CombatSimulation.Core
             public float Rotation, OffsetX, OffsetY;
             public float SpeedScale;
             public int LifetimeTicks;
+            public int CapTicks;
         }
 
         // A receiver adds the owner's child at its launch pose. The parent is the live copy, or a remote bullet that this
@@ -236,7 +237,8 @@ namespace CombatSimulation.Core
 
             var trigger = triggers[operation.DeviceIndex];
             var draw = DrawChild(operation.EntityId, operation.Tick, trigger);
-            if (operation.Tick + draw.LifetimeTicks - 1 < Tick || _battle.HasDueRemoval(operation.EntityId))
+            if (!trigger.Bullet.HasOwnerLifetime && operation.Tick + draw.LifetimeTicks - 1 < Tick ||
+                _battle.HasDueRemoval(operation.EntityId))
             {
                 // The child is gone already; its own children may still arrive.
                 RememberTriggerParent(operation.EntityId, parent.Bullet, trigger.Bullet, draw.SpeedScale, Vec2.Zero);

@@ -275,6 +275,10 @@ namespace CombatSimulation.Core
                             }
                         }
                         if (effects.Siphon > 0f) Siphon(attackerShip, target, damageType, damage * effects.Siphon);
+                        // A hit restores Restore seconds; over time, Restore seconds per second: Restore ticks per tick.
+                        if (effects.Restore > 0f)
+                            RestoreLifetime(ref _world.Bullets[index], kind == HitImpactKind.DamageOverTime
+                                ? effects.Restore : TickTime.Ticks(effects.Restore));
                     }
                 }
 
@@ -302,6 +306,24 @@ namespace CombatSimulation.Core
             var resistance = DamageSystem.ArmorResistance(Setup.DamageTypes, target.Definition, damageType,
                 target.ResistanceShare);
             ship.AddPendingRepair(damage * (1f - resistance));
+        }
+
+        // Legacy RestoreLifeAction (phase 5, step 5d) on the attacker's owner: the expiry moves back by the restored
+        // ticks, at most to a full lifetime from this tick (Lifetime.Restore stops the elapsed time at 0). A fraction of a
+        // tick waits for the next contact. A copy follows the owner's removal record, so no record travels.
+        private void RestoreLifetime(ref BulletEntity bullet, double ticks)
+        {
+            var total = bullet.RestoreCarry + ticks;
+            var whole = Math.Floor(total);
+            var cap = Tick + bullet.LifetimeCapTicks - 1;
+            if (whole >= cap - bullet.ExpiryTick)
+            {
+                bullet.ExpiryTick = Math.Max(bullet.ExpiryTick, cap);
+                bullet.RestoreCarry = 0f;
+                return;
+            }
+            bullet.ExpiryTick += (long)whole;
+            bullet.RestoreCarry = (float)(total - whole);
         }
 
         // Legacy PushAction: the impulse acts at the target's origin, so it never turns the target.

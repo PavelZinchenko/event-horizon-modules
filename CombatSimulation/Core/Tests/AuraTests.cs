@@ -205,7 +205,7 @@ namespace CombatSimulation.Core.Tests
 
         // The owner (20) flies the shooter, slot 1; the copy (10) only receives. Its own slot 102 stays in the hangar,
         // so the battle has a network part.
-        private sealed class Link
+        internal sealed class Link
         {
             private const int Owner20 = 20;
             private const int Receiver = 10;

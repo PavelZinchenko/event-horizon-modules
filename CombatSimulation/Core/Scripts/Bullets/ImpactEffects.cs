@@ -6,10 +6,12 @@ namespace CombatSimulation.Core
     // each once, at full power (legacy actions have no falloff); damage over time and a beam apply each per second,
     // except Roll, which runs on contact entry only.
     // A missile or a tail segment target takes none of them, except the progressive ramp (step 5c), which is damage.
+    // The restore (step 5d) acts on the bullet itself.
     public readonly struct ImpactEffects
     {
         public ImpactEffects(float energyDrain = 0f, float shieldDrain = 0f, float siphon = 0f,
-            float slowDown = 0f, float roll = 0f, float ramp = 0f, float rampTime = 0f)
+            float slowDown = 0f, float roll = 0f, float ramp = 0f, float rampTime = 0f, float restore = 0f,
+            float lifetimeLoss = 0f)
         {
             Validate(energyDrain, nameof(energyDrain));
             Validate(shieldDrain, nameof(shieldDrain));
@@ -18,6 +20,8 @@ namespace CombatSimulation.Core
             Validate(roll, nameof(roll));
             Validate(ramp, nameof(ramp));
             Validate(rampTime, nameof(rampTime));
+            Validate(restore, nameof(restore));
+            Validate(lifetimeLoss, nameof(lifetimeLoss));
             EnergyDrain = energyDrain;
             ShieldDrain = shieldDrain;
             Siphon = siphon;
@@ -25,6 +29,8 @@ namespace CombatSimulation.Core
             Roll = roll;
             Ramp = ramp;
             RampTime = rampTime;
+            Restore = restore;
+            LifetimeLoss = lifetimeLoss;
         }
 
         // Legacy DrainEnergyAction: the target's energy falls by it, clamped at 0, and its recharge delay restarts.
@@ -50,12 +56,19 @@ namespace CombatSimulation.Core
         public float Ramp { get; }
         public float RampTime { get; }
 
+        // Legacy RestoreLifetime on a bullet (phase 5, step 5d): it starts with LifetimeLoss x its lifetime spent
+        // (Lifetime.Take(Max x Factor)), and each contact with a ship or drone gives back Restore seconds of it (over
+        // time: per second), up to its full lifetime (Lifetime.Restore).
+        public float Restore { get; }
+        public float LifetimeLoss { get; }
+
         public bool HasDrain => EnergyDrain > 0f || ShieldDrain > 0f;
 
-        // Legacy BulletStats with PowerLevel c: effect powers x c. The siphon factor and the ramp time stay.
+        // Legacy BulletStats with PowerLevel c: effect powers x c. The siphon factor, the ramp time and the restore stay
+        // (legacy BulletFactory reads the raw RestoreLifetime power).
         internal ImpactEffects WithCharge(float charge) =>
             new ImpactEffects(EnergyDrain * charge, ShieldDrain * charge, Siphon, SlowDown * charge, Roll * charge,
-                Ramp * charge, RampTime);
+                Ramp * charge, RampTime, Restore, LifetimeLoss);
 
         // The ramp damage of the contact ticks [from, to), counted from the contact's first tick (0). Tick k deals
         // ramp x min(1, k x TickDuration / rampTime) x TickDuration; tick 0 deals none (legacy IsNew). The owner adds

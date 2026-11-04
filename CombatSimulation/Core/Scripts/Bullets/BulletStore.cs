@@ -53,6 +53,11 @@ namespace CombatSimulation.Core
         // The last tick the bullet flies in; stage 11 of that tick marks its expiry.
         public long ExpiryTick;
 
+        // A restoring bullet on its owner (phase 5, step 5d): its full lifetime in ticks, which caps the restore, and the
+        // fraction of a tick restored but not yet added to the expiry.
+        public int LifetimeCapTicks;
+        public float RestoreCarry;
+
         // An aura (phase 5, step 4g): the tick its lifetime last started (its spawn, or its weapon's renewal), and its
         // size in ticks of growth (Auras).
         public long RenewTick;
@@ -346,7 +351,7 @@ namespace CombatSimulation.Core
 
         // Stage 11. A missile without hit points dies; a bullet expires after the physics of its last tick.
         // A death in the same tick wins over the expiry. A shot beam expires as a bullet does (phase 5, step 4d). A remote
-        // aura waits for its owner's removal record (step 4g): only the owner knows when its weapon stopped renewing it.
+        // aura (step 4g) or restoring bullet (step 5d) waits for its owner's removal record.
         public void MarkDeaths(long tick, BattleSetup setup)
         {
             for (var i = 0; i < _count; ++i)
@@ -360,7 +365,7 @@ namespace CombatSimulation.Core
                 }
                 else if (bullet.Definition.IsMissile && bullet.HitPoints <= 0f && setup.IsLocalOwner(bullet.Owner))
                     bullet.PendingRemoval = RemovalReason.Death;
-                else if (bullet.ExpiryTick == tick && (!bullet.Definition.IsAura || setup.IsLocalOwner(bullet.Owner)))
+                else if (bullet.ExpiryTick == tick && (!bullet.Definition.HasOwnerLifetime || setup.IsLocalOwner(bullet.Owner)))
                     bullet.PendingRemoval = RemovalReason.Expiry;
             }
         }

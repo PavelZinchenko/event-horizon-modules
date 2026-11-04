@@ -98,6 +98,9 @@ namespace CombatSimulation.Core
                 throw new ArgumentException("Only a beam bolt pierces.", nameof(piercing));
             if (aura && (!(lifetime > 0f) || homing || rocket || stickyLifetime > 0f || beamLength > 0f))
                 throw new ArgumentException("An aura has a body lifetime and no other controller.", nameof(aura));
+            // Its weapon renews an aura's lifetime, and its size follows that lifetime (Auras).
+            if (aura && (effects.Restore > 0f || effects.LifetimeLoss > 0f))
+                throw new ArgumentException("An aura does not restore its lifetime.", nameof(effects));
             if (!(damage >= 0f) || float.IsInfinity(damage))
                 throw new ArgumentOutOfRangeException(nameof(damage), "Damage must be finite and not negative.");
             if (!(weight >= 0f) || float.IsInfinity(weight))
@@ -186,7 +189,7 @@ namespace CombatSimulation.Core
             AuraGrowthTicks = aura ? TickTime.AtLeast(lifetime) : 0;
             BodyLifetime = lifetime;
             Lifetime = lifetime > 0f ? lifetime : range / speed;
-            LifetimeTicks = TickTime.After(Lifetime) + GrowthTicks(1f);
+            LifetimeTicks = SpawnLifetimeTicks(Lifetime, 1f);
             Triggers = triggerList;
             TriggerConditions = conditions;
             HasSpawnTriggers = spawns;
@@ -302,8 +305,17 @@ namespace CombatSimulation.Core
         public bool AttachedToParent { get; }
 
         // Physics steps the bullet flies, from its spawn tick. Legacy expires a bullet when its age exceeds the lifetime
-        // (Lifetime.IsExpired). A beam bolt adds its growth: its lifetime does not run while it grows.
+        // (Lifetime.IsExpired). A beam bolt adds its growth: its lifetime does not run while it grows. A restoring bullet
+        // starts with its lifetime loss spent (phase 5, step 5d).
         public int LifetimeTicks { get; }
+
+        // The flight ticks of a shot with this lifetime (legacy GetBulletLifetime with the random factor).
+        internal int SpawnLifetimeTicks(float lifetime, float speedScale) =>
+            TickTime.After(lifetime * Math.Max(0f, 1f - Effects.LifetimeLoss)) + GrowthTicks(speedScale);
+
+        // Only the owner knows when an aura's weapon stopped renewing it (step 4g), or how long a restoring bullet
+        // touched ships (step 5d). A copy leaves with the owner's removal record.
+        public bool HasOwnerLifetime => IsAura || Effects.Restore > 0f;
 
         // Legacy MovingBeamController (phase 5, step 4e): above zero, the bullet is a beam bolt, a ray of this length
         // from its origin along its heading. It hits through the ray only; nothing hits its body, and point defense does
@@ -335,7 +347,8 @@ namespace CombatSimulation.Core
         // target's origin. Negative pulls. Missiles are never pushed (legacy MissileDamageHandler drops impulses).
         public float Push { get; }
 
-        // Drains and siphon on a ship or drone target (phase 5, step 5a). OverTime: per second.
+        // Drains and siphon on a ship or drone target (phase 5, step 5a), the restore of its own lifetime (5d).
+        // OverTime: per second.
         public ImpactEffects Effects { get; }
 
         // Gameplay triggers in legacy order (phase 5, step 2). The index is the spawn source of a child's identity.

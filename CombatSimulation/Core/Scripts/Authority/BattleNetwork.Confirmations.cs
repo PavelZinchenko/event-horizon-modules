@@ -228,10 +228,10 @@ namespace CombatSimulation.Core
             bullet.Id == SpawnIdentity.CreateChild(bullet.ParentId, bullet.SpawnTick, (uint)operation.DeviceIndex,
                 (uint)operation.BarrelIndex, operation.SpawnSequence);
 
-        // An aura's weapon renews its lifetime, so only the owner's removal record ends it (phase 5, step 4g).
+        // Only the owner's removal record ends an aura (phase 5, step 4g) or a restoring bullet (step 5d).
         private bool HasExpired(CannonDevice cannon, BulletDefinition definition, in OwnerOperation operation)
         {
-            if (definition.IsAura) return false;
+            if (definition.HasOwnerLifetime) return false;
             _world.DrawShot(operation.EntityId, operation.Tick, definition, cannon.Definition.RandomFactor,
                 out _, out var lifetimeTicks);
             return operation.Tick + lifetimeTicks - 1 < Tick;

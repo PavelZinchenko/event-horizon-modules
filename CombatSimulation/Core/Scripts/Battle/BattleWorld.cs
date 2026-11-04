@@ -174,7 +174,7 @@ namespace CombatSimulation.Core
 
             Launch(ship, barrelIndex, id, definition, spread, randomFactor, spawnTick, sample, launch, out muzzle,
                 out angle, out direction, out var velocity, out var position);
-            DrawShot(id, spawnTick, definition, randomFactor, out var speedScale, out var lifetimeTicks);
+            DrawShot(id, spawnTick, definition, randomFactor, out var speedScale, out var lifetimeTicks, out var capTicks);
             var auraTicks = definition.IsAura ? Auras.StartTicks(definition, spawnTick, Tick) : 0;
 
             var body = Physics.CreateBullet(new BulletDef
@@ -208,6 +208,7 @@ namespace CombatSimulation.Core
             bullet.Definition = definition;
             bullet.SpeedScale = speedScale;
             bullet.ExpiryTick = spawnTick + lifetimeTicks - 1;
+            bullet.LifetimeCapTicks = capTicks;
             bullet.RenewTick = spawnTick;
             bullet.AuraTicks = auraTicks;
             bullet.HitPoints = definition.HitPoints;
@@ -272,21 +273,25 @@ namespace CombatSimulation.Core
         // Legacy BulletStats.GetBulletSpeed and GetBulletLifetime with the weapon's RandomFactor (phase 5, step 4a): each
         // varies by (r - 0.5) x factor. The draws come from the shot's identity, so both devices get the same values.
         public void DrawShot(EntityId id, long spawnTick, BulletDefinition definition, float randomFactor,
-            out float speedScale, out int lifetimeTicks)
-        {
-            if (!(randomFactor > 0f))
-            {
-                speedScale = 1f;
-                lifetimeTicks = definition.LifetimeTicks;
-                return;
-            }
+            out float speedScale, out int lifetimeTicks) =>
+            DrawShot(id, spawnTick, definition, randomFactor, out speedScale, out lifetimeTicks, out _);
 
-            var random = CounterRandom.Create(Setup.MatchSeed, id, spawnTick, RandomPurpose.ShotVariation);
-            var speed = random.NextFloat();
-            var lifetime = random.NextFloat();
-            speedScale = 1f + (speed - 0.5f) * randomFactor;
-            lifetimeTicks = TickTime.After(definition.Lifetime * (1f + (lifetime - 0.5f) * randomFactor)) +
-                            definition.GrowthTicks(speedScale);
+        // capTicks: the full lifetime, without the loss of a restoring bullet (phase 5, step 5d).
+        public void DrawShot(EntityId id, long spawnTick, BulletDefinition definition, float randomFactor,
+            out float speedScale, out int lifetimeTicks, out int capTicks)
+        {
+            var lifetime = definition.Lifetime;
+            speedScale = 1f;
+            if (randomFactor > 0f)
+            {
+                var random = CounterRandom.Create(Setup.MatchSeed, id, spawnTick, RandomPurpose.ShotVariation);
+                var speed = random.NextFloat();
+                var variation = random.NextFloat();
+                speedScale = 1f + (speed - 0.5f) * randomFactor;
+                lifetime *= 1f + (variation - 0.5f) * randomFactor;
+            }
+            lifetimeTicks = definition.SpawnLifetimeTicks(lifetime, speedScale);
+            capTicks = TickTime.After(lifetime);
         }
 
         // Returns -1 on an ID collision. The definition is the device's, or its charged copy (phase 5, step 4f).
