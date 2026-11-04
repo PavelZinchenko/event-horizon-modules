@@ -43,11 +43,11 @@ namespace CombatSimulation.Core
             bool detonateWhenDestroyed = true, bool canBeDisarmed = true, BulletImpact impact = BulletImpact.FirstTarget,
             bool damageFalloff = false, float radialPush = 0f, float radialPushWithFalloff = 0f, float lifetime = 0f,
             float scale = 0f, bool attachedToParent = false, bool rocket = false, float stickyLifetime = 0f,
-            bool magnetic = false, bool hasDirection = true, float beamLength = 0f, bool piercing = false)
+            bool magnetic = false, bool hasDirection = true, float beamLength = 0f, bool piercing = false, bool aura = false)
             : this(radius, speed, range, damage, weight, parentVelocityEffect, hitPoints, homing, startingVelocityMultiplier,
                 damageType, recoil, push, extraDamage, triggers, detonateWhenDestroyed, canBeDisarmed, impact, damageFalloff,
                 radialPush, radialPushWithFalloff, lifetime, scale, attachedToParent, rocket, stickyLifetime, magnetic,
-                hasDirection, beamLength, piercing, null, 1f)
+                hasDirection, beamLength, piercing, aura, null, 1f)
         {
         }
 
@@ -57,7 +57,7 @@ namespace CombatSimulation.Core
             float recoil, float push, IReadOnlyList<DamageAmount> extraDamage, IReadOnlyList<BulletTriggerDefinition> triggers,
             bool detonateWhenDestroyed, bool canBeDisarmed, BulletImpact impact, bool damageFalloff, float radialPush,
             float radialPushWithFalloff, float lifetime, float scale, bool attachedToParent, bool rocket,
-            float stickyLifetime, bool magnetic, bool hasDirection, float beamLength, bool piercing,
+            float stickyLifetime, bool magnetic, bool hasDirection, float beamLength, bool piercing, bool aura,
             BulletDefinition uncharged, float charge)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
@@ -95,6 +95,8 @@ namespace CombatSimulation.Core
                     nameof(beamLength));
             if (piercing && !(beamLength > 0f))
                 throw new ArgumentException("Only a beam bolt pierces.", nameof(piercing));
+            if (aura && (!(lifetime > 0f) || homing || rocket || stickyLifetime > 0f || beamLength > 0f))
+                throw new ArgumentException("An aura has a body lifetime and no other controller.", nameof(aura));
             if (!(damage >= 0f) || float.IsInfinity(damage))
                 throw new ArgumentOutOfRangeException(nameof(damage), "Damage must be finite and not negative.");
             if (!(weight >= 0f) || float.IsInfinity(weight))
@@ -176,6 +178,8 @@ namespace CombatSimulation.Core
             AttachedToParent = attachedToParent;
             BeamLength = beamLength;
             Piercing = piercing;
+            IsAura = aura;
+            AuraGrowthTicks = aura ? TickTime.AtLeast(lifetime) : 0;
             BodyLifetime = lifetime;
             Lifetime = lifetime > 0f ? lifetime : range / speed;
             LifetimeTicks = TickTime.After(Lifetime) + GrowthTicks(1f);
@@ -308,6 +312,12 @@ namespace CombatSimulation.Core
         // Legacy PiercingLaser prefab (RayCastCollider._passThrough): the ray reports every body along it, not the first.
         public bool Piercing { get; }
 
+        // Legacy AuraController (phase 5, step 4g): the circle starts at size 0 and grows to Radius in AuraGrowthTicks
+        // (the body lifetime). Its size never exceeds the share of its lifetime that is left, so it shrinks when its
+        // weapon stops renewing it (Auras).
+        public bool IsAura { get; }
+        public int AuraGrowthTicks { get; }
+
         // Legacy MovingBeamController grows the ray until speed x elapsed time reaches the length: the ticks from the
         // spawn tick to the tick the bolt starts to fly. 0 for other bullets.
         public int GrowthTicks(float speedScale) =>
@@ -374,7 +384,7 @@ namespace CombatSimulation.Core
                 ParentVelocityEffect, HitPoints, IsHoming, StartingVelocityMultiplier, DamageType, Recoil * size,
                 Push * charge, extra, triggers, DetonateWhenDestroyed, CanBeDisarmed, Impact, DamageFalloff,
                 RadialPush * charge, RadialPushWithFalloff * charge, BodyLifetime, Scale * size, AttachedToParent, IsRocket,
-                StickyLifetime, IsMagnetic, HasDirection, BeamLength * size, Piercing, this, charge);
+                StickyLifetime, IsMagnetic, HasDirection, BeamLength * size, Piercing, IsAura, this, charge);
             scaled.Add(this, result);
             return result;
         }

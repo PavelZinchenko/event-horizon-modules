@@ -175,6 +175,7 @@ namespace CombatSimulation.Core
             Launch(ship, barrelIndex, id, definition, spread, randomFactor, spawnTick, sample, launch, out muzzle,
                 out angle, out direction, out var velocity, out var position);
             DrawShot(id, spawnTick, definition, randomFactor, out var speedScale, out var lifetimeTicks);
+            var auraTicks = definition.IsAura ? Auras.StartTicks(definition, spawnTick, Tick) : 0;
 
             var body = Physics.CreateBullet(new BulletDef
             {
@@ -186,7 +187,7 @@ namespace CombatSimulation.Core
                 // The core selects the first valid hit, so physics reports every target (contact ordering, rule 1).
                 PassThrough = true,
                 Filter = CollisionFilters.Bullet(definition, ship.Allegiance),
-            }, new Circle(Vec2.Zero, definition.Radius));
+            }, new Circle(Vec2.Zero, definition.IsAura ? Auras.Radius(definition, auraTicks) : definition.Radius));
 
             // Legacy BulletFactory.ConfigureBody: an attached bullet rides on the barrel, at its pose (phase 5, step 3).
             // Each device attaches it to its own copy of the ship.
@@ -207,6 +208,8 @@ namespace CombatSimulation.Core
             bullet.Definition = definition;
             bullet.SpeedScale = speedScale;
             bullet.ExpiryTick = spawnTick + lifetimeTicks - 1;
+            bullet.RenewTick = spawnTick;
+            bullet.AuraTicks = auraTicks;
             bullet.HitPoints = definition.HitPoints;
             bullet.SpawnTick = spawnTick;
             bullet.Confirmed = Setup.IsLocalOwner(ship.Owner);
@@ -215,8 +218,8 @@ namespace CombatSimulation.Core
             bullet.NextSearchTick = spawnTick + 1;
             Bullets.SetBody(index, body);
 
-            // A manageable cannon holds its bullet (phase 5, step 4b), as a beam device holds its beam; a charging cannon
-            // shows it (step 4f).
+            // A manageable or continuous cannon holds its bullet (phase 5, steps 4b and 4g), as a beam device holds its
+            // beam; a charging cannon shows it (step 4f).
             if (barrelIndex != SpawnRequest.ShipCentre && ship.GetDevice(deviceIndex) is CannonDevice cannon)
                 cannon.OnBulletCreated(Bullets.GetHandle(index));
             return index;

@@ -66,7 +66,8 @@ namespace CombatSimulation.Core
     // cooldown and the energy cost, in that order; a failed check spends nothing. Phase 5, step 4a: legacy
     // MultishotCannon fires its whole magazine in one shot; legacy MachineGun fires its magazine at the barrel cooldown,
     // and its weapon cooldown starts in the tick after the last shot. Step 4b: legacy ManageableCannon holds one bullet
-    // until its loss. Step 4f: legacy ChargeableCannon fires its charge at the release.
+    // until its loss. Step 4f: legacy ChargeableCannon fires its charge at the release. Step 4g: legacy ContinuousCannon
+    // holds one bullet and renews its lifetime while the key is held.
     internal sealed class CannonDevice : ShipDevice
     {
         // Legacy TimeFromLastUse starts at 3600 s: the weapon is ready at once.
@@ -87,7 +88,7 @@ namespace CombatSimulation.Core
         public int Shots { get; private set; }
 
         // Legacy WarpDrive blocks every weapon type except Continuous and RequiredCharging.
-        internal override bool IsShotWeapon => Definition.Mode != CannonMode.Charging;
+        internal override bool IsShotWeapon => Definition.Mode != CannonMode.Charging && Definition.Mode != CannonMode.Continuous;
 
         // Legacy ManageableCannon calls Platform.OnShot at the loss of its bullet, not at the shot.
         internal bool ShotUsesBarrel => Definition.Mode != CannonMode.Manageable;
@@ -110,12 +111,13 @@ namespace CombatSimulation.Core
         {
             _charge?.EndAt(tick);
             if (Definition.Mode == CannonMode.MachineGun || Definition.Mode == CannonMode.Manageable ||
-                Definition.Mode == CannonMode.Charging) return;
+                Definition.Mode == CannonMode.Charging || Definition.Mode == CannonMode.Continuous) return;
             if (LastShotTick < tick + Definition.CooldownTicks) LastShotTick = tick;
         }
 
-        // Stage 5 created the bullet of this device's shot, or a copy took the owner's record of it. A manageable cannon
-        // holds it; a charging cannon shows it as its active bullet while it lives (legacy ChargeableCannon.ActiveBullet).
+        // Stage 5 created the bullet of this device's shot, or a copy took the owner's record of it. A manageable or
+        // continuous cannon holds it; a charging cannon shows it as its active bullet while it lives (legacy
+        // ChargeableCannon.ActiveBullet).
         internal void OnBulletCreated(EntityHandle bullet)
         {
             if (Definition.Mode == CannonMode.Charging)
@@ -123,7 +125,7 @@ namespace CombatSimulation.Core
                 _bullet = bullet;
                 return;
             }
-            if (Definition.Mode != CannonMode.Manageable) return;
+            if (Definition.Mode != CannonMode.Manageable && Definition.Mode != CannonMode.Continuous) return;
             _bullet = bullet;
             _holdsBullet = true;
             _lossTick = NoLoss;
@@ -170,6 +172,11 @@ namespace CombatSimulation.Core
                 UpdateCharging(context, ship, tick, IsControlOn(ship));
                 return;
             }
+            if (Definition.Mode == CannonMode.Continuous)
+            {
+                UpdateContinuous(context, ship, tick, IsControlOn(ship));
+                return;
+            }
 
             if (!IsControlOn(ship)) return;
             if (tick - LastShotTick < Definition.CooldownTicks) return;
@@ -202,7 +209,7 @@ namespace CombatSimulation.Core
         }
 
         // Legacy ShipRetreatEffect releases the key: a manageable cannon's bullet detonates, and its loss still counts; a
-        // charging cannon fires its charge.
+        // charging cannon fires its charge; a continuous cannon's bullet runs out its lifetime.
         internal override void UpdateRetreating(DeviceContext context, ShipEntity ship)
         {
             IsActive = false;
@@ -210,6 +217,8 @@ namespace CombatSimulation.Core
                 UpdateManageable(context, ship, context.Tick, false);
             else if (Definition.Mode == CannonMode.Charging)
                 UpdateCharging(context, ship, context.Tick, false);
+            else if (Definition.Mode == CannonMode.Continuous)
+                UpdateContinuous(context, ship, context.Tick, false);
             else
                 base.UpdateRetreating(context, ship);
         }
@@ -261,6 +270,43 @@ namespace CombatSimulation.Core
                 Definition.Bullet));
         }
 
+        // Legacy ContinuousCannon.OnUpdatePhysics with a bullet that is not a beam. Active is the key and the weapon
+        // cooldown (legacy CanBeActivated), with a ready barrel only for a new shot. While the bullet lives, an active key
+        // that pays EnergyCost per second renews its lifetime (Auras.Renew); any other tick restarts the weapon cooldown
+        // (TimeFromLastUse = 0). The tick that finds the bullet gone may fire the next one.
+        private void UpdateContinuous(DeviceContext context, ShipEntity ship, long tick, bool controlOn)
+        {
+            var cooled = tick - LastShotTick >= Definition.CooldownTicks;
+            if (_holdsBullet)
+            {
+                if (context.Bullets.TryGet(_bullet, out var index))
+                {
+                    IsActive = controlOn && cooled;
+                    if (IsActive && ship.Energy.TryConsume(Definition.EnergyCost * Battle.TickDuration))
+                        Auras.Renew(ref context.Bullets[index], tick);
+                    else
+                        LastShotTick = tick;
+                    return;
+                }
+
+                _holdsBullet = false;
+                _bullet = default;
+            }
+
+            IsActive = controlOn && cooled && ship.IsBarrelReady(Definition.BarrelIndex, tick);
+            if (!IsActive || !ship.Energy.TryConsume(Definition.EnergyCost)) return;
+
+            ship.RecordBarrelShot(Definition.BarrelIndex, tick);
+            context.RequestSpawn(new SpawnRequest(ship, Index, Definition.BarrelIndex, Definition.Spread, Definition.Bullet));
+        }
+
+        // A continuous cannon's held bullet, alive or not.
+        internal bool TryGetHeldBullet(out EntityHandle bullet)
+        {
+            bullet = _bullet;
+            return _holdsBullet;
+        }
+
         private bool CanStartBurst(ShipEntity ship, long tick) =>
             tick - LastShotTick >= Definition.CooldownTicks && ship.Energy.Value > Definition.EnergyCost;
 
@@ -275,7 +321,8 @@ namespace CombatSimulation.Core
         }
 
         // Legacy CanBeActivated adds the energy cost (the barrel too, but not for a machine gun; a manageable cannon
-        // with a bullet in flight is ready, whatever the barrel and the energy); Cooldown is the larger timer.
+        // with a bullet in flight is ready, whatever the barrel and the energy); Cooldown is the larger timer. Legacy
+        // ContinuousCannon checks no energy, and its held bullet makes the barrel needless.
         internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick)
         {
             var weapon = DeviceState.Remaining(tick + 1 - LastShotTick, Definition.CooldownTicks);
@@ -287,6 +334,9 @@ namespace CombatSimulation.Core
                     charge: _charge.Level);
 
             var bullet = _holdsBullet && context.Bullets.TryGet(_bullet, out var index) ? context.Bullets[index].Id : default;
+            if (Definition.Mode == CannonMode.Continuous)
+                return new DeviceState(weapon == 0f && (!bullet.IsNull || barrel == 0f), IsActive, Math.Max(weapon, barrel),
+                    activeBullet: bullet);
             var ready = Definition.Mode == CannonMode.MachineGun
                 ? weapon == 0f && ship.Energy.Value > Definition.EnergyCost
                 : !bullet.IsNull || weapon == 0f && barrel == 0f && ship.Energy.CanConsume(Definition.ShotEnergyCost);
@@ -295,7 +345,7 @@ namespace CombatSimulation.Core
 
         private const long NoLoss = long.MinValue;
 
-        // Manageable: the bullet in flight (legacy ManageableCannon._activeBullet). Charging: the last shot's bullet.
+        // Manageable and continuous: the bullet in flight (legacy _activeBullet). Charging: the last shot's bullet.
         private EntityHandle _bullet;
         private bool _holdsBullet;
         private long _lossTick = NoLoss;

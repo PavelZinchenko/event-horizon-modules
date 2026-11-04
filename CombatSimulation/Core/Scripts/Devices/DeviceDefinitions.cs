@@ -59,10 +59,16 @@ namespace CombatSimulation.Core
         // Legacy ChargeableCannon (phase 5, step 4f): the held key charges the weapon; the release fires one bullet with
         // the charge (WeaponCharge). Built with CannonDefinition.Charged.
         Charging,
+
+        // Legacy ContinuousCannon with a bullet that is not a beam (phase 5, step 4g): one bullet at a time. The held key
+        // renews its lifetime for EnergyCost per second; the shot costs EnergyCost (legacy ActivationCost of a bullet
+        // without a continuous controller).
+        Continuous,
     }
 
     // Legacy CommonCannon (Q1): fires while the control bit is held, every cooldown, while energy allows. Phase 5, step
-    // 4a adds the multi-shot and machine gun modes; step 4b the manageable mode; step 4f the charging mode.
+    // 4a adds the multi-shot and machine gun modes; step 4b the manageable mode; step 4f the charging mode; step 4g the
+    // continuous mode.
     public sealed class CannonDefinition : DeviceDefinition
     {
         public CannonDefinition(int barrelIndex, float cooldown, float energyCost, float spread, BulletDefinition bullet,
@@ -84,7 +90,7 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(energyCost), "Energy cost must be finite and not negative.");
             if (!(spread >= 0f) || float.IsInfinity(spread))
                 throw new ArgumentOutOfRangeException(nameof(spread), "Spread must be finite and not negative.");
-            if (mode < CannonMode.Single || mode > CannonMode.Charging)
+            if (mode < CannonMode.Single || mode > CannonMode.Continuous)
                 throw new ArgumentOutOfRangeException(nameof(mode), "Unknown cannon mode.");
             if (HasMagazine(mode) ? magazine < 1 : magazine != 1)
                 throw new ArgumentOutOfRangeException(nameof(magazine),

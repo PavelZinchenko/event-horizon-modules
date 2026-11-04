@@ -122,6 +122,9 @@ namespace CombatSimulation.Core
         // The last tick a projectile flies in. Beams have device-owned lifetime and use long.MaxValue.
         public readonly long ExpiryTick;
 
+        // An aura's share of its full size in this tick (phase 5, step 4g, legacy AuraController power); 1 otherwise.
+        public readonly float AuraPower;
+
         internal BulletState(in BulletEntity bullet, PhysicsWorld world)
         {
             Id = bullet.Id;
@@ -145,6 +148,7 @@ namespace CombatSimulation.Core
                 BeamEndPoint = default;
             LinearVelocity = bullet.IsBeam ? Vec2.Zero : world.GetBulletVelocity(bullet.Body);
             ExpiryTick = bullet.ExpiryTick;
+            AuraPower = Auras.Power(bullet);
         }
     }
 

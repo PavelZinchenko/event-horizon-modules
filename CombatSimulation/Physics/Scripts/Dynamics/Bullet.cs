@@ -189,6 +189,18 @@ namespace CombatSimulation.Physics
             _queryDirty = true;
         }
 
+        // A circle bullet that changes its size (the core's growing aura). Hits follow at the next step.
+        public void SetBulletRadius(BulletId id, float radius)
+        {
+            ref var shape = ref _bullets[ResolveBullet(id)].Shape;
+            if (shape.Kind != ShapeKind.Circle) throw new InvalidOperationException($"{id} is not a circle");
+            shape.Circle = new Circle(shape.Circle.Center, radius);
+            shape.BoundRadius = radius;
+            _queryDirty = true;
+        }
+
+        public float GetBulletRadius(BulletId id) => _bullets[ResolveBullet(id)].Shape.Circle.Radius;
+
         public void SetBulletPose(BulletId id, Vec2 position, float angle)
         {
             ref var bullet = ref _bullets[ResolveBullet(id)];

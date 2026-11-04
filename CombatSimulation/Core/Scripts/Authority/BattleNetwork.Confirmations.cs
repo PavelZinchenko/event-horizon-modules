@@ -120,6 +120,11 @@ namespace CombatSimulation.Core
             int index;
             if (cannon != null)
             {
+                // A continuous cannon's owner lost its earlier bullet before this one, so a bullet still held here is a
+                // prediction (phase 5, step 4g).
+                if (cannon.Definition.Mode == CannonMode.Continuous && cannon.TryGetHeldBullet(out var held) &&
+                    _world.Bullets.TryGet(held, out var heldIndex))
+                    RemoveBulletNow(heldIndex, _world.Bullets[heldIndex].Confirmed ? RemovalReason.Disposal : RemovalReason.Unconfirmed);
                 if (!ship.TryGetSpawnSample(operation.Tick, out var sample)) sample = _world.ReadSpawnSample(ship);
                 index = _world.CreateBullet(ship, operation.DeviceIndex, operation.BarrelIndex, operation.SpawnSequence,
                     bulletDefinition, cannon.Definition.Spread, cannon.Definition.RandomFactor, operation.Tick, sample,
@@ -180,6 +185,7 @@ namespace CombatSimulation.Core
         // tick (an overdue fire input fires it late).
         // - Continuous beam: the device's attached beam at any tick. The owner stopped any earlier beam before this one,
         //   so the attached beam is a prediction; if it was really a later beam, that beam's records restart it.
+        // - Continuous cannon (phase 5, step 4g): its held bullet at any tick, as a continuous beam.
         // - Projectile or shot beam: the window is shorter than the weapon's shortest spacing between two shots, so the
         //   copy can be no other shot of the owner (a wider window would shift every copy of a held burst). The nearest
         //   spawn tick wins, then the earlier one.
@@ -189,6 +195,11 @@ namespace CombatSimulation.Core
             {
                 if (!beamDevice.TryGetBeam(out var current) || !_world.Bullets.TryGet(current, out var beam)) return -1;
                 return IsCopyOfShot(_world.Bullets[beam], operation, long.MaxValue) ? beam : -1;
+            }
+            if (device is CannonDevice continuous && continuous.Definition.Mode == CannonMode.Continuous)
+            {
+                if (!continuous.TryGetHeldBullet(out var held) || !_world.Bullets.TryGet(held, out var index)) return -1;
+                return IsCopyOfShot(_world.Bullets[index], operation, long.MaxValue) ? index : -1;
             }
 
             var window = CopyWindow(device);
@@ -217,8 +228,10 @@ namespace CombatSimulation.Core
             bullet.Id == SpawnIdentity.CreateChild(bullet.ParentId, bullet.SpawnTick, (uint)operation.DeviceIndex,
                 (uint)operation.BarrelIndex, operation.SpawnSequence);
 
+        // An aura's weapon renews its lifetime, so only the owner's removal record ends it (phase 5, step 4g).
         private bool HasExpired(CannonDevice cannon, BulletDefinition definition, in OwnerOperation operation)
         {
+            if (definition.IsAura) return false;
             _world.DrawShot(operation.EntityId, operation.Tick, definition, cannon.Definition.RandomFactor,
                 out _, out var lifetimeTicks);
             return operation.Tick + lifetimeTicks - 1 < Tick;

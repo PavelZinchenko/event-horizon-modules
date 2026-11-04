@@ -49,6 +49,11 @@ namespace CombatSimulation.Core
         // The last tick the bullet flies in; stage 11 of that tick marks its expiry.
         public long ExpiryTick;
 
+        // An aura (phase 5, step 4g): the tick its lifetime last started (its spawn, or its weapon's renewal), and its
+        // size in ticks of growth (Auras).
+        public long RenewTick;
+        public int AuraTicks;
+
         // A missile: its hit points, and the damage accepted at stage 9 that stage 10 applies.
         public float HitPoints;
         public float PendingDamage;
@@ -196,6 +201,8 @@ namespace CombatSimulation.Core
                 ref readonly var bullet = ref _items[index];
                 if (bullet.PendingRemoval != RemovalReason.None) continue;
                 var definition = bullet.Definition;
+                // An aura of size 0 (the last tick of its lifetime) touches nothing.
+                if (definition.IsAura && bullet.AuraTicks == 0) continue;
                 if (definition.IsSticky && !bullet.Stuck && bullet.TargetId.IsNull && !hit.Target.IsBullet &&
                     shapes.TryGet(hit.Target.Shape, out var caught))
                     _items[index].TargetId = caught.OwnerId;
@@ -334,7 +341,8 @@ namespace CombatSimulation.Core
         }
 
         // Stage 11. A missile without hit points dies; a bullet expires after the physics of its last tick.
-        // A death in the same tick wins over the expiry. A shot beam expires as a bullet does (phase 5, step 4d).
+        // A death in the same tick wins over the expiry. A shot beam expires as a bullet does (phase 5, step 4d). A remote
+        // aura waits for its owner's removal record (step 4g): only the owner knows when its weapon stopped renewing it.
         public void MarkDeaths(long tick, BattleSetup setup)
         {
             for (var i = 0; i < _count; ++i)
@@ -348,7 +356,7 @@ namespace CombatSimulation.Core
                 }
                 else if (bullet.Definition.IsMissile && bullet.HitPoints <= 0f && setup.IsLocalOwner(bullet.Owner))
                     bullet.PendingRemoval = RemovalReason.Death;
-                else if (bullet.ExpiryTick == tick)
+                else if (bullet.ExpiryTick == tick && (!bullet.Definition.IsAura || setup.IsLocalOwner(bullet.Owner)))
                     bullet.PendingRemoval = RemovalReason.Expiry;
             }
         }

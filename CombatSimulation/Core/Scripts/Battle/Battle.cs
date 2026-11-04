@@ -393,7 +393,7 @@ namespace CombatSimulation.Core
         }
 
         // Stage 5. The spawn system creates the requested spawns. Fire confirmations of this tick follow the local
-        // spawns (operation stage 6), then unconfirmed bullets leave.
+        // spawns (operation stage 6), then unconfirmed bullets leave. Then auras grow (phase 5, step 4g).
         private void ApplySpawnRequests()
         {
             _network?.RecordSpawnSamples();
@@ -402,6 +402,7 @@ namespace CombatSimulation.Core
             _network?.ApplyRemoteOperations(6);
             _network?.RemoveUnconfirmedBullets();
             _triggers.PruneTriggerParents();
+            Auras.Update(_world, Tick);
         }
 
         private void StepPhysics() => World.Step(TickDuration);
