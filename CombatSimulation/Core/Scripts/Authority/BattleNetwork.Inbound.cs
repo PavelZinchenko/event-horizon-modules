@@ -28,11 +28,15 @@ namespace CombatSimulation.Core
                 hit.DeviceIndex < -1 || hit.TargetShape < 0 || !Finite(hit.Amount) || hit.Amount < 0f ||
                 hit.ContactState < HitContactState.Start || hit.ContactState > HitContactState.End ||
                 hit.ImpactKind < HitImpactKind.Impact || hit.ImpactKind > HitImpactKind.Stop ||
-                !Setup.DamageTypes.Contains(hit.DamageType) || hit.Effect > HitEffect.Roll)
+                !Setup.DamageTypes.Contains(hit.DamageType) || hit.Effect > HitEffect.ProgressiveDamage)
                 return false;
-            // An effect names a ship target, without damage type or push (phase 5, step 5).
-            if (hit.Effect != HitEffect.Damage && (hit.TargetIsBullet || hit.DamageType != 0 ||
-                hit.Impulse.X != 0f || hit.Impulse.Y != 0f)) return false;
+            // An effect names a ship target, without damage type or push (phase 5, step 5). The progressive ramp
+            // (step 5c) is damage of a type over time on shape 0; only it carries a ramp time.
+            if (hit.Effect != HitEffect.Damage && (hit.TargetIsBullet || hit.Impulse.X != 0f || hit.Impulse.Y != 0f ||
+                hit.DamageType != 0 && hit.Effect != HitEffect.ProgressiveDamage)) return false;
+            if (hit.Effect == HitEffect.ProgressiveDamage ? hit.ImpactKind != HitImpactKind.DamageOverTime ||
+                    hit.TargetShape != 0 || !Finite(hit.RampTime) || hit.RampTime < 0f : hit.RampTime != 0f)
+                return false;
             if (hit.Effect == HitEffect.Roll && (hit.ImpactKind == HitImpactKind.DamageOverTime ||
                 hit.ContactState != HitContactState.Start)) return false;
             // A bullet target: one record per contact. Disarm and Stop name bullets only.

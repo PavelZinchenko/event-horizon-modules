@@ -397,7 +397,7 @@ namespace CombatSimulation.Core
                             applied = Math.Max(0L, Math.Min(tick + 1, ownerEnd) - (start + delay));
                         }
                         if (shown > applied)
-                            any |= AddReplayDamage(entry.Hit, (double)(shown - applied) * entry.Hit.Amount * Battle.TickDuration);
+                            any |= AddReplayDamage(entry.Hit, IntervalDamage(entry.Hit, applied, shown));
                         keep = !(endKnown && tick + 1 >= entry.EndTick + delay);
                     }
                 }

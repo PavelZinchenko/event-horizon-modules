@@ -6,7 +6,7 @@ namespace CombatSimulation.Core
     // Disarm and Stop name a bullet target only (TargetIsBullet).
     public enum HitImpactKind : byte { Impact, Energy, DamageOverTime, Disarm, Stop }
     // What the amount of a record on a ship does (phase 5, step 5a). A bullet target takes Damage only.
-    public enum HitEffect : byte { Damage, EnergyDrain, ShieldDrain, SlowDown, Roll }
+    public enum HitEffect : byte { Damage, EnergyDrain, ShieldDrain, SlowDown, Roll, ProgressiveDamage }
 
     // An owner-decided contact against a remote ship or drone. No live object is needed to apply it.
     // Start is inclusive; End is exclusive. Amount is damage, or damage per second for damage over time.
@@ -26,6 +26,8 @@ namespace CombatSimulation.Core
     // DamageType is 0 for a drain.
     // SlowDown carries power (per second for an interval), before the damage record carrying push. Roll carries a
     // positive change in degrees/s, once on contact entry; the receiver chooses the sign from its current spin.
+    // ProgressiveDamage (step 5c): a beam's ramp as its own interval on shape 0, with the full ramp per second as
+    // amount, the beam's damage type and RampTime; the receiver counts the ramp from the interval's first tick.
     public readonly struct ResolvedHit
     {
         public readonly BattleId BattleId;
@@ -45,11 +47,13 @@ namespace CombatSimulation.Core
         public readonly byte DamageType;
         public readonly Vec2 Impulse;
         public readonly HitEffect Effect;
+        // Seconds to the full ramp; ProgressiveDamage only, 0 otherwise.
+        public readonly float RampTime;
 
         public ResolvedHit(BattleId battleId, long tick, EntityId attackerId, int attackerOwner, int deviceIndex,
             EntityId targetId, int targetOwner, int targetShape, HitContactState contactState,
             HitImpactKind impactKind, float amount, ulong sequence = 0, bool targetIsBullet = false, byte damageType = 0,
-            Vec2 impulse = default, HitEffect effect = HitEffect.Damage)
+            Vec2 impulse = default, HitEffect effect = HitEffect.Damage, float rampTime = 0f)
         {
             BattleId = battleId;
             Tick = tick;
@@ -67,15 +71,16 @@ namespace CombatSimulation.Core
             DamageType = damageType;
             Impulse = impulse;
             Effect = effect;
+            RampTime = rampTime;
         }
 
         internal ResolvedHit EndAt(long tick) => new ResolvedHit(BattleId, tick, AttackerId, AttackerOwner,
             DeviceIndex, TargetId, TargetOwner, TargetShape, HitContactState.End, ImpactKind, Amount, 0, TargetIsBullet,
-            DamageType, Impulse, Effect);
+            DamageType, Impulse, Effect, RampTime);
 
         internal ResolvedHit WithSequence(ulong sequence) => new ResolvedHit(BattleId, Tick, AttackerId, AttackerOwner,
             DeviceIndex, TargetId, TargetOwner, TargetShape, ContactState, ImpactKind, Amount, sequence, TargetIsBullet,
-            DamageType, Impulse, Effect);
+            DamageType, Impulse, Effect, RampTime);
 
         // One interval per effect of a contact.
         internal bool SameContact(in ResolvedHit other) => AttackerId == other.AttackerId &&

@@ -96,7 +96,9 @@ namespace CombatSimulation.Runtime
     //     (VarUInt), contact (2), impact (3), amount (32-bit float), damage type (VarUInt, below
     //     DamageTypeTable.MaxTypes; D4), impulse flag (1 bit); with the flag, the push impulse (two 32-bit floats;
     //     phase 4 E4, a projectile's start record on a ship only), effect (3; HitEffect, version 11: a drain names a
-    //     ship target, with damage type 0 and no impulse). The sequence is the hit's position in the stream.
+    //     ship target, with damage type 0 and no impulse); a ProgressiveDamage effect (phase 5, step 5c) then has the
+    //     ramp time (32-bit float), on a ship target over time at shape 0, with its damage type and no impulse. The
+    //     sequence is the hit's position in the stream.
     //   Roster: entity (64), roster ID (32), revision (VarUInt), previous status (2), status (2), reason (3),
     //     deployment count and order (VarUInt), armor deficit, shield deficit, damage fraction (32-bit floats), pose.
     //   Drone launch: entity (64), bay roster ID (32), bay device (VarUInt), parent entity (64), pose.
@@ -267,6 +269,7 @@ namespace CombatSimulation.Runtime
             w.WriteBool(push);
             if (push) { Float(ref w, hit.Impulse.X); Float(ref w, hit.Impulse.Y); }
             w.WriteBits((ulong)hit.Effect, EffectBits);
+            if (hit.Effect == HitEffect.ProgressiveDamage) Float(ref w, hit.RampTime);
             own.Hits = hit.Sequence;
         }
 
@@ -309,19 +312,23 @@ namespace CombatSimulation.Runtime
                         var damageType = r.VarUInt();
                         var impulse = r.Bool() ? new Vec2(r.Float(), r.Float()) : Vec2.Zero;
                         var effect = r.Bits(EffectBits);
+                        var ramp = effect == (ulong)HitEffect.ProgressiveDamage;
+                        var rampTime = ramp ? r.Float() : 0f;
                         Require(contact <= (ulong)HitContactState.End && impact <= (ulong)HitImpactKind.Stop && amount >= 0 &&
                             damageType < DamageTypeTable.MaxTypes &&
                             (targetBullet ? targetName != 0 : impact <= (ulong)HitImpactKind.DamageOverTime) &&
-                            effect <= (ulong)HitEffect.Roll && (effect == (ulong)HitEffect.Damage ||
-                                !targetBullet && damageType == 0 && impulse.X == 0f && impulse.Y == 0f) &&
+                            effect <= (ulong)HitEffect.ProgressiveDamage && (effect == (ulong)HitEffect.Damage ||
+                                !targetBullet && (damageType == 0 || ramp) && impulse.X == 0f && impulse.Y == 0f) &&
                             (effect != (ulong)HitEffect.Roll || contact == (ulong)HitContactState.Start &&
-                                impact != (ulong)HitImpactKind.DamageOverTime));
+                                impact != (ulong)HitImpactKind.DamageOverTime) &&
+                            (!ramp || impact == (ulong)HitImpactKind.DamageOverTime && shape == 0 && rampTime >= 0f &&
+                                !float.IsInfinity(rampTime)));
                         if (!resolve) break;
                         var attacker = attackerBullet ? Bullet(peer, attackerName) : Body(peer, attackerName);
                         hits.Add(new ResolvedHit(battle, r.Tick, attacker, sender, device,
                             targetBullet ? new EntityId(targetName) : Body(own, targetName), receiver, shape,
                             (HitContactState)contact, (HitImpactKind)impact, amount, ++peer.Hits, targetBullet,
-                            (byte)damageType, impulse, (HitEffect)effect));
+                            (byte)damageType, impulse, (HitEffect)effect, rampTime));
                         break;
                     case RecordKind.Roster:
                         var entity = r.Entity(); var id = new RosterId((uint)r.Bits(32)); var revision = r.Int();

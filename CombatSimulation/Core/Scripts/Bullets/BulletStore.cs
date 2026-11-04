@@ -43,6 +43,10 @@ namespace CombatSimulation.Core
         public Vec2 BeamEndPoint;
         public bool RayOverflow;
 
+        // A beam's progressive ramp (phase 5, step 5c): the first body on the ray and the tick its contact started.
+        public EntityId RampTargetId;
+        public long RampTick;
+
         // A beam bolt's ray length in this tick (phase 5, step 4e): cast at stage 6, cut at its first hit at stage 9.
         public float RayLength;
 

@@ -65,7 +65,8 @@ namespace CombatSimulation.Core
                 var through = Math.Min(Tick + 1, interval.EndTick);
                 if (through > interval.NextTick)
                 {
-                    var amount = (double)(through - interval.NextTick) * interval.Hit.Amount * Battle.TickDuration;
+                    var amount = IntervalDamage(interval.Hit, interval.NextTick - interval.StartTick,
+                        through - interval.StartTick);
                     if (interval.Hit.Effect == HitEffect.SlowDown)
                         ContactSystem.ApplySlowDown(Physics, LocalHitTarget(interval.Hit),
                             interval.Hit.Amount * Battle.TickDuration, through - interval.NextTick);
@@ -81,6 +82,13 @@ namespace CombatSimulation.Core
                 else { _remoteIntervals[i] = interval; ++i; }
             }
         }
+
+        // The damage of an interval's ticks [from, to), counted from its first tick (0): the rate per tick, or the
+        // progressive ramp (phase 5, step 5c), which grows from the first tick.
+        internal static double IntervalDamage(in ResolvedHit hit, long from, long to) =>
+            hit.Effect == HitEffect.ProgressiveDamage
+                ? ImpactEffects.RampDamage(hit.Amount, hit.RampTime, from, to)
+                : (double)(to - from) * hit.Amount * Battle.TickDuration;
 
         private ShipEntity LocalHitTarget(in ResolvedHit hit)
         {
@@ -184,12 +192,15 @@ namespace CombatSimulation.Core
         private struct RemoteInterval
         {
             public readonly ResolvedHit Hit;
+            // The local tick of the owner's first contact tick.
+            public readonly long StartTick;
             public long NextTick;
             public long EndTick;
 
             public RemoteInterval(ResolvedHit hit, long nextTick)
             {
                 Hit = hit;
+                StartTick = nextTick;
                 NextTick = nextTick;
                 EndTick = long.MaxValue;
             }

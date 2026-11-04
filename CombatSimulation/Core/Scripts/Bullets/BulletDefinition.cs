@@ -177,6 +177,8 @@ namespace CombatSimulation.Core
             HasFalloff = falloff;
             Scale = scale > 0f ? scale : 2f * radius;
             AttachedToParent = attachedToParent;
+            // The progressive ramp is a beam effect only (phase 5, step 5c).
+            if (effects.Ramp > 0f) throw new ArgumentOutOfRangeException(nameof(effects), "A bullet has no progressive ramp.");
             Effects = effects;
             BeamLength = beamLength;
             Piercing = piercing;

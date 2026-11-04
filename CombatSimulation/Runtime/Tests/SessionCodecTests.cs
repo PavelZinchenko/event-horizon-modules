@@ -59,6 +59,9 @@ namespace CombatSimulation.Runtime.Tests
                     effect: HitEffect.SlowDown),
                 new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 1, HitContactState.Start, HitImpactKind.Energy, 56.25f, 7,
                     effect: HitEffect.Roll),
+                // Step 5c: a beam's ramp carries its damage type and ramp time, on shape 0.
+                new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 0, HitContactState.Start, HitImpactKind.DamageOverTime, 50, 8,
+                    damageType: LegacyDamageModel.Heat, effect: HitEffect.ProgressiveDamage, rampTime: 3f),
             };
             var bytes = link.Write(125, operations, hits);
             var scan = new List<SessionCodec.ScannedRecord>();
@@ -81,7 +84,8 @@ namespace CombatSimulation.Runtime.Tests
                 SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Allegiance, SessionCodec.RecordKind.DeviceUse,
                 SessionCodec.RecordKind.DeviceUse, SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Hit,
                 SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit,
-                SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
+                SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit,
+                SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
             // A push (phase 4 E4) adds 64 bits to its hit; every hit has the 1-bit flag.
             // Version 8 widens every record kind to 4 bits (D13). Version 11 adds the 3-bit effect to every hit.
             Assert.LessOrEqual(scan[3].Bits, 42); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 33); Assert.LessOrEqual(scan[13].Bits, 93 + 64);
@@ -148,7 +152,7 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, false, HitImpactKind.Disarm)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, true, HitImpactKind.Stop)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 77, 0, true, (HitImpactKind)5)), out _, out _));
-            // Phase 5: a ship effect has no damage type or push; effect 5 is unknown until step 5e.
+            // Phase 5: a ship effect has no damage type or push; effect 6 is unknown until step 5e.
             Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 1, effect: HitEffect.EnergyDrain), 1), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
@@ -158,7 +162,21 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 1, impulseX: 2f, effect: HitEffect.ShieldDrain)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
-                Hit(ref w, 0, 1, effect: (HitEffect)5)), out _, out _));
+                Hit(ref w, 0, 1, effect: (HitEffect)6)), out _, out _));
+            // Step 5c: a ramp is damage of a type over time on shape 0, with a finite ramp time that is not negative.
+            Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 50, impact: HitImpactKind.DamageOverTime, damageType: 2, effect: HitEffect.ProgressiveDamage,
+                    rampTime: 3f), 1), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 50, effect: HitEffect.ProgressiveDamage, rampTime: 3f)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 50, impact: HitImpactKind.DamageOverTime, effect: HitEffect.ProgressiveDamage, rampTime: -1f)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 50, impact: HitImpactKind.DamageOverTime, effect: HitEffect.ProgressiveDamage,
+                    rampTime: float.NaN)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 50, impact: HitImpactKind.DamageOverTime, shape: 1, effect: HitEffect.ProgressiveDamage,
+                    rampTime: 3f)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 1, impact: HitImpactKind.DamageOverTime, effect: HitEffect.Roll)), out _, out _));
             // Phase 4 E4: a push must be finite.
@@ -210,11 +228,12 @@ namespace CombatSimulation.Runtime.Tests
             }
 
             void Hit(ref BitWriter w, ulong target, float amount, bool bullet = false, HitImpactKind impact = HitImpactKind.Impact,
-                ulong damageType = 0, float impulseX = 0f, HitEffect effect = HitEffect.Damage)
+                ulong damageType = 0, float impulseX = 0f, HitEffect effect = HitEffect.Damage, float rampTime = 0f,
+                ulong shape = 0)
             {
                 w.WriteBool(false); w.WriteVarUInt(0); w.WriteBool(bullet);
                 if (bullet) w.WriteBits(target, 64); else w.WriteVarUInt(target);
-                w.WriteVarUInt(0); w.WriteVarUInt(0); w.WriteBits(0, 2); w.WriteBits((ulong)impact, 3);
+                w.WriteVarUInt(shape); w.WriteVarUInt(0); w.WriteBits(0, 2); w.WriteBits((ulong)impact, 3);
                 w.WriteBits(unchecked((uint)BitConverter.SingleToInt32Bits(amount)), 32);
                 w.WriteVarUInt(damageType);
                 w.WriteBool(impulseX != 0f);
@@ -224,6 +243,8 @@ namespace CombatSimulation.Runtime.Tests
                     w.WriteBits(0, 32);
                 }
                 w.WriteBits((ulong)effect, 3);
+                if (effect == HitEffect.ProgressiveDamage)
+                    w.WriteBits(unchecked((uint)BitConverter.SingleToInt32Bits(rampTime)), 32);
             }
         }
 

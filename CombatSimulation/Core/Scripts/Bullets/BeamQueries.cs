@@ -34,7 +34,10 @@ namespace CombatSimulation.Core
                 var range = Math.Min(definition.Range, Math.Min(world.Torus.Width, world.Torus.Height));
                 var translation = range * direction;
                 beam.BeamEndPoint = world.Torus.Wrap(beam.BeamOrigin + translation);
+                // A tick without a contact ends the ramp (legacy RayCastCollider clears ActiveCollision).
+                if (beam.TargetId.IsNull) beam.RampTargetId = default;
                 beam.TargetId = default;
+                var effects = definition.Effects;
                 var count = world.RayCast(beam.BeamOrigin, translation, CollisionFilters.Energy(beam.Allegiance),
                     ship.Body, true, _hits, out beam.RayOverflow);
 
@@ -75,6 +78,11 @@ namespace CombatSimulation.Core
                         candidate.TargetPriority = target.Priority;
                         candidate.TargetShapeOrder = target.Order;
                     }
+                    // Legacy ProgressiveDamageAction (phase 5, step 5c): the ramp grows while the first body stays
+                    // the same; a new first body starts at 0. Any target takes it, as damage of the beam's type.
+                    if (effects.Ramp > 0f)
+                        candidate.Damage += ImpactEffects.RampTick(effects.Ramp, effects.RampTime,
+                            candidate.Target == beam.RampTargetId ? battle.Tick - beam.RampTick : 0);
                     _candidates.Add(candidate);
                 }
             }
@@ -143,6 +151,11 @@ namespace CombatSimulation.Core
                 if (!beam.IsBeam) continue;
                 beam.TargetId = hit.Target;
                 beam.BeamEndPoint = hit.Point;
+                if (beam.RampTargetId != hit.Target)
+                {
+                    beam.RampTargetId = hit.Target;
+                    beam.RampTick = battle.Tick;
+                }
             }
 
             for (var i = 0; i < bullets.Capacity; ++i)

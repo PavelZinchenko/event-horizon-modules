@@ -236,9 +236,18 @@ namespace CombatSimulation.Core
                         }
                         target.AddPendingDamage(damageType, damage);
                         if (remote)
+                        {
                             _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                 hit.Target, target.Owner, shape, HitContactState.Start, kind, amount,
                                 damageType: (byte)damageType, impulse: impulse));
+                            // The ramp (step 5c) is in this tick's damage; its interval on shape 0 lasts while the
+                            // ray stays on the target, so the target owner counts the ramp from its first tick.
+                            if (effects.Ramp > 0f)
+                                _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner,
+                                    deviceIndex, hit.Target, target.Owner, 0, HitContactState.Start, kind, effects.Ramp,
+                                    damageType: (byte)damageType, effect: HitEffect.ProgressiveDamage,
+                                    rampTime: effects.RampTime));
+                        }
                         if (projectile != null)
                         {
                             var extra = projectile.ExtraDamage;
