@@ -236,11 +236,13 @@ namespace CombatSimulation.Core.Tests
         public void AChargeScalesTheDrainsButNotTheSiphonFactor()
         {
             var bolt = new BulletDefinition(0.25f, 20f, 10f, 5f,
-                effects: new ImpactEffects(energyDrain: 40f, shieldDrain: 20f, siphon: 0.5f));
+                effects: new ImpactEffects(energyDrain: 40f, shieldDrain: 20f, siphon: 0.5f, slowDown: 3f, roll: 1.25f));
             var half = bolt.WithCharge(0.5f).Effects;
             Assert.AreEqual(20f, half.EnergyDrain);
             Assert.AreEqual(10f, half.ShieldDrain);
             Assert.AreEqual(0.5f, half.Siphon);
+            Assert.AreEqual(1.5f, half.SlowDown);
+            Assert.AreEqual(0.625f, half.Roll);
 
             var beam = BeamDefinition.Charged(0, 1f, 10f, 10f, 10f, 0.5f, effects: new ImpactEffects(energyDrain: 40f));
             Assert.AreEqual(10f, beam.WithCharge(0.25f).Effects.EnergyDrain);
@@ -252,6 +254,8 @@ namespace CombatSimulation.Core.Tests
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new ImpactEffects(energyDrain: -1f));
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new ImpactEffects(shieldDrain: float.NaN));
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new ImpactEffects(siphon: float.PositiveInfinity));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new ImpactEffects(slowDown: -1f));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new ImpactEffects(roll: float.NaN));
         }
 
         // A drain on a ship, without damage type or push; a bullet target takes damage only.

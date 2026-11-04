@@ -53,6 +53,12 @@ namespace CombatSimulation.Runtime.Tests
                 // Phase 5, step 5a: a drain beside the damage of the same contact.
                 new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 1, HitContactState.Start, HitImpactKind.Impact, 250, 4,
                     effect: HitEffect.ShieldDrain),
+                new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 1, HitContactState.Start, HitImpactKind.DamageOverTime, 4, 5,
+                    effect: HitEffect.SlowDown),
+                new ResolvedHit(batch, 126, child, 20, 2, link.Target, 10, 1, HitContactState.End, HitImpactKind.DamageOverTime, 4, 6,
+                    effect: HitEffect.SlowDown),
+                new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 1, HitContactState.Start, HitImpactKind.Energy, 56.25f, 7,
+                    effect: HitEffect.Roll),
             };
             var bytes = link.Write(125, operations, hits);
             var scan = new List<SessionCodec.ScannedRecord>();
@@ -74,6 +80,7 @@ namespace CombatSimulation.Runtime.Tests
                 SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.MissileTarget,
                 SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Allegiance, SessionCodec.RecordKind.DeviceUse,
                 SessionCodec.RecordKind.DeviceUse, SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Hit,
+                SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit,
                 SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
             // A push (phase 4 E4) adds 64 bits to its hit; every hit has the 1-bit flag.
             // Version 8 widens every record kind to 4 bits (D13). Version 11 adds the 3-bit effect to every hit.
@@ -141,7 +148,7 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, false, HitImpactKind.Disarm)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, true, HitImpactKind.Stop)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 77, 0, true, (HitImpactKind)5)), out _, out _));
-            // Phase 5, step 5a: a drain names a ship, without damage type or push; effect 3 is unknown.
+            // Phase 5: a ship effect has no damage type or push; effect 5 is unknown until step 5e.
             Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 1, effect: HitEffect.EnergyDrain), 1), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
@@ -151,7 +158,9 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 1, impulseX: 2f, effect: HitEffect.ShieldDrain)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
-                Hit(ref w, 0, 1, effect: (HitEffect)3)), out _, out _));
+                Hit(ref w, 0, 1, effect: (HitEffect)5)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 1, impact: HitImpactKind.DamageOverTime, effect: HitEffect.Roll)), out _, out _));
             // Phase 4 E4: a push must be finite.
             Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 1, impulseX: 2f), 1), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>

@@ -28,11 +28,13 @@ namespace CombatSimulation.Core
                 hit.DeviceIndex < -1 || hit.TargetShape < 0 || !Finite(hit.Amount) || hit.Amount < 0f ||
                 hit.ContactState < HitContactState.Start || hit.ContactState > HitContactState.End ||
                 hit.ImpactKind < HitImpactKind.Impact || hit.ImpactKind > HitImpactKind.Stop ||
-                !Setup.DamageTypes.Contains(hit.DamageType) || hit.Effect > HitEffect.ShieldDrain)
+                !Setup.DamageTypes.Contains(hit.DamageType) || hit.Effect > HitEffect.Roll)
                 return false;
-            // A drain names a ship target, without damage type or push (phase 5, step 5a).
+            // An effect names a ship target, without damage type or push (phase 5, step 5).
             if (hit.Effect != HitEffect.Damage && (hit.TargetIsBullet || hit.DamageType != 0 ||
                 hit.Impulse.X != 0f || hit.Impulse.Y != 0f)) return false;
+            if (hit.Effect == HitEffect.Roll && (hit.ImpactKind == HitImpactKind.DamageOverTime ||
+                hit.ContactState != HitContactState.Start)) return false;
             // A bullet target: one record per contact. Disarm and Stop name bullets only.
             if (hit.TargetIsBullet ? hit.TargetShape != 0 || hit.ContactState != HitContactState.Start
                 : hit.ImpactKind > HitImpactKind.DamageOverTime) return false;

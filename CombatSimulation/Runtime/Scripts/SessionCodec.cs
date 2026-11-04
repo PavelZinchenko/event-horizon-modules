@@ -312,8 +312,10 @@ namespace CombatSimulation.Runtime
                         Require(contact <= (ulong)HitContactState.End && impact <= (ulong)HitImpactKind.Stop && amount >= 0 &&
                             damageType < DamageTypeTable.MaxTypes &&
                             (targetBullet ? targetName != 0 : impact <= (ulong)HitImpactKind.DamageOverTime) &&
-                            effect <= (ulong)HitEffect.ShieldDrain && (effect == (ulong)HitEffect.Damage ||
-                                !targetBullet && damageType == 0 && impulse.X == 0f && impulse.Y == 0f));
+                            effect <= (ulong)HitEffect.Roll && (effect == (ulong)HitEffect.Damage ||
+                                !targetBullet && damageType == 0 && impulse.X == 0f && impulse.Y == 0f) &&
+                            (effect != (ulong)HitEffect.Roll || contact == (ulong)HitContactState.Start &&
+                                impact != (ulong)HitImpactKind.DamageOverTime));
                         if (!resolve) break;
                         var attacker = attackerBullet ? Bullet(peer, attackerName) : Body(peer, attackerName);
                         hits.Add(new ResolvedHit(battle, r.Tick, attacker, sender, device,

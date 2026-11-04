@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
@@ -56,6 +58,10 @@ namespace CombatSimulation.Core
         // Stage 9. Ship contacts belong to the attacker; bullet damage belongs to the target bullet.
         public void Resolve()
         {
+            var previousRoll = _previousRoll;
+            _previousRoll = _currentRoll;
+            _currentRoll = previousRoll;
+            _currentRoll.Clear();
             _resolver.Resolve();
             _beams.Complete(_battle, _resolver);
             _bolts.Complete(_battle, _resolver);
@@ -208,6 +214,26 @@ namespace CombatSimulation.Core
                         // A remote target's copy takes the same damage and push as a prediction (N3); it never dies of
                         // it. The push on a remote target travels in the first record (phase 4 E4).
                         var remote = !Setup.IsLocalOwner(target.Owner);
+                        // Motion changes precede push, both here and in the outgoing record order (step 5b).
+                        if (effects.SlowDown > 0f)
+                        {
+                            ApplySlowDown(Physics, target, effects.SlowDown * effectScale);
+                            if (remote)
+                                AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.SlowDown,
+                                    effects.SlowDown);
+                        }
+                        if (effects.Roll > 0f)
+                        {
+                            var pair = new EntityPair(hit.Attacker, hit.Target);
+                            if (_currentRoll.Add(pair) && !_previousRoll.Contains(pair))
+                            {
+                                var degrees = effects.Roll / (float)Math.Sqrt(target.Definition.Mass) * 180f;
+                                ApplyRoll(Physics, target, degrees);
+                                if (remote)
+                                    AddEffectRecord(hit, owner, deviceIndex, target, shape, HitImpactKind.Energy,
+                                        HitEffect.Roll, degrees);
+                            }
+                        }
                         target.AddPendingDamage(damageType, damage);
                         if (remote)
                             _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
@@ -248,7 +274,7 @@ namespace CombatSimulation.Core
             _network?.OutgoingHits.CompleteContacts(Tick);
         }
 
-        // A drain on a remote target: its own record, or its own interval with the rate as amount (phase 5, step 5a).
+        // A ship effect on a remote target: its own record, or its own interval with the rate as amount.
         private void AddEffectRecord(in ContactCandidate hit, int owner, int deviceIndex, ShipEntity target, int shape,
             HitImpactKind kind, HitEffect effect, float amount)
         {
@@ -272,6 +298,23 @@ namespace CombatSimulation.Core
         // Legacy PushAction: the impulse acts at the target's origin, so it never turns the target.
         public void ApplyPush(ShipEntity target, Vec2 impulse) =>
             Physics.ApplyImpulse(target.Body, impulse, Physics.GetPosition(target.Body));
+
+        // Missed over-time ticks compound; adding their powers would stop a target too soon. Engine inputs between
+        // those ticks are not replayed, as with the push-on-arrival rule. One tick uses the same float on both peers.
+        internal static void ApplySlowDown(PhysicsWorld physics, ShipEntity target, float power, long ticks = 1)
+        {
+            var factor = 1f - Math.Min(1f, power / (float)Math.Sqrt(target.Definition.Mass));
+            if (ticks != 1) factor = (float)Math.Pow(factor, ticks);
+            physics.SetLinearVelocity(target.Body, physics.GetLinearVelocity(target.Body) * factor);
+            physics.SetAngularVelocity(target.Body, physics.GetAngularVelocity(target.Body) * factor);
+        }
+
+        internal static void ApplyRoll(PhysicsWorld physics, ShipEntity target, float degrees)
+        {
+            var spin = physics.GetAngularVelocity(target.Body);
+            var change = degrees * (float)(Math.PI / 180.0);
+            physics.SetAngularVelocity(target.Body, spin + (spin < 0f ? -change : change));
+        }
 
         // Legacy PushAction (Push x the bullet velocity) plus RadialPushAction (phase 5, step 3): away from the bullet
         // centre toward the target's origin. Legacy applies the radial impulse at the bullet centre; that point lies on
@@ -307,5 +350,7 @@ namespace CombatSimulation.Core
         private readonly BeamQueries _beams = new BeamQueries();
         private readonly BeamBolts _bolts = new BeamBolts();
         private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();
+        private HashSet<EntityPair> _previousRoll = new HashSet<EntityPair>();
+        private HashSet<EntityPair> _currentRoll = new HashSet<EntityPair>();
     }
 }

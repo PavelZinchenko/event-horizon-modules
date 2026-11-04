@@ -9,6 +9,162 @@ namespace CombatSimulation.Core.Tests
     {
         private const float Tolerance = 1e-3f;
 
+        private static ShipDefinition MotionTarget(float mass) =>
+            Fixtures.ShipWith(mass: mass, engine: new EngineDefinition(0f, 0f, 0f, 0f));
+
+        [TestCase(36f, 0.5f)]
+        [TestCase(9f, 0f)]
+        [TestCase(4f, 0f)]
+        public void StasisScalesBothVelocityAndSpin(float mass, float factor)
+        {
+            var bolt = new BulletDefinition(0.25f, 20f, 20f, 4f, effects: new ImpactEffects(slowDown: 3f));
+            var driver = CannonTests.Duel(Fixtures.CannonShip(bolt, cooldown: 10f), MotionTarget(mass));
+            driver.Place(101, Target, new Vec2(2f, 0f));
+            driver.Battle.World.SetAngularVelocity(driver.Ship(101).Body, -1f);
+            driver.Control(1, systems: 1);
+            StepUntilHit(driver);
+            Assert.AreEqual(2f * factor, driver.Battle.World.GetLinearVelocity(driver.Ship(101).Body).X, Tolerance);
+            Assert.AreEqual(-factor, driver.Battle.World.GetAngularVelocity(driver.Ship(101).Body), Tolerance);
+        }
+
+        [Test]
+        public void AWebCompoundsSlowDownEveryTick()
+        {
+            var web = new BulletDefinition(4f, 0f, 0f, 8f, impact: BulletImpact.OverTime, lifetime: 10f,
+                effects: new ImpactEffects(slowDown: 4f));
+            var driver = CannonTests.Duel(Fixtures.CannonShip(web, cooldown: 20f), MotionTarget(16f));
+            driver.Place(101, Target, new Vec2(0.1f, 0f));
+            driver.Battle.World.SetAngularVelocity(driver.Ship(101).Body, 1f);
+            driver.Control(1, systems: 1);
+            StepUntilHit(driver);
+            var hits = 1 + driver.StepCollecting(49).Count(e => e.Kind == BattleEventKind.Hit);
+            Assert.AreEqual(50, hits);
+            var factor = (float)System.Math.Pow(0.98f, hits);
+            Assert.AreEqual(0.1f * factor, driver.Battle.World.GetLinearVelocity(driver.Ship(101).Body).X, Tolerance);
+            Assert.AreEqual(factor, driver.Battle.World.GetAngularVelocity(driver.Ship(101).Body), Tolerance);
+        }
+
+        [Test]
+        public void SlowDownPrecedesPushLocallyAndOnTheTargetOwner()
+        {
+            var bolt = new BulletDefinition(0.25f, 20f, 20f, 0f, push: 0.5f, effects: new ImpactEffects(slowDown: 3f));
+            var pair = new NetPair(Fixtures.CannonShip(bolt, cooldown: 10f), MotionTarget(36f));
+            foreach (var driver in new[] { pair.A, pair.B })
+            {
+                driver.Place(1, Shooter, Vec2.Zero);
+                driver.Place(101, Target, new Vec2(2f, 0f));
+            }
+            pair.HoldHitsFromB = true;
+            pair.B.Control(1, systems: 1);
+            for (var i = 0; i < 30 && pair.HeldHits.Count == 0; ++i) pair.Step();
+            pair.B.Control(1, systems: 0);
+            Assert.AreEqual(2, pair.HeldHits.Count);
+            Assert.AreEqual(HitEffect.SlowDown, pair.HeldHits[0].Effect);
+            Assert.AreEqual(HitEffect.Damage, pair.HeldHits[1].Effect);
+            Assert.AreEqual(10f, pair.HeldHits[1].Impulse.X, Tolerance);
+            var expected = 1f + 10f / 36f;
+            Assert.AreEqual(expected, pair.B.Battle.World.GetLinearVelocity(pair.B.Ship(101).Body).X, Tolerance);
+            Assert.AreEqual(2f, pair.A.Battle.World.GetLinearVelocity(pair.A.Ship(101).Body).X, Tolerance);
+
+            // A correction before acknowledgement must not replay slow-down as damage.
+            Assert.AreEqual(1, pair.Correct(pair.A, pair.B));
+            pair.Step();
+            Assert.AreEqual(1000f, pair.B.Ship(101).Armor.Value);
+            Assert.AreEqual(500f, pair.B.Ship(101).Shield.Value);
+            Assert.AreEqual(300f, pair.B.Ship(101).Energy.Value);
+            pair.ReleaseHits();
+            pair.HoldHitsFromB = false;
+            pair.Step();
+            Assert.AreEqual(expected, pair.A.Battle.World.GetLinearVelocity(pair.A.Ship(101).Body).X, Tolerance);
+        }
+
+        [Test]
+        public void ADelayedWebIntervalCompoundsInsteadOfAddingItsMissedTicks()
+        {
+            var web = new BulletDefinition(4f, 0f, 0f, 0f, impact: BulletImpact.OverTime, lifetime: 1f,
+                effects: new ImpactEffects(slowDown: 4f));
+            var pair = new NetPair(Fixtures.CannonShip(web, cooldown: 20f), MotionTarget(16f));
+            foreach (var driver in new[] { pair.A, pair.B })
+            {
+                driver.Place(1, Shooter, Vec2.Zero);
+                driver.Place(101, Target, new Vec2(0.1f, 0f));
+                driver.Battle.World.SetAngularVelocity(driver.Ship(101).Body, 1f);
+            }
+            pair.HoldHitsFromB = true;
+            pair.B.Control(1, systems: 1);
+            pair.Step(60);
+            pair.B.Control(1, systems: 0);
+            var start = pair.HeldHits.Single(h => h.Effect == HitEffect.SlowDown && h.ContactState == HitContactState.Start);
+            var end = pair.HeldHits.Single(h => h.Effect == HitEffect.SlowDown && h.ContactState == HitContactState.End);
+            Assert.AreEqual(4f, start.Amount);
+            Assert.GreaterOrEqual(end.Tick - start.Tick, 49);
+            var factor = (float)System.Math.Pow(0.98f, end.Tick - start.Tick);
+            pair.ReleaseHits();
+            pair.HoldHitsFromB = false;
+            pair.Step();
+            Assert.AreEqual(0.1f * factor, pair.A.Battle.World.GetLinearVelocity(pair.A.Ship(101).Body).X, Tolerance);
+            Assert.AreEqual(factor, pair.A.Battle.World.GetAngularVelocity(pair.A.Ship(101).Body), Tolerance);
+            pair.Step(5);
+            Assert.AreEqual(factor, pair.A.Battle.World.GetAngularVelocity(pair.A.Ship(101).Body), Tolerance);
+        }
+
+        // One Roll test: the legacy formula, zero spin, receiver direction, and no repeated kick while touching.
+        [Test]
+        public void RollRunsOnContactEntryAndTheOwnerUsesItsOwnSpinDirection()
+        {
+            var area = new BulletDefinition(4f, 0f, 0f, 0f, impact: BulletImpact.OverTime, lifetime: 10f,
+                effects: new ImpactEffects(roll: 1.25f));
+            var pair = new NetPair(Fixtures.CannonShip(area, cooldown: 20f), MotionTarget(16f));
+            foreach (var driver in new[] { pair.A, pair.B })
+            {
+                driver.Place(1, Shooter, Vec2.Zero);
+                driver.Place(101, Target, Vec2.Zero);
+            }
+            pair.A.Battle.World.SetAngularVelocity(pair.A.Ship(101).Body, -0.5f);
+            pair.HoldHitsFromB = true;
+            pair.B.Control(1, systems: 1);
+            pair.Step(4);
+            pair.B.Control(1, systems: 0);
+            var roll = pair.HeldHits.Single(h => h.Effect == HitEffect.Roll);
+            Assert.AreEqual(56.25f, roll.Amount, Tolerance);
+            Assert.AreEqual(HitImpactKind.Energy, roll.ImpactKind);
+            var change = 56.25f * Fixtures.Degrees;
+            Assert.AreEqual(change, pair.B.Battle.World.GetAngularVelocity(pair.B.Ship(101).Body), Tolerance);
+            pair.Correct(pair.A, pair.B);
+            pair.Step();
+            Assert.AreEqual(500f, pair.B.Ship(101).Shield.Value, "Roll is not predicted damage.");
+            pair.ReleaseHits();
+            pair.HoldHitsFromB = false;
+            pair.Step(3);
+            Assert.AreEqual(-0.5f - change, pair.A.Battle.World.GetAngularVelocity(pair.A.Ship(101).Body), Tolerance);
+            // Leaving and entering again is a new contact, even though the same area stays alive.
+            pair.B.Place(101, new Vec2(80f, 80f), Vec2.Zero);
+            pair.Step();
+            pair.B.Place(101, Target, Vec2.Zero);
+            pair.Step(2);
+            Assert.AreEqual(-0.5f - 2f * change, pair.A.Battle.World.GetAngularVelocity(pair.A.Ship(101).Body), Tolerance);
+        }
+
+        [TestCase(HitEffect.SlowDown)]
+        [TestCase(HitEffect.Roll)]
+        public void MotionRecordsRejectBulletTargetsDamageTypesAndPush(HitEffect effect)
+        {
+            var pair = new NetPair();
+            ResolvedHit Hit(bool bullet = false, byte damageType = 0, Vec2 impulse = default,
+                HitImpactKind kind = HitImpactKind.Energy, HitContactState state = HitContactState.Start) =>
+                new ResolvedHit(pair.A.BattleId, 0, new EntityId(999), NetPair.OwnerB, 0, pair.A.Entity(101),
+                    NetPair.OwnerA, 0, state, kind, 1f, 1, bullet, damageType, impulse, effect);
+            Assert.IsFalse(pair.A.Battle.Submit(new InboundHit(NetPair.OwnerB, Hit(bullet: true))));
+            Assert.IsFalse(pair.A.Battle.Submit(new InboundHit(NetPair.OwnerB, Hit(damageType: 1))));
+            Assert.IsFalse(pair.A.Battle.Submit(new InboundHit(NetPair.OwnerB, Hit(impulse: new Vec2(1f, 0f)))));
+            if (effect == HitEffect.Roll)
+            {
+                Assert.IsFalse(pair.A.Battle.Submit(new InboundHit(NetPair.OwnerB, Hit(kind: HitImpactKind.DamageOverTime))));
+                Assert.IsFalse(pair.A.Battle.Submit(new InboundHit(NetPair.OwnerB, Hit(state: HitContactState.Stay))));
+            }
+            Assert.IsTrue(pair.A.Battle.Submit(new InboundHit(NetPair.OwnerB, Hit())));
+        }
+
         private static readonly Vec2 Shooter = new Vec2(50f, 50f);
         private static readonly Vec2 Target = new Vec2(54f, 50f);
 

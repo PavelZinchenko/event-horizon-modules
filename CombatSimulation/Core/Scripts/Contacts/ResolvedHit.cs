@@ -6,7 +6,7 @@ namespace CombatSimulation.Core
     // Disarm and Stop name a bullet target only (TargetIsBullet).
     public enum HitImpactKind : byte { Impact, Energy, DamageOverTime, Disarm, Stop }
     // What the amount of a record on a ship does (phase 5, step 5a). A bullet target takes Damage only.
-    public enum HitEffect : byte { Damage, EnergyDrain, ShieldDrain }
+    public enum HitEffect : byte { Damage, EnergyDrain, ShieldDrain, SlowDown, Roll }
 
     // An owner-decided contact against a remote ship or drone. No live object is needed to apply it.
     // Start is inclusive; End is exclusive. Amount is damage, or damage per second for damage over time.
@@ -24,6 +24,8 @@ namespace CombatSimulation.Core
     // Effect (phase 5, step 5a, SessionCodec version 11): a drain on a ship target travels as its own record with the
     // drain as amount, beside the damage records of the same contact; over time, as its own interval with the rate.
     // DamageType is 0 for a drain.
+    // SlowDown carries power (per second for an interval), before the damage record carrying push. Roll carries a
+    // positive change in degrees/s, once on contact entry; the receiver chooses the sign from its current spin.
     public readonly struct ResolvedHit
     {
         public readonly BattleId BattleId;

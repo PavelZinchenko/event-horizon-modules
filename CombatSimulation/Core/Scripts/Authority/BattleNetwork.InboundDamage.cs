@@ -66,9 +66,15 @@ namespace CombatSimulation.Core
                 if (through > interval.NextTick)
                 {
                     var amount = (double)(through - interval.NextTick) * interval.Hit.Amount * Battle.TickDuration;
-                    AddRemoteDamage(interval.Hit, (float)Math.Min(float.MaxValue, amount));
-                    _battle.Observer?.BeamDamage(new BeamDamageObservation(interval.Hit, Tick, interval.NextTick,
-                        through, (float)Math.Min(float.MaxValue, amount)));
+                    if (interval.Hit.Effect == HitEffect.SlowDown)
+                        ContactSystem.ApplySlowDown(Physics, LocalHitTarget(interval.Hit),
+                            interval.Hit.Amount * Battle.TickDuration, through - interval.NextTick);
+                    else
+                    {
+                        AddRemoteDamage(interval.Hit, (float)Math.Min(float.MaxValue, amount));
+                        _battle.Observer?.BeamDamage(new BeamDamageObservation(interval.Hit, Tick, interval.NextTick,
+                            through, (float)Math.Min(float.MaxValue, amount)));
+                    }
                     interval.NextTick = through;
                 }
                 if (interval.EndTick <= Tick + 1) _remoteIntervals.RemoveAt(i);
@@ -90,6 +96,12 @@ namespace CombatSimulation.Core
             if (ship == null || !(amount > 0f)) return;
             switch (hit.Effect)
             {
+                case HitEffect.SlowDown:
+                    ContactSystem.ApplySlowDown(Physics, ship, amount);
+                    break;
+                case HitEffect.Roll:
+                    ContactSystem.ApplyRoll(Physics, ship, amount);
+                    break;
                 case HitEffect.EnergyDrain:
                     ship.AddPendingDrain(amount, 0f);
                     break;
