@@ -21,8 +21,9 @@ namespace CombatSimulation.Core
         public static Filter Ship(Allegiance allegiance) => new Filter(ShipCategory(allegiance), 0);
         public static Filter Drone(Allegiance allegiance) => new Filter(DroneCategory(allegiance), ShipCategory(allegiance));
 
-        public static Filter Energy(Allegiance allegiance) =>
-            new Filter(EnergyCategory(allegiance), ShipCategory(allegiance) | DroneCategory(allegiance) | AllEnergy);
+        public static Filter Energy(Allegiance allegiance, bool friendlyFire = false) => friendlyFire
+            ? new Filter(EnergyCategory(Allegiance.Neutral), AllEnergy)
+            : new Filter(EnergyCategory(allegiance), ShipCategory(allegiance) | DroneCategory(allegiance) | AllEnergy);
 
         public static Filter Missile(Allegiance allegiance) =>
             new Filter(MissileCategory(allegiance), ShipCategory(allegiance) | DroneCategory(allegiance) |
@@ -31,7 +32,13 @@ namespace CombatSimulation.Core
         // A beam bolt's body pairs with no shape and no bullet (phase 5, step 4e): its ray finds its hits. Category-free
         // queries (point defense) still see it, so they skip it.
         public static Filter Bullet(BulletDefinition definition, Allegiance allegiance) =>
-            definition.IsBeamBolt ? NoContacts : definition.IsMissile ? Missile(allegiance) : Energy(allegiance);
+            definition.IsBeamBolt ? NoContacts : definition.IsMissile
+                ? definition.FriendlyFire ? new Filter(MissileCategory(Allegiance.Neutral), 0) : Missile(allegiance)
+                : Energy(allegiance, definition.FriendlyFire);
+
+        // Legacy collider Source: exclude the firing platform and its units, not every unit of its network owner.
+        internal static bool IsSource(EntityId source, ShipEntity ship, TailSegment segment = null) =>
+            ship != null ? ship.Id == source || ship.MothershipId == source : segment != null && segment.ShipId == source;
 
         private static readonly Filter NoContacts = new Filter(0, ~0UL);
 

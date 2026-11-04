@@ -178,6 +178,14 @@ namespace CombatSimulation.Core
                 };
                 if (!DamageTypes.Contains(type))
                     throw new ArgumentException($"Damage type {type} does not exist in the battle's table.");
+                var effects = device switch
+                {
+                    CannonDefinition cannon => cannon.Bullet.Effects,
+                    BeamDefinition beam => beam.Effects,
+                    _ => default,
+                };
+                if (effects.RepairDamage > 0f && !DamageTypes.Contains(effects.RepairDamageType))
+                    throw new ArgumentException($"Repair damage type {effects.RepairDamageType} does not exist in the battle's table.");
                 if (device.ChildShip != null) ValidateDamageTypes(device.ChildShip, checkedShips);
             }
         }

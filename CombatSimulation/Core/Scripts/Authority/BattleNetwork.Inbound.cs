@@ -28,7 +28,7 @@ namespace CombatSimulation.Core
                 hit.DeviceIndex < -1 || hit.TargetShape < 0 || !Finite(hit.Amount) || hit.Amount < 0f ||
                 hit.ContactState < HitContactState.Start || hit.ContactState > HitContactState.End ||
                 hit.ImpactKind < HitImpactKind.Impact || hit.ImpactKind > HitImpactKind.Stop ||
-                !Setup.DamageTypes.Contains(hit.DamageType) || hit.Effect > HitEffect.ProgressiveDamage)
+                !Setup.DamageTypes.Contains(hit.DamageType) || hit.Effect > HitEffect.ShieldRecharge)
                 return false;
             // An effect names a ship target, without damage type or push (phase 5, step 5). The progressive ramp
             // (step 5c) is damage of a type over time on shape 0; only it carries a ramp time.

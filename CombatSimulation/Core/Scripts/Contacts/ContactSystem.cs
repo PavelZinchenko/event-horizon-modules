@@ -162,12 +162,14 @@ namespace CombatSimulation.Core
                     var effects = default(ImpactEffects);
                     var effectScale = 1f;
                     var attackerShip = default(EntityId);
+                    var hostile = true;
                     if (_world.Bullets.TryGet(hit.AttackerHandle, out var index))
                     {
                         ref readonly var attacker = ref _world.Bullets[index];
                         owner = attacker.Owner;
                         deviceIndex = attacker.DeviceIndex;
                         attackerShip = attacker.ShipId;
+                        hostile = Allegiances.IsHostile(attacker.Allegiance, target.Allegiance);
                         kind = attacker.IsBeam ? HitImpactKind.DamageOverTime :
                             attacker.Definition.IsMissile ? HitImpactKind.Impact : HitImpactKind.Energy;
                         if (attacker.IsBeam)
@@ -175,6 +177,8 @@ namespace CombatSimulation.Core
                             amount = attacker.BeamDefinition.DamagePerSecond;
                             effects = attacker.BeamDefinition.Effects;
                             effectScale = Battle.TickDuration;
+                            // The ray candidate includes repair's enemy damage for missile and segment targets.
+                            if (hostile && effects.RepairDamage > 0f) damage -= effects.RepairDamage * effectScale;
                         }
                         else if (attacker.Definition.Impact == BulletImpact.OverTime)
                         {
@@ -214,6 +218,20 @@ namespace CombatSimulation.Core
                         // A remote target's copy takes the same damage and push as a prediction (N3); it never dies of
                         // it. The push on a remote target travels in the first record (phase 4 E4).
                         var remote = !Setup.IsLocalOwner(target.Owner);
+                        var repairDamage = hostile ? effects.RepairDamage : 0f;
+                        if (effects.RepairDamageType == damageType)
+                        {
+                            amount += repairDamage;
+                            damage += repairDamage * effectScale;
+                        }
+                        else if (repairDamage > 0f)
+                        {
+                            target.AddPendingDamage(effects.RepairDamageType, repairDamage * effectScale);
+                            if (remote)
+                                _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
+                                    hit.Target, target.Owner, shape, HitContactState.Start, kind, repairDamage,
+                                    damageType: (byte)effects.RepairDamageType));
+                        }
                         // Motion changes precede push, both here and in the outgoing record order (step 5b).
                         if (effects.SlowDown > 0f)
                         {
@@ -263,15 +281,30 @@ namespace CombatSimulation.Core
                             }
                             if (impulse.X != 0f || impulse.Y != 0f) ApplyPush(target, impulse);
                         }
-                        if (effects.HasDrain)
+                        var energyDrain = effects.EnergyDrain + (hostile ? effects.EnemyEnergyDrain : 0f);
+                        var shieldDrain = effects.ShieldDrain + (hostile ? effects.EnemyShieldDrain : 0f);
+                        if (energyDrain > 0f || shieldDrain > 0f)
                         {
-                            target.AddPendingDrain(effects.EnergyDrain * effectScale, effects.ShieldDrain * effectScale);
+                            target.AddPendingDrain(energyDrain * effectScale, shieldDrain * effectScale);
                             if (remote)
                             {
                                 AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.EnergyDrain,
-                                    effects.EnergyDrain);
+                                    energyDrain);
                                 AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.ShieldDrain,
-                                    effects.ShieldDrain);
+                                    shieldDrain);
+                            }
+                        }
+                        if (!hostile)
+                        {
+                            target.AddPendingRepair(effects.Repair * effectScale);
+                            target.AddPendingRecharge(effects.EnergyRecharge * effectScale, effects.ShieldRecharge * effectScale);
+                            if (remote)
+                            {
+                                AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.Repair, effects.Repair);
+                                AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.EnergyRecharge,
+                                    effects.EnergyRecharge);
+                                AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.ShieldRecharge,
+                                    effects.ShieldRecharge);
                             }
                         }
                         if (effects.Siphon > 0f) Siphon(attackerShip, target, damageType, damage * effects.Siphon);

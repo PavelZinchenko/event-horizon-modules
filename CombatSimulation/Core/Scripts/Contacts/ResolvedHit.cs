@@ -6,7 +6,10 @@ namespace CombatSimulation.Core
     // Disarm and Stop name a bullet target only (TargetIsBullet).
     public enum HitImpactKind : byte { Impact, Energy, DamageOverTime, Disarm, Stop }
     // What the amount of a record on a ship does (phase 5, step 5a). A bullet target takes Damage only.
-    public enum HitEffect : byte { Damage, EnergyDrain, ShieldDrain, SlowDown, Roll, ProgressiveDamage }
+    public enum HitEffect : byte
+    {
+        Damage, EnergyDrain, ShieldDrain, SlowDown, Roll, ProgressiveDamage, Repair, EnergyRecharge, ShieldRecharge
+    }
 
     // An owner-decided contact against a remote ship or drone. No live object is needed to apply it.
     // Start is inclusive; End is exclusive. Amount is damage, or damage per second for damage over time.
@@ -85,6 +88,6 @@ namespace CombatSimulation.Core
         // One interval per effect of a contact.
         internal bool SameContact(in ResolvedHit other) => AttackerId == other.AttackerId &&
             DeviceIndex == other.DeviceIndex && TargetId == other.TargetId && TargetShape == other.TargetShape &&
-            Effect == other.Effect;
+            Effect == other.Effect && DamageType == other.DamageType;
     }
 }

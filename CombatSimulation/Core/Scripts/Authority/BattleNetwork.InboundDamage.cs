@@ -104,6 +104,15 @@ namespace CombatSimulation.Core
             if (ship == null || !(amount > 0f)) return;
             switch (hit.Effect)
             {
+                case HitEffect.Repair:
+                    ship.AddPendingRepair(amount);
+                    break;
+                case HitEffect.EnergyRecharge:
+                    ship.AddPendingRecharge(amount, 0f);
+                    break;
+                case HitEffect.ShieldRecharge:
+                    ship.AddPendingRecharge(0f, amount);
+                    break;
                 case HitEffect.SlowDown:
                     ContactSystem.ApplySlowDown(Physics, ship, amount);
                     break;

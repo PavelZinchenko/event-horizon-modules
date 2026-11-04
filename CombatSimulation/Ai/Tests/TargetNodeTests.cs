@@ -16,6 +16,51 @@ namespace CombatSimulation.Ai.Tests
         private const NodeState S = NodeState.Success;
         private const NodeState F = NodeState.Failure;
 
+        [Test]
+        public void AlliedTargetConditionsAreBuiltAndReadLiveArmor()
+        {
+            var runner = Battle2V2();
+            var context = ContextOf(runner, 0);
+            var builder = Builder(context);
+            var ally = builder.Build(Node(Leaf(BehaviorNodeType.MainTargetIsAlly)));
+            var low = builder.Build(Node(new BehaviorTreeNodeSerializable
+                { Type = BehaviorNodeType.MainTargetLowHp, MinValue = 1f }));
+            context.TargetShip = runner.Snapshot.Ships[2].Id;
+            Assert.AreEqual(S, ally.Evaluate(context));
+            Assert.AreEqual(F, low.Evaluate(context));
+            context.TargetShip = runner.Snapshot.Ships[1].Id;
+            Assert.AreEqual(F, ally.Evaluate(context));
+            context.TargetShip = default;
+            Assert.AreEqual(F, ally.Evaluate(context));
+            Assert.AreEqual(F, low.Evaluate(context));
+            Assert.IsEmpty(builder.Stubs);
+        }
+
+        [Test]
+        public void FindDamagedAllyUsesTheApprovedThresholdAndExcludesSelfAndEnemies()
+        {
+            var roster = new[]
+            {
+                new RosterSlotSetup(new RosterId(1), 0, Ship),
+                new RosterSlotSetup(new RosterId(2), 0, Ship),
+                new RosterSlotSetup(new RosterId(101), 1, Ship),
+            };
+            var runner = new BattleRunner(new BattleSetup(new BattleId(55), 7, roster, timeLimitTicks: 1,
+                maxActiveShipsPerSide: 2, timerMode: TimerMode.DrainPlayerHp), new NoPilots());
+            foreach (var slot in roster) runner.Deploy(slot.RosterId, 0);
+            runner.Step();
+            var context = ContextOf(runner, 0, WithWeaponRange(1000f));
+            var node = new FindDamagedAllyNode(0.02f, 0.02f, 0f);
+            Assert.AreEqual(F, node.Evaluate(context), "Full armor is not a repair target.");
+            for (var i = 0; i < 110; ++i) Think(runner, context, 0);
+            Assert.Greater(runner.Snapshot.Ships[1].Armor.Value / runner.Snapshot.Ships[1].Armor.Max, 0.75f);
+            Assert.AreEqual(S, node.Evaluate(context), "The approved threshold is 99%, not the legacy search's 75%.");
+            Assert.AreEqual(runner.Snapshot.Ships[1].Id, context.TargetShip);
+            Assert.AreEqual(S, new MainTargetLowHpNode(0.99f).Evaluate(context));
+            Assert.AreEqual(F, new FindDamagedAllyNode(0.02f, 0.02f, 0f).Evaluate(
+                ContextOf(runner, 0, WithWeaponRange(0f))), "The minimum search distance is still bounded.");
+        }
+
         // A second definition, so a profile table can tell slot 102 from the other ships.
         private static readonly ShipDefinition OtherShip = new ShipDefinition(1f, 1f, Ship.Engine, 1000f,
             new ResourceDefinition(500f, 10f, 1f), new ResourceDefinition(300f, 20f, 0.5f));

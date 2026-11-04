@@ -95,7 +95,7 @@ namespace CombatSimulation.Runtime
     //     sender may know only a predicted copy, which no stream names), target shape (VarUInt), device index + 1
     //     (VarUInt), contact (2), impact (3), amount (32-bit float), damage type (VarUInt, below
     //     DamageTypeTable.MaxTypes; D4), impulse flag (1 bit); with the flag, the push impulse (two 32-bit floats;
-    //     phase 4 E4, a projectile's start record on a ship only), effect (3; HitEffect, version 11: a drain names a
+    //     phase 4 E4, a projectile's start record on a ship only), effect (4; HitEffect, version 11: a drain names a
     //     ship target, with damage type 0 and no impulse); a ProgressiveDamage effect (phase 5, step 5c) then has the
     //     ramp time (32-bit float), on a ship target over time at shape 0, with its damage type and no impulse. The
     //     sequence is the hit's position in the stream.
@@ -125,7 +125,7 @@ namespace CombatSimulation.Runtime
         internal const byte Version = 11;
         internal const int MaxBatchBytes = 1 << 20;
         private const int KindBits = 4, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3, AllegianceBits = 3,
-            EffectBits = 3;
+            EffectBits = 4;
         private const int MaxVarUIntBits = 16 + 1 + 64;
         // Upper bounds for buffer sizing. The largest record, a roster change, needs about 720 bits.
         private const int HeaderBits = 8 + 2 * MaxVarUIntBits, RecordBits = 1024;
@@ -317,7 +317,7 @@ namespace CombatSimulation.Runtime
                         Require(contact <= (ulong)HitContactState.End && impact <= (ulong)HitImpactKind.Stop && amount >= 0 &&
                             damageType < DamageTypeTable.MaxTypes &&
                             (targetBullet ? targetName != 0 : impact <= (ulong)HitImpactKind.DamageOverTime) &&
-                            effect <= (ulong)HitEffect.ProgressiveDamage && (effect == (ulong)HitEffect.Damage ||
+                            effect <= (ulong)HitEffect.ShieldRecharge && (effect == (ulong)HitEffect.Damage ||
                                 !targetBullet && (damageType == 0 || ramp) && impulse.X == 0f && impulse.Y == 0f) &&
                             (effect != (ulong)HitEffect.Roll || contact == (ulong)HitContactState.Start &&
                                 impact != (ulong)HitImpactKind.DamageOverTime) &&

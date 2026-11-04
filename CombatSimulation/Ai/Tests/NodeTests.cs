@@ -389,11 +389,11 @@ namespace CombatSimulation.Ai.Tests
         {
             var builder = Builder(Context(out _));
             var node = builder.Build(Node(Composite(BehaviorNodeType.Selector, Leaf(BehaviorNodeType.MaintainAttackRange),
-                Leaf(BehaviorNodeType.MaintainAttackRange), Leaf(BehaviorNodeType.MainTargetIsAlly))));
+                Leaf(BehaviorNodeType.MaintainAttackRange), Leaf(BehaviorNodeType.MainTargetWithinAttackRange))));
 
             Assert.AreSame(EmptyNode.Failure, node);
             Assert.AreEqual(2, builder.Stubs[BehaviorNodeType.MaintainAttackRange]);
-            Assert.AreEqual(1, builder.Stubs[BehaviorNodeType.MainTargetIsAlly]);
+            Assert.AreEqual(1, builder.Stubs[BehaviorNodeType.MainTargetWithinAttackRange]);
         }
     }
 

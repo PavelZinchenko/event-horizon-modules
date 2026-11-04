@@ -72,6 +72,8 @@ namespace CombatSimulation.Core
         public float EnergyDrain;
         public float ShieldDrain;
         public float Repair;
+        public float EnergyRecharge;
+        public float ShieldRecharge;
     }
 
     // A remote ship's received correction, held until its tick has run here. Arrays are reused across pool cycles.
@@ -190,6 +192,13 @@ namespace CombatSimulation.Core
         {
             if (energy > 0f) PendingEffects.EnergyDrain = Sum(PendingEffects.EnergyDrain, energy);
             if (shield > 0f) PendingEffects.ShieldDrain = Sum(PendingEffects.ShieldDrain, shield);
+            HasPendingDamage |= energy > 0f || shield > 0f;
+        }
+
+        public void AddPendingRecharge(float energy, float shield)
+        {
+            if (energy > 0f) PendingEffects.EnergyRecharge = Sum(PendingEffects.EnergyRecharge, energy);
+            if (shield > 0f) PendingEffects.ShieldRecharge = Sum(PendingEffects.ShieldRecharge, shield);
             HasPendingDamage |= energy > 0f || shield > 0f;
         }
 

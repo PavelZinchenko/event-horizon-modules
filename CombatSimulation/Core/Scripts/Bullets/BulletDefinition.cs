@@ -44,11 +44,11 @@ namespace CombatSimulation.Core
             bool damageFalloff = false, float radialPush = 0f, float radialPushWithFalloff = 0f, float lifetime = 0f,
             float scale = 0f, bool attachedToParent = false, bool rocket = false, float stickyLifetime = 0f,
             bool magnetic = false, bool hasDirection = true, float beamLength = 0f, bool piercing = false, bool aura = false,
-            ImpactEffects effects = default)
+            ImpactEffects effects = default, bool friendlyFire = false)
             : this(radius, speed, range, damage, weight, parentVelocityEffect, hitPoints, homing, startingVelocityMultiplier,
                 damageType, recoil, push, extraDamage, triggers, detonateWhenDestroyed, canBeDisarmed, impact, damageFalloff,
                 radialPush, radialPushWithFalloff, lifetime, scale, attachedToParent, rocket, stickyLifetime, magnetic,
-                hasDirection, beamLength, piercing, aura, effects, null, 1f)
+                hasDirection, beamLength, piercing, aura, effects, null, 1f, friendlyFire)
         {
         }
 
@@ -59,7 +59,7 @@ namespace CombatSimulation.Core
             bool detonateWhenDestroyed, bool canBeDisarmed, BulletImpact impact, bool damageFalloff, float radialPush,
             float radialPushWithFalloff, float lifetime, float scale, bool attachedToParent, bool rocket,
             float stickyLifetime, bool magnetic, bool hasDirection, float beamLength, bool piercing, bool aura,
-            ImpactEffects effects, BulletDefinition uncharged, float charge)
+            ImpactEffects effects, BulletDefinition uncharged, float charge, bool friendlyFire)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -137,7 +137,7 @@ namespace CombatSimulation.Core
             }
 
             // A damage-over-time contact travels as one interval with a fixed rate (network plan, decision 2). A push or
-            // a falloff would change per tick, and the interval key has no damage type.
+            // a falloff would change per tick. Its ordinary damage still has one type.
             if (impact == BulletImpact.OverTime && (extra.Length > 0 || falloff || push != 0f || radialPush != 0f))
                 throw new ArgumentException("Damage over time takes one damage type, without push or falloff.",
                     nameof(impact));
@@ -183,6 +183,7 @@ namespace CombatSimulation.Core
             // The progressive ramp is a beam effect only (phase 5, step 5c).
             if (effects.Ramp > 0f) throw new ArgumentOutOfRangeException(nameof(effects), "A bullet has no progressive ramp.");
             Effects = effects;
+            FriendlyFire = friendlyFire;
             BeamLength = beamLength;
             Piercing = piercing;
             IsAura = aura;
@@ -350,6 +351,7 @@ namespace CombatSimulation.Core
         // Drains and siphon on a ship or drone target (phase 5, step 5a), the restore of its own lifetime (5d).
         // OverTime: per second.
         public ImpactEffects Effects { get; }
+        public bool FriendlyFire { get; }
 
         // Gameplay triggers in legacy order (phase 5, step 2). The index is the spawn source of a child's identity.
         public IReadOnlyList<BulletTriggerDefinition> Triggers { get; }
@@ -405,7 +407,7 @@ namespace CombatSimulation.Core
                 Push * charge, extra, triggers, DetonateWhenDestroyed, CanBeDisarmed, Impact, DamageFalloff,
                 RadialPush * charge, RadialPushWithFalloff * charge, BodyLifetime, Scale * size, AttachedToParent, IsRocket,
                 StickyLifetime, IsMagnetic, HasDirection, BeamLength * size, Piercing, IsAura, Effects.WithCharge(charge), this,
-                charge);
+                charge, FriendlyFire);
             scaled.Add(this, result);
             return result;
         }

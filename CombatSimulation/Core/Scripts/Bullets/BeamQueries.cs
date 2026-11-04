@@ -38,9 +38,16 @@ namespace CombatSimulation.Core
                 if (beam.TargetId.IsNull) beam.RampTargetId = default;
                 beam.TargetId = default;
                 var effects = definition.Effects;
-                var count = world.RayCast(beam.BeamOrigin, translation, CollisionFilters.Energy(beam.Allegiance),
+                var count = world.RayCast(beam.BeamOrigin, translation, CollisionFilters.Energy(beam.Allegiance, definition.FriendlyFire),
                     ship.Body, true, _hits, out beam.RayOverflow);
 
+                // Source exclusions must not hide the first valid target beyond the fixed ray buffer.
+                while (definition.FriendlyFire && beam.RayOverflow)
+                {
+                    Array.Resize(ref _hits, _hits.Length * 2);
+                    count = world.RayCast(beam.BeamOrigin, translation,
+                        CollisionFilters.Energy(beam.Allegiance, true), ship.Body, true, _hits, out beam.RayOverflow);
+                }
                 for (var h = 0; h < count; ++h)
                 {
                     ref readonly var hit = ref _hits[h];
@@ -59,11 +66,13 @@ namespace CombatSimulation.Core
                         Point = hit.Point,
                     };
 
+                    Allegiance targetAllegiance;
                     if (hit.Target.IsBullet)
                     {
                         if (!bullets.TryGetByBody(hit.Target.Bullet, out var targetIndex)) continue;
                         ref readonly var target = ref bullets[targetIndex];
-                        if (!target.Definition.IsMissile) continue;
+                        if (!target.Definition.IsMissile || definition.FriendlyFire && target.ShipId == beam.ShipId) continue;
+                        targetAllegiance = target.Definition.FriendlyFire ? Allegiance.Neutral : target.Allegiance;
                         candidate.Target = target.Id;
                         candidate.TargetHandle = bullets.GetHandle(targetIndex);
                         candidate.TargetPriority = ShapeHitPriority.Hull;
@@ -73,6 +82,10 @@ namespace CombatSimulation.Core
                     {
                         if (!battle.Shapes.TryGet(hit.Target.Shape, out var target) ||
                             (battle.FindShip(target.OwnerId) == null && battle.FindSegment(target.OwnerId) == null)) continue;
+                        var targetShip = battle.FindShip(target.OwnerId);
+                        var segment = targetShip == null ? battle.FindSegment(target.OwnerId) : null;
+                        if (definition.FriendlyFire && CollisionFilters.IsSource(beam.ShipId, targetShip, segment)) continue;
+                        targetAllegiance = targetShip?.Allegiance ?? segment.Allegiance;
                         candidate.Target = target.OwnerId;
                         candidate.TargetHandle = target.Owner;
                         candidate.TargetPriority = target.Priority;
@@ -83,6 +96,7 @@ namespace CombatSimulation.Core
                     if (effects.Ramp > 0f)
                         candidate.Damage += ImpactEffects.RampTick(effects.Ramp, effects.RampTime,
                             candidate.Target == beam.RampTargetId ? battle.Tick - beam.RampTick : 0);
+                    candidate.Damage += effects.DamageAgainst(beam.Allegiance, targetAllegiance) * Battle.TickDuration;
                     _candidates.Add(candidate);
                 }
             }
@@ -169,7 +183,7 @@ namespace CombatSimulation.Core
             }
         }
 
-        private readonly RayHit[] _hits = new RayHit[8];
+        private RayHit[] _hits = new RayHit[8];
         private readonly List<ContactCandidate> _candidates = new List<ContactCandidate>(32);
     }
 }

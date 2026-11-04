@@ -87,9 +87,9 @@ namespace CombatSimulation.Runtime.Tests
                 SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit,
                 SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
             // A push (phase 4 E4) adds 64 bits to its hit; every hit has the 1-bit flag.
-            // Version 8 widens every record kind to 4 bits (D13). Version 11 adds the 3-bit effect to every hit.
-            Assert.LessOrEqual(scan[3].Bits, 42); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 33); Assert.LessOrEqual(scan[13].Bits, 93 + 64);
-            Assert.LessOrEqual(scan[15].Bits, 93); Assert.AreEqual(scan[15].Bits, scan[16].Bits);
+            // Version 8 widens every record kind to 4 bits (D13). Version 11 adds the 4-bit effect to every hit.
+            Assert.LessOrEqual(scan[3].Bits, 42); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 33); Assert.LessOrEqual(scan[13].Bits, 94 + 64);
+            Assert.LessOrEqual(scan[15].Bits, 94); Assert.AreEqual(scan[15].Bits, scan[16].Bits);
             // A missile target is about 3 bytes in the plan: here 2 bytes, with tick offsets +1 and +2 (0 in a real batch).
             // Version 11 adds the segment flag; a segment's 64-bit entity ID replaces the 6-bit control index.
             Assert.AreEqual(18, scan[7].Bits); Assert.AreEqual(13, scan[8].Bits); Assert.AreEqual(18 - 6 + 64, scan[12].Bits);
@@ -152,7 +152,7 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, false, HitImpactKind.Disarm)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 0, true, HitImpactKind.Stop)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 77, 0, true, (HitImpactKind)5)), out _, out _));
-            // Phase 5: a ship effect has no damage type or push; effect 6 is unknown until step 5e.
+            // Phase 5: a ship effect has no damage type or push; effect 9 is unknown.
             Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 1, effect: HitEffect.EnergyDrain), 1), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
@@ -162,7 +162,7 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 1, impulseX: 2f, effect: HitEffect.ShieldDrain)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
-                Hit(ref w, 0, 1, effect: (HitEffect)6)), out _, out _));
+                Hit(ref w, 0, 1, effect: (HitEffect)9)), out _, out _));
             // Step 5c: a ramp is damage of a type over time on shape 0, with a finite ramp time that is not negative.
             Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 50, impact: HitImpactKind.DamageOverTime, damageType: 2, effect: HitEffect.ProgressiveDamage,
@@ -242,10 +242,24 @@ namespace CombatSimulation.Runtime.Tests
                     w.WriteBits(unchecked((uint)BitConverter.SingleToInt32Bits(impulseX)), 32);
                     w.WriteBits(0, 32);
                 }
-                w.WriteBits((ulong)effect, 3);
+                w.WriteBits((ulong)effect, 4);
                 if (effect == HitEffect.ProgressiveDamage)
                     w.WriteBits(unchecked((uint)BitConverter.SingleToInt32Bits(rampTime)), 32);
             }
+        }
+
+        [TestCase(HitEffect.Repair)]
+        [TestCase(HitEffect.EnergyRecharge)]
+        [TestCase(HitEffect.ShieldRecharge)]
+        public void SupportIntervalsRoundTrip(HitEffect effect)
+        {
+            var link = new Link();
+            var deploy = Deploy(link.Battle);
+            link.Read(link.Write(10, new[] { deploy }, Array.Empty<ResolvedHit>()), out _, out _);
+            var hit = new ResolvedHit(link.Battle, 11, deploy.EntityId, 20, 0, link.Target, 10, 0,
+                HitContactState.Start, HitImpactKind.DamageOverTime, 120f, 1, effect: effect);
+            link.Read(link.Write(11, Array.Empty<OwnerOperation>(), new[] { hit }), out _, out var actual);
+            CollectionAssert.AreEqual(new[] { hit }, actual);
         }
 
         // A launch pose travels on the correction grid: the muzzle within half a 1/1024 cell, wrapped into the arena; the

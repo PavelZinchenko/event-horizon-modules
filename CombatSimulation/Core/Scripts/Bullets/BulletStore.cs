@@ -212,9 +212,6 @@ namespace CombatSimulation.Core
                 var definition = bullet.Definition;
                 // An aura of size 0 (the last tick of its lifetime) touches nothing.
                 if (definition.IsAura && bullet.AuraTicks == 0) continue;
-                if (definition.IsSticky && !bullet.Stuck && bullet.TargetId.IsNull && !hit.Target.IsBullet &&
-                    shapes.TryGet(hit.Target.Shape, out var caught))
-                    _items[index].TargetId = caught.OwnerId;
                 if (definition.Impact == BulletImpact.AllTargets && !hit.Begin) continue;
 
                 var candidate = new ContactCandidate
@@ -233,6 +230,7 @@ namespace CombatSimulation.Core
                     Point = hit.Point,
                 };
 
+                Allegiance targetAllegiance;
                 Vec2 targetPosition;
                 float targetScale;
                 if (hit.Target.IsBullet)
@@ -243,6 +241,8 @@ namespace CombatSimulation.Core
                     ref readonly var targetBullet = ref _items[targetIndex];
                     if (!targetBullet.Definition.IsMissile || targetBullet.PendingRemoval != RemovalReason.None) continue;
 
+                    if (definition.FriendlyFire && targetBullet.ShipId == bullet.ShipId) continue;
+                    targetAllegiance = targetBullet.Definition.FriendlyFire ? Allegiance.Neutral : targetBullet.Allegiance;
                     candidate.TargetPriority = ShapeHitPriority.Hull;
                     candidate.Target = targetBullet.Id;
                     candidate.TargetHandle = GetHandle(targetIndex);
@@ -256,6 +256,10 @@ namespace CombatSimulation.Core
                     var ship = ships.Get(target.Owner);
                     var segment = ship == null ? segments.Get(target.Owner) : null;
                     if (ship == null && segment == null) continue;
+                    if (definition.FriendlyFire && CollisionFilters.IsSource(bullet.ShipId, ship, segment)) continue;
+                    targetAllegiance = ship?.Allegiance ?? segment.Allegiance;
+                    if (definition.IsSticky && !bullet.Stuck && bullet.TargetId.IsNull)
+                        _items[index].TargetId = target.OwnerId;
 
                     candidate.TargetPriority = target.Priority;
                     candidate.Target = target.OwnerId;
@@ -270,7 +274,9 @@ namespace CombatSimulation.Core
                     ? definition.Falloff(world.Torus.Delta(world.GetBulletPosition(bullet.Body), targetPosition).Length,
                         targetScale)
                     : 1f;
-                candidate.Damage = TotalDamage(definition, candidate.Falloff);
+                candidate.Damage = TotalDamage(definition, candidate.Falloff) +
+                    definition.Effects.DamageAgainst(bullet.Allegiance, targetAllegiance) *
+                    (definition.Impact == BulletImpact.OverTime ? Battle.TickDuration : 1f);
                 resolver.Add(candidate);
             }
         }
@@ -295,6 +301,7 @@ namespace CombatSimulation.Core
                 else if (segment != null) shape = segment.Shape;
                 else continue;
                 if (!shapes.TryGet(shape, out var target)) continue;
+                if (bullet.Definition.FriendlyFire && CollisionFilters.IsSource(bullet.ShipId, ship, segment)) continue;
 
                 resolver.Add(new ContactCandidate
                 {
@@ -312,7 +319,8 @@ namespace CombatSimulation.Core
                     TargetShapeOrder = target.Order,
                     TargetHandle = target.Owner,
                     Falloff = 1f,
-                    Damage = TotalDamage(bullet.Definition, 1f),
+                    Damage = TotalDamage(bullet.Definition, 1f) + bullet.Definition.Effects.DamageAgainst(
+                        bullet.Allegiance, ship?.Allegiance ?? segment.Allegiance) * Battle.TickDuration,
                 });
             }
         }

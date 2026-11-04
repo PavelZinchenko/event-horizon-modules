@@ -54,7 +54,7 @@ namespace CombatSimulation.Ai
             return _lastEnemy.IsNull ? NodeState.Failure : NodeState.Success;
         }
 
-        private bool IsValidEnemy(EntityId id, AiContext context)
+        protected virtual bool IsValidEnemy(EntityId id, AiContext context)
         {
             if (!context.TryGetShip(id, out var enemy)) return false;
             if (!context.IsEnemy(enemy)) return false;
@@ -70,6 +70,43 @@ namespace CombatSimulation.Ai
         private readonly float _changeEnemyCooldown;
         private EntityId _lastEnemy;
         private float _lastEnemyUpdateTime = -MaxCooldown;
+    }
+
+    // Legacy FindDamagedAlly, with the approved 99% threshold for both search and retained targets.
+    internal sealed class FindDamagedAllyNode : FindEnemyNodeBase
+    {
+        public FindDamagedAllyNode(float findCooldown, float changeCooldown, float distance)
+            : base(findCooldown, changeCooldown) => _distance = Math.Max(5f, distance);
+
+        protected override bool IgnoreDrones => true;
+
+        protected override bool IsValidEnemy(EntityId id, AiContext context) =>
+            context.TryGetShip(id, out var target) && id != context.Ship.Id && !target.IsDrone &&
+            !context.IsEnemy(target) && target.Armor.Value / target.Armor.Max <= 0.99f && IsInRange(target, context);
+
+        protected override bool IsInRange(in ShipState target, AiContext context)
+        {
+            var origin = context.TryGetShip(context.Mothership, out var mothership) ? mothership : context.Ship;
+            return context.Distance(origin, target) <= context.Profile.AttackRangeMax + _distance;
+        }
+
+        protected override EntityId FindNewEnemy(AiContext context)
+        {
+            var nearest = default(EntityId);
+            var distance = float.MaxValue;
+            foreach (ref readonly var ship in context.Snapshot.Ships)
+            {
+                // Legacy search skips the mothership; other nodes can still select it for repair.
+                if (ship.Id == context.Mothership || !IsValidEnemy(ship.Id, context)) continue;
+                var next = context.Delta(context.Ship.Position, ship.Position).LengthSquared;
+                if (next > distance) continue;
+                nearest = ship.Id;
+                distance = next;
+            }
+            return nearest;
+        }
+
+        private readonly float _distance;
     }
 
     // Legacy FindNearestEnemy.
@@ -193,6 +230,25 @@ namespace CombatSimulation.Ai
             context.TryGetShip(context.TargetShip, out var target) && context.IsEnemy(target)
                 ? NodeState.Success
                 : NodeState.Failure;
+    }
+
+    // Legacy IsLowOnHp: armor below the fraction.
+    internal sealed class MainTargetIsAllyNode : INode
+    {
+        public NodeState Evaluate(AiContext context) =>
+            context.TryGetShip(context.TargetShip, out var target) && !context.IsEnemy(target)
+                ? NodeState.Success : NodeState.Failure;
+    }
+
+    internal sealed class MainTargetLowHpNode : INode
+    {
+        public MainTargetLowHpNode(float minValue) => _minValue = minValue;
+
+        public NodeState Evaluate(AiContext context) =>
+            context.TryGetShip(context.TargetShip, out var target) && target.Armor.Value / target.Armor.Max < _minValue
+                ? NodeState.Success : NodeState.Failure;
+
+        private readonly float _minValue;
     }
 
     // Legacy IsLowOnHp: armor below the fraction.

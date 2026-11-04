@@ -54,7 +54,10 @@ namespace CombatSimulation.Core
         {
             var types = Setup.DamageTypes;
             var walk = types.ShieldWalk;
-            var left = shield.Max > 0f && shield.Value > effects.ShieldDrain ? shield.Value - effects.ShieldDrain : 0f;
+            var shieldDrain = effects.ShieldDrain - effects.ShieldRecharge;
+            // A recharge nets against shield loss, but cannot absorb damage until the next tick (legacy ApplyShield).
+            var drainBeforeDamage = shieldDrain > 0f ? shieldDrain : 0f;
+            var left = shield.Max > 0f && shield.Value > drainBeforeDamage ? shield.Value - drainBeforeDamage : 0f;
             var absorbed = 0f;
             for (var start = 0; start < walk.Length && left > 0f;)
             {
@@ -81,8 +84,8 @@ namespace CombatSimulation.Core
                 }
                 start = end;
             }
-            var shieldLoss = absorbed + effects.ShieldDrain;
-            if (shieldLoss > 0f) shield.Consume(shieldLoss);
+            var shieldLoss = absorbed + shieldDrain;
+            if (shieldLoss != 0f) shield.Consume(shieldLoss);
 
             var armorDamage = 0f;
             var energyGain = 0f;
@@ -95,7 +98,8 @@ namespace CombatSimulation.Core
             armor.Consume(armorDamage - effects.Repair);
             // A gain does not restart the energy delay (legacy Energy.Get with a negative amount).
             if (energyGain > 0f) energy.Consume(-energyGain);
-            if (effects.EnergyDrain > 0f) energy.Consume(effects.EnergyDrain);
+            var energyDrain = effects.EnergyDrain - effects.EnergyRecharge;
+            if (energyDrain != 0f) energy.Consume(energyDrain);
         }
 
         // A resistance share (ShipStatus) moves the armor resistance toward the ceiling of its type.

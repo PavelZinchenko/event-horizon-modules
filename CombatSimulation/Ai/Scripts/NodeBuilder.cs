@@ -167,9 +167,9 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_HasIncomingThreat content) => new HasIncomingThreatNode(content.TimeToCollision);
         public INode Create(BehaviorTreeNode_HasAdditionalTargets content) => new HasAdditionalTargetsNode();
         public INode Create(BehaviorTreeNode_IsFasterThanTarget content) => new IsFasterThanTargetNode(content.Multiplier);
-        public INode Create(BehaviorTreeNode_MainTargetIsAlly content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MainTargetIsAlly content) => new MainTargetIsAllyNode();
         public INode Create(BehaviorTreeNode_MainTargetIsEnemy content) => new MainTargetIsEnemyNode();
-        public INode Create(BehaviorTreeNode_MainTargetLowHp content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MainTargetLowHp content) => new MainTargetLowHpNode(content.MinValue);
         public INode Create(BehaviorTreeNode_MainTargetWithinAttackRange content) => Stub(content);
         public INode Create(BehaviorTreeNode_HasMothership content) => Stub(content);
         public INode Create(BehaviorTreeNode_TargetDistance content) => Stub(content);
@@ -300,7 +300,12 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_AttackTurretTargets content) => new AttackTurretTargetsNode();
         public INode Create(BehaviorTreeNode_HoldHarpoon content) =>
             HasWeapon(weapon => weapon.BulletBehavior == AiBulletBehavior.Harpoon) ? Stub(content) : EmptyNode.Failure;
-        public INode Create(BehaviorTreeNode_FindDamagedAlly content) => Stub(content);
+        public INode Create(BehaviorTreeNode_FindDamagedAlly content)
+        {
+            var defensive = _profile.IsDrone && _settings.LimitedRange > 0f && content.InAttackRange;
+            var range = defensive ? _settings.LimitedRange / 4f : _settings.LimitedRange;
+            return new FindDamagedAllyNode(content.MinCooldown, content.MaxCooldown, range);
+        }
         public INode Create(BehaviorTreeNode_EnginePropulsionForce content) => Stub(content);
         public INode Create(BehaviorTreeNode_MotherShipRetreated content) => new MothershipRetreatedNode();
         public INode Create(BehaviorTreeNode_MotherShipDestroyed content) => new MothershipDestroyedNode();

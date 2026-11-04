@@ -68,7 +68,13 @@ namespace CombatSimulation.Core
                 var heading = world.GetBulletRotation(bolt.Body);
                 var ship = battle.FindShip(bolt.ShipId);
                 var count = world.RayCast(origin, length * new Vec2(heading.C, heading.S),
-                    CollisionFilters.Energy(bolt.Allegiance), ship?.Body ?? default, true, _hits, out _);
+                    CollisionFilters.Energy(bolt.Allegiance, definition.FriendlyFire), ship?.Body ?? default, true, _hits, out var overflow);
+                while (definition.FriendlyFire && overflow)
+                {
+                    Array.Resize(ref _hits, _hits.Length * 2);
+                    count = world.RayCast(origin, length * new Vec2(heading.C, heading.S),
+                        CollisionFilters.Energy(bolt.Allegiance, true), ship?.Body ?? default, true, _hits, out overflow);
+                }
 
                 // Legacy RayCastCollider: a ray without pass-through stops at the first unit it meets.
                 var first = !definition.Piercing && definition.Impact != BulletImpact.FirstTarget;
@@ -109,6 +115,7 @@ namespace CombatSimulation.Core
                 Point = hit.Point,
             };
 
+            Allegiance targetAllegiance;
             Vec2 targetPosition;
             float targetScale;
             var bullets = battle.Bullets;
@@ -118,6 +125,8 @@ namespace CombatSimulation.Core
                 if (!bullets.TryGetByBody(hit.Target.Bullet, out var targetIndex)) return false;
                 ref readonly var target = ref bullets[targetIndex];
                 if (!target.Definition.IsMissile || target.PendingRemoval != RemovalReason.None) return false;
+                if (definition.FriendlyFire && target.ShipId == bolt.ShipId) return false;
+                targetAllegiance = target.Definition.FriendlyFire ? Allegiance.Neutral : target.Allegiance;
                 candidate.Target = target.Id;
                 candidate.TargetHandle = bullets.GetHandle(targetIndex);
                 candidate.TargetPriority = ShapeHitPriority.Hull;
@@ -131,6 +140,8 @@ namespace CombatSimulation.Core
                 var ship = battle.FindShip(target.OwnerId);
                 var segment = ship == null ? battle.FindSegment(target.OwnerId) : null;
                 if (ship == null && segment == null) return false;
+                if (definition.FriendlyFire && CollisionFilters.IsSource(bolt.ShipId, ship, segment)) return false;
+                targetAllegiance = ship?.Allegiance ?? segment.Allegiance;
                 candidate.Target = target.OwnerId;
                 candidate.TargetHandle = target.Owner;
                 candidate.TargetPriority = target.Priority;
@@ -142,7 +153,9 @@ namespace CombatSimulation.Core
             candidate.Falloff = definition.HasFalloff
                 ? definition.Falloff(world.Torus.Delta(origin, targetPosition).Length, targetScale)
                 : 1f;
-            candidate.Damage = BulletStore.TotalDamage(definition, candidate.Falloff);
+            candidate.Damage = BulletStore.TotalDamage(definition, candidate.Falloff) +
+                definition.Effects.DamageAgainst(bolt.Allegiance, targetAllegiance) *
+                (definition.Impact == BulletImpact.OverTime ? Battle.TickDuration : 1f);
             return true;
         }
 
@@ -172,7 +185,7 @@ namespace CombatSimulation.Core
             }
         }
 
-        private readonly RayHit[] _hits = new RayHit[8];
+        private RayHit[] _hits = new RayHit[8];
         private readonly List<ContactCandidate> _candidates = new List<ContactCandidate>(32);
 
         // The (bolt, unit) pairs on the rays of AllTargets bolts in this tick and the one before.

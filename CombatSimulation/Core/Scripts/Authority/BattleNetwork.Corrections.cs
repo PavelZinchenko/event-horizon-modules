@@ -412,6 +412,15 @@ namespace CombatSimulation.Core
             if (!(amount > 0.0)) return false;
             switch (hit.Effect)
             {
+                case HitEffect.Repair:
+                    _replayEffects.Repair = (float)Math.Min(float.MaxValue, _replayEffects.Repair + amount);
+                    break;
+                case HitEffect.EnergyRecharge:
+                    _replayEffects.EnergyRecharge = (float)Math.Min(float.MaxValue, _replayEffects.EnergyRecharge + amount);
+                    break;
+                case HitEffect.ShieldRecharge:
+                    _replayEffects.ShieldRecharge = (float)Math.Min(float.MaxValue, _replayEffects.ShieldRecharge + amount);
+                    break;
                 case HitEffect.SlowDown:
                 case HitEffect.Roll:
                     return false;
