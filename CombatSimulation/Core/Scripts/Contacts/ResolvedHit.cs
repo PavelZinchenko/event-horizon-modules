@@ -5,11 +5,11 @@ namespace CombatSimulation.Core
     public enum HitContactState : byte { Start, Stay, End }
     // Disarm and Stop name a bullet target only (TargetIsBullet).
     public enum HitImpactKind : byte { Impact, Energy, DamageOverTime, Disarm, Stop }
-    // What the amount of a record on a ship does (phase 5, step 5a). A bullet target takes Damage only.
+    // What a record's amount does. Bullet targets take Damage; a tail segment can also take Teleport (destruction).
     public enum HitEffect : byte
     {
         Damage, EnergyDrain, ShieldDrain, SlowDown, Roll, ProgressiveDamage, Repair, EnergyRecharge, ShieldRecharge,
-        DamageIgnoringShield, ProgressiveDamageIgnoringShield
+        DamageIgnoringShield, ProgressiveDamageIgnoringShield, Teleport
     }
 
     // An owner-decided contact against a remote ship or drone. No live object is needed to apply it.
@@ -34,6 +34,7 @@ namespace CombatSimulation.Core
     // amount, the beam's damage type and RampTime; the receiver counts the ramp from the interval's first tick.
     // DamageIgnoringShield (step 6a, version 12) keeps the damage type and projectile push, but skips shield absorption.
     // ProgressiveDamageIgnoringShield does the same for a ramp. Bullet and segment targets still use Damage.
+    // Teleport (step 6c, version 13): raw distance on contact entry, applied on arrival. A segment target dies instead.
     public readonly struct ResolvedHit
     {
         public readonly BattleId BattleId;

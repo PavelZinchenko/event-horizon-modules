@@ -336,7 +336,8 @@ namespace CombatSimulation.Core
             {
                 var hit = records[i];
                 // Motion effects follow velocity corrections, never the resource prediction ledger.
-                if (hit.TargetIsBullet || hit.Effect == HitEffect.SlowDown || hit.Effect == HitEffect.Roll) continue;
+                if (hit.TargetIsBullet || hit.Effect == HitEffect.SlowDown || hit.Effect == HitEffect.Roll ||
+                    hit.Effect == HitEffect.Teleport) continue;
                 if (hit.ImpactKind != HitImpactKind.DamageOverTime)
                 {
                     if (hit.ContactState != HitContactState.End) _predictedHits.Add(new PredictedHit(hit));
@@ -429,6 +430,7 @@ namespace CombatSimulation.Core
                     break;
                 case HitEffect.SlowDown:
                 case HitEffect.Roll:
+                case HitEffect.Teleport:
                     return false;
                 case HitEffect.EnergyDrain:
                     _replayEffects.EnergyDrain = (float)Math.Min(float.MaxValue, _replayEffects.EnergyDrain + amount);

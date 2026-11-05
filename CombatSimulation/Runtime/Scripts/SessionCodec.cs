@@ -99,6 +99,7 @@ namespace CombatSimulation.Runtime
     //     ship target, with damage type 0 and no impulse); a ProgressiveDamage effect (phase 5, step 5c) then has the
     //     ramp time (32-bit float), on a ship target over time at shape 0, with its damage type and no impulse.
     //     Version 12 adds DamageIgnoringShield and ProgressiveDamageIgnoringShield; the latter also carries ramp time.
+    //     Version 13 adds Teleport: distance once on entry for a ship, or destruction of a tail segment.
     //     The sequence is the hit's position in the stream.
     //   Roster: entity (64), roster ID (32), revision (VarUInt), previous status (2), status (2), reason (3),
     //     deployment count and order (VarUInt), armor deficit, shield deficit, damage fraction (32-bit floats), pose.
@@ -123,7 +124,7 @@ namespace CombatSimulation.Runtime
     {
         internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse }
 
-        internal const byte Version = 12;
+        internal const byte Version = 13;
         internal const int MaxBatchBytes = 1 << 20;
         private const int KindBits = 4, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3, AllegianceBits = 3,
             EffectBits = 4;
@@ -320,11 +321,12 @@ namespace CombatSimulation.Runtime
                         Require(contact <= (ulong)HitContactState.End && impact <= (ulong)HitImpactKind.Stop && amount >= 0 &&
                             damageType < DamageTypeTable.MaxTypes &&
                             (targetBullet ? targetName != 0 : impact <= (ulong)HitImpactKind.DamageOverTime) &&
-                            effect <= (ulong)HitEffect.ProgressiveDamageIgnoringShield && (effect == (ulong)HitEffect.Damage ||
-                                !targetBullet && (effect == (ulong)HitEffect.DamageIgnoringShield ||
+                            effect <= (ulong)HitEffect.Teleport && (effect == (ulong)HitEffect.Damage ||
+                                (!targetBullet || effect == (ulong)HitEffect.Teleport) &&
+                                (effect == (ulong)HitEffect.DamageIgnoringShield ||
                                     (damageType == 0 || ramp) && impulse.X == 0f && impulse.Y == 0f)) &&
-                            (effect != (ulong)HitEffect.Roll || contact == (ulong)HitContactState.Start &&
-                                impact != (ulong)HitImpactKind.DamageOverTime) &&
+                            (effect != (ulong)HitEffect.Roll && effect != (ulong)HitEffect.Teleport ||
+                                contact == (ulong)HitContactState.Start && impact <= (ulong)HitImpactKind.Energy) &&
                             (!ramp || impact == (ulong)HitImpactKind.DamageOverTime && shape == 0 && rampTime >= 0f &&
                                 !float.IsInfinity(rampTime)));
                         if (!resolve) break;

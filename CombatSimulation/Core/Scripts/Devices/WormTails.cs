@@ -126,7 +126,7 @@ namespace CombatSimulation.Core
             var shape = Physics.AddCircle(body, new Circle(Vec2.Zero, definition.Radius * scale), shapeDef);
             Physics.SetPose(body, pose.P, pose.Q.Angle);
 
-            var growsSlowly = parent != null && (parent.GrowsSlowly || parent.HasGrown);
+            var growsSlowly = parent == null ? device.HasGrown : parent.GrowsSlowly || parent.HasGrown;
             segment.Initialize(id, ship, device.Index, definition, (parent?.Number ?? 0) + 1, body, shape, scale, mass,
                 growsSlowly);
             _world.Shapes.Register(shape, new ShapeEntry(segment.Handle, id, ShapeHitPriority.Hull, 0));
@@ -144,7 +144,11 @@ namespace CombatSimulation.Core
                 UpperAngle = limit,
             });
 
-            if (parent == null) device.Head = segment.Handle;
+            if (parent == null)
+            {
+                device.Head = segment.Handle;
+                device.HasGrown = true;
+            }
             else
             {
                 segment.Parent = parent.Handle;
@@ -211,12 +215,14 @@ namespace CombatSimulation.Core
             HitImpactKind kind;
             var impulse = Vec2.Zero;
             var perTick = true;
+            var teleport = 0f;
             var isBullet = _world.Bullets.TryGet(hit.AttackerHandle, out var index);
             if (isBullet)
             {
                 ref readonly var attacker = ref _world.Bullets[index];
                 attackerOwner = attacker.Owner;
                 deviceIndex = attacker.DeviceIndex;
+                teleport = attacker.IsBeam ? attacker.BeamDefinition.Effects.Teleport : attacker.Definition.Effects.Teleport;
                 if (attacker.IsBeam && attacker.BeamDefinition.Impact != BulletImpact.OverTime)
                 {
                     kind = HitImpactKind.Energy;
@@ -241,11 +247,18 @@ namespace CombatSimulation.Core
                 kind = HitImpactKind.Impact;
             }
 
+            // Teleport destroys the contacted segment instead of moving it, including fixed segments (6c row 5).
+            // One contact record carries the effect; ordinary damage cannot change this outcome.
+            if (teleport > 0f)
+            {
+                perTick = false;
+                kind = HitImpactKind.Energy;
+            }
             if (Setup.IsLocalOwner(segment.Owner))
             {
                 if (!Setup.IsLocalOwner(attackerOwner) && !_battle.RecordBulletContact(hit.Attacker, hit.Target, perTick ? Tick : -1))
                     return;
-                QueueSegmentHit(segment, hit.Damage, impulse);
+                QueueSegmentHit(segment, hit.Damage, impulse, teleport > 0f);
                 // A remote projectile that stops at a local segment stops on its owner too.
                 if (isBullet && !hit.AttackerPassThrough && hit.Source != ContactSource.Ray &&
                     !Setup.IsLocalOwner(attackerOwner))
@@ -254,7 +267,8 @@ namespace CombatSimulation.Core
             else if (Setup.IsLocalOwner(attackerOwner) && Setup.HasRemoteOwners)
             {
                 _battle.SendBulletContact(new ResolvedHit(_world.BattleId, Tick, hit.Attacker, attackerOwner, deviceIndex,
-                    segment.Id, segment.Owner, 0, HitContactState.Start, kind, hit.Damage, targetIsBullet: true));
+                    segment.Id, segment.Owner, 0, HitContactState.Start, kind, teleport > 0f ? teleport : hit.Damage,
+                    targetIsBullet: true, effect: teleport > 0f ? HitEffect.Teleport : HitEffect.Damage));
             }
         }
 
@@ -265,14 +279,15 @@ namespace CombatSimulation.Core
                 hit.ImpactKind == HitImpactKind.Disarm || hit.ImpactKind == HitImpactKind.Stop) return;
             var perTick = hit.ImpactKind == HitImpactKind.DamageOverTime || hit.DeviceIndex < 0;
             if (!_battle.RecordBulletContact(hit.AttackerId, hit.TargetId, perTick ? hit.Tick : -1)) return;
-            QueueSegmentHit(segment, hit.Amount, Vec2.Zero);
-            _world.Events.Add(BattleEvent.RemoteHit(_world.BattleId, Tick, _world.Events.Count, hit, hit.Amount));
+            QueueSegmentHit(segment, hit.Amount, Vec2.Zero, hit.Effect == HitEffect.Teleport);
+            if (hit.Effect != HitEffect.Teleport)
+                _world.Events.Add(BattleEvent.RemoteHit(_world.BattleId, Tick, _world.Events.Count, hit, hit.Amount));
         }
 
         // Stage 9 (and tests). Legacy segments take a tenth of the push at once (Impulse.Apply with the reaction factor).
-        public void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse)
+        public void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse, bool destroy = false)
         {
-            _segmentHits.Add(new SegmentHit(segment.Handle, damage));
+            _segmentHits.Add(new SegmentHit(segment.Handle, damage, destroy));
             if (impulse.X != 0f || impulse.Y != 0f)
                 Physics.ApplyImpulse(segment.Body, WormTailDefinition.ImpulseShare * impulse, Physics.GetPosition(segment.Body));
         }
@@ -286,6 +301,12 @@ namespace CombatSimulation.Core
             {
                 var segment = _world.Segments.Get(_segmentHits[i].Segment);
                 if (segment == null || segment.PendingDeath) continue;
+
+                if (_segmentHits[i].Destroy)
+                {
+                    KillSegment(segment);
+                    continue;
+                }
 
                 var damage = _segmentHits[i].Damage;
                 if (!segment.IsFixed)
@@ -385,7 +406,7 @@ namespace CombatSimulation.Core
             else if (!segment.Detached && _world.FindShip(segment.ShipId)?.GetDevice(segment.DeviceIndex) is WormTailDevice device &&
                      device.Head.Index == segment.Index && device.Head.Generation == segment.Generation)
             {
-                device.Head = default;
+                device.HeadRemoved(Tick);
             }
 
             _battle.CaptureRemoval(segment.Id, segment.Owner, reason);
@@ -445,11 +466,13 @@ namespace CombatSimulation.Core
         {
             public readonly EntityHandle Segment;
             public readonly float Damage;
+            public readonly bool Destroy;
 
-            public SegmentHit(EntityHandle segment, float damage)
+            public SegmentHit(EntityHandle segment, float damage, bool destroy)
             {
                 Segment = segment;
                 Damage = damage;
+                Destroy = destroy;
             }
         }
 

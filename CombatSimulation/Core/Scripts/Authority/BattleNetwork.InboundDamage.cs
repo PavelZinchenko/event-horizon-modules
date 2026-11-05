@@ -119,6 +119,9 @@ namespace CombatSimulation.Core
                 case HitEffect.Roll:
                     ContactSystem.ApplyRoll(Physics, ship, amount);
                     break;
+                case HitEffect.Teleport:
+                    ContactSystem.ApplyTeleport(Physics, ship, amount);
+                    break;
                 case HitEffect.EnergyDrain:
                     ship.AddPendingDrain(amount, 0f);
                     break;
@@ -153,6 +156,7 @@ namespace CombatSimulation.Core
                 _tails.ApplySegmentContact(hit, _world.Segments.Get(handle));
                 return;
             }
+            if (hit.Effect == HitEffect.Teleport) return;
             if (!_world.Bullets.TryGet(handle, out var index)) return;
             ref readonly var bullet = ref _world.Bullets[index];
             if (bullet.Owner != hit.TargetOwner || !Setup.IsLocalOwner(bullet.Owner)) return;

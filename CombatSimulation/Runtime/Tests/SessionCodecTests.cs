@@ -181,6 +181,10 @@ namespace CombatSimulation.Runtime.Tests
                     rampTime: 3f)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 1, impact: HitImpactKind.DamageOverTime, effect: HitEffect.Roll)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 100, impact: HitImpactKind.DamageOverTime, effect: HitEffect.Teleport)), out _, out _));
+            Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
+                Hit(ref w, 0, 100, damageType: 1, effect: HitEffect.Teleport)), out _, out _));
             // Phase 4 E4: a push must be finite.
             Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) => Hit(ref w, 0, 1, impulseX: 2f), 1), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
@@ -263,6 +267,20 @@ namespace CombatSimulation.Runtime.Tests
             var hit = new ResolvedHit(link.Battle, 11, deploy.EntityId, 20, 0, link.Target, 10, 0,
                 HitContactState.Start, HitImpactKind.DamageOverTime, 120f, 1, effect: effect,
                 rampTime: effect == HitEffect.ProgressiveDamageIgnoringShield ? 3f : 0f);
+            link.Read(link.Write(11, Array.Empty<OwnerOperation>(), new[] { hit }), out _, out var actual);
+            CollectionAssert.AreEqual(new[] { hit }, actual);
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void TeleportContactRoundTripsForShipAndSegment(bool segment)
+        {
+            var link = new Link();
+            var deploy = Deploy(link.Battle);
+            link.Read(link.Write(10, new[] { deploy }, Array.Empty<ResolvedHit>()), out _, out _);
+            var hit = new ResolvedHit(link.Battle, 11, deploy.EntityId, 20, 0,
+                segment ? new EntityId(987654321) : link.Target, 10, 0,
+                HitContactState.Start, HitImpactKind.Energy, 100f, 1, targetIsBullet: segment, effect: HitEffect.Teleport);
             link.Read(link.Write(11, Array.Empty<OwnerOperation>(), new[] { hit }), out _, out var actual);
             CollectionAssert.AreEqual(new[] { hit }, actual);
         }

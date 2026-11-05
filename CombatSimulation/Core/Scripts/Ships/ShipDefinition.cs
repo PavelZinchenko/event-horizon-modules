@@ -15,9 +15,9 @@ namespace CombatSimulation.Core
             ResourceDefinition shield, ResourceDefinition energy, EngineDefinition engineWithoutEnergy = null,
             IReadOnlyList<Circle> extraHullParts = null, float rammingDamageMultiplier = 1f,
             IReadOnlyList<BarrelDefinition> barrels = null, IReadOnlyList<DeviceDefinition> devices = null,
-            IReadOnlyList<DamageResistance> resistances = null, float scale = 0f)
+            IReadOnlyList<DamageResistance> resistances = null, float scale = 0f, bool teleportImmune = false)
             : this(CircleHull(hullRadius, extraHullParts), mass, engine, armor, shield, energy, engineWithoutEnergy,
-                rammingDamageMultiplier, barrels, devices, resistances, scale)
+                rammingDamageMultiplier, barrels, devices, resistances, scale, teleportImmune)
         {
         }
 
@@ -27,7 +27,7 @@ namespace CombatSimulation.Core
             ResourceDefinition shield, ResourceDefinition energy, EngineDefinition engineWithoutEnergy = null,
             float rammingDamageMultiplier = 1f, IReadOnlyList<BarrelDefinition> barrels = null,
             IReadOnlyList<DeviceDefinition> devices = null, IReadOnlyList<DamageResistance> resistances = null,
-            float scale = 0f)
+            float scale = 0f, bool teleportImmune = false)
         {
             if (hull == null) throw new ArgumentNullException(nameof(hull));
             if (hull.Count == 0) throw new ArgumentException("A hull needs at least one shape.", nameof(hull));
@@ -74,6 +74,7 @@ namespace CombatSimulation.Core
 
             HullRadius = hullRadius;
             Scale = scale > 0f ? scale : 2f * hullRadius;
+            TeleportImmune = teleportImmune;
             HullParts = parts.AsReadOnly();
             HullHash = ComputeHullHash(parts);
             Mass = mass;
@@ -100,6 +101,9 @@ namespace CombatSimulation.Core
         // Legacy Body.WorldScale (ShipModel.ModelScale): the target size in the area falloff (phase 5, step 3, E6).
         // 2 x HullRadius unless set.
         public float Scale { get; }
+
+        // Legacy TeleportAction excludes Starbase and Special ship types, including their drones and clones.
+        public bool TeleportImmune { get; }
 
         // Physics parts in hull shape order, each shape's parts in its own order. The order is the shape order
         // within the entity (contact ordering, key 6) and the target shape index of hit records.

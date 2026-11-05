@@ -4,8 +4,9 @@ namespace CombatSimulation.Core
 {
     // Effects of a bullet or beam on a ship or drone target besides damage and push (phase 5, step 5). A hit applies
     // each once, at full power (legacy actions have no falloff); damage over time and a beam apply each per second,
-    // except Roll, which runs on contact entry only.
-    // Missiles and tail segments take only the progressive ramp and repair's hostile branch, which are damage.
+    // except Roll and Teleport, which run on contact entry only.
+    // Missiles and tail segments take the progressive ramp and repair's hostile branch as damage. Teleport destroys
+    // a tail segment instead of moving it; missiles ignore it.
     // The restore (step 5d) acts on the bullet itself.
     public readonly struct ImpactEffects
     {
@@ -13,7 +14,7 @@ namespace CombatSimulation.Core
             float slowDown = 0f, float roll = 0f, float ramp = 0f, float rampTime = 0f, float restore = 0f,
             float lifetimeLoss = 0f, float repair = 0f, float repairDamage = 0f, int repairDamageType = 0,
             float energyRecharge = 0f, float shieldRecharge = 0f, float enemyEnergyDrain = 0f, float enemyShieldDrain = 0f,
-            bool ignoreShield = false)
+            bool ignoreShield = false, float teleport = 0f)
         {
             Validate(energyDrain, nameof(energyDrain));
             Validate(shieldDrain, nameof(shieldDrain));
@@ -30,6 +31,7 @@ namespace CombatSimulation.Core
             Validate(shieldRecharge, nameof(shieldRecharge));
             Validate(enemyEnergyDrain, nameof(enemyEnergyDrain));
             Validate(enemyShieldDrain, nameof(enemyShieldDrain));
+            Validate(teleport, nameof(teleport));
             DamageTypeTable.ValidateIndex(repairDamageType, nameof(repairDamageType));
             EnergyDrain = energyDrain;
             ShieldDrain = shieldDrain;
@@ -48,6 +50,7 @@ namespace CombatSimulation.Core
             EnemyEnergyDrain = enemyEnergyDrain;
             EnemyShieldDrain = enemyShieldDrain;
             IgnoreShield = ignoreShield;
+            Teleport = teleport;
         }
 
         // Legacy DrainEnergyAction: the target's energy falls by it, clamped at 0, and its recharge delay restarts.
@@ -58,6 +61,10 @@ namespace CombatSimulation.Core
 
         // Only this impact's damage bypasses the shield. Armor resistance and energy absorption still apply.
         public bool IgnoreShield { get; }
+
+        // Raw distance along the target's heading, once per new contact. Never scaled by charge or modifiers.
+        // Ships and drones move with their hinge group; tail segments die instead.
+        public float Teleport { get; }
 
         // Legacy SiphonHitPointsAction Factor, on the first damage effect: the attacker's ship regains that damage x
         // (1 - the target's armor resistance of its type) x Siphon, also while the target's shield absorbs it
@@ -96,13 +103,13 @@ namespace CombatSimulation.Core
         internal float DamageAgainst(Allegiance source, Allegiance target) =>
             Allegiances.IsHostile(source, target) ? RepairDamage : 0f;
 
-        // Legacy BulletStats with PowerLevel c: effect powers x c. The siphon factor, the ramp time and the restore stay
-        // (legacy BulletFactory reads the raw RestoreLifetime power).
+        // Legacy BulletStats with PowerLevel c: effect powers x c. The siphon factor, ramp time, restore and teleport stay
+        // (legacy BulletFactory reads the raw RestoreLifetime and Teleport powers).
         internal ImpactEffects WithCharge(float charge) =>
             new ImpactEffects(EnergyDrain * charge, ShieldDrain * charge, Siphon, SlowDown * charge, Roll * charge,
                 Ramp * charge, RampTime, Restore, LifetimeLoss, Repair * charge, RepairDamage * charge, RepairDamageType,
                 EnergyRecharge * charge, ShieldRecharge * charge, EnemyEnergyDrain * charge, EnemyShieldDrain * charge,
-                IgnoreShield);
+                IgnoreShield, Teleport);
 
         // The ramp damage of the contact ticks [from, to), counted from the contact's first tick (0). Tick k deals
         // ramp x min(1, k x TickDuration / rampTime) x TickDuration; tick 0 deals none (legacy IsNew). The owner adds

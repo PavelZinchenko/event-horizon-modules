@@ -58,10 +58,10 @@ namespace CombatSimulation.Core
         // Stage 9. Ship contacts belong to the attacker; bullet damage belongs to the target bullet.
         public void Resolve()
         {
-            var previousRoll = _previousRoll;
-            _previousRoll = _currentRoll;
-            _currentRoll = previousRoll;
-            _currentRoll.Clear();
+            var previousEntries = _previousEntries;
+            _previousEntries = _currentEntries;
+            _currentEntries = previousEntries;
+            _currentEntries.Clear();
             _resolver.Resolve();
             _beams.Complete(_battle, _resolver);
             _bolts.Complete(_battle, _resolver);
@@ -258,16 +258,28 @@ namespace CombatSimulation.Core
                                 AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.SlowDown,
                                     effects.SlowDown);
                         }
-                        if (effects.Roll > 0f)
+                        if (effects.Roll > 0f || effects.Teleport > 0f)
                         {
                             var pair = new EntityPair(hit.Attacker, hit.Target);
-                            if (_currentRoll.Add(pair) && !_previousRoll.Contains(pair))
+                            if (_currentEntries.Add(pair) && !_previousEntries.Contains(pair))
                             {
-                                var degrees = effects.Roll / (float)Math.Sqrt(target.Definition.Mass) * 180f;
-                                ApplyRoll(Physics, target, degrees);
-                                if (remote)
-                                    AddEffectRecord(hit, owner, deviceIndex, target, shape, HitImpactKind.Energy,
-                                        HitEffect.Roll, degrees);
+                                if (effects.Roll > 0f)
+                                {
+                                    var degrees = effects.Roll / (float)Math.Sqrt(target.Definition.Mass) * 180f;
+                                    ApplyRoll(Physics, target, degrees);
+                                    if (remote)
+                                        AddEffectRecord(hit, owner, deviceIndex, target, shape, HitImpactKind.Energy,
+                                            HitEffect.Roll, degrees);
+                                }
+                                if (effects.Teleport > 0f && !target.Definition.TeleportImmune)
+                                {
+                                    if (remote)
+                                        AddEffectRecord(hit, owner, deviceIndex, target, shape, HitImpactKind.Energy,
+                                            HitEffect.Teleport, effects.Teleport);
+                                    // The target owner moves it; copies follow position corrections. Predicting the
+                                    // jump lets an older correction put it back in the rift and create another hit.
+                                    else ApplyTeleport(Physics, target, effects.Teleport);
+                                }
                             }
                         }
                         target.AddPendingDamage(damageType, damage, effects.IgnoreShield);
@@ -399,6 +411,17 @@ namespace CombatSimulation.Core
             physics.SetAngularVelocity(target.Body, spin + (spin < 0f ? -change : change));
         }
 
+        // Exact landing, with torus wrapping and no free-space search (owner, step 6c). Hinged tail segments keep
+        // their offsets. Only the target's linear velocity clears; its spin and the tail velocities stay unchanged.
+        internal static void ApplyTeleport(PhysicsWorld physics, ShipEntity target, float distance)
+        {
+            if (target.Definition.TeleportImmune) return;
+            var position = physics.GetPosition(target.Body);
+            var heading = physics.GetRotation(target.Body).Rotate(new Vec2(1f, 0f));
+            physics.TeleportGroup(target.Body, position + distance * heading);
+            physics.SetLinearVelocity(target.Body, Vec2.Zero);
+        }
+
         // Legacy PushAction (Push x the bullet velocity) plus RadialPushAction (phase 5, step 3): away from the bullet
         // centre toward the target's origin. Legacy applies the radial impulse at the bullet centre; that point lies on
         // the same line through the origin, so the torque is the same.
@@ -433,7 +456,7 @@ namespace CombatSimulation.Core
         private readonly BeamQueries _beams = new BeamQueries();
         private readonly BeamBolts _bolts = new BeamBolts();
         private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();
-        private HashSet<EntityPair> _previousRoll = new HashSet<EntityPair>();
-        private HashSet<EntityPair> _currentRoll = new HashSet<EntityPair>();
+        private HashSet<EntityPair> _previousEntries = new HashSet<EntityPair>();
+        private HashSet<EntityPair> _currentEntries = new HashSet<EntityPair>();
     }
 }

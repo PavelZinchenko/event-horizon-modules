@@ -28,18 +28,19 @@ namespace CombatSimulation.Core
                 hit.DeviceIndex < -1 || hit.TargetShape < 0 || !Finite(hit.Amount) || hit.Amount < 0f ||
                 hit.ContactState < HitContactState.Start || hit.ContactState > HitContactState.End ||
                 hit.ImpactKind < HitImpactKind.Impact || hit.ImpactKind > HitImpactKind.Stop ||
-                !Setup.DamageTypes.Contains(hit.DamageType) || hit.Effect > HitEffect.ProgressiveDamageIgnoringShield)
+                !Setup.DamageTypes.Contains(hit.DamageType) || hit.Effect > HitEffect.Teleport)
                 return false;
-            // An effect names a ship target, without damage type or push (phase 5, step 5). The progressive ramp
+            // An effect names a ship target (or a segment for Teleport), without damage type or push. The progressive ramp
             // (step 5c) is damage of a type over time on shape 0; only it carries a ramp time.
             var ramp = hit.Effect == HitEffect.ProgressiveDamage || hit.Effect == HitEffect.ProgressiveDamageIgnoringShield;
-            if (hit.TargetIsBullet && hit.Effect != HitEffect.Damage) return false;
+            if (hit.TargetIsBullet && hit.Effect != HitEffect.Damage && hit.Effect != HitEffect.Teleport) return false;
             if (hit.Effect != HitEffect.Damage && hit.Effect != HitEffect.DamageIgnoringShield &&
                 (hit.Impulse.X != 0f || hit.Impulse.Y != 0f || hit.DamageType != 0 && !ramp)) return false;
             if (ramp ? hit.ImpactKind != HitImpactKind.DamageOverTime ||
                     hit.TargetShape != 0 || !Finite(hit.RampTime) || hit.RampTime < 0f : hit.RampTime != 0f)
                 return false;
-            if (hit.Effect == HitEffect.Roll && (hit.ImpactKind == HitImpactKind.DamageOverTime ||
+            if ((hit.Effect == HitEffect.Roll || hit.Effect == HitEffect.Teleport) &&
+                (hit.ImpactKind > HitImpactKind.Energy ||
                 hit.ContactState != HitContactState.Start)) return false;
             // A bullet target: one record per contact. Disarm and Stop name bullets only.
             if (hit.TargetIsBullet ? hit.TargetShape != 0 || hit.ContactState != HitContactState.Start
@@ -54,6 +55,8 @@ namespace CombatSimulation.Core
                 return false;
             if (_world.Entities.TryGet(hit.TargetId, out handle) &&
                 (IsContactTarget(handle.Kind) != hit.TargetIsBullet || _world.EntityOwner(handle) != hit.TargetOwner)) return false;
+            if (hit.TargetIsBullet && hit.Effect == HitEffect.Teleport &&
+                _world.Entities.TryGet(hit.TargetId, out handle) && handle.Kind != EntityKind.Segment) return false;
             if (!AcceptSequence(_hitSequences, record.SenderOwner, record.Sequence)) return false;
             var index = _remoteHits.Count;
             while (index > 0 && CompareHits(record, _remoteHits[index - 1]) < 0) --index;

@@ -102,12 +102,21 @@ namespace CombatSimulation.Core
 
         // Legacy WormTailDeviceV2: the tail appears at the first update after deployment.
         public long HeadGrowthTick { get; private set; }
+        public bool HasGrown { get; set; }
 
         public override void Reset(long tick)
         {
             base.Reset(tick);
             Head = default;
             HeadGrowthTick = tick;
+            HasGrown = false;
+        }
+
+        // Step 6c makes head loss reachable while the ship lives. Legacy waits 1.5 cooldowns before rebuilding it.
+        public void HeadRemoved(long tick)
+        {
+            Head = default;
+            HeadGrowthTick = tick + TickTime.AtLeast(1.5f * Definition.Cooldown);
         }
 
         public override void Update(DeviceContext context, ShipEntity ship) => context.GrowTail(ship, this);
