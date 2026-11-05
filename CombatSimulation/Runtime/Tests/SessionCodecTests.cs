@@ -62,6 +62,8 @@ namespace CombatSimulation.Runtime.Tests
                 // Step 5c: a beam's ramp carries its damage type and ramp time, on shape 0.
                 new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 0, HitContactState.Start, HitImpactKind.DamageOverTime, 50, 8,
                     damageType: LegacyDamageModel.Heat, effect: HitEffect.ProgressiveDamage, rampTime: 3f),
+                new ResolvedHit(batch, 125, child, 20, 2, link.Target, 10, 1, HitContactState.Start, HitImpactKind.Impact, 10, 9,
+                    damageType: LegacyDamageModel.Energy, impulse: new Vec2(1f, 0f), effect: HitEffect.DamageIgnoringShield),
             };
             var bytes = link.Write(125, operations, hits);
             var scan = new List<SessionCodec.ScannedRecord>();
@@ -85,7 +87,7 @@ namespace CombatSimulation.Runtime.Tests
                 SessionCodec.RecordKind.DeviceUse, SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Hit,
                 SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit,
                 SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit,
-                SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
+                SessionCodec.RecordKind.Hit, SessionCodec.RecordKind.Hit }, scan.ConvertAll(r => r.Kind));
             // A push (phase 4 E4) adds 64 bits to its hit; every hit has the 1-bit flag.
             // Version 8 widens every record kind to 4 bits (D13). Version 11 adds the 4-bit effect to every hit.
             Assert.LessOrEqual(scan[3].Bits, 42); Assert.LessOrEqual(scan[2].Bits - scan[3].Bits, 51 + 8); Assert.LessOrEqual(scan[6].Bits, 33); Assert.LessOrEqual(scan[13].Bits, 94 + 64);
@@ -162,7 +164,7 @@ namespace CombatSimulation.Runtime.Tests
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 1, impulseX: 2f, effect: HitEffect.ShieldDrain)), out _, out _));
             Assert.Throws<FormatException>(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
-                Hit(ref w, 0, 1, effect: (HitEffect)9)), out _, out _));
+                Hit(ref w, 0, 1, effect: (HitEffect)15)), out _, out _));
             // Step 5c: a ramp is damage of a type over time on shape 0, with a finite ramp time that is not negative.
             Assert.DoesNotThrow(() => Deployed().Read(Raw(10, 1, 0, (ref BitWriter w) =>
                 Hit(ref w, 0, 50, impact: HitImpactKind.DamageOverTime, damageType: 2, effect: HitEffect.ProgressiveDamage,
@@ -251,13 +253,16 @@ namespace CombatSimulation.Runtime.Tests
         [TestCase(HitEffect.Repair)]
         [TestCase(HitEffect.EnergyRecharge)]
         [TestCase(HitEffect.ShieldRecharge)]
+        [TestCase(HitEffect.DamageIgnoringShield)]
+        [TestCase(HitEffect.ProgressiveDamageIgnoringShield)]
         public void SupportIntervalsRoundTrip(HitEffect effect)
         {
             var link = new Link();
             var deploy = Deploy(link.Battle);
             link.Read(link.Write(10, new[] { deploy }, Array.Empty<ResolvedHit>()), out _, out _);
             var hit = new ResolvedHit(link.Battle, 11, deploy.EntityId, 20, 0, link.Target, 10, 0,
-                HitContactState.Start, HitImpactKind.DamageOverTime, 120f, 1, effect: effect);
+                HitContactState.Start, HitImpactKind.DamageOverTime, 120f, 1, effect: effect,
+                rampTime: effect == HitEffect.ProgressiveDamageIgnoringShield ? 3f : 0f);
             link.Read(link.Write(11, Array.Empty<OwnerOperation>(), new[] { hit }), out _, out var actual);
             CollectionAssert.AreEqual(new[] { hit }, actual);
         }

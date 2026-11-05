@@ -174,8 +174,10 @@ namespace CombatSimulation.Core
         internal Vec2 PushImpulse(in BulletEntity bullet, Vec2 target, float falloff) =>
             _contacts.PushImpulse(bullet, target, falloff);
         internal void ApplyShieldFirst(ref ResourcePool shield, ref ResourcePool armor, ref ResourcePool energy,
-            float[] damage, in PendingEffects effects, ShipDefinition definition, float resistanceShare) =>
-            _damage.ApplyShieldFirst(ref shield, ref armor, ref energy, damage, effects, definition, resistanceShare);
+            float[] damage, in PendingEffects effects, ShipDefinition definition, float resistanceShare,
+            float[] damageIgnoringShield) =>
+            _damage.ApplyShieldFirst(ref shield, ref armor, ref energy, damage, effects, definition, resistanceShare,
+                damageIgnoringShield);
         internal void ForgetContacts(EntityId id) => _contacts.Forget(id);
 
         // World members for the bullet and point-defense queries, the snapshot and tests (8b, decision 1).

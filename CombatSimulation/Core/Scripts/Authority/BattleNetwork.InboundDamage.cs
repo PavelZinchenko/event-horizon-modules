@@ -86,7 +86,7 @@ namespace CombatSimulation.Core
         // The damage of an interval's ticks [from, to), counted from its first tick (0): the rate per tick, or the
         // progressive ramp (phase 5, step 5c), which grows from the first tick.
         internal static double IntervalDamage(in ResolvedHit hit, long from, long to) =>
-            hit.Effect == HitEffect.ProgressiveDamage
+            hit.Effect == HitEffect.ProgressiveDamage || hit.Effect == HitEffect.ProgressiveDamageIgnoringShield
                 ? ImpactEffects.RampDamage(hit.Amount, hit.RampTime, from, to)
                 : (double)(to - from) * hit.Amount * Battle.TickDuration;
 
@@ -126,7 +126,8 @@ namespace CombatSimulation.Core
                     ship.AddPendingDrain(0f, amount);
                     break;
                 default:
-                    ship.AddPendingDamage(hit.DamageType, amount);
+                    ship.AddPendingDamage(hit.DamageType, amount, hit.Effect == HitEffect.DamageIgnoringShield ||
+                        hit.Effect == HitEffect.ProgressiveDamageIgnoringShield);
                     _world.Events.Add(BattleEvent.RemoteHit(BattleId, Tick, _world.Events.Count, hit, amount));
                     break;
             }

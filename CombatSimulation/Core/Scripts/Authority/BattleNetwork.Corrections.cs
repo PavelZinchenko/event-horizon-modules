@@ -211,7 +211,7 @@ namespace CombatSimulation.Core
             }
             if (ReplayPredictedDamage(ship.Id, tick, correction.AppliedHitSequence))
                 _battle.ApplyShieldFirst(ref shield, ref armor, ref energy, _replayDamage, _replayEffects, ship.Definition,
-                    ship.ResistanceShare);
+                    ship.ResistanceShare, _replayDamageIgnoringShield);
             Settle(ref ship.Armor, armor);
             Settle(ref ship.Shield, shield);
             Settle(ref ship.Energy, energy);
@@ -370,6 +370,7 @@ namespace CombatSimulation.Core
         private bool ReplayPredictedDamage(EntityId target, long tick, ulong ack)
         {
             Array.Clear(_replayDamage, 0, _replayDamage.Length);
+            Array.Clear(_replayDamageIgnoringShield, 0, _replayDamageIgnoringShield.Length);
             _replayEffects = default;
             var any = false;
             var kept = 0;
@@ -412,6 +413,11 @@ namespace CombatSimulation.Core
             if (!(amount > 0.0)) return false;
             switch (hit.Effect)
             {
+                case HitEffect.DamageIgnoringShield:
+                case HitEffect.ProgressiveDamageIgnoringShield:
+                    _replayDamageIgnoringShield[hit.DamageType] = (float)Math.Min(float.MaxValue,
+                        _replayDamageIgnoringShield[hit.DamageType] + amount);
+                    break;
                 case HitEffect.Repair:
                     _replayEffects.Repair = (float)Math.Min(float.MaxValue, _replayEffects.Repair + amount);
                     break;
@@ -465,6 +471,7 @@ namespace CombatSimulation.Core
 
         private readonly List<PredictedHit> _predictedHits = new List<PredictedHit>();
         private readonly float[] _replayDamage;
+        private readonly float[] _replayDamageIgnoringShield;
         private PendingEffects _replayEffects;
     }
 }

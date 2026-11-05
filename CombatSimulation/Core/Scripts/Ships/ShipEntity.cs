@@ -178,13 +178,15 @@ namespace CombatSimulation.Core
 
         // Damage accumulated at stage 9, by damage type (D4), and the other effects; stage 10 applies them in one pass.
         public float[] PendingDamage => _pendingDamage;
+        public float[] PendingDamageIgnoringShield => _pendingDamageIgnoringShield;
         public PendingEffects PendingEffects;
         public bool HasPendingDamage { get; private set; }
 
-        public void AddPendingDamage(int type, float amount)
+        public void AddPendingDamage(int type, float amount, bool ignoreShield = false)
         {
             if (!(amount > 0f)) return;
-            _pendingDamage[type] = Sum(_pendingDamage[type], amount);
+            var damage = ignoreShield ? _pendingDamageIgnoringShield : _pendingDamage;
+            damage[type] = Sum(damage[type], amount);
             HasPendingDamage = true;
         }
 
@@ -213,6 +215,7 @@ namespace CombatSimulation.Core
         {
             if (!HasPendingDamage) return;
             System.Array.Clear(_pendingDamage, 0, _pendingDamage.Length);
+            System.Array.Clear(_pendingDamageIgnoringShield, 0, _pendingDamageIgnoringShield.Length);
             PendingEffects = default;
             HasPendingDamage = false;
         }
@@ -268,6 +271,8 @@ namespace CombatSimulation.Core
             PreStepVelocity = Vec2.Zero;
             if (_pendingDamage.Length != damageTypes) _pendingDamage = new float[damageTypes];
             else System.Array.Clear(_pendingDamage, 0, damageTypes);
+            if (_pendingDamageIgnoringShield.Length != damageTypes) _pendingDamageIgnoringShield = new float[damageTypes];
+            else System.Array.Clear(_pendingDamageIgnoringShield, 0, damageTypes);
             PendingEffects = default;
             HasPendingDamage = false;
             _spawnSampleCount = 0;
@@ -431,6 +436,7 @@ namespace CombatSimulation.Core
 
         private ShapeId[] _shapes = new ShapeId[1];
         private float[] _pendingDamage = System.Array.Empty<float>();
+        private float[] _pendingDamageIgnoringShield = System.Array.Empty<float>();
         private long[] _barrelShotTicks = System.Array.Empty<long>();
         private ShipDevice[] _devices = System.Array.Empty<ShipDevice>();
         private readonly SpawnSample[] _spawnSamples = new SpawnSample[SpawnHistoryLength];

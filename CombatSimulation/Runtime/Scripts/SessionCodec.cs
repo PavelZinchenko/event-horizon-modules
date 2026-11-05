@@ -97,8 +97,9 @@ namespace CombatSimulation.Runtime
     //     DamageTypeTable.MaxTypes; D4), impulse flag (1 bit); with the flag, the push impulse (two 32-bit floats;
     //     phase 4 E4, a projectile's start record on a ship only), effect (4; HitEffect, version 11: a drain names a
     //     ship target, with damage type 0 and no impulse); a ProgressiveDamage effect (phase 5, step 5c) then has the
-    //     ramp time (32-bit float), on a ship target over time at shape 0, with its damage type and no impulse. The
-    //     sequence is the hit's position in the stream.
+    //     ramp time (32-bit float), on a ship target over time at shape 0, with its damage type and no impulse.
+    //     Version 12 adds DamageIgnoringShield and ProgressiveDamageIgnoringShield; the latter also carries ramp time.
+    //     The sequence is the hit's position in the stream.
     //   Roster: entity (64), roster ID (32), revision (VarUInt), previous status (2), status (2), reason (3),
     //     deployment count and order (VarUInt), armor deficit, shield deficit, damage fraction (32-bit floats), pose.
     //   Drone launch: entity (64), bay roster ID (32), bay device (VarUInt), parent entity (64), pose.
@@ -122,7 +123,7 @@ namespace CombatSimulation.Runtime
     {
         internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse }
 
-        internal const byte Version = 11;
+        internal const byte Version = 12;
         internal const int MaxBatchBytes = 1 << 20;
         private const int KindBits = 4, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3, AllegianceBits = 3,
             EffectBits = 4;
@@ -269,7 +270,8 @@ namespace CombatSimulation.Runtime
             w.WriteBool(push);
             if (push) { Float(ref w, hit.Impulse.X); Float(ref w, hit.Impulse.Y); }
             w.WriteBits((ulong)hit.Effect, EffectBits);
-            if (hit.Effect == HitEffect.ProgressiveDamage) Float(ref w, hit.RampTime);
+            if (hit.Effect == HitEffect.ProgressiveDamage || hit.Effect == HitEffect.ProgressiveDamageIgnoringShield)
+                Float(ref w, hit.RampTime);
             own.Hits = hit.Sequence;
         }
 
@@ -312,13 +314,15 @@ namespace CombatSimulation.Runtime
                         var damageType = r.VarUInt();
                         var impulse = r.Bool() ? new Vec2(r.Float(), r.Float()) : Vec2.Zero;
                         var effect = r.Bits(EffectBits);
-                        var ramp = effect == (ulong)HitEffect.ProgressiveDamage;
+                        var ramp = effect == (ulong)HitEffect.ProgressiveDamage ||
+                            effect == (ulong)HitEffect.ProgressiveDamageIgnoringShield;
                         var rampTime = ramp ? r.Float() : 0f;
                         Require(contact <= (ulong)HitContactState.End && impact <= (ulong)HitImpactKind.Stop && amount >= 0 &&
                             damageType < DamageTypeTable.MaxTypes &&
                             (targetBullet ? targetName != 0 : impact <= (ulong)HitImpactKind.DamageOverTime) &&
-                            effect <= (ulong)HitEffect.ShieldRecharge && (effect == (ulong)HitEffect.Damage ||
-                                !targetBullet && (damageType == 0 || ramp) && impulse.X == 0f && impulse.Y == 0f) &&
+                            effect <= (ulong)HitEffect.ProgressiveDamageIgnoringShield && (effect == (ulong)HitEffect.Damage ||
+                                !targetBullet && (effect == (ulong)HitEffect.DamageIgnoringShield ||
+                                    (damageType == 0 || ramp) && impulse.X == 0f && impulse.Y == 0f)) &&
                             (effect != (ulong)HitEffect.Roll || contact == (ulong)HitContactState.Start &&
                                 impact != (ulong)HitImpactKind.DamageOverTime) &&
                             (!ramp || impact == (ulong)HitImpactKind.DamageOverTime && shape == 0 && rampTime >= 0f &&

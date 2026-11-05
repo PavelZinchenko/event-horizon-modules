@@ -235,6 +235,7 @@ namespace CombatSimulation.Core
                         // A remote target's copy takes the same damage and push as a prediction (N3); it never dies of
                         // it. The push on a remote target travels in the first record (phase 4 E4).
                         var remote = !Setup.IsLocalOwner(target.Owner);
+                        var damageEffect = effects.IgnoreShield ? HitEffect.DamageIgnoringShield : HitEffect.Damage;
                         var repairDamage = hostile ? effects.RepairDamage : 0f;
                         if (effects.RepairDamageType == damageType)
                         {
@@ -243,11 +244,11 @@ namespace CombatSimulation.Core
                         }
                         else if (repairDamage > 0f)
                         {
-                            target.AddPendingDamage(effects.RepairDamageType, repairDamage * effectScale);
+                            target.AddPendingDamage(effects.RepairDamageType, repairDamage * effectScale, effects.IgnoreShield);
                             if (remote)
                                 _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                     hit.Target, target.Owner, shape, HitContactState.Start, kind, repairDamage,
-                                    damageType: (byte)effects.RepairDamageType));
+                                    damageType: (byte)effects.RepairDamageType, effect: damageEffect));
                         }
                         // Motion changes precede push, both here and in the outgoing record order (step 5b).
                         if (effects.SlowDown > 0f)
@@ -269,18 +270,19 @@ namespace CombatSimulation.Core
                                         HitEffect.Roll, degrees);
                             }
                         }
-                        target.AddPendingDamage(damageType, damage);
+                        target.AddPendingDamage(damageType, damage, effects.IgnoreShield);
                         if (remote)
                         {
                             _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                 hit.Target, target.Owner, shape, HitContactState.Start, kind, amount,
-                                damageType: (byte)damageType, impulse: impulse));
+                                damageType: (byte)damageType, impulse: impulse, effect: damageEffect));
                             // The ramp (step 5c) is in this tick's damage; its interval on shape 0 lasts while the
                             // ray stays on the target, so the target owner counts the ramp from its first tick.
                             if (effects.Ramp > 0f)
                                 _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner,
                                     deviceIndex, hit.Target, target.Owner, 0, HitContactState.Start, kind, effects.Ramp,
-                                    damageType: (byte)damageType, effect: HitEffect.ProgressiveDamage,
+                                    damageType: (byte)damageType, effect: effects.IgnoreShield
+                                        ? HitEffect.ProgressiveDamageIgnoringShield : HitEffect.ProgressiveDamage,
                                     rampTime: effects.RampTime));
                         }
                         if (projectile != null)
@@ -290,11 +292,11 @@ namespace CombatSimulation.Core
                             {
                                 var extraAmount = BulletStore.EffectDamage(projectile, extra[e].Amount, extra[e].Falloff,
                                     falloff);
-                                target.AddPendingDamage(extra[e].DamageType, extraAmount);
+                                target.AddPendingDamage(extra[e].DamageType, extraAmount, effects.IgnoreShield);
                                 if (remote)
                                     _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                         hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind,
-                                        extraAmount, damageType: (byte)extra[e].DamageType));
+                                        extraAmount, damageType: (byte)extra[e].DamageType, effect: damageEffect));
                             }
                             if (impulse.X != 0f || impulse.Y != 0f) ApplyPush(target, impulse);
                         }

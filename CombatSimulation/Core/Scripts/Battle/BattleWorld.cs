@@ -187,7 +187,7 @@ namespace CombatSimulation.Core
                 // The core selects the first valid hit, so physics reports every target (contact ordering, rule 1).
                 PassThrough = true,
                 Filter = CollisionFilters.Bullet(definition, ship.Allegiance),
-            }, new Circle(Vec2.Zero, definition.IsAura ? Auras.Radius(definition, auraTicks) : definition.Radius));
+            }, definition.IsAura ? Auras.Circle(definition, auraTicks) : new Circle(definition.CircleCenter, definition.Radius));
 
             // Legacy BulletFactory.ConfigureBody: an attached bullet rides on the barrel, at its pose (phase 5, step 3).
             // Each device attaches it to its own copy of the ship.

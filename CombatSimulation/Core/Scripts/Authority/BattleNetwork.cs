@@ -19,6 +19,7 @@ namespace CombatSimulation.Core
             _triggers = triggers;
             _contacts = contacts;
             _replayDamage = new float[world.Setup.DamageTypes.Count];
+            _replayDamageIgnoringShield = new float[world.Setup.DamageTypes.Count];
         }
 
         private BattleSetup Setup => _world.Setup;

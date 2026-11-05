@@ -1,4 +1,5 @@
 using System;
+using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
@@ -27,7 +28,7 @@ namespace CombatSimulation.Core
                 var growth = bullet.Definition.AuraGrowthTicks;
                 var left = growth - (tick - bullet.RenewTick);
                 bullet.AuraTicks = (int)Math.Max(0L, Math.Min(Math.Min(bullet.AuraTicks + 1, growth), left));
-                if (bullet.AuraTicks > 0) world.Physics.SetBulletRadius(bullet.Body, Radius(bullet.Definition, bullet.AuraTicks));
+                if (bullet.AuraTicks > 0) world.Physics.SetBulletCircle(bullet.Body, Circle(bullet.Definition, bullet.AuraTicks));
             }
         }
 
@@ -43,5 +44,11 @@ namespace CombatSimulation.Core
         // A physics circle needs a positive radius; size 0 keeps the smallest one and takes no contacts.
         public static float Radius(BulletDefinition definition, int ticks) =>
             definition.Radius * Math.Max(ticks, 1) / definition.AuraGrowthTicks;
+
+        public static Circle Circle(BulletDefinition definition, int ticks)
+        {
+            var radius = Radius(definition, ticks);
+            return new Circle(definition.CircleCenter * (radius / definition.Radius), radius);
+        }
     }
 }

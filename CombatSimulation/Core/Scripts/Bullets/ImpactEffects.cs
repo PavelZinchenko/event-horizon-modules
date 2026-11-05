@@ -12,7 +12,8 @@ namespace CombatSimulation.Core
         public ImpactEffects(float energyDrain = 0f, float shieldDrain = 0f, float siphon = 0f,
             float slowDown = 0f, float roll = 0f, float ramp = 0f, float rampTime = 0f, float restore = 0f,
             float lifetimeLoss = 0f, float repair = 0f, float repairDamage = 0f, int repairDamageType = 0,
-            float energyRecharge = 0f, float shieldRecharge = 0f, float enemyEnergyDrain = 0f, float enemyShieldDrain = 0f)
+            float energyRecharge = 0f, float shieldRecharge = 0f, float enemyEnergyDrain = 0f, float enemyShieldDrain = 0f,
+            bool ignoreShield = false)
         {
             Validate(energyDrain, nameof(energyDrain));
             Validate(shieldDrain, nameof(shieldDrain));
@@ -46,6 +47,7 @@ namespace CombatSimulation.Core
             ShieldRecharge = shieldRecharge;
             EnemyEnergyDrain = enemyEnergyDrain;
             EnemyShieldDrain = enemyShieldDrain;
+            IgnoreShield = ignoreShield;
         }
 
         // Legacy DrainEnergyAction: the target's energy falls by it, clamped at 0, and its recharge delay restarts.
@@ -53,6 +55,9 @@ namespace CombatSimulation.Core
 
         // Legacy DamageShieldAction: the target's shield falls by it before the shield absorbs damage.
         public float ShieldDrain { get; }
+
+        // Only this impact's damage bypasses the shield. Armor resistance and energy absorption still apply.
+        public bool IgnoreShield { get; }
 
         // Legacy SiphonHitPointsAction Factor, on the first damage effect: the attacker's ship regains that damage x
         // (1 - the target's armor resistance of its type) x Siphon, also while the target's shield absorbs it
@@ -96,7 +101,8 @@ namespace CombatSimulation.Core
         internal ImpactEffects WithCharge(float charge) =>
             new ImpactEffects(EnergyDrain * charge, ShieldDrain * charge, Siphon, SlowDown * charge, Roll * charge,
                 Ramp * charge, RampTime, Restore, LifetimeLoss, Repair * charge, RepairDamage * charge, RepairDamageType,
-                EnergyRecharge * charge, ShieldRecharge * charge, EnemyEnergyDrain * charge, EnemyShieldDrain * charge);
+                EnergyRecharge * charge, ShieldRecharge * charge, EnemyEnergyDrain * charge, EnemyShieldDrain * charge,
+                IgnoreShield);
 
         // The ramp damage of the contact ticks [from, to), counted from the contact's first tick (0). Tick k deals
         // ramp x min(1, k x TickDuration / rampTime) x TickDuration; tick 0 deals none (legacy IsNew). The owner adds

@@ -104,7 +104,8 @@ namespace CombatSimulation.Core.Tests
             damage[LegacyDamageModel.Energy] = 30f;
             var effects = new PendingEffects { ShieldDrain = 250f, EnergyDrain = 40f };
 
-            driver.Battle.ApplyShieldFirst(ref shield, ref armor, ref energy, damage, effects, definition, 0f);
+            driver.Battle.ApplyShieldFirst(ref shield, ref armor, ref energy, damage, effects, definition, 0f,
+                new float[damage.Length]);
             Assert.AreEqual(shieldAfter, shield.Value, Tolerance);
             Assert.AreEqual(armorAfter, armor.Value, Tolerance);
             Assert.AreEqual(60f, energy.Value, Tolerance);

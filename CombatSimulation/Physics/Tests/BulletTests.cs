@@ -15,6 +15,32 @@ namespace CombatSimulation.Physics.Tests
         private static readonly ShapeDef HullDef = new ShapeDef { Filter = new Filter(Hull, 0) };
         private static readonly ShapeDef ShieldDef = new ShapeDef { Filter = new Filter(Shield, 0) };
 
+        [TestCase(0f, 100f)]
+        [TestCase(90f, 100f)]
+        [TestCase(0f, 199f)]
+        public void ResizingAnOffsetCircleUpdatesContactsAndQueries(float degrees, float x)
+        {
+            var world = new PhysicsWorld(new WorldSettings());
+            var angle = degrees * (float)(Math.PI / 180.0);
+            var origin = new Vec2(x, 100f);
+            var targetPoint = world.Torus.Wrap(origin + new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle)) * 3.5f);
+            var bullet = world.CreateBullet(new BulletDef { Position = origin, Angle = angle, PassThrough = true },
+                new Circle(new Vec2(0.4f, 0f), 0.5f));
+            var overlaps = new OverlapHit[4];
+            Assert.AreEqual(0, world.OverlapCircle(targetPoint, 0.05f, default, overlaps, out _));
+            world.SetBulletCircle(bullet, new Circle(new Vec2(1.6f, 0f), 2f));
+            Assert.AreEqual(1, world.OverlapCircle(targetPoint, 0.05f, default, overlaps, out _));
+            Assert.AreEqual(bullet, overlaps[0].Target.Bullet);
+            var target = world.CreateBody(BodyDef.Create(targetPoint, 1f));
+            world.AddCircle(target, new Circle(Vec2.Zero, 0.1f));
+            world.Step(Dt);
+            Assert.AreEqual(1, world.BulletHits.Length);
+            Assert.AreEqual(target, world.BulletHits[0].Target.Body);
+            world.SetBulletCircle(bullet, new Circle(new Vec2(0.4f, 0f), 0.5f));
+            world.Step(Dt);
+            Assert.AreEqual(0, world.BulletHits.Length);
+        }
+
         [Test]
         public void FastBulletDoesNotTunnelThroughAThinPlate()
         {

@@ -150,10 +150,16 @@ namespace CombatSimulation.Core.Tests
 
         // Network: the ramp is its own interval on shape 0. The target owner counts it from the interval's first tick,
         // also when the records arrive late; a correction before the acknowledgement replays the ramp, not a flat rate.
-        [Test]
-        public void ARemoteTargetOwnerCountsTheRampFromTheIntervalStart()
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ARemoteTargetOwnerCountsTheRampFromTheIntervalStart(bool ignoreShield)
         {
-            var p = new NetPair(BeamShip(HeavyLaser), Hull);
+            var beam = new BeamDefinition(0, 0.1f, 2f, 0f, 20f, 50f, LegacyDamageModel.Heat,
+                effects: new ImpactEffects(ramp: 50f, rampTime: 3f, ignoreShield: ignoreShield));
+            var shield = ignoreShield ? 100f : 0f;
+            var p = new NetPair(BeamShip(beam), Fixtures.ShipWith(shield: new ResourceDefinition(shield)));
+            var rampEffect = ignoreShield ? HitEffect.ProgressiveDamageIgnoringShield : HitEffect.ProgressiveDamage;
+            var damageEffect = ignoreShield ? HitEffect.DamageIgnoringShield : HitEffect.Damage;
             foreach (var driver in new[] { p.A, p.B })
             {
                 driver.Place(1, Shooter, Vec2.Zero);
@@ -165,9 +171,9 @@ namespace CombatSimulation.Core.Tests
             p.B.Control(1, systems: 0);
             p.Step(5);
 
-            var ramp = p.HeldHits.Single(h => h.Effect == HitEffect.ProgressiveDamage && h.ContactState == HitContactState.Start);
-            var rampEnd = p.HeldHits.Single(h => h.Effect == HitEffect.ProgressiveDamage && h.ContactState == HitContactState.End);
-            var damage = p.HeldHits.First(h => h.Effect == HitEffect.Damage && h.ContactState == HitContactState.Start);
+            var ramp = p.HeldHits.Single(h => h.Effect == rampEffect && h.ContactState == HitContactState.Start);
+            var rampEnd = p.HeldHits.Single(h => h.Effect == rampEffect && h.ContactState == HitContactState.End);
+            var damage = p.HeldHits.First(h => h.Effect == damageEffect && h.ContactState == HitContactState.Start);
             Assert.AreEqual(50f, ramp.Amount);
             Assert.AreEqual(3f, ramp.RampTime);
             Assert.AreEqual(0, ramp.TargetShape);
@@ -188,6 +194,8 @@ namespace CombatSimulation.Core.Tests
             p.HoldHitsFromB = false;
             p.Step(3);
             Assert.AreEqual(1000f - expected, p.A.Ship(101).Armor.Value, 0.01f);
+            Assert.AreEqual(shield, p.A.Ship(101).Shield.Value);
+            Assert.AreEqual(shield, p.B.Ship(101).Shield.Value);
         }
 
         // The closed form the target owner and the replay use equals the owner's sum of single ticks.

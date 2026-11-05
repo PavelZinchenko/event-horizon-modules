@@ -42,15 +42,17 @@ namespace CombatSimulation.Core
 
         private void ApplyShieldFirst(ShipEntity ship) =>
             ApplyShieldFirst(ref ship.Shield, ref ship.Armor, ref ship.Energy, ship.PendingDamage, ship.PendingEffects,
-                ship.Definition, ship.ResistanceShare);
+                ship.Definition, ship.ResistanceShare, ship.PendingDamageIgnoringShield);
 
         // Legacy Impact.ApplyShield and ShipStats.ApplyDamage, by damage type (D4). A shield drain takes the shield
         // first (phase 5, step 5a). The shield left meets the types group by group in shield order; each type's load is
         // its damage less its shield resistance. A group larger than the shield left keeps the same share of each type.
         // Armor then takes what passed, less its armor resistance and the repair, and energy gains its share of what
-        // passed before the energy drain. damage holds raw amounts by type; this changes it to what passed.
+        // passed before the energy drain. damage holds raw amounts by type; this changes it to what passed, plus
+        // damageIgnoringShield. Bypass damage joins only after shield absorption, so other hits still meet the shield.
         public void ApplyShieldFirst(ref ResourcePool shield, ref ResourcePool armor, ref ResourcePool energy,
-            float[] damage, in PendingEffects effects, ShipDefinition definition, float resistanceShare)
+            float[] damage, in PendingEffects effects, ShipDefinition definition, float resistanceShare,
+            float[] damageIgnoringShield)
         {
             var types = Setup.DamageTypes;
             var walk = types.ShieldWalk;
@@ -91,6 +93,7 @@ namespace CombatSimulation.Core
             var energyGain = 0f;
             for (var type = 0; type < damage.Length; ++type)
             {
+                damage[type] = (float)System.Math.Min(float.MaxValue, (double)damage[type] + damageIgnoringShield[type]);
                 if (!(damage[type] > 0f)) continue;
                 armorDamage += damage[type] * (1f - ArmorResistance(types, definition, type, resistanceShare));
                 energyGain += damage[type] * definition.Resistance(type).EnergyGain;

@@ -324,10 +324,12 @@ namespace CombatSimulation.Core.Tests
         }
 
         // A bolt that meets the tail stops there and its damage goes to the tip.
-        [Test]
-        public void ABoltOnTheTailDamagesTheTip()
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ABoltOnTheTailDamagesTheTip(bool ignoreShield)
         {
-            var driver = WormDuel(enemy: Fixtures.CannonShip());
+            var bullet = new BulletDefinition(0.25f, 20f, 10f, 5f, effects: new ImpactEffects(ignoreShield: ignoreShield));
+            var driver = WormDuel(enemy: Fixtures.CannonShip(bullet));
             driver.StepUntil(30);
             driver.Place(101, new Vec2(45f, 56f), Vec2.Zero, (float)(-Math.PI / 2));
             driver.Control(101, systems: 1);

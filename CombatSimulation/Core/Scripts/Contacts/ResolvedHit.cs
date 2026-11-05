@@ -8,7 +8,8 @@ namespace CombatSimulation.Core
     // What the amount of a record on a ship does (phase 5, step 5a). A bullet target takes Damage only.
     public enum HitEffect : byte
     {
-        Damage, EnergyDrain, ShieldDrain, SlowDown, Roll, ProgressiveDamage, Repair, EnergyRecharge, ShieldRecharge
+        Damage, EnergyDrain, ShieldDrain, SlowDown, Roll, ProgressiveDamage, Repair, EnergyRecharge, ShieldRecharge,
+        DamageIgnoringShield, ProgressiveDamageIgnoringShield
     }
 
     // An owner-decided contact against a remote ship or drone. No live object is needed to apply it.
@@ -31,6 +32,8 @@ namespace CombatSimulation.Core
     // positive change in degrees/s, once on contact entry; the receiver chooses the sign from its current spin.
     // ProgressiveDamage (step 5c): a beam's ramp as its own interval on shape 0, with the full ramp per second as
     // amount, the beam's damage type and RampTime; the receiver counts the ramp from the interval's first tick.
+    // DamageIgnoringShield (step 6a, version 12) keeps the damage type and projectile push, but skips shield absorption.
+    // ProgressiveDamageIgnoringShield does the same for a ramp. Bullet and segment targets still use Damage.
     public readonly struct ResolvedHit
     {
         public readonly BattleId BattleId;
