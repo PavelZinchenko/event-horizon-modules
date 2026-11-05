@@ -274,7 +274,7 @@ namespace CombatSimulation.Core
                 return;
             bullet.Definition = bulletDefinition;
             _world.DrawShot(bullet.Id, bullet.SpawnTick, bulletDefinition, cannon.Definition.RandomFactor, out _,
-                out var lifetimeTicks);
+                out var lifetimeTicks, out _, out bullet.FlightLifetime);
             bullet.ExpiryTick = bullet.SpawnTick + lifetimeTicks - 1;
         }
 
@@ -294,7 +294,7 @@ namespace CombatSimulation.Core
             {
                 // The owner's identity draws the speed and lifetime of a shot with a random factor (step 4a).
                 _world.DrawShot(operation.EntityId, operation.Tick, bullet.Definition, cannon?.Definition.RandomFactor ?? 0f,
-                    out var speedScale, out var lifetimeTicks);
+                    out var speedScale, out var lifetimeTicks, out _, out bullet.FlightLifetime);
                 bullet.SpeedScale = speedScale;
                 bullet.ExpiryTick = operation.Tick + lifetimeTicks - 1;
             }

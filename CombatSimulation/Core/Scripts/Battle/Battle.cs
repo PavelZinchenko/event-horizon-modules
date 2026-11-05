@@ -405,6 +405,7 @@ namespace CombatSimulation.Core
             _network?.RemoveUnconfirmedBullets();
             _triggers.PruneTriggerParents();
             Auras.Update(_world, Tick);
+            Waves.Update(_world, Tick);
         }
 
         private void StepPhysics() => World.Step(TickDuration);

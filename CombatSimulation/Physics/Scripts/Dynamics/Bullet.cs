@@ -102,6 +102,7 @@ namespace CombatSimulation.Physics
 
         // Geometry and filter. Body is -1; the mass fields are unused.
         public Shape Shape;
+        public Polygon ScaleTemplate;
 
         public Vec2 Position;
         public Rot Q;
@@ -161,6 +162,7 @@ namespace CombatSimulation.Physics
             if (!bullet.Parent.IsNull) --_attachedBulletCount;
             bullet.Alive = false;
             bullet.Shape.Polygon = null;
+            bullet.ScaleTemplate = null;
             --_aliveBulletCount;
             _queryDirty = true;
             PushFree(ref _freeBullets, ref _freeBulletCount, index);
@@ -205,6 +207,24 @@ namespace CombatSimulation.Physics
         }
 
         public float GetBulletRadius(BulletId id) => _bullets[ResolveBullet(id)].Shape.Circle.Radius;
+
+        // Absolute scale from the original polygon, about the bullet origin. One private copy, no per-step allocations.
+        public void SetBulletPolygonScale(BulletId id, float scale)
+        {
+            if (!(scale > 0f) || float.IsInfinity(scale)) throw new ArgumentOutOfRangeException(nameof(scale));
+            ref var bullet = ref _bullets[ResolveBullet(id)];
+            ref var shape = ref bullet.Shape;
+            if (shape.Kind != ShapeKind.Polygon) throw new InvalidOperationException($"{id} is not a polygon");
+            if (bullet.ScaleTemplate == null)
+            {
+                bullet.ScaleTemplate = shape.Polygon;
+                shape.Polygon = shape.Polygon.CreateScaleCopy();
+            }
+            shape.Polygon.ScaleFrom(bullet.ScaleTemplate, scale);
+            shape.LocalBoundCenter = shape.Polygon.Centroid;
+            shape.BoundRadius = shape.Polygon.BoundRadius;
+            _queryDirty = true;
+        }
 
         public void SetBulletPose(BulletId id, Vec2 position, float angle)
         {

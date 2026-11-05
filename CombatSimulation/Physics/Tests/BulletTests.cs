@@ -18,6 +18,52 @@ namespace CombatSimulation.Physics.Tests
         [TestCase(0f, 100f)]
         [TestCase(90f, 100f)]
         [TestCase(0f, 199f)]
+        public void PolygonScaleUpdatesQueriesAndContactsWithoutChangingSharedGeometry(float degrees, float x)
+        {
+            var world = new PhysicsWorld(new WorldSettings());
+            var template = Polygon.Box(0.5f, 0.25f, new Vec2(0.5f, 0f), 0f);
+            var first = template.Vertex(0);
+            var origin = new Vec2(x, 100f);
+            var angle = degrees * (float)(Math.PI / 180.0);
+            var point = world.Torus.Wrap(origin + Rot.FromAngle(angle).Rotate(new Vec2(3.5f, 0f)));
+            var bullet = world.CreateBullet(new BulletDef { Position = origin, Angle = angle, PassThrough = true }, template);
+            var other = world.CreateBullet(new BulletDef { Position = new Vec2(50f, 50f) }, template);
+            var overlaps = new OverlapHit[4];
+            Assert.AreEqual(0, world.OverlapCircle(point, 0.05f, default, overlaps, out _));
+            world.SetBulletPolygonScale(bullet, 4f);
+            Assert.AreEqual(1, world.OverlapCircle(point, 0.05f, default, overlaps, out _));
+            Assert.AreEqual(bullet, overlaps[0].Target.Bullet);
+            Assert.AreEqual(0, world.OverlapCircle(new Vec2(53.5f, 50f), 0.05f, default, overlaps, out _));
+            Assert.AreEqual(first, template.Vertex(0));
+            var target = world.CreateBody(BodyDef.Create(point, 1f));
+            world.AddCircle(target, new Circle(Vec2.Zero, 0.1f));
+            world.Step(Dt);
+            Assert.AreEqual(1, world.BulletHits.Length);
+            Assert.AreEqual(target, world.BulletHits[0].Target.Body);
+            world.SetBulletPolygonScale(bullet, 1f);
+            world.Step(Dt);
+            Assert.AreEqual(0, world.BulletHits.Length);
+            world.DestroyBullet(bullet);
+            var reused = world.CreateBullet(new BulletDef { Position = origin, Angle = angle }, template);
+            world.SetBulletPolygonScale(reused, 4f);
+            Assert.AreEqual(2, world.OverlapCircle(point, 0.05f, default, overlaps, out _)); // target and reused bullet
+            Assert.IsTrue(world.IsAlive(other));
+        }
+
+        [Test]
+        public void PolygonScaleRejectsInvalidSizesAndNonPolygonBullets()
+        {
+            var world = new PhysicsWorld(new WorldSettings());
+            var bullet = world.CreateBullet(default, Polygon.Box(1f, 1f));
+            foreach (var scale in new[] { 0f, -1f, float.NaN, float.PositiveInfinity })
+                Assert.Throws<ArgumentOutOfRangeException>(() => world.SetBulletPolygonScale(bullet, scale));
+            var circle = world.CreateBullet(default, new Circle(Vec2.Zero, 1f));
+            Assert.Throws<InvalidOperationException>(() => world.SetBulletPolygonScale(circle, 2f));
+        }
+
+        [TestCase(0f, 100f)]
+        [TestCase(90f, 100f)]
+        [TestCase(0f, 199f)]
         public void ResizingAnOffsetCircleUpdatesContactsAndQueries(float degrees, float x)
         {
             var world = new PhysicsWorld(new WorldSettings());

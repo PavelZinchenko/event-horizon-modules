@@ -68,6 +68,8 @@ namespace CombatSimulation.Core
         // size in ticks of growth (Auras).
         public long RenewTick;
         public int AuraTicks;
+        public float WaveScale;
+        public float FlightLifetime;
 
         // A missile: its hit points, and the damage accepted at stage 9 that stage 10 applies.
         public float HitPoints;

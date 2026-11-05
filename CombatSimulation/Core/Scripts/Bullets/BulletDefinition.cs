@@ -45,11 +45,11 @@ namespace CombatSimulation.Core
             bool damageFalloff = false, float radialPush = 0f, float radialPushWithFalloff = 0f, float lifetime = 0f,
             float scale = 0f, bool attachedToParent = false, bool rocket = false, float stickyLifetime = 0f,
             bool magnetic = false, bool hasDirection = true, float beamLength = 0f, bool piercing = false, bool aura = false,
-            ImpactEffects effects = default, bool friendlyFire = false, Vec2 circleCenter = default)
+            ImpactEffects effects = default, bool friendlyFire = false, Vec2 circleCenter = default, WaveDefinition wave = null)
             : this(radius, speed, range, damage, weight, parentVelocityEffect, hitPoints, homing, startingVelocityMultiplier,
                 damageType, recoil, push, extraDamage, triggers, detonateWhenDestroyed, canBeDisarmed, impact, damageFalloff,
                 radialPush, radialPushWithFalloff, lifetime, scale, attachedToParent, rocket, stickyLifetime, magnetic,
-                hasDirection, beamLength, piercing, aura, effects, null, 1f, friendlyFire, circleCenter)
+                hasDirection, beamLength, piercing, aura, effects, null, 1f, friendlyFire, circleCenter, wave)
         {
         }
 
@@ -60,7 +60,7 @@ namespace CombatSimulation.Core
             bool detonateWhenDestroyed, bool canBeDisarmed, BulletImpact impact, bool damageFalloff, float radialPush,
             float radialPushWithFalloff, float lifetime, float scale, bool attachedToParent, bool rocket,
             float stickyLifetime, bool magnetic, bool hasDirection, float beamLength, bool piercing, bool aura,
-            ImpactEffects effects, BulletDefinition uncharged, float charge, bool friendlyFire, Vec2 circleCenter)
+            ImpactEffects effects, BulletDefinition uncharged, float charge, bool friendlyFire, Vec2 circleCenter, WaveDefinition wave)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -162,6 +162,9 @@ namespace CombatSimulation.Core
                 float.IsNaN(circleCenter.Y) || float.IsInfinity(circleCenter.Y))
                 throw new ArgumentOutOfRangeException(nameof(circleCenter), "Circle center must be finite.");
             CircleCenter = circleCenter;
+            if (wave != null && (aura || beamLength > 0f))
+                throw new ArgumentException("A wave cannot use aura or beam growth.", nameof(wave));
+            Wave = wave;
             Speed = speed;
             Range = range;
             Damage = damage;
@@ -216,6 +219,7 @@ namespace CombatSimulation.Core
         // Collision circle in the bullet's local frame, at full size. Auras scale its radius and center together.
         public float Radius { get; }
         public Vec2 CircleCenter { get; }
+        public WaveDefinition Wave { get; }
 
         // Muzzle speed along the shot, in units per second. A homing bullet accelerates up to it.
         public float Speed { get; }
@@ -413,7 +417,7 @@ namespace CombatSimulation.Core
                 Push * charge, extra, triggers, DetonateWhenDestroyed, CanBeDisarmed, Impact, DamageFalloff,
                 RadialPush * charge, RadialPushWithFalloff * charge, BodyLifetime, Scale * size, AttachedToParent, IsRocket,
                 StickyLifetime, IsMagnetic, HasDirection, BeamLength * size, Piercing, IsAura, Effects.WithCharge(charge), this,
-                charge, FriendlyFire, CircleCenter * size);
+                charge, FriendlyFire, CircleCenter * size, Wave);
             scaled.Add(this, result);
             return result;
         }

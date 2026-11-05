@@ -124,6 +124,8 @@ namespace CombatSimulation.Core
 
         // An aura's share of its full size in this tick (phase 5, step 4g, legacy AuraController power); 1 otherwise.
         public readonly float AuraPower;
+        // Absolute arc scale, shared by the collider and view; zero for other bullets.
+        public readonly float WaveScale;
 
         internal BulletState(in BulletEntity bullet, PhysicsWorld world)
         {
@@ -149,6 +151,7 @@ namespace CombatSimulation.Core
             LinearVelocity = bullet.IsBeam ? Vec2.Zero : world.GetBulletVelocity(bullet.Body);
             ExpiryTick = bullet.ExpiryTick;
             AuraPower = Auras.Power(bullet);
+            WaveScale = bullet.WaveScale;
         }
     }
 

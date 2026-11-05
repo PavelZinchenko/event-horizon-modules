@@ -170,7 +170,7 @@ namespace CombatSimulation.Core
                 ref velocity);
 
             var ship = _world.FindShip(parent.ShipId);
-            var body = Physics.CreateBullet(new BulletDef
+            var bodyDef = new BulletDef
             {
                 Position = position,
                 Angle = angle,
@@ -178,7 +178,9 @@ namespace CombatSimulation.Core
                 Owner = ship?.Body ?? default,
                 PassThrough = true,
                 Filter = CollisionFilters.Bullet(definition, parent.Allegiance),
-            }, new Circle(Vec2.Zero, definition.Radius));
+            };
+            var body = definition.Wave != null ? Physics.CreateBullet(bodyDef, definition.Wave.Shape)
+                : Physics.CreateBullet(bodyDef, new Circle(definition.CircleCenter, definition.Radius));
 
             ref var bullet = ref _world.Bullets[index];
             bullet.Id = id;
@@ -192,11 +194,13 @@ namespace CombatSimulation.Core
             bullet.SpeedScale = draw.SpeedScale;
             bullet.ExpiryTick = spawnTick + draw.LifetimeTicks - 1;
             bullet.LifetimeCapTicks = draw.CapTicks;
+            bullet.FlightLifetime = draw.FlightLifetime;
             bullet.HitPoints = definition.HitPoints;
             bullet.SpawnTick = spawnTick;
             bullet.Confirmed = true;
             bullet.NextSearchTick = spawnTick + 1;
             _world.Bullets.SetBody(index, body);
+            Waves.Resize(Physics, ref bullet, Tick);
             return index;
         }
 
@@ -219,6 +223,7 @@ namespace CombatSimulation.Core
             var seconds = trigger.Bullet.Lifetime * (factor > 0f ? 1f + (lifetime - 0.5f) * factor : 1f);
             draw.LifetimeTicks = trigger.Bullet.SpawnLifetimeTicks(seconds, draw.SpeedScale);
             draw.CapTicks = TickTime.After(seconds);
+            draw.FlightLifetime = seconds;
             return draw;
         }
 
@@ -228,6 +233,7 @@ namespace CombatSimulation.Core
             public float SpeedScale;
             public int LifetimeTicks;
             public int CapTicks;
+            public float FlightLifetime;
         }
 
         // A receiver adds the owner's child at its launch pose. The parent is the live copy, or a remote bullet that this

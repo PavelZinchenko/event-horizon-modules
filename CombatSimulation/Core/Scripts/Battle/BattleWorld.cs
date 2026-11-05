@@ -174,10 +174,11 @@ namespace CombatSimulation.Core
 
             Launch(ship, barrelIndex, id, definition, spread, randomFactor, spawnTick, sample, launch, out muzzle,
                 out angle, out direction, out var velocity, out var position);
-            DrawShot(id, spawnTick, definition, randomFactor, out var speedScale, out var lifetimeTicks, out var capTicks);
+            DrawShot(id, spawnTick, definition, randomFactor, out var speedScale, out var lifetimeTicks, out var capTicks,
+                out var flightLifetime);
             var auraTicks = definition.IsAura ? Auras.StartTicks(definition, spawnTick, Tick) : 0;
 
-            var body = Physics.CreateBullet(new BulletDef
+            var bodyDef = new BulletDef
             {
                 Position = position,
                 Angle = angle,
@@ -187,7 +188,10 @@ namespace CombatSimulation.Core
                 // The core selects the first valid hit, so physics reports every target (contact ordering, rule 1).
                 PassThrough = true,
                 Filter = CollisionFilters.Bullet(definition, ship.Allegiance),
-            }, definition.IsAura ? Auras.Circle(definition, auraTicks) : new Circle(definition.CircleCenter, definition.Radius));
+            };
+            var body = definition.Wave != null ? Physics.CreateBullet(bodyDef, definition.Wave.Shape)
+                : Physics.CreateBullet(bodyDef, definition.IsAura ? Auras.Circle(definition, auraTicks)
+                    : new Circle(definition.CircleCenter, definition.Radius));
 
             // Legacy BulletFactory.ConfigureBody: an attached bullet rides on the barrel, at its pose (phase 5, step 3).
             // Each device attaches it to its own copy of the ship.
@@ -209,6 +213,7 @@ namespace CombatSimulation.Core
             bullet.SpeedScale = speedScale;
             bullet.ExpiryTick = spawnTick + lifetimeTicks - 1;
             bullet.LifetimeCapTicks = capTicks;
+            bullet.FlightLifetime = flightLifetime;
             bullet.RenewTick = spawnTick;
             bullet.AuraTicks = auraTicks;
             bullet.HitPoints = definition.HitPoints;
@@ -218,6 +223,7 @@ namespace CombatSimulation.Core
             // Legacy runs no search at creation (its timer check is strict); the first one is in the next tick.
             bullet.NextSearchTick = spawnTick + 1;
             Bullets.SetBody(index, body);
+            Waves.Resize(Physics, ref bullet, Tick);
 
             // A manageable or continuous cannon holds its bullet (phase 5, steps 4b and 4g), as a beam device holds its
             // beam; a charging cannon shows it (step 4f).
@@ -279,6 +285,10 @@ namespace CombatSimulation.Core
         // capTicks: the full lifetime, without the loss of a restoring bullet (phase 5, step 5d).
         public void DrawShot(EntityId id, long spawnTick, BulletDefinition definition, float randomFactor,
             out float speedScale, out int lifetimeTicks, out int capTicks)
+            => DrawShot(id, spawnTick, definition, randomFactor, out speedScale, out lifetimeTicks, out capTicks, out _);
+
+        public void DrawShot(EntityId id, long spawnTick, BulletDefinition definition, float randomFactor,
+            out float speedScale, out int lifetimeTicks, out int capTicks, out float flightLifetime)
         {
             var lifetime = definition.Lifetime;
             speedScale = 1f;
@@ -292,6 +302,7 @@ namespace CombatSimulation.Core
             }
             lifetimeTicks = definition.SpawnLifetimeTicks(lifetime, speedScale);
             capTicks = TickTime.After(lifetime);
+            flightLifetime = lifetime;
         }
 
         // Returns -1 on an ID collision. The definition is the device's, or its charged copy (phase 5, step 4f).

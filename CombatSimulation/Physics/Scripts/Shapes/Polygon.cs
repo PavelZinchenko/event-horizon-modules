@@ -13,16 +13,40 @@ namespace CombatSimulation.Physics
         public const int MaxVertices = 8;
 
         public int Count { get; }
-        public Vec2 Centroid { get; }
+        public Vec2 Centroid { get; private set; }
 
         // Rounding radius. Zero except for a capsule core.
-        public float Radius { get; }
+        public float Radius { get; private set; }
 
         // Distance from the centroid to the farthest surface point.
-        public float BoundRadius { get; }
+        public float BoundRadius { get; private set; }
 
         public Vec2 Vertex(int index) => _vertices[index];
         public Vec2 Normal(int index) => _normals[index];
+
+        // A private bullet copy: the public template stays immutable. Positive uniform scaling preserves normals.
+        internal Polygon CreateScaleCopy() => new Polygon(this);
+
+        internal void ScaleFrom(Polygon source, float scale)
+        {
+            for (var i = 0; i < Count; ++i) _vertices[i] = source._vertices[i] * scale;
+            Centroid = source.Centroid * scale;
+            Radius = source.Radius * scale;
+            BoundRadius = source.BoundRadius * scale;
+        }
+
+        private Polygon(Polygon source)
+        {
+            Count = source.Count;
+            _vertices = new Vec2[Count];
+            _normals = source._normals;
+            CutEdges = source.CutEdges;
+            _outlineIn = source._outlineIn;
+            _outlineOut = source._outlineOut;
+            _arcMiddle = source._arcMiddle;
+            _arcCosine = source._arcCosine;
+            ScaleFrom(source, 1f);
+        }
 
         // Outline data of a part of a concave outline (ConvexDecomposition.AttachOutline). Zero for other polygons.
         // Bit i is set when edge i (vertex i to vertex i + 1) is a cut: it lies inside the outline, between two parts.
