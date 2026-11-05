@@ -194,6 +194,64 @@ namespace CombatSimulation.Core.Tests
             Assert.Greater(angles.Max(Math.Abs), 0.5f * spread);
         }
 
+        [Test]
+        public void HitTriggerSpawnsOneCloudAtTheRayEndpoint()
+        {
+            var cloud = new BulletDefinition(0.1f, 0f, 0f, 0f, lifetime: 3f, impact: BulletImpact.OverTime);
+            var beam = BeamDefinition.Shot(0, 10f, 0f, 15f, 100f, 0.1f,
+                triggers: new[] { BulletTriggerDefinition.Spawn(BulletTriggerConditions.Hit, cloud, cooldown: 1f) });
+            var driver = Duel(Ship(beam));
+            driver.Place(101, new Vec2(60f, 50f), Vec2.Zero);
+            driver.Control(1, systems: 1);
+            var events = driver.StepCollecting(8);
+            var spawn = events.Single(e => e.Kind == BattleEventKind.Spawn && e.BulletDefinition == cloud);
+            Assert.AreEqual(2, spawn.Tick);
+            var child = driver.Battle.Snapshot.Bullets.ToArray().Single(b => b.Definition == cloud);
+            Assert.AreEqual(59f, child.Position.X, Tolerance);
+            Assert.AreEqual(50f, child.Position.Y, Tolerance);
+        }
+
+        [Test]
+        public void AllTargetsHitsEachNewFirstBodyOnceAndKeepsItsTriggerCooldown()
+        {
+            var spark = new BulletDefinition(0.1f, 0f, 0f, 0f, lifetime: 3f, impact: BulletImpact.OverTime);
+            var beam = BeamDefinition.Shot(0, 10f, 0f, 20f, 10f, 0.1f,
+                effects: new ImpactEffects(energyDrain: 1f), impact: BulletImpact.AllTargets,
+                triggers: new[] { BulletTriggerDefinition.Spawn(BulletTriggerConditions.Hit, spark,
+                    new BulletSpawnPattern(Enumerable.Range(0, 9).Select(_ => new SpawnSlot()).ToArray()), cooldown: 0.5f) });
+            var target = Fixtures.ShipWith(shield: new ResourceDefinition(0f));
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, new[]
+            {
+                new RosterSlotSetup(new RosterId(1), 0, Ship(beam)),
+                new RosterSlotSetup(new RosterId(101), 1, target),
+                new RosterSlotSetup(new RosterId(102), 1, target),
+            }, maxActiveShipsPerSide: 2));
+            driver.Deploy(1);
+            driver.Deploy(101);
+            driver.Step();
+            driver.Place(1, new Vec2(50f, 50f), Vec2.Zero);
+            driver.Place(101, new Vec2(60f, 50f), Vec2.Zero);
+            driver.Control(1, systems: 1);
+            var armor = driver.Ship(101).Armor.Value;
+            var energy = driver.Ship(101).Energy.Value;
+            driver.StepUntil(4);
+            Assert.AreEqual(armor - 10f, driver.Ship(101).Armor.Value, Tolerance);
+            Assert.AreEqual(energy - 1f, driver.Ship(101).Energy.Value, Tolerance);
+            // A new identity becomes the first body, then the original body returns.
+            driver.Deploy(102);
+            driver.Step();
+            driver.Place(101, new Vec2(60f, 60f), Vec2.Zero);
+            driver.Place(102, new Vec2(60f, 50f), Vec2.Zero);
+            var secondArmor = driver.Ship(102).Armor.Value;
+            driver.Step();
+            Assert.AreEqual(secondArmor - 10f, driver.Ship(102).Armor.Value, Tolerance);
+            driver.Place(102, new Vec2(60f, 60f), Vec2.Zero);
+            driver.Place(101, new Vec2(60f, 50f), Vec2.Zero);
+            driver.Step();
+            Assert.AreEqual(armor - 10f, driver.Ship(101).Armor.Value, Tolerance);
+            Assert.AreEqual(9, driver.Battle.Snapshot.Bullets.ToArray().Count(b => b.Definition == spark));
+        }
+
         // EnergyBeam_M: continuous, tracking 60°.
         private static BeamDefinition Tracking(float spread = 0f) =>
             new BeamDefinition(0, 0f, 0f, 0f, 10f, 1f, spread: spread, trackingAngle: 60f * Fixtures.Degrees);

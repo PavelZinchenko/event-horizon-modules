@@ -22,7 +22,7 @@ namespace CombatSimulation.Core
     public sealed class BulletTriggerDefinition
     {
         private BulletTriggerDefinition(BulletTriggerConditions conditions, BulletDefinition bullet,
-            BulletSpawnPattern pattern, float randomFactor)
+            BulletSpawnPattern pattern, float randomFactor, float cooldown = 0f)
         {
             if (conditions == BulletTriggerConditions.None || (conditions & ~AllConditions) != 0)
                 throw new ArgumentOutOfRangeException(nameof(conditions), "A trigger needs known conditions.");
@@ -32,6 +32,10 @@ namespace CombatSimulation.Core
             if (bullet != null && bullet.AttachedToParent)
                 throw new ArgumentException("A child bullet cannot be attached to its parent bullet.", nameof(bullet));
 
+            if (!(cooldown >= 0f) || float.IsInfinity(cooldown))
+                throw new ArgumentOutOfRangeException(nameof(cooldown));
+            Cooldown = cooldown;
+            CooldownTicks = cooldown > 0f ? TickTime.AtLeast(cooldown) : 0;
             Conditions = conditions;
             Bullet = bullet;
             Pattern = pattern;
@@ -44,9 +48,9 @@ namespace CombatSimulation.Core
 
         // Legacy SpawnBulletsAction: Pattern.Count child bullets at the parent's pose.
         public static BulletTriggerDefinition Spawn(BulletTriggerConditions conditions, BulletDefinition bullet,
-            BulletSpawnPattern pattern = null, float randomFactor = 0f) =>
+            BulletSpawnPattern pattern = null, float randomFactor = 0f, float cooldown = 0f) =>
             new BulletTriggerDefinition(conditions, bullet ?? throw new ArgumentNullException(nameof(bullet)),
-                pattern ?? BulletSpawnPattern.Single, randomFactor);
+                pattern ?? BulletSpawnPattern.Single, randomFactor, cooldown);
 
         public const BulletTriggerConditions AllConditions = BulletTriggerConditions.Created |
             BulletTriggerConditions.Destroyed | BulletTriggerConditions.Hit | BulletTriggerConditions.Disarmed |
@@ -62,6 +66,8 @@ namespace CombatSimulation.Core
 
         // Legacy BulletStats.RandomFactor of the child: its speed and its lifetime each vary by (r - 0.5) x RandomFactor.
         public float RandomFactor { get; }
+        public int CooldownTicks { get; }
+        public float Cooldown { get; }
     }
 
     // Where the children of one spawn trigger start (legacy SpawnBulletsAction with the trigger's Rotation, OffsetX and

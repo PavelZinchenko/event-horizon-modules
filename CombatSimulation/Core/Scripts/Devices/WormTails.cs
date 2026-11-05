@@ -217,7 +217,12 @@ namespace CombatSimulation.Core
                 ref readonly var attacker = ref _world.Bullets[index];
                 attackerOwner = attacker.Owner;
                 deviceIndex = attacker.DeviceIndex;
-                if (attacker.IsBeam || attacker.Definition.Impact == BulletImpact.OverTime)
+                if (attacker.IsBeam && attacker.BeamDefinition.Impact != BulletImpact.OverTime)
+                {
+                    kind = HitImpactKind.Energy;
+                    perTick = false;
+                }
+                else if (attacker.IsBeam || attacker.Definition.Impact == BulletImpact.OverTime)
                     kind = HitImpactKind.DamageOverTime;
                 else
                 {

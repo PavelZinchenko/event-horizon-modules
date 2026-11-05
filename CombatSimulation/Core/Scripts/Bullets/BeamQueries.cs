@@ -61,7 +61,7 @@ namespace CombatSimulation.Core
                         RayFraction = hit.Fraction,
                         AttackerPassThrough = false,
                         OncePerTargetEntity = true,
-                        Damage = definition.DamagePerSecond * Battle.TickDuration,
+                        Damage = definition.DamagePerSecond * (definition.Impact == BulletImpact.OverTime ? Battle.TickDuration : 1f),
                         DamageType = definition.DamageType,
                         Point = hit.Point,
                     };
@@ -96,7 +96,10 @@ namespace CombatSimulation.Core
                     if (effects.Ramp > 0f)
                         candidate.Damage += ImpactEffects.RampTick(effects.Ramp, effects.RampTime,
                             candidate.Target == beam.RampTargetId ? battle.Tick - beam.RampTick : 0);
-                    candidate.Damage += effects.DamageAgainst(beam.Allegiance, targetAllegiance) * Battle.TickDuration;
+                    candidate.Damage += effects.DamageAgainst(beam.Allegiance, targetAllegiance) *
+                        (definition.Impact == BulletImpact.OverTime ? Battle.TickDuration : 1f);
+                    if (beam.BeamHitTargets != null && beam.BeamHitTargets.Contains(candidate.Target))
+                        candidate.Damage = 0f;
                     _candidates.Add(candidate);
                 }
             }

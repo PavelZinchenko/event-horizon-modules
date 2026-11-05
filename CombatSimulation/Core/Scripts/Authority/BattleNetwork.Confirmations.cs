@@ -97,6 +97,13 @@ namespace CombatSimulation.Core
             if (_predictedRemovalIds.Contains(operation.EntityId) || cannon != null && HasExpired(cannon, bulletDefinition, operation) ||
                 beamDevice != null && HasExpired(beamDefinition, operation) || HasDueRemoval(operation.EntityId))
             {
+                if (beamDefinition != null)
+                    _triggers.RememberTriggerParent(new BulletEntity
+                    {
+                        Id = operation.EntityId, ParentId = ship.Id, ShipId = ship.Id, Side = ship.Side,
+                        Allegiance = ship.Allegiance, Owner = ship.Owner, DeviceIndex = operation.DeviceIndex,
+                        BeamDefinition = beamDefinition,
+                    });
                 if (cannon != null && bulletDefinition.HasSpawnTriggers)
                 {
                     if (!ship.TryGetSpawnSample(operation.Tick, out var shot)) shot = _world.ReadSpawnSample(ship);

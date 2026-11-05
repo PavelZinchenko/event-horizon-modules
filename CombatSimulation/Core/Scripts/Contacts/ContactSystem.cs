@@ -96,6 +96,21 @@ namespace CombatSimulation.Core
                 }
                 if (hit.Kind != ContactKind.Hit) continue;
 
+                // Keep the first body as the ray endpoint even when this shot already hit it.
+                if (hit.Source == ContactSource.Ray && _world.Bullets.TryGet(hit.AttackerHandle, out var beamIndex))
+                {
+                    ref var beam = ref _world.Bullets[beamIndex];
+                    if (beam.IsBeam)
+                    {
+                        if (beam.BeamDefinition.Impact == BulletImpact.AllTargets)
+                        {
+                            if (beam.BeamHitTargets == null) beam.BeamHitTargets = new HashSet<EntityId>();
+                            if (!beam.BeamHitTargets.Add(hit.Target)) continue;
+                        }
+                        _triggers.AddPendingHit(beamIndex);
+                    }
+                }
+
                 // A projectile stops on either copy. Its removal has its own authority flag.
                 if (hit.Source != ContactSource.Ray && _world.Bullets.TryGet(hit.AttackerHandle, out var stopped))
                 {
@@ -113,7 +128,8 @@ namespace CombatSimulation.Core
                     var attackerOwner = attackerBullet ? _world.Bullets[attackerIndex].Owner : _world.Ships.Get(hit.AttackerHandle)?.Owner ?? -1;
                     var ray = hit.Source == ContactSource.Ray;
                     // A ray and damage over time deal one tick per contact; any other contact deals its damage once.
-                    var perTick = ray || (attackerBullet && !_world.Bullets[attackerIndex].IsBeam &&
+                    var perTick = (ray && (!attackerBullet || !_world.Bullets[attackerIndex].IsBeam ||
+                        _world.Bullets[attackerIndex].BeamDefinition.Impact == BulletImpact.OverTime)) || (attackerBullet && !_world.Bullets[attackerIndex].IsBeam &&
                                           _world.Bullets[attackerIndex].Definition.Impact == BulletImpact.OverTime);
                     if (authority == BattleEventAuthority.Committed)
                     {
@@ -176,7 +192,8 @@ namespace CombatSimulation.Core
                         {
                             amount = attacker.BeamDefinition.DamagePerSecond;
                             effects = attacker.BeamDefinition.Effects;
-                            effectScale = Battle.TickDuration;
+                            effectScale = attacker.BeamDefinition.Impact == BulletImpact.OverTime ? Battle.TickDuration : 1f;
+                            if (attacker.BeamDefinition.Impact != BulletImpact.OverTime) kind = HitImpactKind.Energy;
                             // The ray candidate includes repair's enemy damage for missile and segment targets.
                             if (hostile && effects.RepairDamage > 0f) damage -= effects.RepairDamage * effectScale;
                         }

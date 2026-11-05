@@ -30,6 +30,9 @@ namespace CombatSimulation.Core
 
         // Owner only: contacts of this tick whose Hit triggers stage 12 runs.
         public int PendingHits;
+        public long[] TriggerReadyTicks;
+        public HashSet<EntityId> BeamHitTargets;
+        public IReadOnlyList<BulletTriggerDefinition> Triggers => IsBeam ? BeamDefinition.Triggers : Definition.Triggers;
 
         // The children spawned for one spawn tick, across triggers: the sequence of the next child's identity.
         public long ChildTick;

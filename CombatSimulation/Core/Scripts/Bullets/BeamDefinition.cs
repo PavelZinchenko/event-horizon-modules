@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace CombatSimulation.Core
 {
@@ -13,13 +14,14 @@ namespace CombatSimulation.Core
             float range, float damagePerSecond, int damageType = 0, float spread = 0f, float trackingAngle = 0f,
             ImpactEffects effects = default, bool friendlyFire = false)
             : this(barrelIndex, cooldown, activationCost, energyPerSecond, range, damagePerSecond, damageType, spread,
-                trackingAngle, 0f, 0f, effects, null, 1f, friendlyFire)
+                trackingAngle, 0f, 0f, effects, null, 1f, friendlyFire, null, BulletImpact.OverTime)
         {
         }
 
         private BeamDefinition(int barrelIndex, float cooldown, float activationCost, float energyPerSecond,
             float range, float damagePerSecond, int damageType, float spread, float trackingAngle, float lifetime,
-            float chargeTime, ImpactEffects effects, BeamDefinition uncharged, float charge, bool friendlyFire)
+            float chargeTime, ImpactEffects effects, BeamDefinition uncharged, float charge, bool friendlyFire,
+            IReadOnlyList<BulletTriggerDefinition> triggers, BulletImpact impact)
         {
             if (barrelIndex < 0) throw new ArgumentOutOfRangeException(nameof(barrelIndex));
             ValidateAmount(cooldown, nameof(cooldown));
@@ -38,6 +40,18 @@ namespace CombatSimulation.Core
             if (effects.Restore > 0f || effects.LifetimeLoss > 0f)
                 throw new ArgumentOutOfRangeException(nameof(effects), "A beam does not restore its lifetime.");
 
+            if (impact != BulletImpact.OverTime && (impact != BulletImpact.AllTargets || lifetime <= 0f))
+                throw new ArgumentOutOfRangeException(nameof(impact));
+            var copied = new List<BulletTriggerDefinition>();
+            if (triggers != null)
+                foreach (var trigger in triggers)
+                {
+                    if (trigger == null || trigger.IsDetonate || trigger.Conditions != BulletTriggerConditions.Hit)
+                        throw new ArgumentException("Beams support Hit spawn triggers only.", nameof(triggers));
+                    copied.Add(trigger);
+                }
+            Triggers = copied.AsReadOnly();
+            Impact = impact;
             BarrelIndex = barrelIndex;
             Cooldown = cooldown;
             CooldownTicks = TickTime.AtLeast(cooldown);
@@ -60,11 +74,12 @@ namespace CombatSimulation.Core
         // Legacy CommonCannon with a beam controller: one beam per shot for the energy cost; it lives Lifetime seconds.
         public static BeamDefinition Shot(int barrelIndex, float cooldown, float energyCost, float range,
             float damagePerSecond, float lifetime, int damageType = 0, float spread = 0f, float trackingAngle = 0f,
-            ImpactEffects effects = default, bool friendlyFire = false)
+            ImpactEffects effects = default, bool friendlyFire = false, IReadOnlyList<BulletTriggerDefinition> triggers = null,
+            BulletImpact impact = BulletImpact.OverTime)
         {
             if (!(lifetime > 0f)) throw new ArgumentOutOfRangeException(nameof(lifetime));
             return new BeamDefinition(barrelIndex, cooldown, energyCost, 0f, range, damagePerSecond, damageType, spread,
-                trackingAngle, lifetime, 0f, effects, null, 1f, friendlyFire);
+                trackingAngle, lifetime, 0f, effects, null, 1f, friendlyFire, triggers, impact);
         }
 
         // Legacy ChargeableCannon with a beam controller (phase 5, step 4f): a full charge takes chargeTime seconds
@@ -76,7 +91,7 @@ namespace CombatSimulation.Core
             if (!(chargeTime > 0f) || float.IsInfinity(chargeTime)) throw new ArgumentOutOfRangeException(nameof(chargeTime));
             if (!(lifetime > 0f)) throw new ArgumentOutOfRangeException(nameof(lifetime));
             return new BeamDefinition(barrelIndex, 0f, energyCost, 0f, range, damagePerSecond, damageType, spread,
-                trackingAngle, lifetime, chargeTime, effects, null, 1f, friendlyFire);
+                trackingAngle, lifetime, chargeTime, effects, null, 1f, friendlyFire, null, BulletImpact.OverTime);
         }
 
         public int BarrelIndex { get; }
@@ -89,6 +104,7 @@ namespace CombatSimulation.Core
         // A continuous beam only.
         public float EnergyPerSecond { get; }
         public float Range { get; }
+        // Per second for OverTime; per new target for AllTargets.
         public float DamagePerSecond { get; }
 
         // An index into the battle's damage type table (D4).
@@ -107,6 +123,8 @@ namespace CombatSimulation.Core
         // DamagePerSecond.
         public ImpactEffects Effects { get; }
         public bool FriendlyFire { get; }
+        public IReadOnlyList<BulletTriggerDefinition> Triggers { get; }
+        public BulletImpact Impact { get; }
 
         // A shot beam's lifetime in seconds; 0 for a continuous beam.
         public float Lifetime { get; }
@@ -132,7 +150,7 @@ namespace CombatSimulation.Core
             return new BeamDefinition(beam.BarrelIndex, beam.Cooldown, beam.ActivationCost, beam.EnergyPerSecond,
                 beam.Range * (charge > 0.1f ? charge : 0f), beam.DamagePerSecond * charge, beam.DamageType, beam.Spread,
                 beam.TrackingAngle, beam.Lifetime * (0.5f + 0.5f * charge), beam.ChargeTime, beam.Effects.WithCharge(charge),
-                beam, charge, beam.FriendlyFire);
+                beam, charge, beam.FriendlyFire, beam.Triggers, beam.Impact);
         }
 
         internal override void Validate(int barrelCount)

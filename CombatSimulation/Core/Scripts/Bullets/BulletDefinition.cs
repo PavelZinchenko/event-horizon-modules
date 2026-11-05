@@ -399,7 +399,7 @@ namespace CombatSimulation.Core
                 var trigger = Triggers[i];
                 triggers[i] = trigger.IsDetonate ? trigger
                     : BulletTriggerDefinition.Spawn(trigger.Conditions, trigger.Bullet.Charged(charge, scaled), trigger.Pattern,
-                        trigger.RandomFactor);
+                        trigger.RandomFactor, trigger.Cooldown);
             }
 
             result = new BulletDefinition(Radius * size, Speed, Range * rangeScale, Damage * charge, Weight * size,

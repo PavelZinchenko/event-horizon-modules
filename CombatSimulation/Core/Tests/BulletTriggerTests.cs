@@ -349,8 +349,10 @@ namespace CombatSimulation.Core.Tests
             }, localOwners: new[] { localOwner });
 
         private static (Driver owner, Driver remote, Link link) Pair(BulletDefinition bullet)
+            => Pair(Fixtures.CannonShip(bullet, cooldown: 10f, energy: new ResourceDefinition(100000f)));
+
+        private static (Driver owner, Driver remote, Link link) Pair(ShipDefinition ship)
         {
-            var ship = Fixtures.CannonShip(bullet, cooldown: 10f, energy: new ResourceDefinition(100000f));
             var owner = new Driver(NetworkSetup(RemoteOwner, ship));
             var remote = new Driver(NetworkSetup(10, ship));
             var link = new Link();
@@ -487,6 +489,39 @@ namespace CombatSimulation.Core.Tests
             Assert.IsFalse(Applies(Record(1, launch: true)), "The bolt has one trigger.");
             ++tick;
             Assert.IsTrue(Applies(Record(0, launch: true)));
+        }
+
+        [TestCase(0)]
+        [TestCase(12)]
+        public void BeamChildrenArriveOnceEvenAfterTheBeamExpired(int delay)
+        {
+            var child = new BulletDefinition(0.1f, 0f, 0f, 0f, lifetime: 3f, impact: BulletImpact.OverTime);
+            var beam = BeamDefinition.Shot(0, 10f, 0f, 20f, 0f, 0.1f,
+                triggers: new[] { BulletTriggerDefinition.Spawn(BulletTriggerConditions.Hit, child, cooldown: 1f) });
+            var (owner, remote, link) = Pair(Fixtures.ShipWith(
+                barrels: new[] { new BarrelDefinition(Vec2.Zero, 0f) }, devices: new[] { beam }));
+            remote.Deploy(1);
+            remote.Step();
+            foreach (var op in remote.Battle.Snapshot.OutgoingOperations) owner.Battle.Submit(op.Owner, op);
+            owner.Step();
+            link.Capture(owner);
+            link.Deliver(remote);
+            foreach (var driver in new[] { owner, remote })
+            {
+                driver.Place(101, new Vec2(50f, 50f), Vec2.Zero);
+                driver.Place(1, new Vec2(60f, 50f), Vec2.Zero);
+            }
+            for (var i = 0; i < delay + 3; ++i) Tick(owner, remote, link, deliver: false);
+            Assert.AreEqual(1, Children(owner, child).Length);
+            Assert.IsEmpty(Children(remote, child));
+            link.Deliver(remote);
+            Tick(owner, remote, link);
+            var expected = Children(owner, child).Single();
+            var actual = Children(remote, child).Single();
+            Assert.AreEqual(expected.Id, actual.Id);
+            Assert.AreEqual(expected.Position.X, actual.Position.X, Tolerance);
+            Assert.AreEqual(expected.Position.Y, actual.Position.Y, Tolerance);
+            Assert.AreEqual(expected.ExpiryTick, actual.ExpiryTick);
         }
 
         private sealed class Link
