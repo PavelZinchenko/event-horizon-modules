@@ -97,7 +97,8 @@ namespace CombatSimulation.Core
                 if (trigger.CooldownTicks > 0)
                 {
                     ref var bullet = ref _world.Bullets[index];
-                    if (bullet.TriggerReadyTicks == null) bullet.TriggerReadyTicks = new long[triggers.Count];
+                    if (bullet.TriggerReadyTicks == null || bullet.TriggerReadyTicks.Length < triggers.Count)
+                        bullet.TriggerReadyTicks = new long[triggers.Count];
                     if (Tick < bullet.TriggerReadyTicks[t]) continue;
                     bullet.TriggerReadyTicks[t] = Tick + trigger.CooldownTicks;
                 }
@@ -347,6 +348,9 @@ namespace CombatSimulation.Core
             public TriggerParent(in BulletEntity bullet, Vec2 velocity)
             {
                 Bullet = bullet;
+                // The store reuses these with the slot.
+                Bullet.TriggerReadyTicks = null;
+                Bullet.BeamHitTargets = null;
                 Velocity = velocity;
                 RemovedTick = long.MaxValue;
             }

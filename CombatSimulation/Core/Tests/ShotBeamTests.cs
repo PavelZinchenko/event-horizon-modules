@@ -252,6 +252,35 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(9, driver.Battle.Snapshot.Bullets.ToArray().Count(b => b.Definition == spark));
         }
 
+        // A shot beam's hit set and trigger timers stay with its store slot, so repeated shots that hit allocate nothing.
+        [Test]
+        public void RepeatedTriggeringShotsAllocateNothingAfterWarmUp()
+        {
+            var spark = new BulletDefinition(0.1f, 0f, 0f, 0f, lifetime: 0.1f, impact: BulletImpact.OverTime);
+            var beam = BeamDefinition.Shot(0, 0.125f, 0f, 20f, 0.01f, 0.1f, impact: BulletImpact.AllTargets,
+                triggers: new[] { BulletTriggerDefinition.Spawn(BulletTriggerConditions.Hit, spark, cooldown: 0.5f) });
+            var driver = Duel(Ship(beam));
+            driver.Place(101, new Vec2(60f, 50f), Vec2.Zero);
+            driver.Control(1, systems: 1);
+            for (var i = 0; i < 60; ++i) driver.Step();
+            var hits = 0;
+            var children = 0;
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < 120; ++i)
+            {
+                driver.Step();
+                foreach (var item in driver.Battle.Snapshot.Events)
+                {
+                    if (item.Kind == BattleEventKind.Hit) ++hits;
+                    if (item.Kind == BattleEventKind.Spawn && item.BulletDefinition == spark) ++children;
+                }
+            }
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.Greater(hits, 10);
+            Assert.Greater(children, 10);
+            Assert.AreEqual(0, allocated);
+        }
+
         // EnergyBeam_M: continuous, tracking 60°.
         private static BeamDefinition Tracking(float spread = 0f) =>
             new BeamDefinition(0, 0f, 0f, 0f, 10f, 1f, spread: spread, trackingAngle: 60f * Fixtures.Degrees);

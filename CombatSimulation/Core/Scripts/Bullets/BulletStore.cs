@@ -30,7 +30,10 @@ namespace CombatSimulation.Core
 
         // Owner only: contacts of this tick whose Hit triggers stage 12 runs.
         public int PendingHits;
+        // The tick each trigger with a cooldown is ready again (legacy ActionWithCooldown); 0 is ready. The store keeps
+        // the array with the slot, so it can be longer than Triggers.
         public long[] TriggerReadyTicks;
+        // An AllTargets beam: the bodies this shot has hit. The store keeps the set with the slot.
         public HashSet<EntityId> BeamHitTargets;
         public IReadOnlyList<BulletTriggerDefinition> Triggers => IsBeam ? BeamDefinition.Triggers : Definition.Triggers;
 
@@ -137,9 +140,7 @@ namespace CombatSimulation.Core
             }
 
             ref var bullet = ref _items[index];
-            var generation = bullet.Generation + 1;
-            bullet = default;
-            bullet.Generation = generation;
+            Reset(ref bullet, bullet.Generation + 1);
             bullet.IsAlive = true;
             ++AliveCount;
             return index;
@@ -148,12 +149,23 @@ namespace CombatSimulation.Core
         public void Release(int index)
         {
             ref var bullet = ref _items[index];
-            var generation = bullet.Generation;
-            bullet = default;
-            bullet.Generation = generation;
+            Reset(ref bullet, bullet.Generation);
 
             _free[_freeCount++] = index;
             --AliveCount;
+        }
+
+        // Clears the slot but keeps its trigger timers and hit set, so a reused slot allocates nothing.
+        private static void Reset(ref BulletEntity bullet, int generation)
+        {
+            var readyTicks = bullet.TriggerReadyTicks;
+            var hitTargets = bullet.BeamHitTargets;
+            if (readyTicks != null) Array.Clear(readyTicks, 0, readyTicks.Length);
+            hitTargets?.Clear();
+            bullet = default;
+            bullet.Generation = generation;
+            bullet.TriggerReadyTicks = readyTicks;
+            bullet.BeamHitTargets = hitTargets;
         }
 
         // False for a stale or foreign handle.
