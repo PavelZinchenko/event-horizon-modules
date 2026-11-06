@@ -46,11 +46,11 @@ namespace CombatSimulation.Core
             float scale = 0f, bool attachedToParent = false, bool rocket = false, float stickyLifetime = 0f,
             bool magnetic = false, bool hasDirection = true, float beamLength = 0f, bool piercing = false, bool aura = false,
             ImpactEffects effects = default, bool friendlyFire = false, Vec2 circleCenter = default,
-            WaveDefinition wave = null, bool harpoon = false)
+            WaveDefinition wave = null, bool harpoon = false, bool addSizeToAimRange = false)
             : this(radius, speed, range, damage, weight, parentVelocityEffect, hitPoints, homing, startingVelocityMultiplier,
                 damageType, recoil, push, extraDamage, triggers, detonateWhenDestroyed, canBeDisarmed, impact, damageFalloff,
                 radialPush, radialPushWithFalloff, lifetime, scale, attachedToParent, rocket, stickyLifetime, magnetic,
-                hasDirection, beamLength, piercing, aura, effects, null, 1f, friendlyFire, circleCenter, wave, harpoon)
+                hasDirection, beamLength, piercing, aura, effects, null, 1f, friendlyFire, circleCenter, wave, harpoon, addSizeToAimRange)
         {
         }
 
@@ -62,7 +62,7 @@ namespace CombatSimulation.Core
             float radialPushWithFalloff, float lifetime, float scale, bool attachedToParent, bool rocket,
             float stickyLifetime, bool magnetic, bool hasDirection, float beamLength, bool piercing, bool aura,
             ImpactEffects effects, BulletDefinition uncharged, float charge, bool friendlyFire, Vec2 circleCenter,
-            WaveDefinition wave, bool harpoon)
+            WaveDefinition wave, bool harpoon, bool addSizeToAimRange)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -214,6 +214,7 @@ namespace CombatSimulation.Core
             StickyTicks = stickyLifetime > 0f ? TickTime.AtLeast(stickyLifetime) : 0;
             Uncharged = uncharged ?? this;
             Charge = charge;
+            AddSizeToAimRange = addSizeToAimRange;
 
             // Legacy BulletFactory.CreateController: both scale with 1 / (0.2 + 2 x weight); a rocket accelerates at
             // speed / (0.1 + weight), a magnetic bullet at twice the homing thrust.
@@ -231,6 +232,10 @@ namespace CombatSimulation.Core
         public float Speed { get; }
 
         public float Range { get; }
+
+        // Legacy WeaponInfo.Range adds BodySize except for Beam and AreaOfEffect AI behaviour.
+        public bool AddSizeToAimRange { get; }
+        public float AimingRange => Range + (AddSizeToAimRange ? Scale : 0f);
 
         // Damage per hit, of DamageType (D4); per second for OverTime. A missile target takes it without resistance.
         public float Damage { get; }
@@ -426,7 +431,7 @@ namespace CombatSimulation.Core
                 Push * charge, extra, triggers, DetonateWhenDestroyed, CanBeDisarmed, Impact, DamageFalloff,
                 RadialPush * charge, RadialPushWithFalloff * charge, BodyLifetime, Scale * size, AttachedToParent, IsRocket,
                 StickyLifetime, IsMagnetic, HasDirection, BeamLength * size, Piercing, IsAura, Effects.WithCharge(charge), this,
-                charge, FriendlyFire, CircleCenter * size, Wave, IsHarpoon);
+                charge, FriendlyFire, CircleCenter * size, Wave, IsHarpoon, AddSizeToAimRange);
             scaled.Add(this, result);
             return result;
         }

@@ -231,7 +231,7 @@ namespace CombatSimulation.Ai.Tests
         {
             var context = TargetContext(out var target, LongRange, ticks: 30);
             Assert.IsTrue(context.DeviceOf(0).Ready, "the barrel cooldown after the spawn has passed");
-            var mount = WeaponMount.Of(context.Ship, context.Profile.Weapons[0]);
+            var mount = WeaponMount.Of(context.Ship, context.Profile.Weapons[0], context.Snapshot);
             var course = mount.OptimalShipCourse(mount.Position + context.Delta(mount.Position, target.Position));
 
             var result = new AttackMainTargetNode(true).Evaluate(context);
@@ -292,7 +292,7 @@ namespace CombatSimulation.Ai.Tests
 
             var automatic = Context(out _, profile: new AiShipProfile(ArmedShip.Weapons,
                 new[] { new AiDevice(1, DeviceClass.PointDefense, isAutomatic: true) }, new[] { new AiDroneBay(2, isAutomatic: true) },
-                false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, AiTargetPriority.Normal, 0f));
+                false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, 0f));
             var automaticBuilder = Builder(automatic);
             Assert.AreSame(EmptyNode.Failure, automaticBuilder.Build(Node(new BehaviorTreeNodeSerializable
                 { Type = BehaviorNodeType.ActivateDevice, DeviceClass = DeviceClass.PointDefense })));
@@ -310,7 +310,7 @@ namespace CombatSimulation.Ai.Tests
 
             var profile = new AiShipProfile(ArmedShip.Weapons,
                 new[] { new AiDevice(1, DeviceClass.Detonator, isAutomatic: false, activationTime: 1f) }, null,
-                false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, AiTargetPriority.Normal, 0f);
+                false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, 0f);
             var context = TargetContext(out var target, profile);
             Assert.AreEqual(S, Builder(context).Build(Node(leaf)).Evaluate(context));
             Assert.IsTrue(context.Controls.IsSystemActivated(1));
@@ -488,7 +488,7 @@ namespace CombatSimulation.Ai.Tests
             AiWeaponCapability.DamageEnemy, 1000f, 0f));
 
         private static AiShipProfile WithWeapon(AiWeapon weapon) => new AiShipProfile(new[] { weapon }, ArmedShip.Devices,
-            ArmedShip.DroneBays, false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, AiTargetPriority.Normal, 0f);
+            ArmedShip.DroneBays, false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, 0f);
 
         private static BehaviorTreeNode SelectWeapon(AiWeaponCategory category) =>
             Node(new BehaviorTreeNodeSerializable { Type = BehaviorNodeType.SelectWeapon, WeaponType = category });

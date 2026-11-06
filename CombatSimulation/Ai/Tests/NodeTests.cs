@@ -242,7 +242,7 @@ namespace CombatSimulation.Ai.Tests
 
             Assert.AreSame(drone, context.ProfileOf(snapshot.Ships[1]));
             Assert.AreEqual(new[] { AiFixtures.Ship }, asked.ToArray());
-            Assert.AreEqual(AiTargetPriority.Low, context.ProfileOf(snapshot.Ships[1]).TargetPriority);
+            Assert.AreEqual(TargetPriority.Normal, snapshot.Ships[1].TargetPriority, "Priority belongs to the core, not the profile.");
 
             var withoutTable = new AiContext(ArmedShip, AiSettings.Default, 0.02f, default, new AiBattle(Arena, null, BulletScale));
             withoutTable.Update(snapshot, snapshot.Ships[0]);
@@ -408,7 +408,7 @@ namespace CombatSimulation.Ai.Tests
         }
 
         private static AiShipProfile WithWeapons(params AiWeapon[] weapons) => new AiShipProfile(weapons, null, null, false,
-            false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, AiTargetPriority.Normal, 0f);
+            false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, 0f);
 
         // Legacy CalculateAttackRange skips weapons without a capability.
         [Test]

@@ -137,6 +137,7 @@ namespace CombatSimulation.Core
         public int Owner { get; private set; }
         public BodyId Body { get; private set; }
         public ShipDefinition Definition { get; private set; }
+        public TargetPriority TargetPriority { get; set; }
 
         // Resources are fields so that stages update them in place.
         public ResourcePool Armor;
@@ -264,6 +265,7 @@ namespace CombatSimulation.Core
             Owner = owner;
             Body = body;
             Definition = definition;
+            TargetPriority = definition.TargetPriority;
             LastDroneLaunchTick = tick - 1;
             RetreatCompletionTick = NoRetreat;
             PendingDeath = false;
@@ -299,7 +301,14 @@ namespace CombatSimulation.Core
             // the tick before deployment, as if it fired then.
             var barrels = Definition.Barrels.Count;
             if (_barrelShotTicks.Length < barrels) _barrelShotTicks = new long[barrels];
-            for (var i = 0; i < barrels; ++i) _barrelShotTicks[i] = tick - 1;
+            if (_barrels.Length < barrels) System.Array.Resize(ref _barrels, barrels);
+            for (var i = 0; i < barrels; ++i)
+            {
+                _barrelShotTicks[i] = tick - 1;
+                if (_barrels[i] == null) _barrels[i] = new Barrel();
+                _barrels[i].Reset(Definition.Barrels[i], tick);
+            }
+            ClearTurretRequests();
 
             if (!_deviceSets.TryGetValue(definition, out _devices))
             {
@@ -320,12 +329,26 @@ namespace CombatSimulation.Core
         internal void RecordBarrelShot(int barrel, long tick) => _barrelShotTicks[barrel] = tick;
         internal long GetBarrelShotTick(int barrel) => _barrelShotTicks[barrel];
 
+        private Barrel[] _barrels = System.Array.Empty<Barrel>();
+        internal Barrel GetBarrel(int index) => _barrels[index];
+        internal EntityId TurretTarget;
+        internal ulong TurretTargetSystems;
+        internal ulong SearchTurretSystems;
+        internal void ClearTurretRequests()
+        {
+            TurretTarget = default;
+            TurretTargetSystems = SearchTurretSystems = 0;
+        }
+
         internal void ApplyControls(in ControlFrame frame)
         {
             Throttle = frame.Throttle;
             HasCourse = frame.HasCourse;
             Course = frame.Course;
             Systems = frame.Systems;
+            TurretTarget = frame.TurretTarget;
+            TurretTargetSystems = frame.TurretTargetSystems;
+            SearchTurretSystems = frame.SearchTurretSystems;
         }
 
         // Stage 1, before this tick's frames.

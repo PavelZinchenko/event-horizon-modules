@@ -6,15 +6,26 @@ namespace CombatSimulation.Core
     // A weapon mount on the ship (legacy weapon platform). Weapons on one barrel share its cooldown.
     public sealed class BarrelDefinition
     {
-        public BarrelDefinition(Vec2 position, float angle = 0f)
+        public BarrelDefinition(Vec2 position, float angle = 0f, float autoAimingAngle = 0f,
+            float rotationSpeed = 0f, bool isTurret = false, float muzzleOffset = 0f)
         {
             if (!position.IsFinite)
                 throw new ArgumentOutOfRangeException(nameof(position), "Barrel position must be finite.");
             if (float.IsNaN(angle) || float.IsInfinity(angle))
                 throw new ArgumentOutOfRangeException(nameof(angle), "Barrel angle must be finite.");
+            if (!(autoAimingAngle >= 0f) || float.IsInfinity(autoAimingAngle))
+                throw new ArgumentOutOfRangeException(nameof(autoAimingAngle));
+            if (!(rotationSpeed >= 0f) || float.IsInfinity(rotationSpeed))
+                throw new ArgumentOutOfRangeException(nameof(rotationSpeed));
+            if (float.IsNaN(muzzleOffset) || float.IsInfinity(muzzleOffset))
+                throw new ArgumentOutOfRangeException(nameof(muzzleOffset));
 
             Position = position;
             Angle = angle;
+            AutoAimingAngle = rotationSpeed > 0f ? autoAimingAngle : 0f;
+            RotationSpeed = rotationSpeed;
+            IsTurret = isTurret;
+            MuzzleOffset = muzzleOffset;
         }
 
         // The muzzle point in the ship frame, relative to the body origin. It includes the legacy platform offset.
@@ -22,6 +33,16 @@ namespace CombatSimulation.Core
 
         // In radians, relative to the ship heading.
         public float Angle { get; }
+        public float AutoAimingAngle { get; }
+        public float RotationSpeed { get; }
+        public bool IsTurret { get; }
+        public float MuzzleOffset { get; }
+
+        // Position remains the rest muzzle for fixed-barrel callers. The offset rotates around its pivot.
+        public Vec2 PositionAt(float angle) => AutoAimingAngle > 0f
+            ? Position + MuzzleOffset * (Direction(angle) - Direction(Angle)) : Position;
+
+        private static Vec2 Direction(float angle) => new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
     }
 
     // Immutable parameters of one ship device. Each device class is explicit code; from phase 5, step 7 (H2) the gate

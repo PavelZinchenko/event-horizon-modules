@@ -85,11 +85,15 @@ namespace CombatSimulation.Ai.Tests
             var runner = Battle2V2(OtherShip);
             var ships = runner.Snapshot.Ships;
 
-            var high = ContextOf(runner, 0, profiles: d => d == OtherShip ? WithPriority(AiTargetPriority.High) : ArmedShip);
+            runner.Battle.FindShip(ships[3].Id).TargetPriority = TargetPriority.High;
+            runner.Step();
+            var high = ContextOf(runner, 0);
             Assert.AreEqual(S, new FindNearestEnemyNode(0f, 0f, false).Evaluate(high));
             Assert.AreEqual(ships[3].Id, high.TargetShip);
 
-            var none = ContextOf(runner, 0, profiles: d => d == OtherShip ? WithPriority(AiTargetPriority.None) : ArmedShip);
+            runner.Battle.FindShip(ships[3].Id).TargetPriority = TargetPriority.None;
+            runner.Step();
+            var none = ContextOf(runner, 0);
             Assert.AreEqual(S, new FindNearestEnemyNode(0f, 0f, false).Evaluate(none));
             Assert.AreEqual(ships[1].Id, none.TargetShip);
         }
@@ -99,13 +103,14 @@ namespace CombatSimulation.Ai.Tests
         public void FindCooldownDelaysTheNextSearch()
         {
             var runner = Battle2V2();
-            var priority = AiTargetPriority.None;
-            var context = ContextOf(runner, 0, profiles: _ => WithPriority(priority));
+            foreach (var ship in runner.Snapshot.Ships) runner.Battle.FindShip(ship.Id).TargetPriority = TargetPriority.None;
+            runner.Step();
+            var context = ContextOf(runner, 0);
             var node = new FindNearestEnemyNode(1f, 0f, false);
 
             Assert.AreEqual(F, node.Evaluate(context));
             var searched = context.Time;
-            priority = AiTargetPriority.Normal;
+            foreach (var ship in runner.Snapshot.Ships) runner.Battle.FindShip(ship.Id).TargetPriority = TargetPriority.Normal;
 
             while (context.Time - searched < 1f - 1e-4f)
             {
@@ -448,12 +453,9 @@ namespace CombatSimulation.Ai.Tests
             return ships.ConvertAll(id => id.Value).ToArray();
         }
 
-        private static AiShipProfile WithPriority(AiTargetPriority priority) => new AiShipProfile(ArmedShip.Weapons,
-            ArmedShip.Devices, ArmedShip.DroneBays, false, false, SizeClass.Frigate, 10f, 10f, 20f, 0.2f, 1f, 2f, priority, 0f);
-
         private static AiShipProfile WithWeaponRange(float range) => new AiShipProfile(
             new[] { new AiWeapon(0, AiWeaponClass.Common, AiBulletBehavior.Projectile, AiWeaponCapability.DamageEnemy, range, 0f) },
-            null, null, false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, AiTargetPriority.Normal, 0f);
+            null, null, false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, 0f);
 
         // Slots 1 and 2 on side 0, 101 and 102 on side 1; snapshot order 1, 101, 2, 102.
         private static BattleRunner Battle2V2(ShipDefinition secondEnemy = null)

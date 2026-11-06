@@ -310,6 +310,7 @@ namespace CombatSimulation.Core
                 var ship = _world.GetShipEntry(i);
                 if (ship == null) continue;
 
+                BarrelAiming.Update(_world, ship);
                 ship.EngineHasEnergy = ship.Energy.Value > 0f;
                 ship.Energy.Update(TickDuration);
                 if (Setup.IsLocalOwner(ship.Owner))
@@ -405,6 +406,7 @@ namespace CombatSimulation.Core
             _network?.ApplyRemoteOperations(6);
             _network?.RemoveUnconfirmedBullets();
             _triggers.PruneTriggerParents();
+            BarrelAiming.UpdateAttachments(_world);
             Auras.Update(_world, Tick);
             Waves.Update(_world, Tick);
         }

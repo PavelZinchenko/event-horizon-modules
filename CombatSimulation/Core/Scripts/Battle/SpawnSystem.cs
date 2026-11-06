@@ -41,8 +41,12 @@ namespace CombatSimulation.Core
                 var sequence = 0u;
                 for (var j = i - 1; j >= 0 && _requests[j].HasSameSlot(request); --j) ++sequence;
                 if (request.LaunchesShip) SpawnDrone(request, sequence);
-                else if (request.Beam != null) SpawnBeam(request, sequence);
-                else SpawnBullet(request, sequence);
+                else
+                {
+                    BarrelAiming.BeforeShot(_world, request.Ship, request.BarrelIndex, request.Bullet, request.BeamDefinition);
+                    if (request.Beam != null) SpawnBeam(request, sequence);
+                    else SpawnBullet(request, sequence);
+                }
             }
 
             _requests.Clear();

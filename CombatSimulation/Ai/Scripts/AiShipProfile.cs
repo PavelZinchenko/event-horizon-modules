@@ -24,15 +24,6 @@ namespace CombatSimulation.Ai
         RechargeAlly = 8,
     }
 
-    // Legacy Combat.Component.Features.TargetPriority, in legacy order: the enemy search scores the difference.
-    public enum AiTargetPriority
-    {
-        None,
-        Low,
-        Normal,
-        High,
-    }
-
     // What the AI knows about one working weapon (legacy WeaponInfo). The mapper fills it from the database; the core
     // never reads it (AI data, gap 2).
     public sealed class AiWeapon
@@ -109,7 +100,7 @@ namespace CombatSimulation.Ai
     {
         public AiShipProfile(IReadOnlyList<AiWeapon> weapons, IReadOnlyList<AiDevice> devices,
             IReadOnlyList<AiDroneBay> droneBays, bool isDrone, bool isStarbase, SizeClass sizeClass, float enginePower, float turnRate, float propulsion,
-            float kineticResistance, float rammingDamageMultiplier, float modelScale, AiTargetPriority targetPriority,
+            float kineticResistance, float rammingDamageMultiplier, float modelScale,
             float chanceToAvoidDrone)
         {
             Weapons = weapons ?? Array.Empty<AiWeapon>();
@@ -124,7 +115,6 @@ namespace CombatSimulation.Ai
             KineticResistance = kineticResistance;
             RammingDamageMultiplier = rammingDamageMultiplier;
             ModelScale = modelScale;
-            TargetPriority = targetPriority;
             ChanceToAvoidDrone = chanceToAvoidDrone;
 
             foreach (var weapon in Weapons)
@@ -168,10 +158,6 @@ namespace CombatSimulation.Ai
 
         // Legacy Body.Scale: the enemy search measures distance and size with it, not with the hull radius.
         public float ModelScale { get; }
-
-        // Legacy Features.TargetPriority before device modifications: Low for a drone, else Normal. The jammer (High)
-        // and stealth (None while active) are inert in phase 4.
-        public AiTargetPriority TargetPriority { get; }
 
         // Legacy Features.ChanceToAvoidDrone, a fraction. 0 while the drone camouflage device is inert.
         public float ChanceToAvoidDrone { get; }

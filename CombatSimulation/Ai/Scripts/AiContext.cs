@@ -401,7 +401,9 @@ namespace CombatSimulation.Ai
 
         // One-shot ship commands (step 7e). Legacy acts on the ship at once, whatever the tree result, so a failed
         // think keeps them; the pilot submits them with the frame of this think.
-        public bool HasCommands => _vanish || _allegiance.HasValue;
+        public bool HasCommands => _vanish || _allegiance.HasValue || _turretTargetSystems != 0 || _searchTurretSystems != 0;
+        public void SetTurretTarget(EntityId target, int device) { _turretTarget = target; _turretTargetSystems |= 1UL << device; }
+        public void SearchTurret(int device) => _searchTurretSystems |= 1UL << device;
 
         public void Vanish() => _vanish = true;
 
@@ -410,12 +412,14 @@ namespace CombatSimulation.Ai
         // Legacy CommonControls clamps the throttle to [0, 1]; a NaN throttle gives no thrust there, so it becomes 0.
         internal PilotControls ToPilotControls() =>
             PilotControls.Create(_course, _thrust > 0f ? _thrust < 1f ? _thrust : 1f : 0f, _systems, vanish: _vanish,
-                allegiance: _allegiance);
+                allegiance: _allegiance, turretTarget: _turretTarget, turretTargetSystems: _turretTargetSystems, searchTurretSystems: _searchTurretSystems);
 
         internal void ClearCommands()
         {
             _vanish = false;
             _allegiance = null;
+            _turretTarget = default;
+            _turretTargetSystems = _searchTurretSystems = 0;
         }
 
         // Movement and devices only; commands stay until ClearCommands.
@@ -433,5 +437,7 @@ namespace CombatSimulation.Ai
         private ulong _systems;
         private bool _vanish;
         private Allegiance? _allegiance;
+        private EntityId _turretTarget;
+        private ulong _turretTargetSystems, _searchTurretSystems;
     }
 }

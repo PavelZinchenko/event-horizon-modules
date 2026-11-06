@@ -151,9 +151,11 @@ namespace CombatSimulation.Ai
         public readonly float RelativeVelocityEffect;
         public readonly float EnergyCost;
         public readonly float FireRate;
+        public readonly float AutoAimingAngle;
+        public readonly EntityId Target;
 
         private WeaponMount(Vec2 position, float mountAngle, float bulletSpeed, float relativeVelocityEffect,
-            float energyCost, float fireRate)
+            float energyCost, float fireRate, float autoAimingAngle, EntityId target)
         {
             Position = position;
             MountAngle = mountAngle;
@@ -161,11 +163,13 @@ namespace CombatSimulation.Ai
             RelativeVelocityEffect = relativeVelocityEffect;
             EnergyCost = energyCost;
             FireRate = fireRate;
+            AutoAimingAngle = autoAimingAngle;
+            Target = target;
         }
 
         // Legacy Platform.Body.WorldPosition is the muzzle point, as the core barrel position is. A cooldown of 0 maps a
         // fire rate of 0 (step 3a, row 3).
-        public static WeaponMount Of(in ShipState ship, AiWeapon weapon)
+        public static WeaponMount Of(in ShipState ship, AiWeapon weapon, BattleSnapshot snapshot)
         {
             var definition = ship.Definition;
             switch (definition.Devices[weapon.DeviceIndex])
@@ -174,13 +178,13 @@ namespace CombatSimulation.Ai
                     // Legacy WeaponInfo.Firerate of a charging weapon: 1 / the charge time (phase 5, step 4f).
                     return Create(ship, definition.Barrels[cannon.BarrelIndex], cannon.Bullet.Speed,
                         cannon.Bullet.ParentVelocityEffect, cannon.EnergyCost,
-                        FireRateOf(cannon.Mode == CannonMode.Charging ? cannon.ChargeTime : cannon.Cooldown));
+                        FireRateOf(cannon.Mode == CannonMode.Charging ? cannon.ChargeTime : cannon.Cooldown), snapshot.GetBarrels(ship)[cannon.BarrelIndex]);
                 case BeamDefinition beam:
                     // Legacy WeaponInfo.EnergyCost: per second for a continuous beam, per shot for a shot beam, per full
                     // charge for a charged beam.
                     return Create(ship, definition.Barrels[beam.BarrelIndex], 0f, 0f,
                         beam.IsShot ? beam.ActivationCost : beam.EnergyPerSecond,
-                        FireRateOf(beam.IsCharged ? beam.ChargeTime : beam.Cooldown));
+                        FireRateOf(beam.IsCharged ? beam.ChargeTime : beam.Cooldown), snapshot.GetBarrels(ship)[beam.BarrelIndex]);
                 default:
                     throw new InvalidOperationException($"AI weapon at device {weapon.DeviceIndex} is not a cannon or a beam");
             }
@@ -190,16 +194,15 @@ namespace CombatSimulation.Ai
         public float OptimalShipCourse(Vec2 target) => LegacyMath.Angle(target - Position) - MountAngle;
 
         private static WeaponMount Create(in ShipState ship, BarrelDefinition barrel, float bulletSpeed,
-            float relativeVelocityEffect, float energyCost, float fireRate) =>
-            new WeaponMount(ship.Position + Rot.FromAngle(ship.Angle).Rotate(barrel.Position), barrel.Angle, bulletSpeed,
-                relativeVelocityEffect, energyCost, fireRate);
+            float relativeVelocityEffect, float energyCost, float fireRate, BarrelState state) =>
+            new WeaponMount(ship.Position + Rot.FromAngle(ship.Angle).Rotate(barrel.PositionAt(state.Angle)),
+                barrel.Angle, bulletSpeed, relativeVelocityEffect, energyCost, fireRate, barrel.AutoAimingAngle, state.Target);
 
         private static float FireRateOf(float cooldown) => cooldown > 0f ? 1f / cooldown : 0f;
     }
 
     // Legacy AimAndAttackHandler with the WeaponWrapper strategies (WeaponWrapperExtensions) and TargetingHelpers.
-    // Positions are unwrapped around the gun, so the torus offset counts. Auto-aiming barrels and turret targets wait
-    // for D9: AutoAimingAngle is 0 and no platform has an active target.
+    // Positions are unwrapped around the gun, so the torus offset counts.
     internal static class AimAndAttack
     {
         [Flags]
@@ -248,7 +251,7 @@ namespace CombatSimulation.Ai
                 var aiming = new AimingData();
                 if (IsReadyToFire(context, weapon) && IsValidTarget(weapon, enemy))
                 {
-                    var mount = WeaponMount.Of(context.Ship, weapon);
+                    var mount = WeaponMount.Of(context.Ship, weapon, context.Snapshot);
                     Aim(context, weapon, mount, enemy, ref aiming);
                     Attack(context, weapon, mount, enemy, ref aiming);
                 }
@@ -259,6 +262,30 @@ namespace CombatSimulation.Ai
             }
 
             return activated > 0 ? State.Attacking : State.Failed;
+        }
+
+        public static bool AttackTurretTargets(AiContext context, AiWeaponList weapons)
+        {
+            var activated = false;
+            foreach (var weapon in weapons.List)
+            {
+                var mount = WeaponMount.Of(context.Ship, weapon, context.Snapshot);
+                if (!(mount.AutoAimingAngle > 0f)) continue;
+                if (!context.TryGetShip(mount.Target, out var target))
+                {
+                    if (AimingOf(context, weapon) != AimingStrategy.NoAiming)
+                        context.Controls.SearchTurret(weapon.DeviceIndex);
+                    continue;
+                }
+                var aiming = new AimingData();
+                if (!IsReadyToFire(context, weapon) || !IsValidTarget(weapon, target)) continue;
+                Aim(context, weapon, mount, target, ref aiming);
+                Attack(context, weapon, mount, target, ref aiming);
+                if (!aiming.ReadyToFire) continue;
+                activated |= aiming.InRange;
+                Activate(context.Controls, weapon);
+            }
+            return activated;
         }
 
         // Legacy AttackWithAllWeapons: fires the weapons that are aimed and turns to the aimed weapon whose course is
@@ -280,7 +307,7 @@ namespace CombatSimulation.Ai
                 if (!IsReadyToFire(context, weapon)) continue;
                 if (!IsValidTarget(weapon, enemy)) continue;
 
-                var mount = WeaponMount.Of(context.Ship, weapon);
+                var mount = WeaponMount.Of(context.Ship, weapon, context.Snapshot);
                 var aiming = new AimingData();
                 Aim(context, weapon, mount, enemy, ref aiming);
                 Attack(context, weapon, mount, enemy, ref aiming);
@@ -339,7 +366,7 @@ namespace CombatSimulation.Ai
         public static bool IsHidden(AiContext context, in ShipState enemy)
         {
             var profile = context.ProfileOf(enemy);
-            if (profile.TargetPriority != AiTargetPriority.None)
+            if (enemy.TargetPriority != TargetPriority.None)
                 return false;
 
             return context.Distance(context.Ship, enemy) > 5 + profile.ModelScale;
@@ -398,6 +425,8 @@ namespace CombatSimulation.Ai
             else
             {
                 var delta = Math.Abs(LegacyMath.DeltaAngle(aiming.Angle.Value, context.Ship.Angle));
+                if (activation != ActivationStrategy.WhenAimedPrecisely && (mount.Target.IsNull || mount.Target == enemy.Id))
+                    delta -= mount.AutoAimingAngle;
                 var spread = CalculateSpread(aiming.Distance, context.ProfileOf(enemy).ModelScale,
                     AimingAngleErrorMargin + weapon.Spread / 2);
 
@@ -423,7 +452,7 @@ namespace CombatSimulation.Ai
             }
         }
 
-        // Legacy WeaponWrapper.DetermineActivationStrategy; no barrel auto-aims yet (D9).
+        // Legacy WeaponWrapper.DetermineActivationStrategy.
         private static ActivationStrategy ActivationOf(AiWeapon weapon, in WeaponMount mount)
         {
             if (weapon.WeaponClass == AiWeaponClass.Continuous && !(mount.EnergyCost > 0))
@@ -437,9 +466,9 @@ namespace CombatSimulation.Ai
                 case AiBulletBehavior.AreaOfEffect:
                     return ActivationStrategy.WhenInRange;
                 case AiBulletBehavior.Projectile:
-                    return mount.FireRate > 1.0f ? ActivationStrategy.WhenAimedRoughly : ActivationStrategy.WhenAimedPrecisely;
+                    return mount.FireRate > 1.0f || mount.AutoAimingAngle >= 5 * LegacyMath.Degree ? ActivationStrategy.WhenAimedRoughly : ActivationStrategy.WhenAimedPrecisely;
                 case AiBulletBehavior.Harpoon:
-                    return ActivationStrategy.WhenAimedPrecisely;
+                    return mount.AutoAimingAngle >= 5 * LegacyMath.Degree ? ActivationStrategy.WhenAimedRoughly : ActivationStrategy.WhenAimedPrecisely;
                 default:
                     return ActivationStrategy.WhenAimedRoughly;
             }

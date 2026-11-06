@@ -10,6 +10,9 @@ namespace CombatSimulation.Runtime
         public readonly float Course;
         public readonly float Throttle;
         public readonly ulong Systems;
+        public readonly EntityId TurretTarget;
+        public readonly ulong TurretTargetSystems;
+        public readonly ulong SearchTurretSystems;
         public readonly bool SelfDestruct;
 
         // One-shot ship commands (phase 4, step 7e). The runner submits them for the pilot's own ship; their effects
@@ -19,12 +22,15 @@ namespace CombatSimulation.Runtime
         public readonly Allegiance Allegiance;
 
         private PilotControls(bool hasCourse, float course, float throttle, ulong systems, bool selfDestruct, bool vanish,
-            bool changesAllegiance, Allegiance allegiance)
+            bool changesAllegiance, Allegiance allegiance, EntityId turretTarget, ulong turretTargetSystems, ulong searchTurretSystems)
         {
             HasCourse = hasCourse;
             Course = course;
             Throttle = throttle;
             Systems = systems;
+            TurretTarget = turretTarget;
+            TurretTargetSystems = turretTargetSystems;
+            SearchTurretSystems = searchTurretSystems;
             SelfDestruct = selfDestruct;
             Vanish = vanish;
             ChangesAllegiance = changesAllegiance;
@@ -33,9 +39,9 @@ namespace CombatSimulation.Runtime
 
         // A null course means none; a null allegiance keeps the current one.
         public static PilotControls Create(float? course, float throttle, ulong systems, bool selfDestruct = false,
-            bool vanish = false, Allegiance? allegiance = null) =>
+            bool vanish = false, Allegiance? allegiance = null, EntityId turretTarget = default, ulong turretTargetSystems = 0, ulong searchTurretSystems = 0) =>
             new PilotControls(course.HasValue, course ?? 0f, throttle, systems, selfDestruct, vanish, allegiance.HasValue,
-                allegiance ?? default);
+                allegiance ?? default, turretTarget, turretTargetSystems, searchTurretSystems);
     }
 
     // Reads a snapshot and decides the controls of one ship. Scripted pilots, behavior trees and the

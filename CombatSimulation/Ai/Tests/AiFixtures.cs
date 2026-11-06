@@ -17,7 +17,7 @@ namespace CombatSimulation.Ai.Tests
 
         // A drone without devices. Fixture battles give drones no pilot.
         public static readonly ShipDefinition DroneShip = new ShipDefinition(0.5f, 1f, Engine, 100f,
-            new ResourceDefinition(0f), new ResourceDefinition(100f));
+            new ResourceDefinition(0f), new ResourceDefinition(100f), targetPriority: TargetPriority.Low);
 
         // The devices of the ArmedShip profile: a cannon on a forward barrel (device 0), point defense (1) and a drone
         // bay (2).
@@ -36,23 +36,23 @@ namespace CombatSimulation.Ai.Tests
             new[] { new AiDevice(1, DeviceClass.PointDefense, isAutomatic: false) }, new[] { new AiDroneBay(2, isAutomatic: false) },
             isDrone: false, isStarbase: false, SizeClass.Frigate,
             enginePower: 10f, turnRate: 10f, propulsion: 20f, kineticResistance: 0.2f, rammingDamageMultiplier: 1f,
-            modelScale: 2f, AiTargetPriority.Normal, chanceToAvoidDrone: 0f);
+            modelScale: 2f, chanceToAvoidDrone: 0f);
 
         public static AiShipProfile Drone => new AiShipProfile(
             new[] { new AiWeapon(0, AiWeaponClass.Common, AiBulletBehavior.Projectile, AiWeaponCapability.DamageEnemy, 10f, 0f) },
             null, null, isDrone: true, isStarbase: false, SizeClass.Undefined,
             enginePower: 20f, turnRate: 20f, propulsion: 40f, kineticResistance: 0f, rammingDamageMultiplier: 1f,
-            modelScale: 0.5f, AiTargetPriority.Low, chanceToAvoidDrone: 0f);
+            modelScale: 0.5f, chanceToAvoidDrone: 0f);
 
         public static AiShipProfile Starbase => new AiShipProfile(
             new[] { new AiWeapon(0, AiWeaponClass.Continuous, AiBulletBehavior.Beam, AiWeaponCapability.DamageEnemy, 40f, 0f) },
             null, new[] { new AiDroneBay(2, isAutomatic: false) }, isDrone: false, isStarbase: true, SizeClass.Starbase,
             enginePower: 0f, turnRate: 0f, propulsion: 0f, kineticResistance: 0.5f, rammingDamageMultiplier: 1f,
-            modelScale: 10f, AiTargetPriority.Normal, chanceToAvoidDrone: 0f);
+            modelScale: 10f, chanceToAvoidDrone: 0f);
 
         public static AiShipProfile Unarmed => new AiShipProfile(null, null, null, isDrone: false,
             isStarbase: false, SizeClass.Destroyer, enginePower: 10f, turnRate: 10f, propulsion: 20f,
-            kineticResistance: 0f, rammingDamageMultiplier: 1f, modelScale: 2f, AiTargetPriority.Normal,
+            kineticResistance: 0f, rammingDamageMultiplier: 1f, modelScale: 2f,
             chanceToAvoidDrone: 0f);
 
         // Every fixture ship shares one definition, so every ship in a fixture battle is an armed ship.

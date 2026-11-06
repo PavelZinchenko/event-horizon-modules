@@ -56,7 +56,7 @@ namespace CombatSimulation.Ai
         private readonly float _successIfMore;
     }
 
-    // Legacy AttackMainTargetNode. The turret target for an ally waits for D9.
+    // Legacy AttackMainTargetNode, including an allied repair target for the selected platforms.
     internal sealed class AttackMainTargetNode : INode
     {
         public AttackMainTargetNode(bool allowRotation) => _allowRotation = allowRotation;
@@ -65,6 +65,10 @@ namespace CombatSimulation.Ai
         {
             if (context.TargetShip.IsNull)
                 return NodeState.Failure;
+
+            if (context.TryGetShip(context.TargetShip, out var target) && !context.IsEnemy(target))
+                foreach (var weapon in context.SelectedWeapons.List)
+                    context.Controls.SetTurretTarget(target.Id, weapon.DeviceIndex);
 
             var result = _allowRotation
                 ? AimAndAttack.AttackWithAllWeapons(context, context.TargetShip, context.SelectedWeapons)
@@ -103,11 +107,11 @@ namespace CombatSimulation.Ai
         private readonly bool _allowRotation;
     }
 
-    // Legacy AttackTurretTargets: only auto-aiming barrels and satellites have a turret target, and both wait for D9.
-    // Legacy gives Failure for a ship without them. A node, not a constant, so its parents build as legacy does.
+    // Legacy AttackTurretTargets: ask the core to search idle mounts, then attack their live targets.
     internal sealed class AttackTurretTargetsNode : INode
     {
-        public NodeState Evaluate(AiContext context) => NodeState.Failure;
+        public NodeState Evaluate(AiContext context) => AimAndAttack.AttackTurretTargets(context, context.SelectedWeapons)
+            ? NodeState.Success : NodeState.Failure;
     }
 
     // Legacy MatchVelocityNode.
@@ -287,7 +291,7 @@ namespace CombatSimulation.Ai
             {
                 if (!ShouldTrack(context, weapon)) continue;
 
-                var mount = WeaponMount.Of(context.Ship, weapon);
+                var mount = WeaponMount.Of(context.Ship, weapon, context.Snapshot);
                 if (TryAim(context, weapon, mount, context.TargetShip))
                     return NodeState.Running;
 
@@ -356,7 +360,7 @@ namespace CombatSimulation.Ai
             foreach (var weapon in _weapons)
             {
                 var charge = context.DeviceOf(weapon.DeviceIndex).Charge;
-                var energyCost = WeaponMount.Of(context.Ship, weapon).EnergyCost * (1f - charge);
+                var energyCost = WeaponMount.Of(context.Ship, weapon, context.Snapshot).EnergyCost * (1f - charge);
                 if (context.EnergyLevel < energyCost && context.EnergyLevelPercentage < FullEnergy) continue;
 
                 context.Controls.ActivateSystem(weapon.DeviceIndex);

@@ -53,6 +53,9 @@ namespace CombatSimulation.Core
         public ReadOnlySpan<DeviceState> GetDevices(in ShipState ship) =>
             new ReadOnlySpan<DeviceState>(_devices, ship.DeviceStart, ship.Definition.Devices.Count);
 
+        public ReadOnlySpan<BarrelState> GetBarrels(in ShipState ship) =>
+            new ReadOnlySpan<BarrelState>(_barrels, ship.BarrelStart, ship.Definition.Barrels.Count);
+
         public bool TryGetShip(EntityId id, out ShipState ship)
         {
             for (var i = 0; i < _shipCount; ++i)
@@ -84,6 +87,7 @@ namespace CombatSimulation.Core
             if (_ships.Length < battle.ShipEntryCount)
                 Array.Resize(ref _ships, Math.Max(battle.ShipEntryCount, _ships.Length * 2));
             var deviceCount = 0;
+            var barrelCount = 0;
             for (var i = 0; i < battle.ShipEntryCount; ++i)
             {
                 var ship = battle.GetShipEntry(i);
@@ -94,7 +98,12 @@ namespace CombatSimulation.Core
                     Array.Resize(ref _devices, Math.Max(deviceCount + devices, _devices.Length * 2));
                 for (var d = 0; d < devices; ++d)
                     _devices[deviceCount + d] = ship.GetDevice(d).GetState(battle.DeviceContext, ship, tick);
-                _ships[_shipCount++] = new ShipState(ship, world, deviceCount);
+                var barrels = ship.Definition.Barrels.Count;
+                if (_barrels.Length < barrelCount + barrels)
+                    Array.Resize(ref _barrels, Math.Max(barrelCount + barrels, _barrels.Length * 2));
+                for (var b = 0; b < barrels; ++b) _barrels[barrelCount + b] = new BarrelState(ship.GetBarrel(b));
+                _ships[_shipCount++] = new ShipState(ship, world, deviceCount, barrelCount);
+                barrelCount += barrels;
                 deviceCount += devices;
             }
 
@@ -136,6 +145,7 @@ namespace CombatSimulation.Core
         private readonly RosterSlotState[] _roster;
         private ShipState[] _ships;
         private int _shipCount;
+        private BarrelState[] _barrels = new BarrelState[16];
         private DeviceState[] _devices = new DeviceState[16];
         private BulletState[] _bullets = new BulletState[16];
         private int _bulletCount;

@@ -27,8 +27,8 @@ namespace CombatSimulation.Core
                 var definition = beam.BeamDefinition;
                 var barrel = ship.Definition.Barrels[definition.BarrelIndex];
                 beam.BeamOrigin = world.Torus.Wrap(world.GetPosition(ship.Body) +
-                    world.GetRotation(ship.Body).Rotate(barrel.Position));
-                beam.BeamAngle = Aim(battle, beam, world.GetAngle(ship.Body) + barrel.Angle);
+                    world.GetRotation(ship.Body).Rotate(barrel.PositionAt(ship.GetBarrel(definition.BarrelIndex).Angle)));
+                beam.BeamAngle = Aim(battle, beam, world.GetAngle(ship.Body) + ship.GetBarrel(definition.BarrelIndex).Angle);
                 var direction = new Vec2((float)Math.Cos(beam.BeamAngle), (float)Math.Sin(beam.BeamAngle));
                 // Match PhysicsWorld's torus ray-length cap, including the no-hit endpoint.
                 var range = Math.Min(definition.Range, Math.Min(world.Torus.Width, world.Torus.Height));

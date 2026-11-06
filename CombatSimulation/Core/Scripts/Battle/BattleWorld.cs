@@ -200,7 +200,7 @@ namespace CombatSimulation.Core
             if (definition.AttachedToParent)
             {
                 var barrel = ship.Definition.Barrels[barrelIndex];
-                Physics.AttachBullet(body, ship.Body, new Pose(barrel.Position, Rot.FromAngle(barrel.Angle)));
+                Physics.AttachBullet(body, ship.Body, new Pose(barrel.PositionAt(ship.GetBarrel(barrelIndex).Angle), Rot.FromAngle(ship.GetBarrel(barrelIndex).Angle)));
             }
 
             ref var bullet = ref Bullets[index];
@@ -253,8 +253,8 @@ namespace CombatSimulation.Core
             {
                 // An attached bullet has no spread (legacy ConfigureBody); the barrel decides its pose.
                 var barrel = ship.Definition.Barrels[barrelIndex];
-                muzzle = sample.Position + sample.Rotation.Rotate(barrel.Position);
-                angle = sample.Angle + barrel.Angle;
+                muzzle = sample.Position + sample.Rotation.Rotate(barrel.PositionAt(ship.GetBarrel(barrelIndex).Angle));
+                angle = sample.Angle + ship.GetBarrel(barrelIndex).Angle;
                 if (!definition.AttachedToParent)
                 {
                     var random = CounterRandom.Create(Setup.MatchSeed, id, spawnTick, RandomPurpose.WeaponSpread);

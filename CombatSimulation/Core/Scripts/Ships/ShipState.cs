@@ -33,6 +33,7 @@ namespace CombatSimulation.Core
         public readonly Allegiance Allegiance;
         public readonly int Owner;
         public readonly ShipDefinition Definition;
+        public readonly TargetPriority TargetPriority;
 
         // Canonical torus coordinates and radians.
         public readonly Vec2 Position;
@@ -64,8 +65,9 @@ namespace CombatSimulation.Core
 
         // The first of this ship's Definition.Devices.Count entries in the snapshot's device buffer.
         internal readonly int DeviceStart;
+        internal readonly int BarrelStart;
 
-        internal ShipState(ShipEntity ship, PhysicsWorld world, int deviceStart)
+        internal ShipState(ShipEntity ship, PhysicsWorld world, int deviceStart, int barrelStart = 0)
         {
             Id = ship.Id;
             RosterId = ship.Slot?.RosterId ?? default;
@@ -76,6 +78,7 @@ namespace CombatSimulation.Core
             Allegiance = ship.Allegiance;
             Owner = ship.Owner;
             Definition = ship.Definition;
+            TargetPriority = ship.TargetPriority;
             Position = world.GetPosition(ship.Body);
             Angle = world.GetAngle(ship.Body);
             LinearVelocity = world.GetLinearVelocity(ship.Body);
@@ -92,6 +95,7 @@ namespace CombatSimulation.Core
             Tint = ship.Tint;
             ResistanceShare = ship.ResistanceShare;
             DeviceStart = deviceStart;
+            BarrelStart = barrelStart;
         }
 
         public bool IsRetreating => RetreatCompletionTick != ShipEntity.NoRetreat;

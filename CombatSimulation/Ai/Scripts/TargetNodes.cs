@@ -439,7 +439,7 @@ namespace CombatSimulation.Ai
             {
                 if (!context.IsEnemy(ship)) continue;
                 var profile = context.ProfileOf(ship);
-                if (profile.TargetPriority == AiTargetPriority.None) continue;
+                if (ship.TargetPriority == TargetPriority.None) continue;
                 if (options.IgnoreDrones && ship.IsDrone) continue;
                 if (options.UseDroneCamouflage && profile.ChanceToAvoidDrone > 0f && context.Percentage(profile.ChanceToAvoidDrone))
                     continue;
@@ -454,7 +454,7 @@ namespace CombatSimulation.Ai
                         continue;
                 }
 
-                var stats = new TargetStats(profile, distanceToShip);
+                var stats = new TargetStats(ship, profile.ModelScale, distanceToShip);
                 if (enemy.IsNull || stats.IsBetterThan(enemyStats))
                 {
                     enemy = ship.Id;
@@ -473,8 +473,8 @@ namespace CombatSimulation.Ai
             private readonly float _distance;
             private readonly float _size;
 
-            public TargetStats(AiShipProfile target, float distance)
-                : this((int)target.TargetPriority, distance, target.ModelScale)
+            public TargetStats(in ShipState target, float size, float distance)
+                : this((int)target.TargetPriority, distance, size)
             {
             }
 
