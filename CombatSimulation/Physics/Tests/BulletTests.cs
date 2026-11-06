@@ -15,6 +15,31 @@ namespace CombatSimulation.Physics.Tests
         private static readonly ShapeDef HullDef = new ShapeDef { Filter = new Filter(Hull, 0) };
         private static readonly ShapeDef ShieldDef = new ShapeDef { Filter = new Filter(Shield, 0) };
 
+        [Test]
+        public void FreeHookCapsItsSweepBeforeItCanHitPastTheRope()
+        {
+            var world = new PhysicsWorld(new WorldSettings());
+            var owner = world.CreateBody(BodyDef.Create(new Vec2(50f, 50f), 1f));
+            var target = world.CreateBody(BodyDef.Create(new Vec2(64f, 50f), 1f));
+            world.AddCircle(target, new Circle(Vec2.Zero, 0.5f));
+            var hook = world.CreateBullet(new BulletDef
+            {
+                Position = new Vec2(61f, 50f), LinearVelocity = new Vec2(1000f, 0f),
+                Owner = owner, MaxOwnerDistance = 12f, PassThrough = true,
+            }, new Circle(Vec2.Zero, 0.5f));
+            world.Step(Dt);
+            Assert.AreEqual(0, world.BulletHits.Length);
+            Assert.AreEqual(62f, world.GetBulletPosition(hook).X, 0.001f);
+            world.Step(Dt);
+            Assert.Less(world.GetBulletVelocity(hook).Length, 0.001f);
+            world.SetLinearVelocity(owner, new Vec2(-10f, 0f));
+            world.Step(Dt);
+            Assert.AreEqual(12f, world.Torus.Delta(world.GetPosition(owner), world.GetBulletPosition(hook)).Length, 0.001f);
+            world.SetBulletOwner(hook, target); // Capture changes collision ownership, not the rope's anchor.
+            world.Step(Dt);
+            Assert.AreEqual(12f, world.Torus.Delta(world.GetPosition(owner), world.GetBulletPosition(hook)).Length, 0.001f);
+        }
+
         [TestCase(0f, 100f)]
         [TestCase(90f, 100f)]
         [TestCase(0f, 199f)]

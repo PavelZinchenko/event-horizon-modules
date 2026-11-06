@@ -21,6 +21,67 @@ namespace CombatSimulation.Ai.Tests
         private const float Degree = (float)(Math.PI / 180.0);
 
         [Test]
+        public void HoldHarpoonHoldsAnEnemyShipAndReleasesAfterHalfASecondWithoutIt()
+        {
+            var hook = new BulletDefinition(0.5f, 0f, 300f, 0f, lifetime: 0.5f, harpoon: true,
+                impact: BulletImpact.OverTime, hitPoints: 100f);
+            BattleRunner Create(Vec2 muzzle)
+            {
+                var shooter = new ShipDefinition(1f, 1f, AiFixtures.Engine, 1000f, new ResourceDefinition(0f),
+                    new ResourceDefinition(300f), barrels: new[] { new BarrelDefinition(muzzle) },
+                    devices: new[] { new CannonDefinition(0, 0f, 0f, 0f, hook, CannonMode.Continuous) });
+                var result = new BattleRunner(new BattleSetup(new BattleId(1), 7, new[]
+                {
+                    new RosterSlotSetup(new RosterId(1), 0, shooter),
+                    new RosterSlotSetup(new RosterId(101), 1, AiFixtures.Ship),
+                    new RosterSlotSetup(new RosterId(102), 1, AiFixtures.Ship),
+                }), new FirePilots());
+                result.Deploy(new RosterId(1), result.Tick);
+                result.Deploy(new RosterId(101), result.Tick);
+                result.Step();
+                return result;
+            }
+            // Place the muzzle on the seeded enemy so this node test does not need an aiming pilot.
+            var probe = Create(Vec2.Zero);
+            var source = probe.Snapshot.Ships[0];
+            var delta = new Torus(200f, 200f).Delta(source.Position, probe.Snapshot.Ships[1].Position);
+            var runner = Create(Rot.FromAngle(source.Angle).InvRotate(delta));
+            for (var i = 0; i < 12; ++i) runner.Step();
+            var weapon = new AiWeapon(0, AiWeaponClass.Continuous, AiBulletBehavior.Harpoon,
+                AiWeaponCapability.DamageEnemy, 12f, 0f);
+            var context = new AiContext(WithWeapon(weapon), AiSettings.Default, 0.02f, default, BattleData());
+            context.Update(runner.Snapshot, runner.Snapshot.Ships[0]);
+            var node = Builder(context).Build(Node(Leaf(BehaviorNodeType.HoldHarpoon)));
+            Assert.IsTrue(context.TryGetBullet(context.DeviceOf(0).ActiveBullet, out var activeHook), "A hook must be active.");
+            Assert.IsFalse(activeHook.AttachedTargetId.IsNull, "The hook must be attached.");
+            Assert.AreEqual(S, node.Evaluate(context));
+            Assert.IsTrue(context.Controls.IsSystemActivated(0));
+            Assert.IsFalse(AimAndAttack.IsReadyToFire(context, weapon));
+
+            Assert.IsTrue(runner.Vanish(runner.Snapshot.Ships[1].Id, runner.Tick));
+            runner.Step();
+            runner.Step();
+            context.Update(runner.Snapshot, runner.Snapshot.Ships[0]);
+            for (var i = 0; i < 24; ++i)
+            {
+                context.Controls.Reset();
+                Assert.AreEqual(S, node.Evaluate(context));
+                Assert.IsTrue(context.Controls.IsSystemActivated(0));
+            }
+            node.Evaluate(context); // Float timer boundary, as in legacy.
+            context.Controls.Reset();
+            Assert.AreEqual(F, node.Evaluate(context));
+            Assert.IsFalse(context.Controls.IsSystemActivated(0));
+        }
+
+        [Test]
+        public void HoldHarpoonWithoutAWeaponFailsWithoutCreatingAStub()
+        {
+            var context = Context(out _);
+            Assert.AreSame(EmptyNode.Failure, Builder(context).Build(Node(Leaf(BehaviorNodeType.HoldHarpoon))));
+        }
+
+        [Test]
         public void AnglesFollowMathf()
         {
             Assert.AreEqual(20f * Degree, LegacyMath.DeltaAngle(350f * Degree, 10f * Degree), 1e-5f);

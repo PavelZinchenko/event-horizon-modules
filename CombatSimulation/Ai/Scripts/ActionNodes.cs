@@ -431,6 +431,39 @@ namespace CombatSimulation.Ai
         private readonly bool _secondaryTargets;
     }
 
+    // Legacy HoldHarpoonNode: retain a hook on an enemy ship and for half a second after losing that target.
+    internal sealed class HoldHarpoonNode : INode
+    {
+        public HoldHarpoonNode(IReadOnlyList<AiWeapon> weapons) => _weapons = weapons;
+
+        public NodeState Evaluate(AiContext context)
+        {
+            var result = NodeState.Failure;
+            foreach (var weapon in _weapons)
+            {
+                if (!context.TryGetBullet(context.DeviceOf(weapon.DeviceIndex).ActiveBullet, out var bullet)) continue;
+                if (!bullet.AttachedTargetId.IsNull)
+                {
+                    if (!context.TryGetShip(bullet.AttachedTargetId, out var target) ||
+                        target.IsDrone || !context.IsEnemy(target)) continue;
+                    _timeLeft = 0.5f;
+                }
+                else
+                {
+                    // Legacy shares one timer and subtracts once per free hook.
+                    _timeLeft -= context.DeltaTime;
+                    if (_timeLeft < 0f) continue;
+                }
+                context.Controls.ActivateSystem(weapon.DeviceIndex);
+                result = NodeState.Success;
+            }
+            return result;
+        }
+
+        private readonly IReadOnlyList<AiWeapon> _weapons;
+        private float _timeLeft;
+    }
+
     // Legacy AvoidThreatsNode: turns away from the threats that are not much faster than the ship, at full thrust.
     // Threats that left the battle since the list update are skipped; legacy reads their last state.
     internal sealed class AvoidThreatsNode : INode

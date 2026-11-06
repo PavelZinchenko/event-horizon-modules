@@ -82,6 +82,18 @@ namespace CombatSimulation.Physics
             {
                 ref var bullet = ref _bullets[b];
                 if (!bullet.Alive) continue;
+                // Bodies have already moved. Cap before broad-phase and casts, so a hook cannot hit past its rope.
+                if (bullet.Parent.IsNull && bullet.MaxOwnerDistance > 0f && IsAlive(bullet.DistanceAnchor))
+                {
+                    var ownerPosition = _bodies[bullet.DistanceAnchor.Index].Origin;
+                    var end = bullet.Position + dt * bullet.V;
+                    var delta = Torus.Delta(ownerPosition, end);
+                    if (delta.LengthSquared > bullet.MaxOwnerDistance * bullet.MaxOwnerDistance)
+                    {
+                        end = ownerPosition + bullet.MaxOwnerDistance * delta.Normalized;
+                        bullet.V = Torus.Delta(bullet.Position, end) * (1f / dt);
+                    }
+                }
                 var group = IsAlive(bullet.Owner) ? bullet.Owner.Index : -2 - b;
                 var aabb = SweptAabb(bullet.Shape.ComputeAabb(bullet.Pose), dt * bullet.V);
                 grid.Add(BulletFlag | b, aabb, group, false, bullet.Shape.Filter);

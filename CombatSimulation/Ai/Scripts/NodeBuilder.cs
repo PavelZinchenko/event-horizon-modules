@@ -298,8 +298,13 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_TargetEnemyStarbase content) => Stub(content);
         public INode Create(BehaviorTreeNode_BypassObstacles content) => Stub(content);
         public INode Create(BehaviorTreeNode_AttackTurretTargets content) => new AttackTurretTargetsNode();
-        public INode Create(BehaviorTreeNode_HoldHarpoon content) =>
-            HasWeapon(weapon => weapon.BulletBehavior == AiBulletBehavior.Harpoon) ? Stub(content) : EmptyNode.Failure;
+        public INode Create(BehaviorTreeNode_HoldHarpoon content)
+        {
+            var weapons = new List<AiWeapon>();
+            foreach (var weapon in _profile.Weapons)
+                if (weapon.BulletBehavior == AiBulletBehavior.Harpoon) weapons.Add(weapon);
+            return weapons.Count > 0 ? new HoldHarpoonNode(weapons) : EmptyNode.Failure;
+        }
         public INode Create(BehaviorTreeNode_FindDamagedAlly content)
         {
             var defensive = _profile.IsDrone && _settings.LimitedRange > 0f && content.InAttackRange;

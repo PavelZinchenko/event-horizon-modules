@@ -185,6 +185,7 @@ namespace CombatSimulation.Core
                 Angle = angle,
                 LinearVelocity = velocity,
                 Owner = ship.Body,
+                MaxOwnerDistance = definition.IsHarpoon ? definition.Range : 0f,
 
                 // The core selects the first valid hit, so physics reports every target (contact ordering, rule 1).
                 PassThrough = true,

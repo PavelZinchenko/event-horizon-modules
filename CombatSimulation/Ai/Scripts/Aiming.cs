@@ -346,11 +346,13 @@ namespace CombatSimulation.Ai
         }
 
         // Legacy WeaponWrapperExtensions.IsReadyToFire on the device state (step 3b). A charging weapon needs a full
-        // charge (phase 5, step 4f). Harpoons are inert until step 6, so no harpoon has a bullet out.
+        // charge (phase 5, step 4f). A harpoon with a hook out is maintained by HoldHarpoon.
         public static bool IsReadyToFire(AiContext context, AiWeapon weapon)
         {
             var device = context.DeviceOf(weapon.DeviceIndex);
             if (!device.Ready) return false;
+            if (weapon.BulletBehavior == AiBulletBehavior.Harpoon &&
+                context.TryGetBullet(device.ActiveBullet, out _)) return false;
             if (weapon.WeaponClass == AiWeaponClass.RequiredCharging && device.Charge < 1f) return false;
             return true;
         }

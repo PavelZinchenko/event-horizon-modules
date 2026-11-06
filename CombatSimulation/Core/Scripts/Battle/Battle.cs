@@ -390,6 +390,7 @@ namespace CombatSimulation.Core
                 if (bullet.Definition.IsHoming) HomingSteering.Update(this, ref bullet);
                 else if (bullet.Definition.IsRocket) RocketSteering.Update(World, ref bullet);
                 else if (bullet.Definition.IsSticky) StickyMine.Update(this, i);
+                else if (bullet.Definition.IsHarpoon) Harpoons.Update(this, i);
                 else if (bullet.Definition.IsBeamBolt) BeamBolts.Update(World, ref bullet, Tick);
             }
         }
@@ -501,6 +502,7 @@ namespace CombatSimulation.Core
         {
             ref readonly var bullet = ref _world.Bullets[index];
             if (!Setup.IsLocalOwner(bullet.Owner)) _triggers.ForgetTriggerParentCopy(bullet);
+            if (World.IsAlive(bullet.HarpoonRope)) World.DestroyJoint(bullet.HarpoonRope);
             if (!bullet.IsBeam) World.DestroyBullet(bullet.Body);
             _contacts.Ledger.Forget(bullet.Id);
             _world.Entities.Remove(bullet.Id);
@@ -637,7 +639,8 @@ namespace CombatSimulation.Core
             {
                 if (!_world.Bullets.IsAlive(i)) continue;
                 ref var bullet = ref _world.Bullets[i];
-                if (bullet.ParentId != ship.Id || !bullet.IsBeam && !bullet.Definition.AttachedToParent) continue;
+                if (bullet.ParentId != ship.Id || !bullet.IsBeam && !bullet.Definition.AttachedToParent &&
+                    !bullet.Definition.IsHarpoon) continue;
                 bullet.SkipTriggers = true;
                 if (bullet.PendingRemoval == RemovalReason.None) bullet.PendingRemoval = RemovalReason.Disposal;
             }

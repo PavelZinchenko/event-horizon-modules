@@ -31,6 +31,8 @@ namespace CombatSimulation.Physics
 
         // The bullet never hits a shape of this body (start inside its own ship). Null for no owner.
         public BodyId Owner;
+        // Free hook: cap its sweep at this distance from the owner; zero disables the cap.
+        public float MaxOwnerDistance;
 
         // Pass-through: all hits of the step in order, one per target. Otherwise only the first hit.
         public bool PassThrough;
@@ -108,7 +110,12 @@ namespace CombatSimulation.Physics
         public Rot Q;
         public Vec2 V;
         public BodyId Owner;
+        // Free hook: cap its sweep at this distance from the owner; zero disables the cap.
+        public float MaxOwnerDistance;
         public bool PassThrough;
+
+        // The firing body stays the rope anchor when capture changes the collision owner.
+        public BodyId DistanceAnchor;
 
         // Attachment: the parent body (null when free) and the pose in the parent's frame, relative to its origin.
         public BodyId Parent;
@@ -304,6 +311,8 @@ namespace CombatSimulation.Physics
 
         private int AllocateBullet(in BulletDef def, ShapeKind kind)
         {
+            if (!(def.MaxOwnerDistance >= 0f) || float.IsInfinity(def.MaxOwnerDistance))
+                throw new ArgumentOutOfRangeException(nameof(def.MaxOwnerDistance));
             int index;
             if (_freeBulletCount > 0)
             {
@@ -329,6 +338,8 @@ namespace CombatSimulation.Physics
             bullet.Q = Rot.FromAngle(def.Angle);
             bullet.V = def.LinearVelocity;
             bullet.Owner = def.Owner;
+            bullet.MaxOwnerDistance = def.MaxOwnerDistance;
+            bullet.DistanceAnchor = def.Owner;
             bullet.PassThrough = def.PassThrough;
 
             ++_aliveBulletCount;

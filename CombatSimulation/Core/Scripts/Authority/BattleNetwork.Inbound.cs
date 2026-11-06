@@ -144,8 +144,8 @@ namespace CombatSimulation.Core
                         (_world.EntityOwner(handle) == operation.Owner &&
                          (IsContactTarget(handle.Kind) ? !operation.BayKey.HasValue :
                           _world.Ships.Get(handle)?.Bay?.Key == operation.BayKey && operation.BayKey.HasValue));
-                // The missile or its target may be gone; a live missile must be the owner's homing or sticky projectile.
-                // A tail segment target is a sticky bullet's (phase 5, step 5a).
+                // The missile or its target may be gone; a live missile must be the owner's homing, sticky or harpoon
+                // projectile. Only sticky bullets and harpoons can name a tail segment.
                 case OwnerOperationKind.MissileTarget:
                     if (operation.EntityId.IsNull || operation.TargetIsSegment && operation.TargetId.IsNull) return false;
                     if (_world.Entities.TryGet(operation.TargetId, out handle) && (handle.Kind == EntityKind.Bullet ||
@@ -153,6 +153,7 @@ namespace CombatSimulation.Core
                     return !_world.Entities.TryGet(operation.EntityId, out handle) ||
                         (_world.Bullets.TryGet(handle, out var missile) && _world.Bullets[missile].Owner == operation.Owner &&
                          !_world.Bullets[missile].IsBeam && (_world.Bullets[missile].Definition.IsSticky ||
+                         _world.Bullets[missile].Definition.IsHarpoon ||
                          _world.Bullets[missile].Definition.IsHoming && !operation.TargetIsSegment));
                 // The ship may be gone; a live ship must be the owner's.
                 case OwnerOperationKind.Allegiance:
@@ -314,6 +315,11 @@ namespace CombatSimulation.Core
         {
             if (!_world.Entities.TryGet(operation.EntityId, out var handle) || !_world.Bullets.TryGet(handle, out var index)) return;
             ref var bullet = ref _world.Bullets[index];
+            if (bullet.Definition.IsHarpoon)
+            {
+                Harpoons.ApplyTarget(_battle, index, operation.TargetId);
+                return;
+            }
             if (bullet.Definition.IsSticky)
             {
                 if (!bullet.Stuck) StickyMine.Stick(_battle, index, operation.TargetId, operation.Tick);

@@ -114,6 +114,8 @@ namespace CombatSimulation.Core
         // the end of this tick's ray from the bolt's pose, at its first hit for a ray without pass-through.
         public readonly Vec2 BeamEndPoint;
         public readonly EntityId BeamTargetId;
+        // A stuck hook or mine; null while free. AI reads this without accessing physics.
+        public readonly EntityId AttachedTargetId;
         public bool HasRay => IsBeam || Definition.IsBeamBolt;
 
         // Canonical torus coordinates and radians.
@@ -139,6 +141,7 @@ namespace CombatSimulation.Core
             Definition = bullet.Definition;
             BeamDefinition = bullet.BeamDefinition;
             BeamTargetId = bullet.IsBeam ? bullet.TargetId : default;
+            AttachedTargetId = bullet.Stuck ? bullet.TargetId : default;
             Position = bullet.IsBeam ? bullet.BeamOrigin : world.GetBulletPosition(bullet.Body);
             Angle = bullet.IsBeam ? bullet.BeamAngle : world.GetBulletRotation(bullet.Body).Angle;
             if (bullet.IsBeam)

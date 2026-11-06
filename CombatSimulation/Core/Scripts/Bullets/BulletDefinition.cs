@@ -45,11 +45,12 @@ namespace CombatSimulation.Core
             bool damageFalloff = false, float radialPush = 0f, float radialPushWithFalloff = 0f, float lifetime = 0f,
             float scale = 0f, bool attachedToParent = false, bool rocket = false, float stickyLifetime = 0f,
             bool magnetic = false, bool hasDirection = true, float beamLength = 0f, bool piercing = false, bool aura = false,
-            ImpactEffects effects = default, bool friendlyFire = false, Vec2 circleCenter = default, WaveDefinition wave = null)
+            ImpactEffects effects = default, bool friendlyFire = false, Vec2 circleCenter = default,
+            WaveDefinition wave = null, bool harpoon = false)
             : this(radius, speed, range, damage, weight, parentVelocityEffect, hitPoints, homing, startingVelocityMultiplier,
                 damageType, recoil, push, extraDamage, triggers, detonateWhenDestroyed, canBeDisarmed, impact, damageFalloff,
                 radialPush, radialPushWithFalloff, lifetime, scale, attachedToParent, rocket, stickyLifetime, magnetic,
-                hasDirection, beamLength, piercing, aura, effects, null, 1f, friendlyFire, circleCenter, wave)
+                hasDirection, beamLength, piercing, aura, effects, null, 1f, friendlyFire, circleCenter, wave, harpoon)
         {
         }
 
@@ -60,7 +61,8 @@ namespace CombatSimulation.Core
             bool detonateWhenDestroyed, bool canBeDisarmed, BulletImpact impact, bool damageFalloff, float radialPush,
             float radialPushWithFalloff, float lifetime, float scale, bool attachedToParent, bool rocket,
             float stickyLifetime, bool magnetic, bool hasDirection, float beamLength, bool piercing, bool aura,
-            ImpactEffects effects, BulletDefinition uncharged, float charge, bool friendlyFire, Vec2 circleCenter, WaveDefinition wave)
+            ImpactEffects effects, BulletDefinition uncharged, float charge, bool friendlyFire, Vec2 circleCenter,
+            WaveDefinition wave, bool harpoon)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -157,6 +159,10 @@ namespace CombatSimulation.Core
                 }
             }
 
+            if (harpoon && (!(range > 0f) || homing || rocket || stickyLifetime > 0f || attachedToParent || aura ||
+                beamLength > 0f))
+                throw new ArgumentException("A harpoon needs a positive range and no other controller.", nameof(harpoon));
+            IsHarpoon = harpoon;
             Radius = radius;
             if (float.IsNaN(circleCenter.X) || float.IsInfinity(circleCenter.X) ||
                 float.IsNaN(circleCenter.Y) || float.IsInfinity(circleCenter.Y))
@@ -269,6 +275,9 @@ namespace CombatSimulation.Core
         public float StickyLifetime { get; }
         public bool IsSticky => StickyLifetime > 0f;
 
+        // A hook stops at range while free; after sticking, a rope joins its target to the firing ship.
+        public bool IsHarpoon { get; }
+
         // Legacy cooldown -= dt, detonation at <= 0: the ticks from the stick tick to the detonation tick, both counted.
         public int StickyTicks { get; }
 
@@ -324,9 +333,9 @@ namespace CombatSimulation.Core
         internal int SpawnLifetimeTicks(float lifetime, float speedScale) =>
             TickTime.After(lifetime * Math.Max(0f, 1f - Effects.LifetimeLoss)) + GrowthTicks(speedScale);
 
-        // Only the owner knows when an aura's weapon stopped renewing it (step 4g), or how long a restoring bullet
-        // touched ships (step 5d). A copy leaves with the owner's removal record.
-        public bool HasOwnerLifetime => IsAura || Effects.Restore > 0f;
+        // Only the owner knows when an aura or harpoon stopped being held, or how long a restoring bullet touched
+        // ships. A copy leaves with the owner's removal record.
+        public bool HasOwnerLifetime => IsAura || IsHarpoon || Effects.Restore > 0f;
 
         // Legacy MovingBeamController (phase 5, step 4e): above zero, the bullet is a beam bolt, a ray of this length
         // from its origin along its heading. It hits through the ray only; nothing hits its body, and point defense does
@@ -417,7 +426,7 @@ namespace CombatSimulation.Core
                 Push * charge, extra, triggers, DetonateWhenDestroyed, CanBeDisarmed, Impact, DamageFalloff,
                 RadialPush * charge, RadialPushWithFalloff * charge, BodyLifetime, Scale * size, AttachedToParent, IsRocket,
                 StickyLifetime, IsMagnetic, HasDirection, BeamLength * size, Piercing, IsAura, Effects.WithCharge(charge), this,
-                charge, FriendlyFire, CircleCenter * size, Wave);
+                charge, FriendlyFire, CircleCenter * size, Wave, IsHarpoon);
             scaled.Add(this, result);
             return result;
         }

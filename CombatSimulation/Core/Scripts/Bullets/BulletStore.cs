@@ -96,6 +96,7 @@ namespace CombatSimulation.Core
         // A sticky bullet rides on its TargetId's body (phase 5, step 4b); the owner detonates it at stage 4 of
         // DetonationTick.
         public bool Stuck;
+        public JointId HarpoonRope;
         public long DetonationTick;
 
         // The owner's spawn tick. A remote bullet is Confirmed once its owner's fire record arrives; local bullets
@@ -278,7 +279,7 @@ namespace CombatSimulation.Core
                     if (ship == null && segment == null) continue;
                     if (definition.FriendlyFire && CollisionFilters.IsSource(bullet.SourceShipId, ship, segment)) continue;
                     targetAllegiance = ship?.Allegiance ?? segment.Allegiance;
-                    if (definition.IsSticky && !bullet.Stuck && bullet.TargetId.IsNull)
+                    if ((definition.IsSticky || definition.IsHarpoon) && !bullet.Stuck && bullet.TargetId.IsNull)
                         _items[index].TargetId = target.OwnerId;
 
                     candidate.TargetPriority = target.Priority;
