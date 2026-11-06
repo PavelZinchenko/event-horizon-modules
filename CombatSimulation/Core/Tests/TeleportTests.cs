@@ -113,36 +113,44 @@ namespace CombatSimulation.Core.Tests
             }
         }
 
-        [TestCase(1)]
-        [TestCase(4)]
-        public void DirectSegmentHitDestroysItAndDetachesTheRest(int number)
+        [Test]
+        public void DirectSegmentHitDestroysItAndDetachesTheRest()
         {
             var driver = CannonTests.Duel(Shooter(Rift(radius: 0.05f), new Vec2(0f, -3f)), Target(worm: true));
+            var world = driver.Battle.World;
+            var segmentId = HitSegment(driver, 4);
+            Assert.IsNull(driver.Battle.FindSegment(segmentId));
+            Assert.AreEqual(3, driver.Battle.Snapshot.Segments.ToArray().Count(s => !s.Detached));
+            Assert.AreEqual(6, driver.Battle.Snapshot.Segments.ToArray().Count(s => s.Detached));
+            Near(new Vec2(80f, 50f), world.GetPosition(driver.Ship(101).Body));
+        }
+
+        // Legacy FixedWormSegment.Affect ignores CollisionEffect.Destroy: the fixed segment survives and nothing moves.
+        [TestCase(1)]
+        [TestCase(2)]
+        public void FixedSegmentIgnoresTeleport(int number)
+        {
+            var driver = CannonTests.Duel(Shooter(Rift(radius: 0.05f), new Vec2(0f, -3f)), Target(worm: true));
+            var world = driver.Battle.World;
+            var segmentId = HitSegment(driver, number);
+            Assert.IsNotNull(driver.Battle.FindSegment(segmentId));
+            Assert.IsFalse(driver.Battle.FindSegment(segmentId).Detached);
+            Assert.AreEqual(0, driver.Battle.Snapshot.Segments.ToArray().Count(s => s.Detached));
+            Near(new Vec2(80f, 50f), world.GetPosition(driver.Ship(101).Body));
+        }
+
+        // Moves the worm clear of the shooter, then fires one rift at the given segment. Returns the segment's ID.
+        private static EntityId HitSegment(Driver driver, int number)
+        {
             var world = driver.Battle.World;
             world.TeleportGroup(driver.Ship(101).Body, new Vec2(80f, 50f), 0f);
             driver.Step(30);
             var segment = driver.Battle.Snapshot.Segments.ToArray().Select(s => driver.Battle.FindSegment(s.Id))
                 .Single(s => s.Number == number);
-            var segmentId = segment.Id;
             driver.Place(1, world.GetPosition(segment.Body) + new Vec2(0f, 3f), Vec2.Zero);
             driver.Control(1, systems: 1);
             driver.Step();
-            Assert.IsNull(driver.Battle.FindSegment(segmentId));
-            Assert.AreEqual(number - 1, driver.Battle.Snapshot.Segments.ToArray().Count(s => !s.Detached));
-            Assert.AreEqual(10 - number, driver.Battle.Snapshot.Segments.ToArray().Count(s => s.Detached));
-            Near(new Vec2(80f, 50f), world.GetPosition(driver.Ship(101).Body));
-            if (number == 1)
-            {
-                var regrow = driver.Tick - 1 + TickTime.AtLeast(7.5f);
-                driver.StepUntil(regrow);
-                Assert.IsEmpty(driver.Battle.Snapshot.Segments.ToArray());
-                driver.Step();
-                Assert.AreEqual(1, driver.Battle.Snapshot.Segments.Length);
-                driver.Step(24);
-                Assert.AreEqual(1, driver.Battle.Snapshot.Segments.Length);
-                driver.Step();
-                Assert.AreEqual(2, driver.Battle.Snapshot.Segments.Length, "A rebuilt tail grows every 0.5 seconds.");
-            }
+            return segment.Id;
         }
 
         [Test]

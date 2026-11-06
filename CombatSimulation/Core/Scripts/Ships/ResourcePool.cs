@@ -38,13 +38,15 @@ namespace CombatSimulation.Core
             DelayRemaining = 0f;
         }
 
-        // True when TryConsume would spend the amount.
-        public readonly bool CanConsume(float amount) => Value > 0f && Value >= amount && Max > 0f;
+        // True when TryConsume would succeed. A cost of 0 or less always passes, even with an empty or zero-capacity
+        // pool. Legacy Energy.TryGet(0) fails there and only some weapons bypass it; owner, 2026-11-06: a legacy bug.
+        public readonly bool CanConsume(float amount) => amount <= 0f || Value > 0f && Value >= amount && Max > 0f;
 
-        // Spends the amount only if it is available. A failed attempt does not touch the delay.
+        // Spends the amount only if it is available. A failed attempt does not touch the delay; a free one changes nothing.
         public bool TryConsume(float amount)
         {
             if (!CanConsume(amount)) return false;
+            if (amount <= 0f) return true;
 
             Value -= amount;
             RestartDelay(amount);

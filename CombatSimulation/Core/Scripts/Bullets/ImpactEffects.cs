@@ -6,7 +6,7 @@ namespace CombatSimulation.Core
     // each once, at full power (legacy actions have no falloff); damage over time and a beam apply each per second,
     // except Roll and Teleport, which run on contact entry only.
     // Missiles and tail segments take the progressive ramp and repair's hostile branch as damage. Teleport destroys
-    // a tail segment instead of moving it; missiles ignore it.
+    // a destroyable tail segment instead of moving it; fixed segments and missiles ignore it.
     // The restore (step 5d) acts on the bullet itself.
     public readonly struct ImpactEffects
     {
@@ -65,7 +65,7 @@ namespace CombatSimulation.Core
         public bool IgnoreShield { get; }
 
         // Raw distance along the target's heading, once per new contact. Never scaled by charge or modifiers.
-        // Ships and drones move with their hinge group; tail segments die instead.
+        // Ships and drones move with their hinge group; destroyable tail segments die instead.
         public float Teleport { get; }
 
         // Once per new contact, on drones and missiles only. Disabled when the setup has remote owners (H9).

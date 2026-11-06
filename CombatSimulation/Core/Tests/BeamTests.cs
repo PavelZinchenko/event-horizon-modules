@@ -115,16 +115,17 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(0, driver.Battle.Snapshot.Bullets.Length);
             Assert.AreEqual(0, Hits(driver).Length);
             driver.Step();
-            Assert.AreEqual(1, driver.Battle.Snapshot.Bullets.Length, "Zero-cost activation still requires positive energy.");
+            Assert.AreEqual(1, driver.Battle.Snapshot.Bullets.Length, "A zero-cost activation needs no energy.");
         }
 
         [Test]
-        public void ZeroEnergyCannotActivateEvenAZeroCostDevice()
+        // Owner, 2026-11-06: a free cost always passes; legacy Energy.TryGet(0) failing at zero capacity is a bug.
+        public void ZeroEnergyActivatesAZeroCostDevice()
         {
             var driver = Duel(BeamShip(new BeamDefinition(0, 0f, 0f, 0f, 30f, 0f), new ResourceDefinition(0f)));
             driver.Control(1, systems: 1);
             driver.Step(10);
-            Assert.AreEqual(0, driver.Battle.Snapshot.Bullets.Length);
+            Assert.AreEqual(1, driver.Battle.Snapshot.Bullets.Length);
         }
 
         [Test]

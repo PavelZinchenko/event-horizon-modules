@@ -124,6 +124,7 @@ namespace CombatSimulation.Runtime
     {
         internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse }
 
+        // Do not bump before the first release (owner, 2026-11-06; docs/combat_simulation.md, "Tick batch").
         internal const byte Version = 13;
         internal const int MaxBatchBytes = 1 << 20;
         private const int KindBits = 4, StatusBits = 2, ReasonBits = 3, ContactBits = 2, ImpactBits = 3, AllegianceBits = 3,

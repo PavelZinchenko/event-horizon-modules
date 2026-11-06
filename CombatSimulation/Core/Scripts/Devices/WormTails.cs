@@ -247,8 +247,10 @@ namespace CombatSimulation.Core
                 kind = HitImpactKind.Impact;
             }
 
-            // Teleport destroys the contacted segment instead of moving it, including fixed segments (6c row 5).
+            // Teleport destroys a destroyable segment instead of moving it (6c row 5). Legacy FixedWormSegment.Affect
+            // ignores CollisionEffect.Destroy, so a fixed segment takes the hit as ordinary damage.
             // One contact record carries the effect; ordinary damage cannot change this outcome.
+            if (segment.IsFixed) teleport = 0f;
             if (teleport > 0f)
             {
                 perTick = false;
@@ -276,7 +278,8 @@ namespace CombatSimulation.Core
         public void ApplySegmentContact(in ResolvedHit hit, TailSegment segment)
         {
             if (segment == null || segment.Owner != hit.TargetOwner || !Setup.IsLocalOwner(segment.Owner) ||
-                hit.ImpactKind == HitImpactKind.Disarm || hit.ImpactKind == HitImpactKind.Stop) return;
+                hit.ImpactKind == HitImpactKind.Disarm || hit.ImpactKind == HitImpactKind.Stop ||
+                hit.Effect == HitEffect.Teleport && segment.IsFixed) return;
             var perTick = hit.ImpactKind == HitImpactKind.DamageOverTime || hit.DeviceIndex < 0;
             if (!_battle.RecordBulletContact(hit.AttackerId, hit.TargetId, perTick ? hit.Tick : -1)) return;
             QueueSegmentHit(segment, hit.Amount, Vec2.Zero, hit.Effect == HitEffect.Teleport);

@@ -112,7 +112,8 @@ namespace CombatSimulation.Core
             HasGrown = false;
         }
 
-        // Step 6c makes head loss reachable while the ship lives. Legacy waits 1.5 cooldowns before rebuilding it.
+        // Head loss while the ship lives (no built-in path reaches it: fixed segments ignore teleport, as legacy).
+        // Legacy waits 1.5 cooldowns before rebuilding it.
         public void HeadRemoved(long tick)
         {
             Head = default;

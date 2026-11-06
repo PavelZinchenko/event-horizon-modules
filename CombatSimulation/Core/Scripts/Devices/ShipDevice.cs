@@ -282,9 +282,7 @@ namespace CombatSimulation.Core
                 if (context.Bullets.TryGet(_bullet, out var index))
                 {
                     IsActive = controlOn && cooled;
-                    // Legacy WeaponBase.TryConsumeEnergy bypasses the pool for a free weapon, even at zero capacity.
-                    if (IsActive && (Definition.EnergyCost <= 0f ||
-                        ship.Energy.TryConsume(Definition.EnergyCost * Battle.TickDuration)))
+                    if (IsActive && ship.Energy.TryConsume(Definition.EnergyCost * Battle.TickDuration))
                         Auras.Renew(ref context.Bullets[index], tick);
                     else
                         LastShotTick = tick;
@@ -296,7 +294,7 @@ namespace CombatSimulation.Core
             }
 
             IsActive = controlOn && cooled && ship.IsBarrelReady(Definition.BarrelIndex, tick);
-            if (!IsActive || Definition.EnergyCost > 0f && !ship.Energy.TryConsume(Definition.EnergyCost)) return;
+            if (!IsActive || !ship.Energy.TryConsume(Definition.EnergyCost)) return;
 
             ship.RecordBarrelShot(Definition.BarrelIndex, tick);
             context.RequestSpawn(new SpawnRequest(ship, Index, Definition.BarrelIndex, Definition.Spread, Definition.Bullet));

@@ -61,7 +61,11 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(0f, pool.DelayRemaining);
 
             pool.Value = 0f;
-            Assert.IsFalse(pool.TryConsume(0f), "An empty pool grants nothing, also a zero amount.");
+            Assert.IsTrue(pool.TryConsume(0f), "A free amount always passes, also from an empty pool.");
+            Assert.AreEqual(0f, pool.Value);
+            Assert.AreEqual(0f, pool.DelayRemaining);
+            Assert.IsTrue(pool.TryConsume(-3f), "A negative amount passes and adds nothing.");
+            Assert.AreEqual(0f, pool.Value);
         }
 
         [Test]
@@ -114,7 +118,8 @@ namespace CombatSimulation.Core.Tests
             pool.Update(1f);
             Assert.AreEqual(0f, pool.Value);
             Assert.AreEqual(0f, pool.Consume(5f));
-            Assert.IsFalse(pool.TryConsume(0f));
+            Assert.IsFalse(pool.TryConsume(1f));
+            Assert.IsTrue(pool.TryConsume(0f));
         }
 
         [Test]
