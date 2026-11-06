@@ -38,7 +38,7 @@ namespace CombatSimulation.Core
 
         // Legacy collider Source: exclude the firing platform and its units, not every unit of its network owner.
         internal static bool IsSource(EntityId source, ShipEntity ship, TailSegment segment = null) =>
-            ship != null ? ship.Id == source || ship.MothershipId == source : segment != null && segment.ShipId == source;
+            !source.IsNull && (ship != null ? ship.Id == source || ship.MothershipId == source : segment != null && segment.ShipId == source);
 
         private static readonly Filter NoContacts = new Filter(0, ~0UL);
 

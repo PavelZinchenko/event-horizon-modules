@@ -26,6 +26,7 @@ namespace CombatSimulation.Core
         // Drones have no roster slot. BayKey identifies their persistent owner instead.
         public readonly DroneBayKey? BayKey;
         public readonly EntityId MothershipId;
+        public readonly EntityId? MothershipOverride;
         public bool IsDrone => BayKey.HasValue;
         public readonly int Side;
         // Hostility (D13). A side's ships start with Allegiances.OfSide; a drone can change it.
@@ -70,6 +71,7 @@ namespace CombatSimulation.Core
             RosterId = ship.Slot?.RosterId ?? default;
             BayKey = ship.Bay?.Key;
             MothershipId = ship.MothershipId;
+            MothershipOverride = ship.MothershipOverride;
             Side = ship.Side;
             Allegiance = ship.Allegiance;
             Owner = ship.Owner;

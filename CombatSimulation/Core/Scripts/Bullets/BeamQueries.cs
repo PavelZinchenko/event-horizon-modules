@@ -71,7 +71,8 @@ namespace CombatSimulation.Core
                     {
                         if (!bullets.TryGetByBody(hit.Target.Bullet, out var targetIndex)) continue;
                         ref readonly var target = ref bullets[targetIndex];
-                        if (!target.Definition.IsMissile || definition.FriendlyFire && target.ShipId == beam.ShipId) continue;
+                        if (!target.Definition.IsMissile || definition.FriendlyFire &&
+                            !beam.SourceShipId.IsNull && target.SourceShipId == beam.SourceShipId) continue;
                         targetAllegiance = target.Definition.FriendlyFire ? Allegiance.Neutral : target.Allegiance;
                         candidate.Target = target.Id;
                         candidate.TargetHandle = bullets.GetHandle(targetIndex);
@@ -84,7 +85,7 @@ namespace CombatSimulation.Core
                             (battle.FindShip(target.OwnerId) == null && battle.FindSegment(target.OwnerId) == null)) continue;
                         var targetShip = battle.FindShip(target.OwnerId);
                         var segment = targetShip == null ? battle.FindSegment(target.OwnerId) : null;
-                        if (definition.FriendlyFire && CollisionFilters.IsSource(beam.ShipId, targetShip, segment)) continue;
+                        if (definition.FriendlyFire && CollisionFilters.IsSource(beam.SourceShipId, targetShip, segment)) continue;
                         targetAllegiance = targetShip?.Allegiance ?? segment.Allegiance;
                         candidate.Target = target.OwnerId;
                         candidate.TargetHandle = target.Owner;

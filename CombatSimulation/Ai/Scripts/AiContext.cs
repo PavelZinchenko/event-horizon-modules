@@ -64,14 +64,13 @@ namespace CombatSimulation.Ai
             }
         }
 
-        // Legacy Context.Mothership of a drone: the ship that launched it (Type.Owner). The core points a drone at the
-        // active ship of its bay slot, which a redeployment replaces, so the context keeps the first one. Other ships
-        // and a drone that went berserk have none. The ID can name a ship that left the battle.
+        // Keep the original deployment until capture explicitly replaces it. The old bay still owns the inventory.
+        // A cleared override removes the mothership; a later capture can give the drone another one.
         public EntityId Mothership => _mothership;
 
         // Legacy UnitState.Destroyed of the mothership: its slot was destroyed in the deployment that launched the drone.
         public bool IsMothershipDestroyed => _ship.IsDrone && !_ownerRemoved && !IsActive(_mothership) &&
-            TryGetBaySlot(out var slot) && slot.Status == RosterStatus.Destroyed && slot.DeploymentCount == _mothershipDeployment;
+            TryGetMothershipSlot(out var slot) && slot.Status == RosterStatus.Destroyed && slot.DeploymentCount == _mothershipDeployment;
 
         // Legacy UnitState.Inactive of the mothership: it left the battle without being destroyed (retreat or vanish, D12).
         public bool IsMothershipRetreated => _ship.IsDrone && !_ownerRemoved && !IsActive(_mothership) && !IsMothershipDestroyed;
@@ -245,6 +244,14 @@ namespace CombatSimulation.Ai
             Snapshot = snapshot;
             _ship = ship;
             if (FrameId == 0) Start(snapshot.Tick);
+            if (_ship.IsDrone && _ship.MothershipOverride.HasValue &&
+                (FrameId == 0 || _mothership != _ship.MothershipId || _ownerRemoved != _ship.MothershipId.IsNull))
+            {
+                _mothership = _ship.MothershipId;
+                _ownerRemoved = _mothership.IsNull;
+                _mothershipRosterId = TryGetShip(_mothership, out var mother) ? mother.RosterId : default;
+                _mothershipDeployment = TryGetMothershipSlot(out var slot) ? slot.DeploymentCount : 0;
+            }
             FrameId++;
             Time = (snapshot.Tick - _firstTick) * Battle.TickDuration + DeltaTime;
             LockedEnergy = 0f;
@@ -257,18 +264,18 @@ namespace CombatSimulation.Ai
             if (!_ship.IsDrone) return;
 
             _mothership = _ship.MothershipId;
-            if (TryGetBaySlot(out var slot))
+            _mothershipRosterId = _ship.BayKey.Value.RosterId;
+            if (TryGetMothershipSlot(out var slot))
                 _mothershipDeployment = slot.DeploymentCount;
         }
 
-        private bool TryGetBaySlot(out RosterSlotState slot)
+        private bool TryGetMothershipSlot(out RosterSlotState slot)
         {
-            if (_ship.BayKey.HasValue)
+            if (_ship.IsDrone)
             {
-                var rosterId = _ship.BayKey.Value.RosterId;
                 foreach (var item in Snapshot.Roster)
                 {
-                    if (item.RosterId != rosterId) continue;
+                    if (item.RosterId != _mothershipRosterId) continue;
                     slot = item;
                     return true;
                 }
@@ -290,6 +297,7 @@ namespace CombatSimulation.Ai
         private float _timeToHit;
         private bool _threatsDisabled;
         private EntityId _mothership;
+        private RosterId _mothershipRosterId;
         private uint _mothershipDeployment;
         private bool _ownerRemoved;
         private BitArray64 _flags;

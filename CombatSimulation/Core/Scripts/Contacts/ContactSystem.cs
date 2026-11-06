@@ -137,6 +137,13 @@ namespace CombatSimulation.Core
                         if (Setup.IsLocalOwner(attackerOwner) || _ledger.Record(hit.Attacker, hit.Target, perTick ? Tick : -1))
                         {
                             _world.Bullets.AddDamage(hit.TargetHandle, hit.Damage);
+                            if (attackerBullet && !Setup.HasRemoteOwners)
+                            {
+                                ref readonly var source = ref _world.Bullets[attackerIndex];
+                                var effects = source.IsBeam ? source.BeamDefinition.Effects : source.Definition.Effects;
+                                if (effects.ChangesDroneOwner && Entered(hit))
+                                    ChangeMissileOwner(ref _world.Bullets[index], source, effects);
+                            }
                             _triggers.AddPendingHit(index);
                         }
                         // A remote projectile that stops at a local bullet stops on its owner too.
@@ -184,7 +191,7 @@ namespace CombatSimulation.Core
                         ref readonly var attacker = ref _world.Bullets[index];
                         owner = attacker.Owner;
                         deviceIndex = attacker.DeviceIndex;
-                        attackerShip = attacker.ShipId;
+                        attackerShip = attacker.SourceShipId;
                         hostile = Allegiances.IsHostile(attacker.Allegiance, target.Allegiance);
                         kind = attacker.IsBeam ? HitImpactKind.DamageOverTime :
                             attacker.Definition.IsMissile ? HitImpactKind.Impact : HitImpactKind.Energy;
@@ -258,11 +265,17 @@ namespace CombatSimulation.Core
                                 AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.SlowDown,
                                     effects.SlowDown);
                         }
-                        if (effects.Roll > 0f || effects.Teleport > 0f)
+                        if (effects.Roll > 0f || effects.Teleport > 0f ||
+                            !Setup.HasRemoteOwners && target.IsDrone && effects.ChangesDroneOwner)
                         {
-                            var pair = new EntityPair(hit.Attacker, hit.Target);
-                            if (_currentEntries.Add(pair) && !_previousEntries.Contains(pair))
+                            if (Entered(hit))
                             {
+                                if (!Setup.HasRemoteOwners && target.IsDrone && effects.ChangesDroneOwner)
+                                {
+                                    ref readonly var source = ref _world.Bullets[index];
+                                    _world.SetAllegiance(target, effects.DriveDronesCrazy ? Allegiance.Undefined : source.Allegiance);
+                                    target.MothershipOverride = effects.DriveDronesCrazy ? default(EntityId) : source.SourceShipId;
+                                }
                                 if (effects.Roll > 0f)
                                 {
                                     var degrees = effects.Roll / (float)Math.Sqrt(target.Definition.Mass) * 180f;
@@ -349,6 +362,23 @@ namespace CombatSimulation.Core
                 _world.Events.Add(BattleEvent.HitEvent(BattleId, Tick, _world.Events.Count, hit, authority));
             }
             _network?.OutgoingHits.CompleteContacts(Tick);
+        }
+
+        private bool Entered(in ContactCandidate hit)
+        {
+            var pair = new EntityPair(hit.Attacker, hit.Target);
+            return _currentEntries.Add(pair) && !_previousEntries.Contains(pair);
+        }
+
+        private void ChangeMissileOwner(ref BulletEntity target, in BulletEntity source, in ImpactEffects effects)
+        {
+            if (target.IsBeam || !target.Definition.IsMissile) return;
+            target.AllegianceOwner = effects.DriveDronesCrazy ? default(EntityId) : source.SourceShipId;
+            target.Allegiance = effects.DriveDronesCrazy ? Allegiance.Undefined : source.Allegiance;
+            Physics.SetBulletFilter(target.Body, CollisionFilters.Bullet(target.Definition, target.Allegiance));
+            Physics.SetBulletOwner(target.Body, _world.FindShip(target.SourceShipId)?.Body ?? default);
+            target.TargetId = default;
+            target.NextSearchTick = Tick + 1;
         }
 
         // A ship effect on a remote target: its own record, or its own interval with the rate as amount.

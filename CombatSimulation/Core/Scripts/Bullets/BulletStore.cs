@@ -15,6 +15,9 @@ namespace CombatSimulation.Core
         public EntityId ParentId;
         // The ship that fired the bullet or its first ancestor. Allegiance changes follow it.
         public EntityId ShipId;
+        // Capture keeps spawn identity and source weapon, but changes whose allegiance the missile follows.
+        public EntityId? AllegianceOwner;
+        public EntityId SourceShipId => AllegianceOwner ?? ShipId;
         public int Side;
         public Allegiance Allegiance;
         public int Owner;
@@ -258,7 +261,7 @@ namespace CombatSimulation.Core
                     ref readonly var targetBullet = ref _items[targetIndex];
                     if (!targetBullet.Definition.IsMissile || targetBullet.PendingRemoval != RemovalReason.None) continue;
 
-                    if (definition.FriendlyFire && targetBullet.ShipId == bullet.ShipId) continue;
+                    if (definition.FriendlyFire && !bullet.SourceShipId.IsNull && targetBullet.SourceShipId == bullet.SourceShipId) continue;
                     targetAllegiance = targetBullet.Definition.FriendlyFire ? Allegiance.Neutral : targetBullet.Allegiance;
                     candidate.TargetPriority = ShapeHitPriority.Hull;
                     candidate.Target = targetBullet.Id;
@@ -273,7 +276,7 @@ namespace CombatSimulation.Core
                     var ship = ships.Get(target.Owner);
                     var segment = ship == null ? segments.Get(target.Owner) : null;
                     if (ship == null && segment == null) continue;
-                    if (definition.FriendlyFire && CollisionFilters.IsSource(bullet.ShipId, ship, segment)) continue;
+                    if (definition.FriendlyFire && CollisionFilters.IsSource(bullet.SourceShipId, ship, segment)) continue;
                     targetAllegiance = ship?.Allegiance ?? segment.Allegiance;
                     if (definition.IsSticky && !bullet.Stuck && bullet.TargetId.IsNull)
                         _items[index].TargetId = target.OwnerId;
@@ -318,7 +321,7 @@ namespace CombatSimulation.Core
                 else if (segment != null) shape = segment.Shape;
                 else continue;
                 if (!shapes.TryGet(shape, out var target)) continue;
-                if (bullet.Definition.FriendlyFire && CollisionFilters.IsSource(bullet.ShipId, ship, segment)) continue;
+                if (bullet.Definition.FriendlyFire && CollisionFilters.IsSource(bullet.SourceShipId, ship, segment)) continue;
 
                 resolver.Add(new ContactCandidate
                 {

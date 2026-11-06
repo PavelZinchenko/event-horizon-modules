@@ -169,7 +169,7 @@ namespace CombatSimulation.Core
             RocketSteering.Advance(Physics.Torus, definition, draw.SpeedScale, angle, spawnTick, Tick, ref position,
                 ref velocity);
 
-            var ship = _world.FindShip(parent.ShipId);
+            var ship = _world.FindShip(parent.SourceShipId);
             var bodyDef = new BulletDef
             {
                 Position = position,
@@ -186,6 +186,7 @@ namespace CombatSimulation.Core
             bullet.Id = id;
             bullet.ParentId = parent.Id;
             bullet.ShipId = parent.ShipId;
+            bullet.AllegianceOwner = parent.AllegianceOwner;
             bullet.Side = parent.Side;
             bullet.Allegiance = parent.Allegiance;
             bullet.Owner = parent.Owner;
@@ -322,6 +323,7 @@ namespace CombatSimulation.Core
                 return;
             parent.Velocity = Physics.GetBulletVelocity(bullet.Body);
             parent.Bullet.Allegiance = bullet.Allegiance;
+            parent.Bullet.AllegianceOwner = bullet.AllegianceOwner;
             _triggerParents[bullet.Id] = parent;
         }
 

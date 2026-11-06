@@ -125,7 +125,10 @@ namespace CombatSimulation.Core
         public RosterSlot Slot { get; private set; }
         public DroneBayInventory Bay { get; private set; }
         public bool IsDrone => Bay != null;
-        public EntityId MothershipId => Bay?.Slot.ActiveShip?.Id ?? default;
+        // Null override keeps the original bay association; an explicit null entity means no owner.
+        // Capture changes this link, never the bay's inventory or network owner.
+        public EntityId? MothershipOverride { get; set; }
+        public EntityId MothershipId => MothershipOverride ?? Bay?.Slot.ActiveShip?.Id ?? default;
         public long LastDroneLaunchTick { get; set; }
         public int Side { get; private set; }
 
@@ -255,6 +258,7 @@ namespace CombatSimulation.Core
             Id = id;
             Slot = slot;
             Bay = bay;
+            MothershipOverride = null;
             Side = side;
             Allegiance = Allegiances.OfSide(side);
             Owner = owner;

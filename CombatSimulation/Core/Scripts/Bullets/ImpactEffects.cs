@@ -14,7 +14,7 @@ namespace CombatSimulation.Core
             float slowDown = 0f, float roll = 0f, float ramp = 0f, float rampTime = 0f, float restore = 0f,
             float lifetimeLoss = 0f, float repair = 0f, float repairDamage = 0f, int repairDamageType = 0,
             float energyRecharge = 0f, float shieldRecharge = 0f, float enemyEnergyDrain = 0f, float enemyShieldDrain = 0f,
-            bool ignoreShield = false, float teleport = 0f)
+            bool ignoreShield = false, float teleport = 0f, bool captureDrones = false, bool driveDronesCrazy = false)
         {
             Validate(energyDrain, nameof(energyDrain));
             Validate(shieldDrain, nameof(shieldDrain));
@@ -51,6 +51,8 @@ namespace CombatSimulation.Core
             EnemyShieldDrain = enemyShieldDrain;
             IgnoreShield = ignoreShield;
             Teleport = teleport;
+            CaptureDrones = captureDrones;
+            DriveDronesCrazy = driveDronesCrazy;
         }
 
         // Legacy DrainEnergyAction: the target's energy falls by it, clamped at 0, and its recharge delay restarts.
@@ -65,6 +67,11 @@ namespace CombatSimulation.Core
         // Raw distance along the target's heading, once per new contact. Never scaled by charge or modifiers.
         // Ships and drones move with their hinge group; tail segments die instead.
         public float Teleport { get; }
+
+        // Once per new contact, on drones and missiles only. Disabled when the setup has remote owners (H9).
+        public bool CaptureDrones { get; }
+        public bool DriveDronesCrazy { get; }
+        public bool ChangesDroneOwner => CaptureDrones || DriveDronesCrazy;
 
         // Legacy SiphonHitPointsAction Factor, on the first damage effect: the attacker's ship regains that damage x
         // (1 - the target's armor resistance of its type) x Siphon, also while the target's shield absorbs it
@@ -109,7 +116,7 @@ namespace CombatSimulation.Core
             new ImpactEffects(EnergyDrain * charge, ShieldDrain * charge, Siphon, SlowDown * charge, Roll * charge,
                 Ramp * charge, RampTime, Restore, LifetimeLoss, Repair * charge, RepairDamage * charge, RepairDamageType,
                 EnergyRecharge * charge, ShieldRecharge * charge, EnemyEnergyDrain * charge, EnemyShieldDrain * charge,
-                IgnoreShield, Teleport);
+                IgnoreShield, Teleport, CaptureDrones, DriveDronesCrazy);
 
         // The ramp damage of the contact ticks [from, to), counted from the contact's first tick (0). Tick k deals
         // ramp x min(1, k x TickDuration / rampTime) x TickDuration; tick 0 deals none (legacy IsNew). The owner adds

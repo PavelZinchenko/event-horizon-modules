@@ -125,7 +125,7 @@ namespace CombatSimulation.Core
                 if (!bullets.TryGetByBody(hit.Target.Bullet, out var targetIndex)) return false;
                 ref readonly var target = ref bullets[targetIndex];
                 if (!target.Definition.IsMissile || target.PendingRemoval != RemovalReason.None) return false;
-                if (definition.FriendlyFire && target.ShipId == bolt.ShipId) return false;
+                if (definition.FriendlyFire && !bolt.SourceShipId.IsNull && target.SourceShipId == bolt.SourceShipId) return false;
                 targetAllegiance = target.Definition.FriendlyFire ? Allegiance.Neutral : target.Allegiance;
                 candidate.Target = target.Id;
                 candidate.TargetHandle = bullets.GetHandle(targetIndex);
@@ -140,7 +140,7 @@ namespace CombatSimulation.Core
                 var ship = battle.FindShip(target.OwnerId);
                 var segment = ship == null ? battle.FindSegment(target.OwnerId) : null;
                 if (ship == null && segment == null) return false;
-                if (definition.FriendlyFire && CollisionFilters.IsSource(bolt.ShipId, ship, segment)) return false;
+                if (definition.FriendlyFire && CollisionFilters.IsSource(bolt.SourceShipId, ship, segment)) return false;
                 targetAllegiance = ship?.Allegiance ?? segment.Allegiance;
                 candidate.Target = target.OwnerId;
                 candidate.TargetHandle = target.Owner;

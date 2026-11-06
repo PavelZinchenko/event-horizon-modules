@@ -184,6 +184,9 @@ namespace CombatSimulation.Physics
         // An attached bullet takes the velocity of its parent's point at each step; this value lasts until then.
         public void SetBulletVelocity(BulletId id, Vec2 velocity) => _bullets[ResolveBullet(id)].V = velocity;
 
+        // Capture changes the group that excludes contacts with the firing body and its other bullets.
+        public void SetBulletOwner(BulletId id, BodyId owner) => _bullets[ResolveBullet(id)].Owner = owner;
+
         // A change of allegiance or similar rules. Hits follow at the next step.
         public void SetBulletFilter(BulletId id, in Filter filter)
         {

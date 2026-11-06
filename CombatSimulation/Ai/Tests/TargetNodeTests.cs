@@ -319,6 +319,74 @@ namespace CombatSimulation.Ai.Tests
             Assert.AreEqual(F, new MothershipDistanceExceededNode(0.0001f).Evaluate(context));
         }
 
+        [Test]
+        public void DroneContextFollowsEmpCaptureAndTheNewMothershipDeath()
+        {
+            var crazy = new BulletDefinition(150f, 0f, 0f, 0f, lifetime: 0.02f,
+                impact: BulletImpact.AllTargets, friendlyFire: true,
+                effects: new ImpactEffects(driveDronesCrazy: true));
+            var capture = new BulletDefinition(150f, 0f, 0f, 0f, lifetime: 0.02f,
+                impact: BulletImpact.AllTargets, effects: new ImpactEffects(captureDrones: true));
+            var controller = new ShipDefinition(1f, 1f, Ship.Engine, 1000f,
+                new ResourceDefinition(0f), new ResourceDefinition(1000f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[] { new CannonDefinition(0, 10f, 0f, 0f, crazy),
+                    new CannonDefinition(0, 10f, 0f, 0f, capture) });
+            var pilots = new DroneControlPilots(controller);
+            var runner = Start(new List<RosterSlotSetup>
+            {
+                new RosterSlotSetup(new RosterId(1), 0, Carrier),
+                new RosterSlotSetup(new RosterId(101), 1, controller),
+            }, 1, pilots);
+            for (var i = 0; i < 30; ++i) runner.Step();
+            var drone = default(EntityId);
+            foreach (var ship in runner.Snapshot.Ships) if (ship.IsDrone) drone = ship.Id;
+            Assert.IsFalse(drone.IsNull);
+            var context = DroneContext(runner, drone);
+            var oldMother = context.Mothership;
+            var newMother = runner.Snapshot.Ships[1].Id;
+            pilots.Systems = 1;
+            for (var i = 0; i < 3; ++i) runner.Step();
+            Think(runner, context, drone);
+            Assert.IsFalse(context.HasOwner);
+            Assert.IsTrue(context.Mothership.IsNull);
+            Assert.AreEqual(F, new MothershipRetreatedNode().Evaluate(context));
+            pilots.Systems = 2;
+            for (var i = 0; i < 3; ++i) runner.Step();
+            Think(runner, context, drone);
+            Assert.IsTrue(context.HasOwner);
+            Assert.AreEqual(newMother, context.Mothership);
+            Assert.AreNotEqual(oldMother, context.Mothership);
+            Assert.AreEqual(S, new TargetMothershipNode().Evaluate(context));
+            var lateContext = DroneContext(runner, drone);
+            Assert.AreEqual(newMother, lateContext.Mothership);
+            runner.KillAll(0, runner.Tick);
+            runner.Step();
+            Assert.IsTrue(runner.Snapshot.TryGetShip(drone, out var survivor));
+            context.Update(runner.Snapshot, survivor);
+            lateContext.Update(runner.Snapshot, survivor);
+            Assert.AreEqual(S, new MothershipDestroyedNode().Evaluate(context));
+            Assert.AreEqual(S, new MothershipDestroyedNode().Evaluate(lateContext));
+            Assert.AreEqual(F, new MothershipRetreatedNode().Evaluate(context));
+        }
+
+        private sealed class DroneControlPilots : IPilotProvider, IPilot
+        {
+            public DroneControlPilots(ShipDefinition controller) => _controller = controller;
+            public ulong Systems;
+            public IPilot CreatePilot(BattleSnapshot snapshot, in ShipState ship, out PilotSchedule schedule)
+            {
+                schedule = PilotSchedule.Ship;
+                return ship.Definition == Carrier ? new LaunchPilot(false) : ship.Definition == _controller ? this : null;
+            }
+            public bool Think(BattleSnapshot snapshot, in ShipState self, out PilotControls controls)
+            {
+                controls = PilotControls.Create(null, 0f, Systems);
+                return true;
+            }
+            private readonly ShipDefinition _controller;
+        }
+
         // A retreat is legacy Inactive. A redeployed slot is not the drone's mothership.
         [Test]
         public void RetreatedMothershipStaysRetreatedAfterARedeployment()

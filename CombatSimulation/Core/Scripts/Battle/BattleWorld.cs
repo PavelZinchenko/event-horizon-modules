@@ -133,6 +133,7 @@ namespace CombatSimulation.Core
         public void SetAllegiance(ShipEntity ship, Allegiance allegiance)
         {
             ship.Allegiance = allegiance;
+            if (ship.IsDrone && allegiance == Allegiance.Undefined) ship.MothershipOverride = default(EntityId);
             SetHullFilters(ship);
 
             for (var i = 0; i < Segments.Capacity; ++i)
@@ -147,7 +148,7 @@ namespace CombatSimulation.Core
             {
                 if (!Bullets.IsAlive(i)) continue;
                 ref var bullet = ref Bullets[i];
-                if (bullet.ShipId != ship.Id) continue;
+                if ((bullet.AllegianceOwner ?? bullet.ShipId) != ship.Id) continue;
                 bullet.Allegiance = allegiance;
                 if (!bullet.IsBeam) Physics.SetBulletFilter(bullet.Body, CollisionFilters.Bullet(bullet.Definition, allegiance));
             }
