@@ -43,7 +43,7 @@ namespace CombatSimulation.Core
                 if (request.LaunchesShip) SpawnDrone(request, sequence);
                 else
                 {
-                    BarrelAiming.BeforeShot(_world, request.Ship, request.BarrelIndex, request.Bullet, request.BeamDefinition);
+                    BarrelAiming.BeforeShot(_world, request.Ship, request.BarrelIndex, request.Bullet, request.BeamDefinition, _network);
                     if (request.Beam != null) SpawnBeam(request, sequence);
                     else SpawnBullet(request, sequence);
                 }

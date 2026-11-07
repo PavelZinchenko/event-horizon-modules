@@ -169,6 +169,14 @@ namespace CombatSimulation.Core
                         (!_world.Entities.TryGet(operation.EntityId, out handle) ||
                          (handle.Kind == EntityKind.Ship && _world.EntityOwner(handle) == operation.Owner &&
                           operation.DeviceIndex < _world.Ships.Get(handle).DeviceCount));
+                case OwnerOperationKind.TurretTarget:
+                    if (operation.EntityId.IsNull || operation.BarrelIndex < 0) return false;
+                    if (_world.Entities.TryGet(operation.TargetId, out handle) && handle.Kind != EntityKind.Ship) return false;
+                    if (!_world.Entities.TryGet(operation.EntityId, out handle)) return true;
+                    var turretShip = _world.Ships.Get(handle);
+                    return handle.Kind == EntityKind.Ship && turretShip != null && turretShip.Owner == operation.Owner &&
+                        operation.BarrelIndex < turretShip.Definition.Barrels.Count &&
+                        turretShip.Definition.Barrels[operation.BarrelIndex].AutoAimingAngle > 0f;
                 // The parent may not exist yet; it is checked when the record applies.
                 case OwnerOperationKind.BulletSpawn:
                     return !operation.ParentId.IsNull && operation.DeviceIndex >= 0 && operation.BarrelIndex >= 0 &&
@@ -217,6 +225,11 @@ namespace CombatSimulation.Core
                         else if (operation.Kind == OwnerOperationKind.MissileTarget)
                         {
                             ApplyRemoteMissileTarget(operation);
+                            _appliedOperations.Add(operation);
+                        }
+                        else if (operation.Kind == OwnerOperationKind.TurretTarget)
+                        {
+                            ApplyRemoteTurretTarget(operation);
                             _appliedOperations.Add(operation);
                         }
                         else if (operation.Kind == OwnerOperationKind.Allegiance)
@@ -306,6 +319,23 @@ namespace CombatSimulation.Core
                 ship.RetreatCompletionTick != ShipEntity.NoRetreat) return false;
             ship.RetreatCompletionTick = operation.Tick + Battle.RetreatTicks;
             return true;
+        }
+
+        private void ApplyRemoteTurretTarget(in OwnerOperation operation)
+        {
+            // Deployment can arrive in the same batch. Recheck ownership and the mount after it applies.
+            var ship = _world.FindShip(operation.EntityId);
+            if (ship == null || ship.Owner != operation.Owner || operation.BarrelIndex >= ship.Definition.Barrels.Count ||
+                !(ship.Definition.Barrels[operation.BarrelIndex].AutoAimingAngle > 0f)) return;
+            // Keep an unknown target ID: its owner's deployment can arrive later on the other stream.
+            BarrelAiming.SetTarget(_world, ship, operation.BarrelIndex, operation.TargetId);
+        }
+
+        internal void CaptureTurretTarget(ShipEntity ship, int barrelIndex, EntityId target)
+        {
+            if (ShouldCapture(ship.Owner))
+                _outgoingOperations.Add(OwnerOperation.TurretTargetChanged(BattleId, ship.Owner,
+                    NextOperationSequence(ship.Owner), Tick, ship.Id, barrelIndex, target));
         }
 
         // P3: the copy takes the owner's target and search schedule. A copy that is already gone needs nothing; the
@@ -490,7 +520,7 @@ namespace CombatSimulation.Core
             operation.Kind == OwnerOperationKind.DroneSpawn ? 5 :
             operation.Kind == OwnerOperationKind.BulletSpawn ? 6 :
             operation.Kind == OwnerOperationKind.Retreat || operation.Kind == OwnerOperationKind.Allegiance ||
-            operation.Kind == OwnerOperationKind.DeviceUse ? 1 :
+            operation.Kind == OwnerOperationKind.DeviceUse || operation.Kind == OwnerOperationKind.TurretTarget ? 1 :
             operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed ? 1 : 12;
 
         private static int CompareHits(in InboundHit a, in InboundHit b)

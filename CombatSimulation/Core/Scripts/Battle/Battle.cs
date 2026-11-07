@@ -310,7 +310,7 @@ namespace CombatSimulation.Core
                 var ship = _world.GetShipEntry(i);
                 if (ship == null) continue;
 
-                BarrelAiming.Update(_world, ship);
+                BarrelAiming.Update(_world, ship, _network);
                 ship.EngineHasEnergy = ship.Energy.Value > 0f;
                 ship.Energy.Update(TickDuration);
                 if (Setup.IsLocalOwner(ship.Owner))

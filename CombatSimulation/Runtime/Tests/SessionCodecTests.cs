@@ -347,6 +347,31 @@ namespace CombatSimulation.Runtime.Tests
         private static OwnerOperation Deploy(BattleId battle) => OwnerOperation.RosterChange(battle, 20, 1, 10, new EntityId(77),
             new RosterRecord(new RosterId(99), 1, RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0));
 
+        [Test]
+        public void TurretTargetsRoundTripEnemyAllyUnknownAndClearWithoutVersionChange()
+        {
+            var link = new Link();
+            var deploy = Deploy(link.Battle);
+            var operations = new[] { deploy,
+                OwnerOperation.TurretTargetChanged(link.Battle, 20, 2, 10, deploy.EntityId, 0, link.Target),
+                OwnerOperation.TurretTargetChanged(link.Battle, 20, 3, 10, deploy.EntityId, 1, deploy.EntityId),
+                OwnerOperation.TurretTargetChanged(link.Battle, 20, 4, 10, deploy.EntityId, 2, new EntityId(ulong.MaxValue)),
+                OwnerOperation.TurretTargetChanged(link.Battle, 20, 5, 10, deploy.EntityId, 0, default) };
+            var bytes = link.Write(10, operations, Array.Empty<ResolvedHit>());
+            var scan = new List<SessionCodec.ScannedRecord>();
+            var watermark = link.Read(bytes, out var actual, out _, scan);
+            CollectionAssert.AreEqual(operations, actual);
+            Assert.AreEqual(5UL, watermark.OperationSequence);
+            Assert.AreEqual(13, SessionCodec.Version);
+            Assert.AreEqual(SessionCodec.RecordKind.TurretTarget, scan[1].Kind);
+            Assert.AreEqual(64, scan[1].Bits - scan[4].Bits);
+            for (var size = 0; size < bytes.Length; ++size)
+            {
+                var cut = new Link();
+                Assert.Throws<FormatException>(() => cut.Read(bytes.AsSpan(0, size).ToArray(), out _, out _));
+            }
+        }
+
         // Every cut of a batch either throws or reads a prefix of its records; it never misreads one.
         [Test]
         public void TruncatedBatchesNeverMisreadARecord()

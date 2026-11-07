@@ -123,14 +123,19 @@ namespace CombatSimulation.Runtime
                 if (sample.Tick > Tick) { ++i; continue; }
                 if (Snapshot.TryGetShip(sample.Entity, out var ship) && ship.Owner == _options.LocalOwner)
                 {
-                    // Both copies apply the quantized frame; an unchanged frame is neither applied nor sent.
-                    if (_controls.Quantize(sample.Entity, sample.Controls, out var controls))
+                    // Motion and firing are quantized on both copies. Barrel requests run only on the owner,
+                    // even when the held input is unchanged; its target decisions travel as reliable records.
+                    var changed = _controls.Quantize(sample.Entity, sample.Controls, out var controls);
+                    if (changed) _controls.Changed(sample.Entity, sample.Tick, controls);
+                    if (changed || (sample.Controls.SelfDestruct || sample.Controls.TurretTargetSystems != 0 ||
+                        sample.Controls.SearchTurretSystems != 0) && _controls.TryGetHeld(sample.Entity, out controls))
                     {
-                        _controls.Changed(sample.Entity, sample.Tick, controls);
-                        _localInputs.Add(sample.Entity, sample.Tick, controls.ToControls(sample.Controls.SelfDestruct));
+                        var local = controls.ToControls(sample.Controls.SelfDestruct);
+                        _localInputs.Add(sample.Entity, sample.Tick, PilotControls.Create(
+                            local.HasCourse ? local.Course : (float?)null, local.Throttle, local.Systems, local.SelfDestruct,
+                            turretTarget: sample.Controls.TurretTarget, turretTargetSystems: sample.Controls.TurretTargetSystems,
+                            searchTurretSystems: sample.Controls.SearchTurretSystems));
                     }
-                    else if (sample.Controls.SelfDestruct && _controls.TryGetHeld(sample.Entity, out controls))
-                        _localInputs.Add(sample.Entity, sample.Tick, controls.ToControls(true));
                 }
                 _samples.RemoveAt(i);
             }

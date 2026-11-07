@@ -49,7 +49,7 @@ namespace CombatSimulation.Core
         }
     }
 
-    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse }
+    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse, TurretTarget }
 
     // One logical commit. A roster operation includes its entity spawn/removal, never a second message.
     // Sequence starts at 1 per owner and covers this batch only (hits have their own sequence).
@@ -76,7 +76,7 @@ namespace CombatSimulation.Core
         // Plain projectile spawns only (network plan, P1): Pose holds the owner's muzzle position and launch angle.
         public readonly bool HasLaunchPose;
 
-        // Missile target changes only (network plan, P3): the new homing target, or null. A sticky bullet may name a
+        // Missile or turret target changes: the new target, or null. A sticky bullet may name a
         // tail segment (phase 5, step 5a).
         public readonly EntityId TargetId;
         public readonly bool TargetIsSegment;
@@ -173,6 +173,12 @@ namespace CombatSimulation.Core
             EntityId entityId, int deviceIndex, bool started) =>
             new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.DeviceUse, entityId,
                 deviceIndex: deviceIndex, useStarted: started);
+
+        // The owner chose a target for this ship's barrel. Copies turn locally but never choose their own target.
+        public static OwnerOperation TurretTargetChanged(BattleId battleId, int owner, ulong sequence, long tick,
+            EntityId entityId, int barrelIndex, EntityId targetId) =>
+            new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.TurretTarget, entityId,
+                barrelIndex: barrelIndex, targetId: targetId);
     }
 
     // "All my operations through tick Tick are sent; the last one has sequence OperationSequence" (0: none yet).

@@ -179,6 +179,109 @@ namespace CombatSimulation.Core.Tests
             }
         }
 
+        [TestCase(true)]
+        [TestCase(false)]
+        public void RemoteBarrelNeverSearchesEvenWithPilotRequestsOrShots(bool turret)
+        {
+            var (owner, copy) = NetworkDuel(turret);
+            copy.Battle.Submit(ControlFrame.Create(copy.BattleId, 100, copy.Tick, copy.Entity(1), null, 0f, 1,
+                copy.Entity(101), 1, 1));
+            copy.Step(60);
+            Assert.IsTrue(State(copy).Target.IsNull);
+            Assert.AreEqual(0f, State(copy).Angle);
+            foreach (var op in copy.Battle.Snapshot.OutgoingOperations)
+                Assert.AreNotEqual(OwnerOperationKind.TurretTarget, op.Kind);
+        }
+
+        [Test]
+        public void OwnerSendsChangesOnlyIncludingAllyAndClear()
+        {
+            var (owner, copy) = NetworkDuel(true);
+            owner.Step();
+            var changes = 0;
+            foreach (var op in owner.Battle.Snapshot.OutgoingOperations)
+                if (op.Kind == OwnerOperationKind.TurretTarget)
+                {
+                    ++changes;
+                    Assert.AreEqual(owner.Entity(101), op.TargetId);
+                    Assert.IsTrue(copy.Battle.Submit(0, op));
+                }
+            Assert.AreEqual(1, changes);
+            copy.Step(8);
+            Assert.AreEqual(owner.Entity(101), State(copy).Target);
+            Assert.AreEqual(40f, State(copy).Angle / Degree, 0.001f);
+            owner.Step();
+            Assert.AreEqual(0, owner.Battle.Snapshot.OutgoingOperations.Length);
+
+            owner.Ship(101).Allegiance = owner.Ship(1).Allegiance;
+            owner.Place(101, new Vec2(150f, 150f), Vec2.Zero);
+            owner.Step(49);
+            Assert.IsTrue(State(owner).Target.IsNull);
+            Assert.AreEqual(OwnerOperationKind.TurretTarget, owner.Battle.Snapshot.OutgoingOperations[0].Kind);
+            Assert.IsTrue(owner.Battle.Snapshot.OutgoingOperations[0].TargetId.IsNull);
+
+            owner.Battle.Submit(ControlFrame.Create(owner.BattleId, 100, owner.Tick, owner.Entity(1), null, 0f, 0,
+                owner.Entity(101), 1));
+            owner.Step();
+            Assert.AreEqual(owner.Entity(101), owner.Battle.Snapshot.OutgoingOperations[0].TargetId);
+        }
+
+        [Test]
+        public void TargetRecordValidatesOwnerAndBarrelAndWaitsForItsTick()
+        {
+            var (owner, copy) = NetworkDuel(true);
+            OwnerOperation Record(ulong sequence, int barrel = 0, EntityId entity = default) =>
+                OwnerOperation.TurretTargetChanged(copy.BattleId, 0, sequence, copy.Tick + 2,
+                    entity.IsNull ? copy.Entity(1) : entity, barrel, copy.Entity(101));
+            Assert.IsFalse(copy.Battle.Submit(1, Record(100)));
+            Assert.IsFalse(copy.Battle.Submit(0, Record(100, -1)));
+            Assert.IsFalse(copy.Battle.Submit(0, Record(100, 1)));
+            Assert.IsFalse(copy.Battle.Submit(0, Record(100, 0, copy.Entity(101))));
+            var valid = Record(100);
+            Assert.IsTrue(copy.Battle.Submit(0, valid));
+            Assert.IsFalse(copy.Battle.Submit(0, valid));
+            copy.Step(2);
+            Assert.IsTrue(State(copy).Target.IsNull);
+            copy.Step();
+            Assert.AreEqual(copy.Entity(101), State(copy).Target);
+            Assert.IsTrue(copy.Battle.Submit(0, OwnerOperation.TurretTargetChanged(copy.BattleId, 0, 101, 0,
+                copy.Entity(1), 0, default)));
+            copy.Step(10);
+            Assert.IsTrue(State(copy).Target.IsNull);
+            Assert.AreEqual(0f, State(copy).Angle);
+        }
+
+        [Test]
+        public void RemoteInvisibleBarrelSpendsIdleTimeWhenOwnerTargetArrives()
+        {
+            var (owner, copy) = NetworkDuel(false);
+            copy.Step(50);
+            Assert.IsTrue(copy.Battle.Submit(0, OwnerOperation.TurretTargetChanged(copy.BattleId, 0, 100, 0,
+                copy.Entity(1), 0, copy.Entity(101))));
+            copy.Step();
+            Assert.AreEqual(40f, State(copy).Angle / Degree, 0.001f);
+        }
+
+        private static (Driver owner, Driver copy) NetworkDuel(bool turret)
+        {
+            var roster = new[] {
+                new RosterSlotSetup(new RosterId(1), 0, Definition(80f, turret), 0),
+                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship, 1) };
+            var owner = new Driver(new BattleSetup(new BattleId(1), 7, roster, localOwners: new[] { 0 }));
+            var copy = new Driver(new BattleSetup(new BattleId(1), 7, roster, localOwners: new[] { 1 }));
+            owner.Deploy(1); copy.Deploy(101); owner.Step(); copy.Step();
+            foreach (var op in owner.Battle.Snapshot.OutgoingOperations) Assert.IsTrue(copy.Battle.Submit(0, op));
+            foreach (var op in copy.Battle.Snapshot.OutgoingOperations) Assert.IsTrue(owner.Battle.Submit(1, op));
+            owner.Step(); copy.Step();
+            foreach (var driver in new[] { owner, copy })
+            {
+                driver.Place(1, Origin, Vec2.Zero);
+                EnemyAt(driver, 40f);
+                driver.Ship(1).GetBarrel(0).Reset(driver.Ship(1).Definition.Barrels[0], driver.Tick);
+            }
+            return (owner, copy);
+        }
+
         private static ShipDefinition Definition(float arc, bool turret, DeviceDefinition device = null) =>
             Fixtures.ShipWith(barrels: new[] { new BarrelDefinition(Vec2.Zero, 0f, arc * Degree, 270f * Degree, turret) },
                 devices: new[] { device ?? new CannonDefinition(0, 10f, 0f, 0f, new BulletDefinition(0.1f, 20f, 50f, 0f)) });
@@ -199,6 +302,11 @@ namespace CombatSimulation.Core.Tests
         private static void EnemyAt(Driver driver, float degrees) => driver.Place(101,
             Origin + 20f * new Vec2((float)Math.Cos(degrees * Degree), (float)Math.Sin(degrees * Degree)), Vec2.Zero);
 
-        private static BarrelState State(Driver driver) => driver.Battle.Snapshot.GetBarrels(driver.Battle.Snapshot.Ships[0])[0];
+        private static BarrelState State(Driver driver)
+        {
+            foreach (var ship in driver.Battle.Snapshot.Ships)
+                if (ship.Id == driver.Entity(1)) return driver.Battle.Snapshot.GetBarrels(ship)[0];
+            throw new InvalidOperationException("Missing turret ship.");
+        }
     }
 }

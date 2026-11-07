@@ -117,12 +117,14 @@ namespace CombatSimulation.Runtime
     //     stream (VarUInt; 0: no target).
     //   Allegiance (phase 4, D13; version 8): ship control index (VarUInt), allegiance (3).
     //   Device use (phase 5, step 7; version 9): ship control index (VarUInt), device index (VarUInt), started (1 bit).
+    //   Turret target (phase 5, step 12b; version remains 13): ship control index and barrel index (VarUInt),
+    //     target present (1 bit), then entity ID (64). The target may be an ally or absent from either stream.
     //   Pose: position, angle, linear velocity, angular velocity (six 32-bit floats).
     // Operation sequences are consecutive inside a batch and end at the header's value. Operations come before hits,
     // so a hit names only bullets already counted.
     internal static class SessionCodec
     {
-        internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse }
+        internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse, TurretTarget }
 
         // Do not bump before the first release (owner, 2026-11-06; docs/combat_simulation.md, "Tick batch").
         internal const byte Version = 13;
@@ -247,6 +249,15 @@ namespace CombatSimulation.Runtime
                         throw new InvalidOperationException("A device use names a ship the stream does not know.");
                     Header(ref w, RecordKind.DeviceUse, batchTick, op.Tick);
                     w.WriteVarUInt(user); w.WriteVarUInt((ulong)op.DeviceIndex); w.WriteBool(op.UseStarted);
+                    break;
+                case OwnerOperationKind.TurretTarget:
+                    if (!own.TryGetBody(op.EntityId, out var turretShip) || op.BarrelIndex < 0)
+                        throw new InvalidOperationException("A turret target names an unknown ship or invalid barrel.");
+                    Header(ref w, RecordKind.TurretTarget, batchTick, op.Tick);
+                    w.WriteVarUInt(turretShip); w.WriteVarUInt((ulong)op.BarrelIndex);
+                    // Targets can belong to either stream (including allies), or arrive before their deployment.
+                    w.WriteBool(!op.TargetId.IsNull);
+                    if (!op.TargetId.IsNull) w.WriteBits(op.TargetId.Value, 64);
                     break;
                 default: throw new InvalidOperationException("Unknown owner operation.");
             }
@@ -415,6 +426,13 @@ namespace CombatSimulation.Runtime
                         operations.Add(OwnerOperation.AllegianceChanged(battle, sender, ++peer.LastOperation, r.Tick,
                             Body(peer, name), allegiance));
                         break;
+                    case RecordKind.TurretTarget:
+                        name = r.VarUInt(); var mount = r.Int();
+                        var turretTarget = r.Bool() ? r.Entity() : default;
+                        if (!resolve) break;
+                        operations.Add(OwnerOperation.TurretTargetChanged(battle, sender, ++peer.LastOperation, r.Tick,
+                            Body(peer, name), mount, turretTarget));
+                        break;
                     case RecordKind.DeviceUse:
                         name = r.VarUInt(); var used = r.VarUInt(); var started = r.Bool();
                         Require(used < 64);
@@ -483,7 +501,7 @@ namespace CombatSimulation.Runtime
             {
                 if (_reader.AtPadding()) return false;
                 var kind = Bits(KindBits);
-                Require(kind >= (ulong)RecordKind.Hit && kind <= (ulong)RecordKind.DeviceUse);
+                Require(kind >= (ulong)RecordKind.Hit && kind <= (ulong)RecordKind.TurretTarget);
                 Kind = (RecordKind)kind;
                 var code = VarUInt();
                 var offset = (long)(code >> 1) ^ -(long)(code & 1);

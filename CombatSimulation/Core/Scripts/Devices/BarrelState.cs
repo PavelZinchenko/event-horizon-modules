@@ -38,7 +38,7 @@ namespace CombatSimulation.Core
 
     internal static class BarrelAiming
     {
-        public static void Update(BattleWorld world, ShipEntity ship)
+        public static void Update(BattleWorld world, ShipEntity ship, BattleNetwork network)
         {
             for (var i = 0; i < ship.Definition.Barrels.Count; ++i)
             {
@@ -52,25 +52,26 @@ namespace CombatSimulation.Core
                         if (BarrelIndex(device) == i)
                         {
                             Configure(barrel, device);
-                            Search(world, ship, i);
+                            Search(world, ship, i, network);
                         }
                 }
                 barrel.IdleTime += Battle.TickDuration;
                 Turn(world, ship, i, Battle.TickDuration);
-                if (definition.IsTurret && barrel.Range > 0f) Search(world, ship, i);
+                if (definition.IsTurret && barrel.Range > 0f) Search(world, ship, i, network);
             }
 
             // Pilot requests are consumed once. Repeated frames explicitly renew an ally target, as legacy does.
             for (var d = 0; d < ship.DeviceCount; ++d)
             {
+                if (!world.Setup.IsLocalOwner(ship.Owner)) break;
                 var index = BarrelIndex(ship.Definition.Devices[d]);
                 if (index < 0 || !(ship.Definition.Barrels[index].AutoAimingAngle > 0f)) continue;
                 if ((ship.TurretTargetSystems & (1UL << d)) != 0 && world.FindShip(ship.TurretTarget) != null)
-                    SetTarget(world, ship, index, ship.TurretTarget);
+                    SetTarget(world, ship, index, ship.TurretTarget, network);
                 if ((ship.SearchTurretSystems & (1UL << d)) != 0)
                 {
                     Configure(ship.GetBarrel(index), ship.Definition.Devices[d]);
-                    Search(world, ship, index);
+                    Search(world, ship, index, network);
                 }
             }
             ship.ClearTurretRequests();
@@ -95,14 +96,15 @@ namespace CombatSimulation.Core
         public static int BarrelIndex(DeviceDefinition device) => device is CannonDefinition cannon ? cannon.BarrelIndex
             : device is BeamDefinition beam ? beam.BarrelIndex : -1;
 
-        public static void BeforeShot(BattleWorld world, ShipEntity ship, int index, BulletDefinition bullet, BeamDefinition beam)
+        public static void BeforeShot(BattleWorld world, ShipEntity ship, int index, BulletDefinition bullet, BeamDefinition beam,
+            BattleNetwork network)
         {
             if (index < 0 || !(ship.Definition.Barrels[index].AutoAimingAngle > 0f)) return;
             var barrel = ship.GetBarrel(index);
             barrel.Speed = bullet?.Speed ?? 0f;
             barrel.Range = bullet?.AimingRange ?? beam.Range;
             barrel.RelativeVelocity = bullet?.ParentVelocityEffect ?? 0f;
-            Search(world, ship, index);
+            Search(world, ship, index, network);
         }
 
         private static void Configure(Barrel barrel, DeviceDefinition device)
@@ -113,12 +115,17 @@ namespace CombatSimulation.Core
             barrel.RelativeVelocity = cannon?.Bullet.ParentVelocityEffect ?? 0f;
         }
 
-        private static void Search(BattleWorld world, ShipEntity ship, int index)
+        private static void Search(BattleWorld world, ShipEntity ship, int index, BattleNetwork network)
         {
+            if (!world.Setup.IsLocalOwner(ship.Owner)) return;
             var barrel = ship.GetBarrel(index);
             var active = world.FindShip(barrel.Target);
             if (active != null && Allegiances.IsHostile(ship.Allegiance, active.Allegiance) &&
-                active.TargetPriority == TargetPriority.None) barrel.Target = default;
+                active.TargetPriority == TargetPriority.None)
+            {
+                barrel.Target = default;
+                network?.CaptureTurretTarget(ship, index, default);
+            }
             if (world.Tick - barrel.LastSearchTick < 5) return;
             if (world.Tick - barrel.LastSearchTick < 50 && world.FindShip(barrel.Target) != null) return;
 
@@ -149,18 +156,19 @@ namespace CombatSimulation.Core
                 bestDistance = distance;
                 validFound = valid;
             }
-            SetTarget(world, ship, index, best?.Id ?? default);
+            SetTarget(world, ship, index, best?.Id ?? default, network);
         }
 
         private static float Compare(float first, float second) => Math.Max(first, second) > 0f
             ? (first - second) / Math.Max(first, second) : 0f;
 
-        private static void SetTarget(BattleWorld world, ShipEntity ship, int index, EntityId target)
+        internal static void SetTarget(BattleWorld world, ShipEntity ship, int index, EntityId target, BattleNetwork network = null)
         {
             var barrel = ship.GetBarrel(index);
             barrel.LastSearchTick = world.Tick;
             if (barrel.Target == target) return;
             barrel.Target = target;
+            network?.CaptureTurretTarget(ship, index, target);
             if (!ship.Definition.Barrels[index].IsTurret && barrel.IdleTime > 0f && world.FindShip(target) != null)
                 Turn(world, ship, index, barrel.IdleTime);
         }
