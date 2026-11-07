@@ -7,8 +7,10 @@ namespace CombatSimulation.Core
     public sealed class BarrelDefinition
     {
         public BarrelDefinition(Vec2 position, float angle = 0f, float autoAimingAngle = 0f,
-            float rotationSpeed = 0f, bool isTurret = false, float muzzleOffset = 0f)
+            float rotationSpeed = 0f, bool isTurret = false, float muzzleOffset = 0f, int satellite = Hull)
         {
+            if (satellite < Hull)
+                throw new ArgumentOutOfRangeException(nameof(satellite));
             if (!position.IsFinite)
                 throw new ArgumentOutOfRangeException(nameof(position), "Barrel position must be finite.");
             if (float.IsNaN(angle) || float.IsInfinity(angle))
@@ -26,17 +28,23 @@ namespace CombatSimulation.Core
             RotationSpeed = rotationSpeed;
             IsTurret = isTurret;
             MuzzleOffset = muzzleOffset;
+            Satellite = satellite;
         }
 
-        // The muzzle point in the ship frame, relative to the body origin. It includes the legacy platform offset.
+        public const int Hull = -1;
+
+        // The muzzle point in the carrier frame, relative to the body origin. It includes the legacy platform offset.
         public Vec2 Position { get; }
 
-        // In radians, relative to the ship heading.
+        // In radians, relative to the carrier heading.
         public float Angle { get; }
         public float AutoAimingAngle { get; }
         public float RotationSpeed { get; }
         public bool IsTurret { get; }
         public float MuzzleOffset { get; }
+
+        // The carrier: Hull, or an index in ShipDefinition.Satellites (phase 5, step 12c).
+        public int Satellite { get; }
 
         // Position remains the rest muzzle for fixed-barrel callers. The offset rotates around its pivot.
         public Vec2 PositionAt(float angle) => AutoAimingAngle > 0f

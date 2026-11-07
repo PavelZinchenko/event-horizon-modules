@@ -13,7 +13,8 @@ namespace CombatSimulation.Core
         internal BarrelState(Barrel barrel) { Angle = barrel.Angle; Target = barrel.Target; }
     }
 
-    // Legacy WeaponPlatformBody. One state per mount, shared by every weapon on it.
+    // Legacy WeaponPlatformBody, or the aiming state of an AutoAimingSatelliteController. One state per mount, shared by
+    // every weapon on it.
     internal sealed class Barrel
     {
         public float Angle;
@@ -42,8 +43,9 @@ namespace CombatSimulation.Core
         {
             for (var i = 0; i < ship.Definition.Barrels.Count; ++i)
             {
+                if (!ship.Definition.Aims(i)) continue;
                 var definition = ship.Definition.Barrels[i];
-                if (!(definition.AutoAimingAngle > 0f)) continue;
+                var satellite = ship.Definition.IsOnAimingSatellite(i);
                 var barrel = ship.GetBarrel(i);
                 if (!barrel.Initialized)
                 {
@@ -55,9 +57,14 @@ namespace CombatSimulation.Core
                             Search(world, ship, i, network);
                         }
                 }
-                barrel.IdleTime += Battle.TickDuration;
-                Turn(world, ship, i, Battle.TickDuration);
-                if (definition.IsTurret && barrel.Range > 0f) Search(world, ship, i, network);
+
+                // An aiming satellite turns its body at stage 4 (Satellites.Update) and searches each tick, as a turret.
+                if (!satellite)
+                {
+                    barrel.IdleTime += Battle.TickDuration;
+                    Turn(world, ship, i, Battle.TickDuration);
+                }
+                if ((satellite || definition.IsTurret) && barrel.Range > 0f) Search(world, ship, i, network);
             }
 
             // Pilot requests are consumed once. Repeated frames explicitly renew an ally target, as legacy does.
@@ -65,13 +72,14 @@ namespace CombatSimulation.Core
             {
                 if (!world.Setup.IsLocalOwner(ship.Owner)) break;
                 var index = BarrelIndex(ship.Definition.Devices[d]);
-                if (index < 0 || !(ship.Definition.Barrels[index].AutoAimingAngle > 0f)) continue;
+                if (index < 0 || !ship.Definition.Aims(index)) continue;
                 if ((ship.TurretTargetSystems & (1UL << d)) != 0 && world.FindShip(ship.TurretTarget) != null)
                     SetTarget(world, ship, index, ship.TurretTarget, network);
                 if ((ship.SearchTurretSystems & (1UL << d)) != 0)
                 {
+                    // Legacy IAimingSystem.Aim of a satellite only takes the weapon values; the satellite searches itself.
                     Configure(ship.GetBarrel(index), ship.Definition.Devices[d]);
-                    Search(world, ship, index, network);
+                    if (!ship.Definition.IsOnAimingSatellite(index)) Search(world, ship, index, network);
                 }
             }
             ship.ClearTurretRequests();
@@ -89,7 +97,8 @@ namespace CombatSimulation.Core
                 var barrel = ship.Definition.Barrels[cannon.BarrelIndex];
                 if (!(barrel.AutoAimingAngle > 0f)) continue;
                 var angle = ship.GetBarrel(cannon.BarrelIndex).Angle;
-                world.Physics.AttachBullet(bullet.Body, ship.Body, new Pose(barrel.PositionAt(angle), Rot.FromAngle(angle)));
+                world.Physics.AttachBullet(bullet.Body, world.CarrierBody(ship, cannon.BarrelIndex),
+                    new Pose(barrel.PositionAt(angle), Rot.FromAngle(angle)));
             }
         }
 
@@ -99,12 +108,12 @@ namespace CombatSimulation.Core
         public static void BeforeShot(BattleWorld world, ShipEntity ship, int index, BulletDefinition bullet, BeamDefinition beam,
             BattleNetwork network)
         {
-            if (index < 0 || !(ship.Definition.Barrels[index].AutoAimingAngle > 0f)) return;
+            if (index < 0 || !ship.Definition.Aims(index)) return;
             var barrel = ship.GetBarrel(index);
             barrel.Speed = bullet?.Speed ?? 0f;
             barrel.Range = bullet?.AimingRange ?? beam.Range;
             barrel.RelativeVelocity = bullet?.ParentVelocityEffect ?? 0f;
-            Search(world, ship, index, network);
+            if (!ship.Definition.IsOnAimingSatellite(index)) Search(world, ship, index, network);
         }
 
         private static void Configure(Barrel barrel, DeviceDefinition device)
@@ -130,9 +139,7 @@ namespace CombatSimulation.Core
             if (world.Tick - barrel.LastSearchTick < 50 && world.FindShip(barrel.Target) != null) return;
 
             var physics = world.Physics;
-            var definition = ship.Definition.Barrels[index];
-            var position = physics.GetPosition(ship.Body) + physics.GetRotation(ship.Body).Rotate(definition.PositionAt(barrel.Angle));
-            var mountAngle = physics.GetAngle(ship.Body) + definition.Angle;
+            SearchFrame(world, ship, index, out var position, out var mountAngle, out var arc);
             ShipEntity best = null;
             var bestDistance = float.MaxValue;
             var validFound = false;
@@ -145,8 +152,8 @@ namespace CombatSimulation.Core
                 var delta = physics.Torus.Delta(position, physics.GetPosition(candidate.Body));
                 var distance = delta.Length - candidate.Definition.Scale * 0.5f;
                 if (distance > barrel.Range * 2f) continue;
-                var valid = distance <= barrel.Range && (definition.AutoAimingAngle >= Math.PI ||
-                    Math.Abs(Delta(mountAngle, (float)Math.Atan2(delta.Y, delta.X))) <= definition.AutoAimingAngle);
+                var valid = distance <= barrel.Range && (arc >= Math.PI ||
+                    Math.Abs(Delta(mountAngle, (float)Math.Atan2(delta.Y, delta.X))) <= arc);
                 if (!valid && validFound) continue;
                 if (best != null && valid == validFound &&
                     ((int)best.TargetPriority - (int)candidate.TargetPriority) * 300f +
@@ -159,6 +166,30 @@ namespace CombatSimulation.Core
             SetTarget(world, ship, index, best?.Id ?? default, network);
         }
 
+        // The search origin, the arc centre and the half-width. A mount searches from its muzzle around its mount angle.
+        // An aiming satellite searches from its slot (legacy AutoAimingSatelliteController.GetRequiredPosition), over
+        // the centre and half-width of its limits (owner decision 8, 2026-11-07). Legacy passes a wrong centre and the
+        // full width, so its arc test never runs (D9, docs/issues/battle_simulator.md).
+        private static void SearchFrame(BattleWorld world, ShipEntity ship, int index, out Vec2 position, out float centre,
+            out float arc)
+        {
+            var physics = world.Physics;
+            var definition = ship.Definition.Barrels[index];
+            if (ship.Definition.IsOnAimingSatellite(index))
+            {
+                var satellite = ship.Definition.Satellites[definition.Satellite];
+                position = physics.GetPosition(ship.Body) + physics.GetRotation(ship.Body).Rotate(satellite.Slot);
+                centre = physics.GetAngle(ship.Body) + satellite.Angle + 0.5f * (satellite.MinAngle + satellite.MaxAngle);
+                arc = 0.5f * (satellite.MaxAngle - satellite.MinAngle);
+                return;
+            }
+
+            var carrier = world.CarrierBody(ship, index);
+            position = physics.GetPosition(carrier) + physics.GetRotation(carrier).Rotate(definition.PositionAt(ship.GetBarrel(index).Angle));
+            centre = physics.GetAngle(carrier) + definition.Angle;
+            arc = definition.AutoAimingAngle;
+        }
+
         private static float Compare(float first, float second) => Math.Max(first, second) > 0f
             ? (first - second) / Math.Max(first, second) : 0f;
 
@@ -169,7 +200,8 @@ namespace CombatSimulation.Core
             if (barrel.Target == target) return;
             barrel.Target = target;
             network?.CaptureTurretTarget(ship, index, target);
-            if (!ship.Definition.Barrels[index].IsTurret && barrel.IdleTime > 0f && world.FindShip(target) != null)
+            var definition = ship.Definition.Barrels[index];
+            if (!definition.IsTurret && definition.AutoAimingAngle > 0f && barrel.IdleTime > 0f && world.FindShip(target) != null)
                 Turn(world, ship, index, barrel.IdleTime);
         }
 
@@ -182,31 +214,37 @@ namespace CombatSimulation.Core
             if (target != null)
             {
                 var physics = world.Physics;
-                var position = physics.GetPosition(ship.Body) + physics.GetRotation(ship.Body).Rotate(definition.PositionAt(barrel.Angle));
+                var carrier = world.CarrierBody(ship, index);
+                var position = physics.GetPosition(carrier) + physics.GetRotation(carrier).Rotate(definition.PositionAt(barrel.Angle));
                 var delta = physics.Torus.Delta(position, physics.GetPosition(target.Body));
-                if (barrel.Speed > 0f && delta.LengthSquared > target.Definition.Scale * target.Definition.Scale * 0.25f)
+                if (barrel.Speed > 0f)
                 {
-                    var velocity = physics.GetLinearVelocity(target.Body) - barrel.RelativeVelocity * physics.GetLinearVelocity(ship.Body);
-                    // Legacy centre intercept; the radius changes travel time, not the returned lead point.
-                    var a = velocity.LengthSquared - barrel.Speed * barrel.Speed;
-                    var b = 2f * Vec2.Dot(delta, velocity);
-                    var c = delta.LengthSquared;
-                    var discriminant = b * b - 4f * a * c;
-                    if (discriminant >= 0f)
-                    {
-                        var root = (float)Math.Sqrt(discriminant);
-                        var t1 = (-b - root) / (2f * a);
-                        var t2 = (-b + root) / (2f * a);
-                        var time = t1 < 0f ? t2 : t2 < 0f ? t1 : Math.Min(t1, t2);
-                        if (time >= 0f && !float.IsInfinity(time)) delta += time * velocity;
-                    }
+                    var velocity = physics.GetLinearVelocity(target.Body) - barrel.RelativeVelocity * physics.GetLinearVelocity(carrier);
+                    delta = Lead(delta, velocity, barrel.Speed, target.Definition.Scale * 0.5f);
                 }
-                var angle = (float)Math.Atan2(delta.Y, delta.X) - physics.GetAngle(ship.Body);
+                var angle = (float)Math.Atan2(delta.Y, delta.X) - physics.GetAngle(carrier);
                 desired += Math.Max(-definition.AutoAimingAngle, Math.Min(definition.AutoAimingAngle, Delta(desired, angle)));
                 barrel.IdleTime = 0f;
             }
             var limit = definition.RotationSpeed * elapsed;
             barrel.Angle += Math.Max(-limit, Math.Min(limit, Delta(barrel.Angle, desired)));
+        }
+
+        // Legacy Geometry.GetTargetPosition with the target radius: the offset to the lead point; the target itself at
+        // point blank. The radius changes the travel time, not the returned point, so the point is the centre intercept.
+        internal static Vec2 Lead(Vec2 delta, Vec2 velocity, float speed, float radius)
+        {
+            if (!(delta.LengthSquared > radius * radius)) return delta;
+            var a = velocity.LengthSquared - speed * speed;
+            var b = 2f * Vec2.Dot(delta, velocity);
+            var c = delta.LengthSquared;
+            var discriminant = b * b - 4f * a * c;
+            if (discriminant < 0f) return delta;
+            var root = (float)Math.Sqrt(discriminant);
+            var t1 = (-b - root) / (2f * a);
+            var t2 = (-b + root) / (2f * a);
+            var time = t1 < 0f ? t2 : t2 < 0f ? t1 : Math.Min(t1, t2);
+            return time >= 0f && !float.IsInfinity(time) ? delta + time * velocity : delta;
         }
 
         internal static float Delta(float current, float target)

@@ -310,6 +310,12 @@ namespace CombatSimulation.Core
             }
             ClearTurretRequests();
 
+            // BattleWorld.AddSatellites creates the bodies once the ship has its pose.
+            var satellites = Definition.Satellites.Count;
+            if (_satellites.Length < satellites) System.Array.Resize(ref _satellites, satellites);
+            for (var i = 0; i < satellites; ++i)
+                if (_satellites[i] == null) _satellites[i] = new Satellite();
+
             if (!_deviceSets.TryGetValue(definition, out _devices))
             {
                 var devices = definition.Devices;
@@ -324,13 +330,19 @@ namespace CombatSimulation.Core
         public int DeviceCount => _devices.Length;
         public ShipDevice GetDevice(int index) => _devices[index];
 
-        // Legacy FixedPlatform.IsReady: more than 0.04 s since the barrel's last shot, a strict check.
-        public bool IsBarrelReady(int barrel, long tick) => tick - _barrelShotTicks[barrel] >= BarrelCooldownTicks;
+        // Legacy FixedPlatform.IsReady: more than 0.04 s since the barrel's last shot, a strict check. A barrel on an
+        // inactive satellite is not ready (Frontier; built-in satellites stay active).
+        public bool IsBarrelReady(int barrel, long tick) => tick - _barrelShotTicks[barrel] >= BarrelCooldownTicks &&
+            (Definition.Barrels[barrel].Satellite < 0 || _satellites[Definition.Barrels[barrel].Satellite].ActiveTick <= tick);
         internal void RecordBarrelShot(int barrel, long tick) => _barrelShotTicks[barrel] = tick;
         internal long GetBarrelShotTick(int barrel) => _barrelShotTicks[barrel];
 
         private Barrel[] _barrels = System.Array.Empty<Barrel>();
         internal Barrel GetBarrel(int index) => _barrels[index];
+
+        // One per Definition.Satellites entry (phase 5, step 12c).
+        private Satellite[] _satellites = System.Array.Empty<Satellite>();
+        internal Satellite GetSatellite(int index) => _satellites[index];
         internal EntityId TurretTarget;
         internal ulong TurretTargetSystems;
         internal ulong SearchTurretSystems;

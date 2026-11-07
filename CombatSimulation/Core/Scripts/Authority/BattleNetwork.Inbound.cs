@@ -176,7 +176,7 @@ namespace CombatSimulation.Core
                     var turretShip = _world.Ships.Get(handle);
                     return handle.Kind == EntityKind.Ship && turretShip != null && turretShip.Owner == operation.Owner &&
                         operation.BarrelIndex < turretShip.Definition.Barrels.Count &&
-                        turretShip.Definition.Barrels[operation.BarrelIndex].AutoAimingAngle > 0f;
+                        turretShip.Definition.Aims(operation.BarrelIndex);
                 // The parent may not exist yet; it is checked when the record applies.
                 case OwnerOperationKind.BulletSpawn:
                     return !operation.ParentId.IsNull && operation.DeviceIndex >= 0 && operation.BarrelIndex >= 0 &&
@@ -268,6 +268,7 @@ namespace CombatSimulation.Core
                 ship.Initialize(operation.EntityId, slot, body, operation.Tick, Setup.DamageTypes.Count);
                 _world.AddShipShapes(ship, CollisionFilters.Ship(ship.Allegiance));
                 SetSpawnPose(body, operation.Pose);
+                Satellites.Add(_world, ship);
                 _world.Events.Add(BattleEvent.Spawn(BattleId, Tick, _world.Events.Count, ship));
             }
             else
@@ -298,6 +299,7 @@ namespace CombatSimulation.Core
             ship.InitializeDrone(operation.EntityId, bay, body, operation.Tick, Setup.DamageTypes.Count);
             _world.AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));
             SetSpawnPose(body, operation.Pose);
+            Satellites.Add(_world, ship);
             _world.AddDrone(ship);
             bay.RecordLaunch();
             _world.Events.Add(BattleEvent.Spawn(BattleId, Tick, _world.Events.Count, ship));
@@ -326,7 +328,7 @@ namespace CombatSimulation.Core
             // Deployment can arrive in the same batch. Recheck ownership and the mount after it applies.
             var ship = _world.FindShip(operation.EntityId);
             if (ship == null || ship.Owner != operation.Owner || operation.BarrelIndex >= ship.Definition.Barrels.Count ||
-                !(ship.Definition.Barrels[operation.BarrelIndex].AutoAimingAngle > 0f)) return;
+                !ship.Definition.Aims(operation.BarrelIndex)) return;
             // Keep an unknown target ID: its owner's deployment can arrive later on the other stream.
             BarrelAiming.SetTarget(_world, ship, operation.BarrelIndex, operation.TargetId);
         }

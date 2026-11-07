@@ -79,6 +79,7 @@ namespace CombatSimulation.Core
                 Physics.TryFindFreePosition(body, origin, SearchDistance, out var position);
                 Physics.SetPose(body, position, angle);
             }
+            Satellites.Add(_world, ship);
 
             _world.AddDrone(ship);
             bay.RecordLaunch();
@@ -101,7 +102,8 @@ namespace CombatSimulation.Core
         }
 
         // Legacy BulletFactory.ConfigureBody at the muzzle pose, plus the Q1 recoil (owner, 2026-10-20; phase 4 E1):
-        // Recoil x the bullet velocity relative to the ship (legacy BulletFactory.ApplyRecoil), at the muzzle.
+        // Recoil x the bullet velocity relative to the carrier (legacy BulletFactory.ApplyRecoil), at the muzzle. A
+        // satellite takes the recoil of its barrels (phase 5, step 12c).
         private void SpawnBullet(in SpawnRequest request, uint sequence)
         {
             var ship = request.Ship;
@@ -113,9 +115,10 @@ namespace CombatSimulation.Core
             var definition = request.Bullet;
             if (definition.Recoil > 0f && !definition.AttachedToParent)
             {
+                var carrier = _world.CarrierBody(ship, request.BarrelIndex);
                 var relative = _world.Bullets[index].Speed * definition.StartingVelocityMultiplier * direction +
-                               (definition.ParentVelocityEffect - 1f) * sample.LinearVelocity;
-                Physics.ApplyImpulse(ship.Body, -definition.Recoil * relative, muzzle);
+                               (definition.ParentVelocityEffect - 1f) * Physics.GetLinearVelocity(carrier);
+                Physics.ApplyImpulse(carrier, -definition.Recoil * relative, muzzle);
             }
 
             ref readonly var bullet = ref _world.Bullets[index];

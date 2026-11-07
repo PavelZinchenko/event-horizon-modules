@@ -66,8 +66,9 @@ namespace CombatSimulation.Core
         // The first of this ship's Definition.Devices.Count entries in the snapshot's device buffer.
         internal readonly int DeviceStart;
         internal readonly int BarrelStart;
+        internal readonly int SatelliteStart;
 
-        internal ShipState(ShipEntity ship, PhysicsWorld world, int deviceStart, int barrelStart = 0)
+        internal ShipState(ShipEntity ship, PhysicsWorld world, int deviceStart, int barrelStart = 0, int satelliteStart = 0)
         {
             Id = ship.Id;
             RosterId = ship.Slot?.RosterId ?? default;
@@ -96,6 +97,7 @@ namespace CombatSimulation.Core
             ResistanceShare = ship.ResistanceShare;
             DeviceStart = deviceStart;
             BarrelStart = barrelStart;
+            SatelliteStart = satelliteStart;
         }
 
         public bool IsRetreating => RetreatCompletionTick != ShipEntity.NoRetreat;

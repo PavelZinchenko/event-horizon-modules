@@ -107,7 +107,7 @@ namespace CombatSimulation.Core
             }
         }
 
-        private ShapeId AddHullPart(BodyId body, in HullPart part, in ShapeDef shapeDef)
+        public ShapeId AddHullPart(BodyId body, in HullPart part, in ShapeDef shapeDef)
         {
             switch (part.Type)
             {
@@ -125,6 +125,23 @@ namespace CombatSimulation.Core
             var filter = ShipStatusRules.HullFilter(ship);
             for (var i = 0; i < ship.ShapeCount; ++i)
                 Physics.SetShapeFilter(ship.GetShape(i), filter);
+            Satellites.SetFilters(this, ship);
+        }
+
+        // The body that carries a barrel: the hull, or the barrel's satellite (phase 5, step 12c). barrelIndex may be
+        // SpawnRequest.ShipCentre.
+        public BodyId CarrierBody(ShipEntity ship, int barrelIndex)
+        {
+            var satellite = barrelIndex < 0 ? BarrelDefinition.Hull : ship.Definition.Barrels[barrelIndex].Satellite;
+            return satellite < 0 ? ship.Body : ship.GetSatellite(satellite).Body;
+        }
+
+        // The ship sample for the hull. A satellite keeps no history, so its barrels fire from its present state.
+        public SpawnSample CarrierSample(ShipEntity ship, int barrelIndex, in SpawnSample sample)
+        {
+            var body = CarrierBody(ship, barrelIndex);
+            return body.Equals(ship.Body) ? sample : new SpawnSample(sample.Tick, Physics.GetPosition(body),
+                Physics.GetRotation(body), Physics.GetAngle(body), Physics.GetLinearVelocity(body));
         }
 
         // D13: the ship, its hull filters, its attached tail segments and its live bullets and beams take the new
@@ -156,7 +173,7 @@ namespace CombatSimulation.Core
 
         // Legacy BulletFactory.ConfigureBody at the muzzle of the sample. A spawn tick before the present advances the
         // bullet on a line, step by step as physics moves it, without hit tests. Returns -1 on an ID collision.
-        // With an owner launch pose (P1), the muzzle and angle come from it; the inherited velocity stays the sample's.
+        // With an owner launch pose (P1), the muzzle and angle come from it; the inherited velocity stays the carrier's.
         // barrelIndex may be SpawnRequest.ShipCentre.
         public int CreateBullet(ShipEntity ship, int deviceIndex, int barrelIndex, uint sequence,
             BulletDefinition definition, float spread, float randomFactor, long spawnTick, in SpawnSample sample,
@@ -200,7 +217,7 @@ namespace CombatSimulation.Core
             if (definition.AttachedToParent)
             {
                 var barrel = ship.Definition.Barrels[barrelIndex];
-                Physics.AttachBullet(body, ship.Body, new Pose(barrel.PositionAt(ship.GetBarrel(barrelIndex).Angle), Rot.FromAngle(ship.GetBarrel(barrelIndex).Angle)));
+                Physics.AttachBullet(body, CarrierBody(ship, barrelIndex), new Pose(barrel.PositionAt(ship.GetBarrel(barrelIndex).Angle), Rot.FromAngle(ship.GetBarrel(barrelIndex).Angle)));
             }
 
             ref var bullet = ref Bullets[index];
@@ -239,6 +256,7 @@ namespace CombatSimulation.Core
             float randomFactor, long spawnTick, in SpawnSample sample, in OwnerOperation launch, out Vec2 muzzle,
             out float angle, out Vec2 direction, out Vec2 velocity, out Vec2 position)
         {
+            var carrier = CarrierSample(ship, barrelIndex, sample);
             if (launch.HasLaunchPose && !definition.AttachedToParent)
             {
                 muzzle = launch.Pose.Position;
@@ -253,8 +271,8 @@ namespace CombatSimulation.Core
             {
                 // An attached bullet has no spread (legacy ConfigureBody); the barrel decides its pose.
                 var barrel = ship.Definition.Barrels[barrelIndex];
-                muzzle = sample.Position + sample.Rotation.Rotate(barrel.PositionAt(ship.GetBarrel(barrelIndex).Angle));
-                angle = sample.Angle + ship.GetBarrel(barrelIndex).Angle;
+                muzzle = carrier.Position + carrier.Rotation.Rotate(barrel.PositionAt(ship.GetBarrel(barrelIndex).Angle));
+                angle = carrier.Angle + ship.GetBarrel(barrelIndex).Angle;
                 if (!definition.AttachedToParent)
                 {
                     var random = CounterRandom.Create(Setup.MatchSeed, id, spawnTick, RandomPurpose.WeaponSpread);
@@ -265,9 +283,9 @@ namespace CombatSimulation.Core
             DrawShot(id, spawnTick, definition, randomFactor, out var speedScale, out _);
             direction = new Vec2((float)Math.Cos(angle), (float)Math.Sin(angle));
             velocity = definition.AttachedToParent
-                ? sample.LinearVelocity
+                ? carrier.LinearVelocity
                 : BeamBolts.LaunchSpeed(definition, speedScale) * direction +
-                  definition.ParentVelocityEffect * sample.LinearVelocity;
+                  definition.ParentVelocityEffect * carrier.LinearVelocity;
 
             position = muzzle;
             if (spawnTick < Tick && !definition.AttachedToParent)

@@ -56,6 +56,10 @@ namespace CombatSimulation.Core
         public ReadOnlySpan<BarrelState> GetBarrels(in ShipState ship) =>
             new ReadOnlySpan<BarrelState>(_barrels, ship.BarrelStart, ship.Definition.Barrels.Count);
 
+        // In Definition.Satellites order (phase 5, step 12c).
+        public ReadOnlySpan<SatelliteState> GetSatellites(in ShipState ship) =>
+            new ReadOnlySpan<SatelliteState>(_satellites, ship.SatelliteStart, ship.Definition.Satellites.Count);
+
         public bool TryGetShip(EntityId id, out ShipState ship)
         {
             for (var i = 0; i < _shipCount; ++i)
@@ -88,6 +92,7 @@ namespace CombatSimulation.Core
                 Array.Resize(ref _ships, Math.Max(battle.ShipEntryCount, _ships.Length * 2));
             var deviceCount = 0;
             var barrelCount = 0;
+            var satelliteCount = 0;
             for (var i = 0; i < battle.ShipEntryCount; ++i)
             {
                 var ship = battle.GetShipEntry(i);
@@ -102,8 +107,14 @@ namespace CombatSimulation.Core
                 if (_barrels.Length < barrelCount + barrels)
                     Array.Resize(ref _barrels, Math.Max(barrelCount + barrels, _barrels.Length * 2));
                 for (var b = 0; b < barrels; ++b) _barrels[barrelCount + b] = new BarrelState(ship.GetBarrel(b));
-                _ships[_shipCount++] = new ShipState(ship, world, deviceCount, barrelCount);
+                var satellites = ship.Definition.Satellites.Count;
+                if (_satellites.Length < satelliteCount + satellites)
+                    Array.Resize(ref _satellites, Math.Max(satelliteCount + satellites, _satellites.Length * 2));
+                for (var s = 0; s < satellites; ++s)
+                    _satellites[satelliteCount + s] = new SatelliteState(world, ship.GetSatellite(s));
+                _ships[_shipCount++] = new ShipState(ship, world, deviceCount, barrelCount, satelliteCount);
                 barrelCount += barrels;
+                satelliteCount += satellites;
                 deviceCount += devices;
             }
 
@@ -146,6 +157,7 @@ namespace CombatSimulation.Core
         private ShipState[] _ships;
         private int _shipCount;
         private BarrelState[] _barrels = new BarrelState[16];
+        private SatelliteState[] _satellites = Array.Empty<SatelliteState>();
         private DeviceState[] _devices = new DeviceState[16];
         private BulletState[] _bullets = new BulletState[16];
         private int _bulletCount;

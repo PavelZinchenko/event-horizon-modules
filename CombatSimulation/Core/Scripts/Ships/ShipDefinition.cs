@@ -15,9 +15,10 @@ namespace CombatSimulation.Core
             ResourceDefinition shield, ResourceDefinition energy, EngineDefinition engineWithoutEnergy = null,
             IReadOnlyList<Circle> extraHullParts = null, float rammingDamageMultiplier = 1f,
             IReadOnlyList<BarrelDefinition> barrels = null, IReadOnlyList<DeviceDefinition> devices = null,
-            IReadOnlyList<DamageResistance> resistances = null, float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal)
+            IReadOnlyList<DamageResistance> resistances = null, float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal,
+            IReadOnlyList<SatelliteDefinition> satellites = null)
             : this(CircleHull(hullRadius, extraHullParts), mass, engine, armor, shield, energy, engineWithoutEnergy,
-                rammingDamageMultiplier, barrels, devices, resistances, scale, teleportImmune, targetPriority)
+                rammingDamageMultiplier, barrels, devices, resistances, scale, teleportImmune, targetPriority, satellites)
         {
         }
 
@@ -27,7 +28,8 @@ namespace CombatSimulation.Core
             ResourceDefinition shield, ResourceDefinition energy, EngineDefinition engineWithoutEnergy = null,
             float rammingDamageMultiplier = 1f, IReadOnlyList<BarrelDefinition> barrels = null,
             IReadOnlyList<DeviceDefinition> devices = null, IReadOnlyList<DamageResistance> resistances = null,
-            float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal)
+            float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal,
+            IReadOnlyList<SatelliteDefinition> satellites = null)
         {
             if (hull == null) throw new ArgumentNullException(nameof(hull));
             if (hull.Count == 0) throw new ArgumentException("A hull needs at least one shape.", nameof(hull));
@@ -52,9 +54,28 @@ namespace CombatSimulation.Core
                 }
             }
 
+            var satelliteArray = new SatelliteDefinition[satellites?.Count ?? 0];
+            var aimingBarrels = new int[satelliteArray.Length];
+            for (var i = 0; i < satelliteArray.Length; ++i)
+            {
+                satelliteArray[i] = satellites[i] ?? throw new ArgumentNullException(nameof(satellites), "Satellites must not be null.");
+                aimingBarrels[i] = -1;
+            }
+
             var barrelArray = new BarrelDefinition[barrels?.Count ?? 0];
             for (var i = 0; i < barrelArray.Length; ++i)
-                barrelArray[i] = barrels[i] ?? throw new ArgumentNullException(nameof(barrels), "Barrels must not be null.");
+            {
+                var barrel = barrels[i] ?? throw new ArgumentNullException(nameof(barrels), "Barrels must not be null.");
+                barrelArray[i] = barrel;
+                if (barrel.Satellite >= satelliteArray.Length)
+                    throw new ArgumentOutOfRangeException(nameof(barrels), $"Barrel {i} names a missing satellite.");
+                if (barrel.Satellite < 0 || !satelliteArray[barrel.Satellite].IsAiming) continue;
+
+                // Legacy AutoAimingSatelliteController aims one fixed platform: the satellite turns, not the barrel.
+                if (aimingBarrels[barrel.Satellite] >= 0 || barrel.AutoAimingAngle > 0f)
+                    throw new ArgumentException($"Aiming satellite {barrel.Satellite} needs one fixed barrel.", nameof(barrels));
+                aimingBarrels[barrel.Satellite] = i;
+            }
 
             var deviceArray = new DeviceDefinition[devices?.Count ?? 0];
             if (deviceArray.Length > MaxDevices)
@@ -89,6 +110,8 @@ namespace CombatSimulation.Core
             Energy = energy;
             RammingDamageMultiplier = rammingDamageMultiplier;
             Barrels = barrelArray;
+            Satellites = Array.AsReadOnly(satelliteArray);
+            _aimingBarrels = aimingBarrels;
             Devices = deviceArray;
             _resistances = resistanceArray;
             Resistances = Array.AsReadOnly(resistanceArray);
@@ -138,6 +161,26 @@ namespace CombatSimulation.Core
 
         public IReadOnlyList<BarrelDefinition> Barrels { get; }
 
+        // Bodies steered to their slots (phase 5, step 12c). A barrel names its carrier.
+        public IReadOnlyList<SatelliteDefinition> Satellites { get; }
+
+        // The barrel of an aiming satellite, or -1.
+        internal int AimingBarrel(int satellite) => _aimingBarrels[satellite];
+
+        // A barrel with a target: an auto-aiming barrel, or the barrel of an aiming satellite.
+        public bool Aims(int barrel)
+        {
+            var definition = Barrels[barrel];
+            return definition.AutoAimingAngle > 0f || IsOnAimingSatellite(barrel);
+        }
+
+        // Legacy FixedPlatform with the satellite's aiming system: the whole satellite turns toward the target.
+        public bool IsOnAimingSatellite(int barrel)
+        {
+            var satellite = Barrels[barrel].Satellite;
+            return satellite >= 0 && _aimingBarrels[satellite] == barrel;
+        }
+
         // In control-bit order: device i reads bit i of the control frame.
         public IReadOnlyList<DeviceDefinition> Devices { get; }
 
@@ -150,6 +193,7 @@ namespace CombatSimulation.Core
         internal DamageResistance Resistance(int type) => type < _resistances.Length ? _resistances[type] : default;
 
         private readonly DamageResistance[] _resistances;
+        private readonly int[] _aimingBarrels;
 
         private const byte HullHashTag = 4;
 

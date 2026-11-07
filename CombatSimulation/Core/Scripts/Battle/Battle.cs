@@ -185,6 +185,7 @@ namespace CombatSimulation.Core
         internal ShapeTable Shapes => _world.Shapes;
         internal TailSegmentStore Segments => _world.Segments;
         internal ShipEntity FindShip(EntityId id) => _world.FindShip(id);
+        internal BodyId CarrierBody(ShipEntity ship, int barrelIndex) => _world.CarrierBody(ship, barrelIndex);
         internal bool TryGetBullet(EntityId id, out int index)
         {
             index = -1;
@@ -375,6 +376,7 @@ namespace CombatSimulation.Core
 
                 // Physics reports a touch after the solve, so ramming uses the velocity from before the step.
                 ship.PreStepVelocity = World.GetLinearVelocity(ship.Body);
+                Satellites.Update(_world, ship);
             }
             _tails.UpdateSegmentMotion();
 
@@ -591,6 +593,7 @@ namespace CombatSimulation.Core
             _world.AddShipShapes(ship, CollisionFilters.Ship(ship.Allegiance));
 
             _spawns.PlaceRosterShip(body, id, slot.Side);
+            Satellites.Add(_world, ship);
             slot.Activate(ship, ++_world.DeploymentOrder);
 
             _world.Events.Add(BattleEvent.Spawn(BattleId, Tick, _world.Events.Count, ship, _world.Authority(ship.Owner)));
@@ -621,6 +624,7 @@ namespace CombatSimulation.Core
                 _world.Shapes.Release(ship.GetShape(i));
             _contacts.Ramming.Forget(ship.Id);
             if (!Setup.IsLocalOwner(ship.Owner)) _network.ForgetPredictedHits(ship.Id);
+            Satellites.Remove(_world, ship);
             World.DestroyBody(ship.Body);
             _world.Entities.Remove(ship.Id);
             if (ship.IsDrone)

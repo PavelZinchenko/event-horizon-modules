@@ -154,8 +154,11 @@ namespace CombatSimulation.Ai
         public readonly float AutoAimingAngle;
         public readonly EntityId Target;
 
+        // Legacy FixedPlatform.ActiveTarget of an aiming satellite: the mount has a target but no arc (phase 5, step 12c).
+        public readonly bool HasTarget;
+
         private WeaponMount(Vec2 position, float mountAngle, float bulletSpeed, float relativeVelocityEffect,
-            float energyCost, float fireRate, float autoAimingAngle, EntityId target)
+            float energyCost, float fireRate, float autoAimingAngle, EntityId target, bool hasTarget)
         {
             Position = position;
             MountAngle = mountAngle;
@@ -165,6 +168,7 @@ namespace CombatSimulation.Ai
             FireRate = fireRate;
             AutoAimingAngle = autoAimingAngle;
             Target = target;
+            HasTarget = hasTarget;
         }
 
         // Legacy Platform.Body.WorldPosition is the muzzle point, as the core barrel position is. A cooldown of 0 maps a
@@ -176,15 +180,15 @@ namespace CombatSimulation.Ai
             {
                 case CannonDefinition cannon:
                     // Legacy WeaponInfo.Firerate of a charging weapon: 1 / the charge time (phase 5, step 4f).
-                    return Create(ship, definition.Barrels[cannon.BarrelIndex], cannon.Bullet.Speed,
+                    return Create(ship, cannon.BarrelIndex, cannon.Bullet.Speed,
                         cannon.Bullet.ParentVelocityEffect, cannon.EnergyCost,
-                        FireRateOf(cannon.Mode == CannonMode.Charging ? cannon.ChargeTime : cannon.Cooldown), snapshot.GetBarrels(ship)[cannon.BarrelIndex]);
+                        FireRateOf(cannon.Mode == CannonMode.Charging ? cannon.ChargeTime : cannon.Cooldown), snapshot);
                 case BeamDefinition beam:
                     // Legacy WeaponInfo.EnergyCost: per second for a continuous beam, per shot for a shot beam, per full
                     // charge for a charged beam.
-                    return Create(ship, definition.Barrels[beam.BarrelIndex], 0f, 0f,
+                    return Create(ship, beam.BarrelIndex, 0f, 0f,
                         beam.IsShot ? beam.ActivationCost : beam.EnergyPerSecond,
-                        FireRateOf(beam.IsCharged ? beam.ChargeTime : beam.Cooldown), snapshot.GetBarrels(ship)[beam.BarrelIndex]);
+                        FireRateOf(beam.IsCharged ? beam.ChargeTime : beam.Cooldown), snapshot);
                 default:
                     throw new InvalidOperationException($"AI weapon at device {weapon.DeviceIndex} is not a cannon or a beam");
             }
@@ -193,10 +197,26 @@ namespace CombatSimulation.Ai
         // Legacy IWeaponPlatform.OptimalShipCourse: the ship heading that points the barrel at the target.
         public float OptimalShipCourse(Vec2 target) => LegacyMath.Angle(target - Position) - MountAngle;
 
-        private static WeaponMount Create(in ShipState ship, BarrelDefinition barrel, float bulletSpeed,
-            float relativeVelocityEffect, float energyCost, float fireRate, BarrelState state) =>
-            new WeaponMount(ship.Position + Rot.FromAngle(ship.Angle).Rotate(barrel.PositionAt(state.Angle)),
-                barrel.Angle, bulletSpeed, relativeVelocityEffect, energyCost, fireRate, barrel.AutoAimingAngle, state.Target);
+        // A satellite barrel's muzzle is on the satellite; legacy MountAngle stays local, so the course rule reads it
+        // relative to the ship heading, as for a hull barrel.
+        private static WeaponMount Create(in ShipState ship, int index, float bulletSpeed, float relativeVelocityEffect,
+            float energyCost, float fireRate, BattleSnapshot snapshot)
+        {
+            var barrel = ship.Definition.Barrels[index];
+            var state = snapshot.GetBarrels(ship)[index];
+            var position = ship.Position;
+            var angle = ship.Angle;
+            if (barrel.Satellite >= 0)
+            {
+                var satellite = snapshot.GetSatellites(ship)[barrel.Satellite];
+                position = satellite.Position;
+                angle = satellite.Angle;
+            }
+
+            return new WeaponMount(position + Rot.FromAngle(angle).Rotate(barrel.PositionAt(state.Angle)), barrel.Angle,
+                bulletSpeed, relativeVelocityEffect, energyCost, fireRate, barrel.AutoAimingAngle, state.Target,
+                ship.Definition.Aims(index));
+        }
 
         private static float FireRateOf(float cooldown) => cooldown > 0f ? 1f / cooldown : 0f;
     }
@@ -270,7 +290,7 @@ namespace CombatSimulation.Ai
             foreach (var weapon in weapons.List)
             {
                 var mount = WeaponMount.Of(context.Ship, weapon, context.Snapshot);
-                if (!(mount.AutoAimingAngle > 0f)) continue;
+                if (!mount.HasTarget) continue;
                 if (!context.TryGetShip(mount.Target, out var target))
                 {
                     if (AimingOf(context, weapon) != AimingStrategy.NoAiming)
