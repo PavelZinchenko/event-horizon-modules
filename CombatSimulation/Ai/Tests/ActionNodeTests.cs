@@ -544,6 +544,51 @@ namespace CombatSimulation.Ai.Tests
             return false;
         }
 
+        // Phase 5, step 9d: legacy RamNode with UseSystems holds the first accelerator at full throttle beyond 10 u, then
+        // the first fortification from a second before the hit. The bits of devices 1 and 2 stand in for them.
+        [Test]
+        public void RamUsesTheAcceleratorThenTheFortification()
+        {
+            var runner = Battle(new RamPilots(new AiDevice(1, DeviceClass.Accelerator, false),
+                new AiDevice(2, DeviceClass.Fortification, false)));
+            var accelerated = -1;
+            var fortified = -1;
+            for (var i = 0; i < 1000 && fortified < 0; ++i)
+            {
+                runner.Step();
+                var systems = runner.Snapshot.Ships[0].Systems;
+                if (accelerated < 0 && (systems & 2UL) != 0) accelerated = i;
+                if ((systems & 4UL) != 0) fortified = i;
+            }
+
+            Assert.GreaterOrEqual(accelerated, 0, "the accelerator on the way");
+            Assert.Greater(fortified, accelerated, "the fortification near the hit");
+        }
+
+        // Ship 0 rams the enemy; the enemy idles.
+        private sealed class RamPilots : IPilotProvider
+        {
+            public RamPilots(AiDevice accelerator, AiDevice fortification)
+            {
+                _accelerator = accelerator;
+                _fortification = fortification;
+            }
+
+            public IPilot CreatePilot(BattleSnapshot snapshot, in ShipState ship, out PilotSchedule schedule)
+            {
+                schedule = PilotSchedule.Ship;
+                if (ship.Side != 0) return null;
+
+                var context = new AiContext(ArmedShip, AiSettings.Default, schedule.Period * CombatSimulation.Core.Battle.TickDuration,
+                    Utilites.RandomState.FromSeed(1), BattleData());
+                return new BehaviorTreePilot(new ChaseEnemy(new RamNode(_accelerator, _fortification)), context,
+                    new Dictionary<BehaviorNodeType, int>());
+            }
+
+            private readonly AiDevice _accelerator;
+            private readonly AiDevice _fortification;
+        }
+
         // Ship 0 chases the enemy; the enemy idles.
         private sealed class ChasePilots : IPilotProvider
         {

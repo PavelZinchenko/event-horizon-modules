@@ -37,8 +37,8 @@ namespace CombatSimulation.Core
         // Devices whose control bit counts as released from the next tick on (legacy ISystemsModification).
         public ulong BlockedDevices;
 
-        // The share from 0 to 1 by which the view moves the ship colour to its device colour (legacy Detonator
-        // FeaturesData.Color); the view only.
+        // The share from 0 to 1 by which the view moves the ship colour to its device colour (legacy Detonator, Ghost
+        // and Fortification FeaturesData.Color); the view only.
         public float Tint;
 
         // From 0 to 1: each armor resistance r of the ship becomes r + share x (ceiling - r), the ceiling of its damage
@@ -66,6 +66,30 @@ namespace CombatSimulation.Core
 
         private float _engineScale;
         private bool _scalesEngine;
+    }
+
+    // Legacy GhostDevice and FortificationDevice OnUpdateView (phase 5, step 9d): the colour moves toward the device
+    // colour while the use runs, and back after it, by 5 x the elapsed time of the remaining distance. The core steps
+    // it once per tick; the last thousandth snaps.
+    internal struct DeviceTint
+    {
+        private const float Rate = 5f;
+        private const float Snap = 0.001f;
+
+        public float Level { get; private set; }
+
+        public void Update(bool on)
+        {
+            var target = on ? 1f : 0f;
+            Level += (target - Level) * Rate * Battle.TickDuration;
+            if (Math.Abs(target - Level) < Snap) Level = target;
+        }
+
+        // The strongest tint of the ship's devices wins.
+        public readonly void AddTo(ref ShipStatus status)
+        {
+            if (Level > status.Tint) status.Tint = Level;
+        }
     }
 
     internal static class ShipStatusRules

@@ -58,8 +58,8 @@ namespace CombatSimulation.Core
         // Legacy WeaponType other than Continuous and RequiredCharging: a warp blocks it.
         internal virtual bool IsShotWeapon => false;
 
-        // Legacy StealthDevice.OnSystemActivated keeps stealth on for point defense and drone bays (phase 5, step 9b);
-        // any other active device ends it.
+        // Legacy StealthDevice.OnSystemActivated keeps stealth on for point defense and drone bays (phase 5, step 9b),
+        // ghosts and fortifications (step 9d); any other active device ends it.
         internal virtual bool KeepsStealth => false;
 
         // Stage 14, at the end of the tick.

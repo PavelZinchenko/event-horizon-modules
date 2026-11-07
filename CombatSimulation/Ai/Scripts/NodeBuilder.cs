@@ -222,7 +222,10 @@ namespace CombatSimulation.Ai
             return new SpawnDronesNode(bays);
         }
 
-        public INode Create(BehaviorTreeNode_Ram content) => new RamNode();
+        // Legacy RamNode: with UseShipSystems, the first accelerator and the first fortification.
+        public INode Create(BehaviorTreeNode_Ram content) => content.UseShipSystems
+            ? new RamNode(FirstDevice(DeviceClass.Accelerator), FirstDevice(DeviceClass.Fortification))
+            : new RamNode();
         // Legacy DetonateShipNode: Failure without a detonator.
         public INode Create(BehaviorTreeNode_DetonateShip content)
         {

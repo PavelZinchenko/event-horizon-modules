@@ -167,19 +167,57 @@ namespace CombatSimulation.Ai
         private readonly AiDevice _warpDrive;
     }
 
-    // Legacy RamNode: fails without a target or while it only follows; runs from a second before the hit.
+    // Legacy RamNode: fails without a target or while it only follows; runs from a second before the hit. With
+    // UseSystems (phase 5, step 9d) the first fortification is pressed from a second before the hit, and the first
+    // accelerator at full throttle.
     internal sealed class RamNode : INode
     {
         private const float ImpactTime = 1.0f;
+        private const float MaxAfterburnerDeltaAngle = 15 * LegacyMath.Degree;
+        private const float MinAfterburnerDistance = 10f;
+        private const float MinAfterburnerEnergy = 0.5f;
+
+        // Each device is the first of its class, or null.
+        public RamNode(AiDevice accelerator = null, AiDevice fortification = null)
+        {
+            _accelerator = accelerator;
+            _fortification = fortification;
+        }
 
         public NodeState Evaluate(AiContext context)
         {
-            var status = Navigation.ChaseAndRam(context, context.TargetShip, out var timeToHit, out _);
-            if (!(timeToHit < ImpactTime) && (status == Navigation.Status.NoTarget || status == Navigation.Status.Following))
+            var status = Navigation.ChaseAndRam(context, context.TargetShip, out var timeToHit, out var deltaAngle);
+            if (timeToHit < ImpactTime)
+            {
+                if (_fortification != null) context.Controls.ActivateSystem(_fortification.DeviceIndex);
+            }
+            else if (status == Navigation.Status.NoTarget || status == Navigation.Status.Following)
+            {
                 return NodeState.Failure;
+            }
+            else if (status == Navigation.Status.FullThrottle && _accelerator != null)
+            {
+                UseAfterburner(context, deltaAngle);
+            }
 
             return NodeState.Running;
         }
+
+        // Legacy UseAfterburner: Energy.Percentage reads the whole store; Helpers.DistanceWrap is centre to centre on
+        // the torus.
+        private void UseAfterburner(AiContext context, float deltaAngle)
+        {
+            if (deltaAngle > MaxAfterburnerDeltaAngle) return;
+            var energy = context.Ship.Energy;
+            if (!context.DeviceOf(_accelerator.DeviceIndex).Active && energy.Value / energy.Max < MinAfterburnerEnergy) return;
+            if (!context.TryGetShip(context.TargetShip, out var target)) return;
+            if (context.Delta(context.Ship.Position, target.Position).Length < MinAfterburnerDistance) return;
+
+            context.Controls.ActivateSystem(_accelerator.DeviceIndex);
+        }
+
+        private readonly AiDevice _accelerator;
+        private readonly AiDevice _fortification;
     }
 
     // Legacy DetonateShipNode (phase 5, step 7b): holds the first detonator. With inAttackRange it fails unless the ship
