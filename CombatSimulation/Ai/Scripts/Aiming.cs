@@ -157,8 +157,13 @@ namespace CombatSimulation.Ai
         // Legacy FixedPlatform.ActiveTarget of an aiming satellite: the mount has a target but no arc (phase 5, step 12c).
         public readonly bool HasTarget;
 
+        // The barrel turns with an aiming satellite; MuzzleAngle is its world heading (phase 5, 12c finding 4).
+        public readonly bool OnAimingSatellite;
+        public readonly float MuzzleAngle;
+
         private WeaponMount(Vec2 position, float mountAngle, float bulletSpeed, float relativeVelocityEffect,
-            float energyCost, float fireRate, float autoAimingAngle, EntityId target, bool hasTarget)
+            float energyCost, float fireRate, float autoAimingAngle, EntityId target, bool hasTarget,
+            bool onAimingSatellite, float muzzleAngle)
         {
             Position = position;
             MountAngle = mountAngle;
@@ -169,6 +174,8 @@ namespace CombatSimulation.Ai
             AutoAimingAngle = autoAimingAngle;
             Target = target;
             HasTarget = hasTarget;
+            OnAimingSatellite = onAimingSatellite;
+            MuzzleAngle = muzzleAngle;
         }
 
         // Legacy Platform.Body.WorldPosition is the muzzle point, as the core barrel position is. A cooldown of 0 maps a
@@ -215,7 +222,7 @@ namespace CombatSimulation.Ai
 
             return new WeaponMount(position + Rot.FromAngle(angle).Rotate(barrel.PositionAt(state.Angle)), barrel.Angle,
                 bulletSpeed, relativeVelocityEffect, energyCost, fireRate, barrel.AutoAimingAngle, state.Target,
-                ship.Definition.Aims(index));
+                ship.Definition.Aims(index), ship.Definition.IsOnAimingSatellite(index), angle + state.Angle);
         }
 
         private static float FireRateOf(float cooldown) => cooldown > 0f ? 1f / cooldown : 0f;
@@ -444,7 +451,12 @@ namespace CombatSimulation.Ai
                 aiming.ReadyToFire = false;
             else
             {
-                var delta = Math.Abs(LegacyMath.DeltaAngle(aiming.Angle.Value, context.Ship.Angle));
+                // Redesign (owner, 2026-11-07; 12c finding 4): an aiming satellite that holds this enemy fires when its
+                // muzzle points at the aim point. Legacy compares the ship heading, so the satellite fired only when the
+                // ship faced the enemy.
+                var delta = mount.OnAimingSatellite && mount.Target == enemy.Id
+                    ? Math.Abs(LegacyMath.DeltaAngle(LegacyMath.Angle(aiming.Position - mount.Position), mount.MuzzleAngle))
+                    : Math.Abs(LegacyMath.DeltaAngle(aiming.Angle.Value, context.Ship.Angle));
                 if (activation != ActivationStrategy.WhenAimedPrecisely && (mount.Target.IsNull || mount.Target == enemy.Id))
                     delta -= mount.AutoAimingAngle;
                 var spread = CalculateSpread(aiming.Distance, context.ProfileOf(enemy).ModelScale,

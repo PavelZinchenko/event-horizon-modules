@@ -69,22 +69,39 @@ namespace CombatSimulation.Ai.Tests
         }
 
         // Phase 5, step 12c: legacy FixedPlatform.ActiveTarget of an aiming satellite. The node fires at it without a
-        // search request; the fire check still reads the ship heading, as legacy does.
+        // search request.
         [Test]
         public void TurretNodeFiresAnAimingSatelliteAtItsTarget()
         {
-            var satellite = new ShipDefinition(1f, 1f, AiFixtures.Engine, 1000f,
-                new ResourceDefinition(0f), new ResourceDefinition(100f),
-                barrels: new[] { new BarrelDefinition(new Vec2(0.4f, 0f), satellite: 0) },
-                devices: new[] { new CannonDefinition(0, 10f, 0f, 0f, new BulletDefinition(0.1f, 20f, 50f, 0f)) },
-                satellites: new[] { new SatelliteDefinition(new Vec2(-1f, 2.2f), 0f, 0.4f, -10f * Degree, 190f * Degree) });
-            var context = Context(out var runner, false, satellite, new Vec2(70f, 52.2f), 60);
+            var context = Context(out var runner, false, AimingSatelliteShip(), new Vec2(70f, 52.2f), 60);
             Assert.AreEqual(context.TargetShip, runner.Snapshot.GetBarrels(context.Ship)[0].Target);
             var pilot = new BehaviorTreePilot(new AttackTurretTargetsNode(), context, null);
             Assert.IsTrue(pilot.Think(runner.Snapshot, context.Ship, out var controls));
             Assert.AreEqual(1UL, controls.Systems);
             Assert.AreEqual(0UL, controls.SearchTurretSystems);
         }
+
+        // 12c finding 4 (redesign, owner, 2026-11-07): the fire check reads the satellite's muzzle, not the ship heading.
+        // The enemy is 90 degrees off the heading, inside the satellite arc: the satellite fires once it has turned.
+        [Test]
+        public void AimingSatelliteFiresAtAnEnemyTheShipDoesNotFace()
+        {
+            var context = Context(out var runner, false, AimingSatelliteShip(), new Vec2(49f, 72.2f), 1);
+            Assert.AreEqual(context.TargetShip, runner.Snapshot.GetBarrels(context.Ship)[0].Target);
+            var pilot = new BehaviorTreePilot(new AttackTurretTargetsNode(), context, null);
+            pilot.Think(runner.Snapshot, context.Ship, out var controls);
+            Assert.AreEqual(0UL, controls.Systems, "the satellite has not turned yet");
+
+            for (var i = 0; i < 100; ++i) runner.Step();
+            Assert.IsTrue(pilot.Think(runner.Snapshot, runner.Snapshot.Ships[0], out controls));
+            Assert.AreEqual(1UL, controls.Systems);
+        }
+
+        private static ShipDefinition AimingSatelliteShip() => new ShipDefinition(1f, 1f, AiFixtures.Engine, 1000f,
+            new ResourceDefinition(0f), new ResourceDefinition(100f),
+            barrels: new[] { new BarrelDefinition(new Vec2(0.4f, 0f), satellite: 0) },
+            devices: new[] { new CannonDefinition(0, 10f, 0f, 0f, new BulletDefinition(0.1f, 20f, 50f, 0f)) },
+            satellites: new[] { new SatelliteDefinition(new Vec2(-1f, 2.2f), 0f, 0.4f, -10f * Degree, 190f * Degree) });
 
         private static AiContext Context(out BattleRunner runner, bool turret, ShipDefinition definition = null,
             Vec2? targetPosition = null, int settleTicks = 1)
