@@ -25,6 +25,9 @@ namespace CombatSimulation.Core
 
         // Legacy StealthDevice (phase 5, step 9b): target priority None; the view fades the ship by the viewer's side.
         Stealth = 16,
+
+        // Legacy AcceleratorDevice (phase 5, step 9c): throttle 1, so the brake does not act. EngineOff wins over it.
+        FullThrottle = 32,
     }
 
     internal struct ShipStatus
@@ -42,11 +45,27 @@ namespace CombatSimulation.Core
         // type (legacy IStatsModification on Resistance: worm tail, step 7d).
         public float ResistanceShare;
 
+        // Legacy BrakeDevice (phase 5, step 9c): the sum of the brakes, in units per second squared. The engine applies it
+        // while the throttle is 0.001 or less.
+        public float Deceleration;
+
         // Legacy applies each modification in turn, so two shares p and q give 1 - (1 - p)(1 - q).
         public void AddResistanceShare(float share)
         {
             if (share > 0f) ResistanceShare = 1f - (1f - ResistanceShare) * (1f - Math.Min(share, 1f));
         }
+
+        // Legacy AcceleratorDevice (phase 5, step 9c): propulsion and velocity x power; two accelerators multiply.
+        public readonly float EngineScale => _scalesEngine ? _engineScale : 1f;
+
+        public void ScaleEngine(float power)
+        {
+            _engineScale = EngineScale * power;
+            _scalesEngine = true;
+        }
+
+        private float _engineScale;
+        private bool _scalesEngine;
     }
 
     internal static class ShipStatusRules

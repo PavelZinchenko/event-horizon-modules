@@ -83,7 +83,7 @@ namespace CombatSimulation.Core
             engine == null || (engine.TurnRate <= MaxTurnRate && engine.MaxAngularVelocity <= MaxAngularVelocity)
                 ? engine
                 : new EngineDefinition(engine.Propulsion, engine.MaxVelocity, Math.Min(engine.TurnRate, MaxTurnRate),
-                    Math.Min(engine.MaxAngularVelocity, MaxAngularVelocity));
+                    Math.Min(engine.MaxAngularVelocity, MaxAngularVelocity), engine.VelocityLimit);
 
         internal override void Validate(int barrelCount) { }
         internal override ShipDevice CreateDevice(int index) => new WormTailDevice(this, index);

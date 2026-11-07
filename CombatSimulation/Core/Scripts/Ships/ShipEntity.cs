@@ -47,20 +47,26 @@ namespace CombatSimulation.Core
         }
     }
 
-    // The engine input of one tick at stage 4: no engine while retreating, else the engine its energy selects.
+    // The engine input of one tick at stage 4: no engine while retreating, else the engine its energy selects. Phase 5,
+    // step 9c: the accelerator's scale and the brake's deceleration of the tick's status.
     internal readonly struct EngineInput
     {
         public readonly EngineDefinition Engine;
         public readonly float Throttle;
         public readonly bool HasCourse;
         public readonly float Course;
+        public readonly float Scale;
+        public readonly float Deceleration;
 
-        public EngineInput(EngineDefinition engine, float throttle, bool hasCourse, float course)
+        public EngineInput(EngineDefinition engine, float throttle, bool hasCourse, float course, float scale = 1f,
+            float deceleration = 0f)
         {
             Engine = engine;
             Throttle = throttle;
             HasCourse = hasCourse;
             Course = course;
+            Scale = scale;
+            Deceleration = deceleration;
         }
     }
 
@@ -173,6 +179,8 @@ namespace CombatSimulation.Core
         public ulong BlockedDevices { get; set; }
         public float Tint { get; set; }
         public float ResistanceShare { get; set; }
+        public float EngineScale { get; set; } = 1f;
+        public float Deceleration { get; set; }
 
         // The control bits a device sees at stage 2.
         public ulong UsableSystems => Systems & ~BlockedDevices;
@@ -291,6 +299,8 @@ namespace CombatSimulation.Core
             LastContactTick = NoContact;
             Tint = 0f;
             ResistanceShare = 0f;
+            EngineScale = 1f;
+            Deceleration = 0f;
             PreStepVelocity = Vec2.Zero;
             if (_pendingDamage.Length != damageTypes) _pendingDamage = new float[damageTypes];
             else System.Array.Clear(_pendingDamage, 0, damageTypes);
@@ -484,6 +494,8 @@ namespace CombatSimulation.Core
             HasContactStealth = false;
             Tint = 0f;
             ResistanceShare = 0f;
+            EngineScale = 1f;
+            Deceleration = 0f;
             PreStepVelocity = Vec2.Zero;
             ClearPendingDamage();
             _spawnSampleCount = 0;

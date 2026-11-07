@@ -13,16 +13,23 @@ namespace CombatSimulation.Core
         private const float MinSpin = (float)(0.01 * Math.PI / 180.0);
         private const float FullCircle = (float)(2.0 * Math.PI);
 
+        // Legacy BrakeDevice acts at this throttle or less; legacy ApplyDeceleration skips a slower ship.
+        private const float BrakeThrottle = 0.001f;
+        private const float MinBrakeSpeed = 0.001f;
+
         // Stage 4: the engine input of this tick. No engine while retreating (legacy ShipRetreatEffect) or with Drift.
-        // EngineOff (phase 5, step 7) sets throttle 0 and no course, so only the spin brake runs.
+        // EngineOff (phase 5, step 7) sets throttle 0 and no course, so only the spin brake runs; it also stops the brake
+        // (legacy WarpDrive sets Deceleration 0). FullThrottle (step 9c) sets throttle 1, so the brake does not act.
         public static EngineInput Input(ShipEntity ship)
         {
             var engine = ship.RetreatCompletionTick != ShipEntity.NoRetreat || (ship.Status & ShipStatusFlags.Drift) != 0
                 ? null
                 : ship.EngineHasEnergy ? ship.Definition.Engine : ship.Definition.EngineWithoutEnergy;
-            return (ship.Status & ShipStatusFlags.EngineOff) != 0
-                ? new EngineInput(engine, 0f, false, 0f)
-                : new EngineInput(engine, ship.Throttle, ship.HasCourse, ship.Course);
+            if ((ship.Status & ShipStatusFlags.EngineOff) != 0) return new EngineInput(engine, 0f, false, 0f);
+
+            var throttle = (ship.Status & ShipStatusFlags.FullThrottle) != 0 ? 1f : ship.Throttle;
+            return new EngineInput(engine, throttle, ship.HasCourse, ship.Course, ship.EngineScale,
+                throttle <= BrakeThrottle ? ship.Deceleration : 0f);
         }
 
         public static void Update(PhysicsWorld world, BodyId body, in EngineInput input, float dt)
@@ -40,7 +47,8 @@ namespace CombatSimulation.Core
         {
             var engine = input.Engine;
             if (engine == null) return;
-            if (input.Throttle > MinThrottle) ApplyThrust(engine, input.Throttle, rotation, ref velocity, dt);
+            if (input.Throttle > MinThrottle) ApplyThrust(engine, input.Throttle, input.Scale, rotation, ref velocity, dt);
+            if (input.Deceleration > 0f) ApplyDeceleration(input.Deceleration, ref velocity, dt);
 
             if (input.HasCourse)
                 ApplyTurn(engine, input.Course, rotation.Angle, ref angularVelocity, dt);
@@ -48,11 +56,13 @@ namespace CombatSimulation.Core
                 ApplySpinBrake(engine, ref angularVelocity, dt);
         }
 
-        // Steers the velocity toward MaxVelocity along the heading. Faster forward motion is kept.
-        private static void ApplyThrust(EngineDefinition engine, float throttle, Rot rotation, ref Vec2 velocity, float dt)
+        // Steers the velocity toward MaxVelocity along the heading. Faster forward motion is kept. An accelerator scales
+        // propulsion and MaxVelocity; VelocityLimit caps the scaled MaxVelocity only (legacy ShipEngine.UpdateData).
+        private static void ApplyThrust(EngineDefinition engine, float throttle, float scale, Rot rotation, ref Vec2 velocity,
+            float dt)
         {
             var forward = new Vec2(rotation.C, rotation.S);
-            var maxVelocity = engine.MaxVelocity;
+            var maxVelocity = Math.Min(engine.MaxVelocity * scale, engine.VelocityLimit);
 
             var forwardVelocity = Vec2.Dot(velocity, forward);
             var requiredVelocity = forwardVelocity > maxVelocity ? forwardVelocity : maxVelocity;
@@ -62,8 +72,19 @@ namespace CombatSimulation.Core
             if (length < MinPropulsionDelta) return;
 
             var propulsionVector = direction * (1f / Math.Max(0.5f * length, maxVelocity));
-            var acceleration = engine.Propulsion * throttle * propulsionVector;
+            var acceleration = engine.Propulsion * scale * throttle * propulsionVector;
             velocity = velocity + dt * acceleration;
+        }
+
+        // Legacy ShipEngine.ApplyDeceleration against the velocity. Owner question 6 (b): the brake stops the ship at
+        // zero speed and never reverses it.
+        private static void ApplyDeceleration(float deceleration, ref Vec2 velocity, float dt)
+        {
+            var speed = velocity.Length;
+            if (speed < MinBrakeSpeed) return;
+
+            var change = deceleration * dt;
+            velocity = change >= speed ? Vec2.Zero : velocity - (change / speed) * velocity;
         }
 
         private static void ApplyTurn(EngineDefinition engine, float course, float angle, ref float angularVelocity, float dt)

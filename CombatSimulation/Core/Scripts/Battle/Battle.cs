@@ -364,6 +364,8 @@ namespace CombatSimulation.Core
                 ship.BlockedDevices = status.BlockedDevices;
                 ship.Tint = status.Tint;
                 ship.ResistanceShare = status.ResistanceShare;
+                ship.EngineScale = status.EngineScale;
+                ship.Deceleration = status.Deceleration;
                 if (contactsChanged) _world.SetHullFilters(ship);
             }
         }
