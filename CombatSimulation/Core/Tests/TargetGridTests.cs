@@ -99,11 +99,92 @@ namespace CombatSimulation.Core.Tests
             Assert.IsTrue(Find(grid).IsNull);
         }
 
-        private static TargetGrid Grid() => new TargetGrid(new Torus(200f, 200f));
-
-        private static EntityId Find(TargetGrid grid)
+        // Phase 5, step 9a: inside the cone a higher priority wins before distance (legacy GetEnemyForMissile).
+        [Test]
+        public void InTheConeAHigherPriorityWinsOverANearerEnemy()
         {
-            grid.FindMissileTarget(Origin, Ahead, Allegiances.OfSide(0), MaxRange, SelfRadius, out var target);
+            var grid = Grid();
+            grid.Add(new EntityId(1), Allegiances.OfSide(1), Origin + new Vec2(5f, 0f), 1f, TargetPriority.Low);
+            grid.Add(new EntityId(2), Allegiances.OfSide(1), Origin + new Vec2(20f, 0f), 1f);
+            Assert.AreEqual(new EntityId(2), Find(grid), "A ship before a drone.");
+
+            grid.Add(new EntityId(3), Allegiances.OfSide(1), Origin + new Vec2(30f, 1f), 1f, TargetPriority.High);
+            Assert.AreEqual(new EntityId(3), Find(grid), "A jammer before a ship.");
+        }
+
+        [Test]
+        public void TheConeComesBeforePriority()
+        {
+            var grid = Grid();
+            grid.Add(new EntityId(1), Allegiances.OfSide(1), Origin + new Vec2(0f, 5f), 1f, TargetPriority.High);
+            grid.Add(new EntityId(2), Allegiances.OfSide(1), Origin + new Vec2(20f, 0f), 1f, TargetPriority.Low);
+
+            Assert.AreEqual(new EntityId(2), Find(grid));
+        }
+
+        [Test]
+        public void TheFallbackByDeviationIgnoresPriority()
+        {
+            var grid = Grid();
+            grid.Add(new EntityId(1), Allegiances.OfSide(1), Origin + new Vec2(0f, 5f), 1f, TargetPriority.High);
+            grid.Add(new EntityId(2), Allegiances.OfSide(1), Origin + new Vec2(3f, 4f), 1f, TargetPriority.Low);
+
+            Assert.AreEqual(new EntityId(2), Find(grid));
+        }
+
+        [Test]
+        public void AnEnemyWithPriorityNoneIsNeverATarget()
+        {
+            var grid = Grid();
+            grid.Add(new EntityId(1), Allegiances.OfSide(1), Origin + new Vec2(5f, 0f), 1f, TargetPriority.None);
+            Assert.IsTrue(Find(grid).IsNull);
+
+            grid.Add(new EntityId(2), Allegiances.OfSide(1), Origin + new Vec2(0f, -20f), 1f, TargetPriority.Low);
+            Assert.AreEqual(new EntityId(2), Find(grid), "The fallback skips it too.");
+        }
+
+        [Test]
+        public void ACamouflageChanceOfOneAlwaysDodges()
+        {
+            var grid = Grid();
+            grid.Add(new EntityId(1), Allegiances.OfSide(1), Origin + new Vec2(5f, 0f), 1f, chanceToAvoidMissile: 1f);
+            grid.Add(new EntityId(2), Allegiances.OfSide(1), Origin + new Vec2(30f, 0f), 1f);
+
+            for (var tick = 0; tick < 20; ++tick)
+                Assert.AreEqual(new EntityId(2), Find(grid, new EntityId(50), tick));
+        }
+
+        [Test]
+        public void TheDodgeRollIsSeededPerSearcherTickAndCandidate()
+        {
+            // Chance 0.9 (MissileCamouflage): over 1000 searches about 100 find the ship. Each search gives the same
+            // result on a second grid with the same seed, and a different seed gives a different sequence.
+            var grid = Grid(11UL);
+            var copy = Grid(11UL);
+            var other = Grid(12UL);
+            foreach (var g in new[] { grid, copy, other })
+                g.Add(new EntityId(1), Allegiances.OfSide(1), Origin + new Vec2(5f, 0f), 1f, chanceToAvoidMissile: 0.9f);
+
+            var found = 0;
+            var differences = 0;
+            for (var tick = 0; tick < 1000; ++tick)
+            {
+                var target = Find(grid, new EntityId(50), tick);
+                Assert.AreEqual(target, Find(copy, new EntityId(50), tick));
+                if (!target.IsNull) ++found;
+                if (target != Find(other, new EntityId(50), tick)) ++differences;
+            }
+
+            Assert.That(found, Is.InRange(70, 130));
+            Assert.That(differences, Is.GreaterThan(50));
+        }
+
+        private static TargetGrid Grid(ulong matchSeed = 0UL) => new TargetGrid(new Torus(200f, 200f), matchSeed);
+
+        private static EntityId Find(TargetGrid grid, EntityId searcher = default, long tick = 0)
+        {
+            grid.FindMissileTarget(Origin, Ahead, Allegiances.OfSide(0), MaxRange, SelfRadius, out var target,
+                searcher: searcher, tick: tick);
             return target;
         }
     }

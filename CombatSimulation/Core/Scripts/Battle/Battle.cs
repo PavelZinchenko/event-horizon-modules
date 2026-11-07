@@ -22,7 +22,7 @@ namespace CombatSimulation.Core
             _world = new BattleWorld(setup);
             _commands = new CommandQueue(setup.BattleId);
             _flow = new CommittedBattleFlow(setup);
-            _targets = new TargetGrid(World.Torus);
+            _targets = new TargetGrid(World.Torus, setup.MatchSeed);
             _tails = new WormTails(_world, this);
             _triggers = new BulletTriggers(_world, this);
             var bulletContacts = new BulletContactLedger();
@@ -363,7 +363,8 @@ namespace CombatSimulation.Core
             {
                 var ship = _world.GetShipEntry(i);
                 if (ship != null)
-                    _targets.Add(ship.Id, ship.Allegiance, World.GetPosition(ship.Body), ship.Definition.HullRadius);
+                    _targets.Add(ship.Id, ship.Allegiance, World.GetPosition(ship.Body), ship.Definition.HullRadius,
+                        ship.TargetPriority, ship.Definition.ChanceToAvoidMissile);
             }
 
             for (var i = 0; i < _world.ShipEntryCount; ++i)

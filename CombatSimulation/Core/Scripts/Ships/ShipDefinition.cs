@@ -16,9 +16,10 @@ namespace CombatSimulation.Core
             IReadOnlyList<Circle> extraHullParts = null, float rammingDamageMultiplier = 1f,
             IReadOnlyList<BarrelDefinition> barrels = null, IReadOnlyList<DeviceDefinition> devices = null,
             IReadOnlyList<DamageResistance> resistances = null, float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal,
-            IReadOnlyList<SatelliteDefinition> satellites = null)
+            IReadOnlyList<SatelliteDefinition> satellites = null, float chanceToAvoidMissile = 0f)
             : this(CircleHull(hullRadius, extraHullParts), mass, engine, armor, shield, energy, engineWithoutEnergy,
-                rammingDamageMultiplier, barrels, devices, resistances, scale, teleportImmune, targetPriority, satellites)
+                rammingDamageMultiplier, barrels, devices, resistances, scale, teleportImmune, targetPriority, satellites,
+                chanceToAvoidMissile)
         {
         }
 
@@ -29,7 +30,7 @@ namespace CombatSimulation.Core
             float rammingDamageMultiplier = 1f, IReadOnlyList<BarrelDefinition> barrels = null,
             IReadOnlyList<DeviceDefinition> devices = null, IReadOnlyList<DamageResistance> resistances = null,
             float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal,
-            IReadOnlyList<SatelliteDefinition> satellites = null)
+            IReadOnlyList<SatelliteDefinition> satellites = null, float chanceToAvoidMissile = 0f)
         {
             if (hull == null) throw new ArgumentNullException(nameof(hull));
             if (hull.Count == 0) throw new ArgumentException("A hull needs at least one shape.", nameof(hull));
@@ -41,6 +42,8 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(rammingDamageMultiplier), "Ramming multiplier must be finite and not negative.");
             if (!(scale >= 0f) || float.IsInfinity(scale))
                 throw new ArgumentOutOfRangeException(nameof(scale), "Scale must be finite and not negative.");
+            if (!(chanceToAvoidMissile >= 0f && chanceToAvoidMissile <= 1f))
+                throw new ArgumentOutOfRangeException(nameof(chanceToAvoidMissile), "The chance must be within [0, 1].");
 
             var parts = new List<HullPart>();
             var hullRadius = 0f;
@@ -97,6 +100,7 @@ namespace CombatSimulation.Core
             Scale = scale > 0f ? scale : 2f * hullRadius;
             TeleportImmune = teleportImmune;
             TargetPriority = targetPriority;
+            ChanceToAvoidMissile = chanceToAvoidMissile;
             HullParts = parts.AsReadOnly();
             HullHash = ComputeHullHash(parts);
             Mass = mass;
@@ -129,6 +133,10 @@ namespace CombatSimulation.Core
         // Legacy TeleportAction excludes Starbase and Special ship types, including their drones and clones.
         public bool TeleportImmune { get; }
         public TargetPriority TargetPriority { get; }
+
+        // Legacy Features.ChanceToAvoidMissile (missile camouflage, phase 5, step 9a): a homing search skips the ship
+        // with this chance.
+        public float ChanceToAvoidMissile { get; }
 
         // Physics parts in hull shape order, each shape's parts in its own order. The order is the shape order
         // within the entity (contact ordering, key 6) and the target shape index of hit records.

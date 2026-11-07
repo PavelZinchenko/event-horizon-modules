@@ -35,7 +35,7 @@ namespace CombatSimulation.Core
             {
                 battle.Targets.FindMissileTarget(position, heading, bullet.Allegiance,
                     definition.Range * BulletDefinition.SearchRangeFactor, definition.Radius, out var id,
-                    definition.IsMagnetic && !definition.HasDirection);
+                    definition.IsMagnetic && !definition.HasDirection, bullet.Id, battle.Tick);
                 if (id != bullet.TargetId) battle.CaptureMissileTarget(bullet, id);
                 bullet.TargetId = id;
                 bullet.NextSearchTick = battle.Tick + SearchTicks;

@@ -80,7 +80,7 @@ namespace CombatSimulation.Core.Tests
             Assert.Greater(battle.MaxBarrelTurn, 90f * Fixtures.Degrees, "The full-circle turret turns past a side arc.");
             Assert.Greater(battle.BeamSpawns, 0, "The turret beam.");
             Assert.Greater(battle.Redeployments, 0, "Mount reset on redeployment.");
-            Assert.AreEqual("3C1F47320E38F5C72D9BBBFF5AF2D77E61FD6416E5AAD3AD0352850864E0B133", Hash(battle.Log));
+            Assert.AreEqual("72A8081FF28C7CC484B5E9334084428BB17B5034566B8FD56ACF88C22EAEE389", Hash(battle.Log));
         }
 
         [Test]
@@ -94,8 +94,8 @@ namespace CombatSimulation.Core.Tests
             Assert.IsTrue(duel.IsCompleted, $"No result after {ScriptedBattle.MaxTicks} ticks.");
             Assert.Greater(Sent(OwnerOperationKind.TurretTarget), 0, "Owner turret targets.");
             Assert.AreEqual(duel.A.Battle.Snapshot.Result.Outcome, duel.B.Battle.Snapshot.Result.Outcome);
-            Assert.AreEqual("929C6F17229C5CA12DF8E8F71C5404BD7E91DB928A85135FDEE187A37051C215", Hash(duel.A.Log), "Core A.");
-            Assert.AreEqual("D4186CD98919E0FFE2BBC1EECD3D2C08DB983420F619F1F2FDDC955C1EA38B46", Hash(duel.B.Log), "Core B.");
+            Assert.AreEqual("735291224D88E98C699FD4357CD5745BB8BEFDCB8D05AD523014A2C021AFA995", Hash(duel.A.Log), "Core A.");
+            Assert.AreEqual("876536520930A4728E34B1F7023D44EF856D48DB01BD9F164AE9CFDE8590C755", Hash(duel.B.Log), "Core B.");
         }
 
         // The hashes are worth something only if a run repeats itself.

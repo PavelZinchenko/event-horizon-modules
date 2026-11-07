@@ -20,6 +20,9 @@ namespace CombatSimulation.Core
 
         // A beam's spread angle in one tick (phase 5, step 4d).
         BeamJitter = 6,
+
+        // A homing search's camouflage roll for one candidate (phase 5, step 9a).
+        MissileDodge = 7,
     }
 
     // Counter-based random (investigation 6.7): a draw is a function of match seed, entity, tick and purpose.
@@ -38,6 +41,20 @@ namespace CombatSimulation.Core
             hash = StableHash.Append(hash, entityId.Value, 8);
             hash = StableHash.Append(hash, (ulong)tick, 8);
             hash = StableHash.Append(hash, (uint)purpose, 4);
+            return new RandomState { Value = PcgRandomAlgorithm.InitializeState(StableHash.Mix(hash)) };
+        }
+
+        // A draw that also depends on a second entity: the same fields, then other u64.
+        internal static RandomState Create(ulong matchSeed, EntityId entityId, long tick, RandomPurpose purpose, EntityId other)
+        {
+            if (tick < 0) throw new ArgumentOutOfRangeException(nameof(tick));
+
+            var hash = StableHash.Begin(Tag);
+            hash = StableHash.Append(hash, matchSeed, 8);
+            hash = StableHash.Append(hash, entityId.Value, 8);
+            hash = StableHash.Append(hash, (ulong)tick, 8);
+            hash = StableHash.Append(hash, (uint)purpose, 4);
+            hash = StableHash.Append(hash, other.Value, 8);
             return new RandomState { Value = PcgRandomAlgorithm.InitializeState(StableHash.Mix(hash)) };
         }
     }

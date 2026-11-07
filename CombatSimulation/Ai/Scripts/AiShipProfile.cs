@@ -159,7 +159,7 @@ namespace CombatSimulation.Ai
         // Legacy Body.Scale: the enemy search measures distance and size with it, not with the hull radius.
         public float ModelScale { get; }
 
-        // Legacy Features.ChanceToAvoidDrone, a fraction. 0 while the drone camouflage device is inert.
+        // Legacy Features.ChanceToAvoidDrone, a fraction: the drone camouflage Power (phase 5, step 9a).
         public float ChanceToAvoidDrone { get; }
 
         // Legacy RequirementChecker HasEngine and NodeBuilder.CanMove.
