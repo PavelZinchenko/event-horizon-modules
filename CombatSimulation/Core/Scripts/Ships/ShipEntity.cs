@@ -137,7 +137,13 @@ namespace CombatSimulation.Core
         public int Owner { get; private set; }
         public BodyId Body { get; private set; }
         public ShipDefinition Definition { get; private set; }
-        public TargetPriority TargetPriority { get; set; }
+        // The definition's priority; a running stealth (stage 3, phase 5, step 9b) gives None, whatever the jammer
+        // sets (owner question 4).
+        public TargetPriority TargetPriority
+        {
+            get => (Status & ShipStatusFlags.Stealth) != 0 ? TargetPriority.None : _targetPriority;
+            set => _targetPriority = value;
+        }
 
         // Resources are fields so that stages update them in place.
         public ResourcePool Armor;
@@ -170,6 +176,16 @@ namespace CombatSimulation.Core
 
         // The control bits a device sees at stage 2.
         public ulong UsableSystems => Systems & ~BlockedDevices;
+
+        public const long NoContact = long.MinValue;
+
+        // Legacy Ship.OnCollision runs the OnHit triggers for every contact (phase 5, step 9b): the last tick in which
+        // a local ship took one, from stage 9 or 10. A stealth device reads it at stage 2 of the next tick.
+        public long LastContactTick { get; set; }
+
+        // The stealth devices, and whether one of them ends at a contact; set at deployment.
+        public ulong StealthDevices { get; private set; }
+        public bool HasContactStealth { get; private set; }
 
         // Set at stage 11; stage 12 applies it.
         public bool PendingDeath { get; set; }
@@ -272,6 +288,7 @@ namespace CombatSimulation.Core
             PendingVanish = false;
             Status = ShipStatusFlags.None;
             BlockedDevices = 0;
+            LastContactTick = NoContact;
             Tint = 0f;
             ResistanceShare = 0f;
             PreStepVelocity = Vec2.Zero;
@@ -323,7 +340,15 @@ namespace CombatSimulation.Core
                 for (var i = 0; i < _devices.Length; ++i) _devices[i] = devices[i].CreateDevice(i);
                 _deviceSets.Add(definition, _devices);
             }
-            for (var i = 0; i < _devices.Length; ++i) _devices[i].Reset(tick);
+            StealthDevices = 0;
+            HasContactStealth = false;
+            for (var i = 0; i < _devices.Length; ++i)
+            {
+                _devices[i].Reset(tick);
+                if (!(_devices[i] is StealthDevice stealth)) continue;
+                StealthDevices |= 1UL << i;
+                HasContactStealth |= stealth.Definition.EndsOnContact;
+            }
         }
 
         // In control-bit order. Deployment creates or resets the cached devices for its definition.
@@ -454,6 +479,9 @@ namespace CombatSimulation.Core
             PendingDeath = false;
             Status = ShipStatusFlags.None;
             BlockedDevices = 0;
+            LastContactTick = NoContact;
+            StealthDevices = 0;
+            HasContactStealth = false;
             Tint = 0f;
             ResistanceShare = 0f;
             PreStepVelocity = Vec2.Zero;
@@ -473,6 +501,7 @@ namespace CombatSimulation.Core
             ClearControls();
         }
 
+        private TargetPriority _targetPriority;
         private ShapeId[] _shapes = new ShapeId[1];
         private float[] _pendingDamage = System.Array.Empty<float>();
         private float[] _pendingDamageIgnoringShield = System.Array.Empty<float>();

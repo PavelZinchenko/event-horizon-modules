@@ -95,6 +95,7 @@ namespace CombatSimulation.Core
                     continue;
                 }
                 if (hit.Kind != ContactKind.Hit) continue;
+                if (hit.TargetHandle.Kind == EntityKind.Ship) MarkContact(hit);
 
                 // Keep the first body as the ray endpoint even when this shot already hit it.
                 if (hit.Source == ContactSource.Ray && _world.Bullets.TryGet(hit.AttackerHandle, out var beamIndex))
@@ -362,6 +363,48 @@ namespace CombatSimulation.Core
                 _world.Events.Add(BattleEvent.HitEvent(BattleId, Tick, _world.Events.Count, hit, authority));
             }
             _network?.OutgoingHits.CompleteContacts(Tick);
+            MarkTouches();
+        }
+
+        // Legacy Ship.OnCollision (phase 5, step 9b): every contact of a local attacker counts, with or without damage,
+        // also one that a shot beam already hit. A remote attacker's contact counts when its record arrives (stage 10).
+        private void MarkContact(in ContactCandidate hit)
+        {
+            var target = _world.Ships.Get(hit.TargetHandle);
+            if (target == null || !target.HasContactStealth || !Setup.IsLocalOwner(target.Owner)) return;
+
+            var owner = _world.Bullets.TryGet(hit.AttackerHandle, out var index)
+                ? _world.Bullets[index].Owner
+                : _world.Ships.Get(hit.AttackerHandle)?.Owner ?? -1;
+            if (Setup.IsLocalOwner(owner)) target.LastContactTick = Tick;
+        }
+
+        // Legacy OnCollisionEnter2D and OnCollisionStay2D: a body touch with a ship or a tail segment, of any allegiance,
+        // counts in each tick it lasts, also below the ramming damage.
+        private void MarkTouches()
+        {
+            var listens = false;
+            for (var i = 0; i < _world.ShipEntryCount && !listens; ++i)
+            {
+                var ship = _world.GetShipEntry(i);
+                listens = ship != null && ship.HasContactStealth && Setup.IsLocalOwner(ship.Owner);
+            }
+            if (!listens) return;
+
+            for (var i = 0; i < Physics.ContactCount; ++i)
+            {
+                ref readonly var contact = ref Physics.GetContact(i);
+                if (!contact.Touching || !_world.Shapes.TryGet(contact.ShapeA, out var a) ||
+                    !_world.Shapes.TryGet(contact.ShapeB, out var b) || a.OwnerId == b.OwnerId) continue;
+                MarkTouch(a.Owner);
+                MarkTouch(b.Owner);
+            }
+        }
+
+        private void MarkTouch(EntityHandle handle)
+        {
+            var ship = _world.Ships.Get(handle);
+            if (ship != null && ship.HasContactStealth && Setup.IsLocalOwner(ship.Owner)) ship.LastContactTick = Tick;
         }
 
         private bool Entered(in ContactCandidate hit)

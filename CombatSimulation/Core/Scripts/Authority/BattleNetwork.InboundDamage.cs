@@ -21,6 +21,7 @@ namespace CombatSimulation.Core
                     ApplyBulletContact(hit);
                     continue;
                 }
+                if (hit.ContactState != HitContactState.End) MarkContact(hit);
                 if (hit.ImpactKind != HitImpactKind.DamageOverTime)
                 {
                     if (hit.ContactState != HitContactState.End) AddRemoteDamage(hit, hit.Amount);
@@ -65,6 +66,7 @@ namespace CombatSimulation.Core
                 var through = Math.Min(Tick + 1, interval.EndTick);
                 if (through > interval.NextTick)
                 {
+                    MarkContact(interval.Hit);
                     var amount = IntervalDamage(interval.Hit, interval.NextTick - interval.StartTick,
                         through - interval.StartTick);
                     if (interval.Hit.Effect == HitEffect.SlowDown)
@@ -89,6 +91,13 @@ namespace CombatSimulation.Core
             hit.Effect == HitEffect.ProgressiveDamage || hit.Effect == HitEffect.ProgressiveDamageIgnoringShield
                 ? ImpactEffects.RampDamage(hit.Amount, hit.RampTime, from, to)
                 : (double)(to - from) * hit.Amount * Battle.TickDuration;
+
+        // A remote attacker's contact on a local ship (phase 5, step 9b): the stealth rule counts it when it arrives.
+        private void MarkContact(in ResolvedHit hit)
+        {
+            var ship = LocalHitTarget(hit);
+            if (ship != null) ship.LastContactTick = Tick;
+        }
 
         private ShipEntity LocalHitTarget(in ResolvedHit hit)
         {

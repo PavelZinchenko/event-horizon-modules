@@ -8,6 +8,9 @@ namespace CombatSimulation.Core
             Definition = definition;
 
         public PointDefenseDefinition Definition { get; }
+
+        // Legacy StealthDevice keeps stealth on for point defense (phase 5, step 9b).
+        internal override bool KeepsStealth => true;
         public bool Enabled { get; private set; }
         public long NextQueryTick { get; private set; }
 

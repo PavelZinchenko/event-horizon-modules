@@ -22,6 +22,9 @@ namespace CombatSimulation.Core
         // No thrust, no turn and no spin brake: the ship keeps its velocity and spin (legacy Detonator EngineData: turn
         // rate, propulsion and throttle 0).
         Drift = 8,
+
+        // Legacy StealthDevice (phase 5, step 9b): target priority None; the view fades the ship by the viewer's side.
+        Stealth = 16,
     }
 
     internal struct ShipStatus

@@ -324,12 +324,26 @@ namespace CombatSimulation.Core
                 for (var d = 0; d < ship.DeviceCount; ++d)
                 {
                     var device = ship.GetDevice(d);
-                    if (ship.RetreatCompletionTick != ShipEntity.NoRetreat) device.UpdateRetreating(DeviceContext, ship);
-                    else device.Update(DeviceContext, ship);
+                    if (ship.RetreatCompletionTick != ShipEntity.NoRetreat)
+                    {
+                        device.UpdateRetreating(DeviceContext, ship);
+                        continue;
+                    }
+                    device.Update(DeviceContext, ship);
+                    if (device.IsActive && ship.StealthDevices != 0 && !device.KeepsStealth) EndStealth(ship, d);
                 }
             }
 
             _tails.UpdateDetachedSegments();
+        }
+
+        // Legacy StealthDevice.OnSystemActivated (phase 5, step 9b): in device order, so a stealth device after the active
+        // one has not updated in this tick yet.
+        private void EndStealth(ShipEntity ship, int active)
+        {
+            for (var d = 0; d < ship.DeviceCount; ++d)
+                if (d != active && (ship.StealthDevices & (1UL << d)) != 0)
+                    ((StealthDevice)ship.GetDevice(d)).OnDeviceActivated(DeviceContext, ship, d < active);
         }
 
         // Stage 3 (phase 5, step 7). Collects the status of each ship's running device uses. A change of NoContacts

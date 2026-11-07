@@ -34,6 +34,9 @@ namespace CombatSimulation.Core
         public DroneBayDevice(DroneBayDefinition definition, int index) : base(index) => Definition = definition;
         public DroneBayDefinition Definition { get; }
 
+        // Legacy StealthDevice keeps stealth on for drone bays (phase 5, step 9b).
+        internal override bool KeepsStealth => true;
+
         public override void Update(DeviceContext context, ShipEntity ship)
         {
             IsActive = IsControlOn(ship) && IsReady(ship, context.Tick);

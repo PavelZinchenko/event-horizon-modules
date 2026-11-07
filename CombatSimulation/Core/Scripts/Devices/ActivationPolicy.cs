@@ -118,6 +118,9 @@ namespace CombatSimulation.Core
             if (policy.CooldownStart == CooldownStart.AtEnd) LastUseTick = tick;
         }
 
+        // Legacy TimeFromLastUse = 0 without an end: a stealth copy's cooldown (phase 5, step 9b).
+        public void RestartCooldown(long tick) => LastUseTick = tick;
+
         // The HUD fraction at the tick (DeviceState.Cooldown).
         public readonly float Cooldown(in ActivationPolicy policy, long tick) =>
             DeviceState.Remaining(tick - LastUseTick, policy.CooldownTicks);

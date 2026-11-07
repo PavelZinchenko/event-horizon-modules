@@ -63,7 +63,7 @@ namespace CombatSimulation.Core.Tests
             return driver;
         }
 
-        private static DeviceState Device(Driver driver, uint rosterId, int index)
+        internal static DeviceState Device(Driver driver, uint rosterId, int index)
         {
             driver.Battle.Snapshot.TryGetShip(driver.Entity(rosterId), out var ship);
             return driver.Battle.Snapshot.GetDevices(ship)[index];
@@ -614,16 +614,16 @@ namespace CombatSimulation.Core.Tests
 
         // H8: the owner sends the start and the end; the copy follows them and never starts a warp itself.
 
-        private const int RemoteOwner = 20;
+        internal const int RemoteOwner = 20;
 
-        private static BattleSetup NetworkSetup(int localOwner, ShipDefinition ship) => new BattleSetup(new BattleId(77), 13,
+        internal static BattleSetup NetworkSetup(int localOwner, ShipDefinition ship) => new BattleSetup(new BattleId(77), 13,
             new[]
             {
                 new RosterSlotSetup(new RosterId(1), 0, Fixtures.Ship, 10),
                 new RosterSlotSetup(new RosterId(101), 1, ship, RemoteOwner),
             }, localOwners: new[] { localOwner });
 
-        private static (Driver owner, Driver remote, Link link) Pair(ShipDefinition ship)
+        internal static (Driver owner, Driver remote, Link link) Pair(ShipDefinition ship)
         {
             var owner = new Driver(NetworkSetup(RemoteOwner, ship));
             var remote = new Driver(NetworkSetup(10, ship));
@@ -636,7 +636,7 @@ namespace CombatSimulation.Core.Tests
             return (owner, remote, link);
         }
 
-        private static void Tick(Driver owner, Driver remote, Link link)
+        internal static void Tick(Driver owner, Driver remote, Link link)
         {
             owner.Step();
             link.Capture(owner);
@@ -644,7 +644,7 @@ namespace CombatSimulation.Core.Tests
             remote.Step();
         }
 
-        private static IEnumerable<OwnerOperation> Uses(Driver driver) =>
+        internal static IEnumerable<OwnerOperation> Uses(Driver driver) =>
             driver.Battle.Snapshot.OutgoingOperations.ToArray().Where(o => o.Kind == OwnerOperationKind.DeviceUse);
 
         [Test]
@@ -805,7 +805,7 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(1, Device(remote, 101, 0).InHangar);
         }
 
-        private sealed class Link
+        internal sealed class Link
         {
             private readonly List<OwnerOperation> _held = new List<OwnerOperation>(64);
             private ulong _lastSequence;
