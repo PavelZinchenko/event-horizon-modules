@@ -14,10 +14,12 @@ namespace CombatSimulation.Core.Tests
         public const int OwnerB = 10;
         public const int CorrectionPeriod = 10;
 
-        public ScriptedDuel()
+        // Setup: owner of side 0, owner of side 1, local owners. Barrel digest: the step 12a log adds barrel states.
+        public ScriptedDuel(Func<int, int, IReadOnlyCollection<int>, BattleSetup> setup = null, bool barrelDigest = false)
         {
-            A = new Core(OwnerA, 1UL << 40);
-            B = new Core(OwnerB, 2UL << 40);
+            setup = setup ?? ((owner0, owner1, local) => ScriptedBattle.Phase5Setup(owner0, owner1, local));
+            A = new Core(OwnerA, 1UL << 40, setup, barrelDigest);
+            B = new Core(OwnerB, 2UL << 40, setup, barrelDigest);
             A.Command();
             B.Command();
         }
@@ -26,9 +28,10 @@ namespace CombatSimulation.Core.Tests
         public Core B { get; }
         public bool IsCompleted => A.Battle.IsCompleted && B.Battle.IsCompleted;
 
-        public static ScriptedDuel RunToResult()
+        public static ScriptedDuel RunToResult(Func<int, int, IReadOnlyCollection<int>, BattleSetup> setup = null,
+            bool barrelDigest = false)
         {
-            var duel = new ScriptedDuel();
+            var duel = new ScriptedDuel(setup, barrelDigest);
             while (!duel.IsCompleted && duel.A.Battle.Tick < ScriptedBattle.MaxTicks) duel.Step();
             return duel;
         }
@@ -82,11 +85,13 @@ namespace CombatSimulation.Core.Tests
 
         internal sealed class Core
         {
-            public Core(int owner, ulong firstCommandId)
+            public Core(int owner, ulong firstCommandId, Func<int, int, IReadOnlyCollection<int>, BattleSetup> setup,
+                bool barrelDigest)
             {
                 Owner = owner;
-                Battle = new Battle(ScriptedBattle.Phase5Setup(OwnerB, OwnerA, new[] { owner })) { ThrowOnDefect = true };
+                Battle = new Battle(setup(OwnerB, OwnerA, new[] { owner })) { ThrowOnDefect = true };
                 _nextCommandId = firstCommandId;
+                _barrelDigest = barrelDigest;
             }
 
             public int Owner { get; }
@@ -94,7 +99,7 @@ namespace CombatSimulation.Core.Tests
             public ulong LastSequence;
 
             // Records this core sent, per OwnerOperationKind; hits it sent; body corrections it held.
-            public readonly int[] SentOperations = new int[8];
+            public readonly int[] SentOperations = new int[Enum.GetValues(typeof(OwnerOperationKind)).Length];
             public int SentHits, HeldCorrections;
 
             // One line per tick with its full state digest, then one line per event.
@@ -105,7 +110,7 @@ namespace CombatSimulation.Core.Tests
                 var snapshot = Battle.Snapshot;
                 if (Log.Count > 0 && snapshot.Tick == _lastRecordedTick) return;
                 _lastRecordedTick = snapshot.Tick;
-                Log.Add($"{snapshot.Tick} {ScriptedBattle.Digest(snapshot, true):X16}");
+                Log.Add($"{snapshot.Tick} {ScriptedBattle.Digest(snapshot, true, _barrelDigest):X16}");
                 foreach (var item in snapshot.Events) Log.Add(item.ToString());
                 UpdateRegistrations(snapshot);
             }
@@ -122,8 +127,10 @@ namespace CombatSimulation.Core.Tests
                     if (!registration.Pilot.Think(snapshot, ship, out var controls)) continue;
 
                     var target = snapshot.Tick + registration.Schedule.Delay;
+                    // Barrel requests matter only on the owner; the copy ignores them and takes the owner's records.
                     var frame = ControlFrame.Create(Battle.BattleId, _nextCommandId++, target, registration.EntityId,
-                        controls.HasCourse ? controls.Course : (float?)null, controls.Throttle, controls.Systems);
+                        controls.HasCourse ? controls.Course : (float?)null, controls.Throttle, controls.Systems,
+                        controls.TurretTarget, controls.TurretTargetSystems, controls.SearchTurretSystems);
                     Battle.Submit(frame);
                     if (!peer.Battle.IsCompleted) peer.Battle.Submit(frame);
                     if (controls.SelfDestruct)
@@ -181,6 +188,7 @@ namespace CombatSimulation.Core.Tests
 
             private readonly ScriptedBattle.PilotProvider _provider = new ScriptedBattle.PilotProvider();
             private readonly List<Registration> _pilots = new List<Registration>();
+            private readonly bool _barrelDigest;
             private ulong _nextCommandId;
             private long _lastRecordedTick;
 

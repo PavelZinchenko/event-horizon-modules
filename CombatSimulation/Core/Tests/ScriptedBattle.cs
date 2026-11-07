@@ -179,6 +179,45 @@ namespace CombatSimulation.Core.Tests
             return new BattleSetup(new BattleId(5), 11, roster, ArenaSize, ArenaSize, TimeLimitTicks, ships.Length, localOwners);
         }
 
+        // Step 12a baseline: auto-aiming mounts. Battery: a hidden 20° barrel (device 0), an 80° turret on the left
+        // (device 1) and a full-circle turret with a beam at the stern (device 2). Picket: a low-priority gunship.
+        // Slots x01-x03: battery, picket, striker; the battery retreats once, so its mounts also reset on redeployment.
+        public static ShipDefinition Battery() =>
+            Fixtures.ShipWith(armor: 700f, shield: new ResourceDefinition(200f, 10f, 1f),
+                energy: new ResourceDefinition(300f, 30f, 0.5f),
+                barrels: new[]
+                {
+                    new BarrelDefinition(new Vec2(1f, 0f), 0f, 20f * Fixtures.Degrees, 270f * Fixtures.Degrees, muzzleOffset: 0.5f),
+                    new BarrelDefinition(new Vec2(0f, 0.8f), 90f * Fixtures.Degrees, 80f * Fixtures.Degrees,
+                        180f * Fixtures.Degrees, true, 0.4f),
+                    new BarrelDefinition(new Vec2(-0.6f, 0f), (float)Math.PI, 360f * Fixtures.Degrees, 90f * Fixtures.Degrees, true),
+                },
+                devices: new DeviceDefinition[]
+                {
+                    new CannonDefinition(0, 0.2f, 2f, 2f * Fixtures.Degrees, Fixtures.Bolt),
+                    new CannonDefinition(1, 0.4f, 2f, 0f, Fixtures.Bolt),
+                    new BeamDefinition(2, 0.1f, 2f, 15f, 15f, 40f),
+                });
+
+        public static ShipDefinition Picket() =>
+            Fixtures.ShipWith(armor: 500f, shield: new ResourceDefinition(100f, 10f, 1f),
+                energy: new ResourceDefinition(300f, 30f, 0.5f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[] { new CannonDefinition(0, 0.2f, 2f, 4f * Fixtures.Degrees, Fixtures.Bolt) },
+                targetPriority: TargetPriority.Low);
+
+        public static BattleSetup TurretSetup(int owner0 = 0, int owner1 = 0, IReadOnlyCollection<int> localOwners = null)
+        {
+            var ships = new[] { Battery(), Picket(), Striker(600f) };
+            var roster = new List<RosterSlotSetup>();
+            for (var side = 0; side < BattleSetup.SideCount; ++side)
+                for (var i = 0; i < ships.Length; ++i)
+                    roster.Add(new RosterSlotSetup(new RosterId((uint)(1 + i + 100 * side)), side, ships[i],
+                        side == 0 ? owner0 : owner1));
+
+            return new BattleSetup(new BattleId(12), 13, roster, ArenaSize, ArenaSize, TimeLimitTicks, ships.Length, localOwners);
+        }
+
         private static BulletSpawnPattern Ring(int count)
         {
             var slots = new SpawnSlot[count];
@@ -187,22 +226,24 @@ namespace CombatSimulation.Core.Tests
             return new BulletSpawnPattern(slots);
         }
 
-        public static ScriptedBattle RunToResult(BattleSetup setup, bool fullDigest = false)
+        public static ScriptedBattle RunToResult(BattleSetup setup, bool fullDigest = false, bool barrelDigest = false)
         {
-            var battle = new ScriptedBattle(setup, record: true, retreat: true, fullDigest);
+            var battle = new ScriptedBattle(setup, record: true, retreat: true, fullDigest, barrelDigest);
             while (!battle.IsCompleted && battle.Runner.Tick < MaxTicks) battle.Step();
             return battle;
         }
 
         // Record: keep the event log, counts and snapshot sizes. It allocates, so allocation tests turn it off.
         // Full digest: also status, device states and tail segments (phase 5); the phase 2 baseline hash omits them.
-        public ScriptedBattle(BattleSetup setup, bool record, bool retreat, bool fullDigest = false)
+        // Barrel digest: also barrel angles and targets (step 12a); the older baselines omit them.
+        public ScriptedBattle(BattleSetup setup, bool record, bool retreat, bool fullDigest = false, bool barrelDigest = false)
         {
             Runner = new BattleRunner(setup, new PilotProvider());
             _maxActive = setup.MaxActiveShipsPerSide;
             _record = record;
             _retreat = retreat;
             _fullDigest = fullDigest;
+            _barrelDigest = barrelDigest;
             Command(Runner.Snapshot);
         }
 
@@ -221,6 +262,10 @@ namespace CombatSimulation.Core.Tests
         // Phase 5 coverage: spawns per bullet definition, clone spawns, peak tail segments, ship-ticks per status flag.
         public readonly Dictionary<BulletDefinition, int> BulletSpawns = new Dictionary<BulletDefinition, int>();
         public int CloneSpawns, MaxSegments, NoContactsTicks, FadedTicks, DriftTicks;
+
+        // Step 12a coverage: barrel-ticks with a target, and the largest barrel turn from its mount, in radians.
+        public int BarrelTargetTicks;
+        public float MaxBarrelTurn;
 
         public void Step()
         {
@@ -275,7 +320,7 @@ namespace CombatSimulation.Core.Tests
             var ships = snapshot.Ships;
             var bullets = snapshot.Bullets;
             var events = snapshot.Events;
-            Log.Add($"{snapshot.Tick} {Digest(snapshot, _fullDigest):X16}");
+            Log.Add($"{snapshot.Tick} {Digest(snapshot, _fullDigest, _barrelDigest):X16}");
 
             for (var i = 0; i < events.Length; ++i)
             {
@@ -329,6 +374,13 @@ namespace CombatSimulation.Core.Tests
                 if ((ship.Status & ShipStatusFlags.NoContacts) != 0) ++NoContactsTicks;
                 if ((ship.Status & ShipStatusFlags.Faded) != 0) ++FadedTicks;
                 if ((ship.Status & ShipStatusFlags.Drift) != 0) ++DriftTicks;
+                var barrels = snapshot.GetBarrels(ship);
+                for (var b = 0; b < barrels.Length; ++b)
+                {
+                    if (!barrels[b].Target.IsNull) ++BarrelTargetTicks;
+                    MaxBarrelTurn = Math.Max(MaxBarrelTurn,
+                        Math.Abs(BarrelAiming.Delta(ship.Definition.Barrels[b].Angle, barrels[b].Angle)));
+                }
             }
             MaxSegments = Math.Max(MaxSegments, snapshot.Segments.Length);
             MaxShips = Math.Max(MaxShips, ships.Length);
@@ -341,8 +393,8 @@ namespace CombatSimulation.Core.Tests
         public int SpawnsOf(BulletDefinition definition) => BulletSpawns.TryGetValue(definition, out var count) ? count : 0;
 
         // Catches a divergence that produces no event: poses, velocities and resources as raw bits. Full adds the ship
-        // status, the device states and the tail segments.
-        internal static ulong Digest(BattleSnapshot snapshot, bool full)
+        // status, the device states and the tail segments. Barrels adds each barrel's angle and target.
+        internal static ulong Digest(BattleSnapshot snapshot, bool full, bool barrels = false)
         {
             var hash = 14695981039346656037UL;
             foreach (var ship in snapshot.Ships)
@@ -366,6 +418,12 @@ namespace CombatSimulation.Core.Tests
                     Mix(ref hash, device.Cooldown);
                     Mix(ref hash, (ulong)(uint)device.InHangar);
                     Mix(ref hash, (ulong)(uint)device.ActiveDrones);
+                }
+                if (!barrels) continue;
+                foreach (var barrel in snapshot.GetBarrels(ship))
+                {
+                    Mix(ref hash, barrel.Angle);
+                    Mix(ref hash, barrel.Target.Value);
                 }
             }
 
@@ -406,6 +464,7 @@ namespace CombatSimulation.Core.Tests
         private readonly bool _record;
         private readonly bool _retreat;
         private readonly bool _fullDigest;
+        private readonly bool _barrelDigest;
         private readonly HashSet<EntityId> _ships = new HashSet<EntityId>();
         private readonly HashSet<EntityId> _beams = new HashSet<EntityId>();
         private readonly HashSet<RosterId> _deployed = new HashSet<RosterId>();
@@ -431,8 +490,10 @@ namespace CombatSimulation.Core.Tests
                 var devices = definition.Devices;
                 _range = new float[devices.Count];
                 _aim = new float[devices.Count];
+                _barrel = new int[devices.Count];
                 for (var i = 0; i < devices.Count; ++i)
                 {
+                    _barrel[i] = BarrelAiming.BarrelIndex(devices[i]);
                     switch (devices[i])
                     {
                         case CannonDefinition cannon:
@@ -455,6 +516,13 @@ namespace CombatSimulation.Core.Tests
                         default:
                             _alwaysOn |= 1UL << i;
                             break;
+                    }
+
+                    // An auto-aiming mount widens the cone by its arc (step 12a). Fixed mounts keep the old rule.
+                    if (_barrel[i] >= 0 && definition.Barrels[_barrel[i]].AutoAimingAngle > 0f)
+                    {
+                        _autoAiming |= 1UL << i;
+                        _aim[i] = Math.Min((float)Math.PI, _aim[i] + definition.Barrels[_barrel[i]].AutoAimingAngle);
                     }
                 }
             }
@@ -494,8 +562,22 @@ namespace CombatSimulation.Core.Tests
                     if (_range[i] > 0f && nearestDistance <= _range[i] && error <= _aim[i]) systems |= 1UL << i;
                 if (nearestDistance > WarpDistance && error <= 10f * Fixtures.Degrees) systems |= _warp;
 
+                // Legacy AttackTurretTargets: fire an auto-aiming mount at its own target, else ask the core to search.
+                var search = 0UL;
+                if (_autoAiming != 0)
+                {
+                    var barrels = snapshot.GetBarrels(self);
+                    for (var i = 0; i < _range.Length; ++i)
+                    {
+                        if ((_autoAiming & (1UL << i)) == 0) continue;
+                        if (barrels[_barrel[i]].Target.IsNull) search |= 1UL << i;
+                        else systems |= 1UL << i;
+                    }
+                }
+
                 // Close in at full throttle; inside the stand-off range only turn, so the guns can aim.
-                controls = PilotControls.Create(course, nearestDistance > StandOff ? 1f : 0f, systems);
+                controls = PilotControls.Create(course, nearestDistance > StandOff ? 1f : 0f, systems,
+                    searchTurretSystems: search);
                 return true;
             }
 
@@ -523,8 +605,10 @@ namespace CombatSimulation.Core.Tests
 
             private readonly float[] _range;
             private readonly float[] _aim;
+            private readonly int[] _barrel;
             private readonly ulong _alwaysOn;
             private readonly ulong _warp;
+            private readonly ulong _autoAiming;
         }
     }
 

@@ -64,6 +64,40 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual("9E05F0DB0B5E1E49D7B18C79B7AFF4A3210C483149FD8639BA0AAC5B17DBA14D", Hash(duel.B.Log), "Core B.");
         }
 
+        // Step 12a baseline: auto-aiming mounts (a hidden barrel, an 80° turret, a full-circle beam turret), a
+        // low-priority target and a redeployment. The digest adds barrel angles and targets; the scenes above omit them.
+        [Test]
+        [SetCulture("en-US")]
+        public void TurretSinglePlayerLogIsUnchanged()
+        {
+            var battle = ScriptedBattle.RunToResult(ScriptedBattle.TurretSetup(), fullDigest: true, barrelDigest: true);
+            TestContext.WriteLine(battle.Report());
+            TestContext.WriteLine($"Barrels: {battle.BarrelTargetTicks} barrel-ticks with a target, " +
+                $"largest turn {battle.MaxBarrelTurn * 180f / Math.PI:F1} deg");
+
+            Assert.IsTrue(battle.IsCompleted, $"No result after {ScriptedBattle.MaxTicks} ticks.");
+            Assert.Greater(battle.BarrelTargetTicks, 0, "Barrel targets.");
+            Assert.Greater(battle.MaxBarrelTurn, 90f * Fixtures.Degrees, "The full-circle turret turns past a side arc.");
+            Assert.Greater(battle.BeamSpawns, 0, "The turret beam.");
+            Assert.Greater(battle.Redeployments, 0, "Mount reset on redeployment.");
+            Assert.AreEqual("3C1F47320E38F5C72D9BBBFF5AF2D77E61FD6416E5AAD3AD0352850864E0B133", Hash(battle.Log));
+        }
+
+        [Test]
+        [SetCulture("en-US")]
+        public void TurretTwoOwnerLogsAreUnchanged()
+        {
+            var duel = ScriptedDuel.RunToResult(ScriptedBattle.TurretSetup, barrelDigest: true);
+            int Sent(OwnerOperationKind kind) => duel.A.SentOperations[(int)kind] + duel.B.SentOperations[(int)kind];
+            TestContext.WriteLine($"Turret target records: {Sent(OwnerOperationKind.TurretTarget)}");
+
+            Assert.IsTrue(duel.IsCompleted, $"No result after {ScriptedBattle.MaxTicks} ticks.");
+            Assert.Greater(Sent(OwnerOperationKind.TurretTarget), 0, "Owner turret targets.");
+            Assert.AreEqual(duel.A.Battle.Snapshot.Result.Outcome, duel.B.Battle.Snapshot.Result.Outcome);
+            Assert.AreEqual("929C6F17229C5CA12DF8E8F71C5404BD7E91DB928A85135FDEE187A37051C215", Hash(duel.A.Log), "Core A.");
+            Assert.AreEqual("D4186CD98919E0FFE2BBC1EECD3D2C08DB983420F619F1F2FDDC955C1EA38B46", Hash(duel.B.Log), "Core B.");
+        }
+
         // The hashes are worth something only if a run repeats itself.
         [Test]
         public void Phase5RunsRepeat()
@@ -76,6 +110,15 @@ namespace CombatSimulation.Core.Tests
             var duel2 = ScriptedDuel.RunToResult();
             AssertSameLog(duel1.A.Log, duel2.A.Log, "core A");
             AssertSameLog(duel1.B.Log, duel2.B.Log, "core B");
+
+            var turret1 = ScriptedBattle.RunToResult(ScriptedBattle.TurretSetup(), fullDigest: true, barrelDigest: true);
+            var turret2 = ScriptedBattle.RunToResult(ScriptedBattle.TurretSetup(), fullDigest: true, barrelDigest: true);
+            AssertSameLog(turret1.Log, turret2.Log, "turret single player");
+
+            var turretDuel1 = ScriptedDuel.RunToResult(ScriptedBattle.TurretSetup, barrelDigest: true);
+            var turretDuel2 = ScriptedDuel.RunToResult(ScriptedBattle.TurretSetup, barrelDigest: true);
+            AssertSameLog(turretDuel1.A.Log, turretDuel2.A.Log, "turret core A");
+            AssertSameLog(turretDuel1.B.Log, turretDuel2.B.Log, "turret core B");
         }
 
         private static string Hash(List<string> log)
