@@ -154,9 +154,10 @@ namespace CombatSimulation.Core.Tests
             DroneBayTests.Launch(driver);
             driver.Step(DroneBayDevice.LaunchCooldownTicks);
 
+            // Legacy DroneBay.Cooldown: a bay full of drones shows the full cooldown (phase 5, step 10a).
             var state = State(driver);
             Assert.AreEqual(0, state.InHangar);
-            Assert.AreEqual(0f, state.Cooldown);
+            Assert.AreEqual(1f, state.Cooldown);
             Assert.IsFalse(state.Ready);
             Assert.IsFalse(state.Active);
         }

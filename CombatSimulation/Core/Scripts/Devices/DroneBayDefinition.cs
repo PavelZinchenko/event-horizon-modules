@@ -24,28 +24,33 @@ namespace CombatSimulation.Core
 
     public sealed class DroneBayDefinition : DeviceDefinition
     {
-        public DroneBayDefinition(int capacity, float energyCost, ShipDefinition drone)
+        public DroneBayDefinition(int capacity, float energyCost, ShipDefinition drone, int buildExtraCycles = 0)
         {
             if (capacity < 1) throw new ArgumentOutOfRangeException(nameof(capacity));
+            if (buildExtraCycles < 0) throw new ArgumentOutOfRangeException(nameof(buildExtraCycles));
             if (!(energyCost >= 0f) || float.IsInfinity(energyCost))
                 throw new ArgumentOutOfRangeException(nameof(energyCost));
             Drone = drone ?? throw new ArgumentNullException(nameof(drone));
             ValidateChild(drone, nameof(drone));
             Capacity = capacity;
             EnergyCost = energyCost;
+            BuildExtraCycles = buildExtraCycles;
         }
 
         public int Capacity { get; }
+
+        // Legacy DroneBay.BuildExtraCycles: replicator cycles before each restored drone (phase 5, step 10a).
+        public int BuildExtraCycles { get; }
         public float EnergyCost { get; }
         public ShipDefinition Drone { get; }
         public override ShipDefinition ChildShip => Drone;
 
-        // A launched ship carries no drone bay and no clonning center (legacy ShipFactory: CreateDroneBays only for a
-        // ship without a mothership).
+        // A launched ship carries no drone bay, no clonning center and no drone replicator (legacy ShipFactory:
+        // CreateDroneBays only for a ship without a mothership).
         internal static void ValidateChild(ShipDefinition child, string parameter)
         {
             foreach (var device in child.Devices)
-                if (device.ChildShip != null)
+                if (device.ChildShip != null || device is DroneReplicatorDefinition)
                     throw new ArgumentException("A launched ship cannot launch ships.", parameter);
         }
 

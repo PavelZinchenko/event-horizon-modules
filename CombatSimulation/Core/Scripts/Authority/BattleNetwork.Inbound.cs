@@ -291,10 +291,13 @@ namespace CombatSimulation.Core
         {
             if (_world.Entities.TryGet(operation.EntityId, out _) || _removedRemoteEntities.Contains(operation.EntityId)) return false;
             var bay = FindBay(operation.BayKey.Value);
-            if (bay.InHangar <= 0 || operation.EntityId != SpawnIdentity.CreateChild(operation.ParentId,
-                operation.Tick, (uint)bay.Key.DeviceIndex, (uint)bay.Launched, 0)) return false;
+            // Only the owner's drone replicator restores (phase 5, step 10a): a launch beyond the copy's hangar is one.
+            var restored = bay.InHangar <= 0;
+            if (restored && bay.Slot.ReplicatorIndex < 0 || operation.EntityId != SpawnIdentity.CreateChild(
+                operation.ParentId, operation.Tick, (uint)bay.Key.DeviceIndex, (uint)bay.Launched, 0)) return false;
             var ship = _world.Ships.Allocate();
             if (!_world.TryRegister(operation.EntityId, ship.Handle)) { _world.Ships.Release(ship); return false; }
+            if (restored) bay.RecordRemoteRestore();
             var body = Physics.CreateBody(new BodyDef { Mass = bay.Drone.Mass });
             ship.InitializeDrone(operation.EntityId, bay, body, operation.Tick, Setup.DamageTypes.Count);
             _world.AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));

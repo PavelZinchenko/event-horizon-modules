@@ -15,18 +15,24 @@ namespace CombatSimulation.Core
         {
             Setup = setup;
             _bays = new DroneBayInventory[setup.Ship.Devices.Count];
+            ReplicatorIndex = -1;
             for (var i = 0; i < _bays.Length; ++i)
             {
                 var device = setup.Ship.Devices[i];
                 if (device is DroneBayDefinition bay)
-                    _bays[i] = new DroneBayInventory(this, i, bay.Drone, bay.Capacity);
+                    _bays[i] = new DroneBayInventory(this, i, bay.Drone, bay.Capacity, bay.BuildExtraCycles);
                 else if (device is ClonningCenterDefinition center)
                     _bays[i] = new DroneBayInventory(this, i, center.Clone, DroneBayInventory.NoCapacity);
+                else if (device is DroneReplicatorDefinition && ReplicatorIndex < 0)
+                    ReplicatorIndex = i;
             }
         }
 
         internal DroneBayInventory GetBay(int index) => _bays[index];
         private readonly DroneBayInventory[] _bays;
+
+        // The first drone replicator of the ship (phase 5, step 10a), or -1.
+        internal int ReplicatorIndex { get; }
 
         public RosterSlotSetup Setup { get; }
         public RosterId RosterId => Setup.RosterId;
