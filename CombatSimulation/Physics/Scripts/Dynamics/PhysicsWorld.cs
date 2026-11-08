@@ -99,7 +99,7 @@ namespace CombatSimulation.Physics
             var index = AddShape(body, ShapeKind.Circle, def);
             ref var shape = ref _shapes[index];
             shape.Circle = circle;
-            shape.MassData = circle.ComputeMass();
+            shape.MassData = def.Massless ? default : circle.ComputeMass();
             shape.LocalBoundCenter = circle.Center;
             shape.BoundRadius = circle.Radius;
             UpdateMass(shape.Body);
@@ -115,7 +115,7 @@ namespace CombatSimulation.Physics
             var index = AddShape(body, ShapeKind.Polygon, def);
             ref var shape = ref _shapes[index];
             shape.Polygon = polygon;
-            shape.MassData = polygon.ComputeMass();
+            shape.MassData = def.Massless ? default : polygon.ComputeMass();
             shape.LocalBoundCenter = polygon.Centroid;
             shape.BoundRadius = polygon.BoundRadius;
             UpdateMass(shape.Body);
@@ -130,7 +130,7 @@ namespace CombatSimulation.Physics
             ref var shape = ref _shapes[index];
             shape.Capsule = capsule;
             shape.Polygon = capsule.Core;
-            shape.MassData = capsule.ComputeMass();
+            shape.MassData = def.Massless ? default : capsule.ComputeMass();
             shape.LocalBoundCenter = capsule.Core.Centroid;
             shape.BoundRadius = capsule.Core.BoundRadius;
             UpdateMass(shape.Body);

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CombatSimulation.Core;
 using CombatSimulation.Physics;
+using GameDatabase.Enums;
 
 namespace CombatSimulation.Ai
 {
@@ -365,6 +366,46 @@ namespace CombatSimulation.Ai
 
             var armor = mothership.Armor;
             return armor.Value / armor.Max < _minValue ? NodeState.Success : NodeState.Failure;
+        }
+
+        private readonly float _minValue;
+    }
+
+    // Legacy MothershipLowEnergyNode: the mothership's energy is below the fraction (phase 5, step 10d).
+    internal sealed class MothershipLowEnergyNode : INode
+    {
+        public MothershipLowEnergyNode(float minValue) => _minValue = minValue;
+
+        public NodeState Evaluate(AiContext context) =>
+            context.TryGetShip(context.Mothership, out var mothership) && Share(mothership.Energy) < _minValue
+                ? NodeState.Success : NodeState.Failure;
+
+        // Legacy Percentage; a ship without the resource has EmptyResources, 0.
+        internal static float Share(in ResourceState resource) => resource.Max > 0f ? resource.Value / resource.Max : 0f;
+
+        private readonly float _minValue;
+    }
+
+    // Legacy MothershipLowShieldNode: the mothership's energy share when it has an energy shield, else its shield share,
+    // is below the fraction (phase 5, step 10d).
+    internal sealed class MothershipLowShieldNode : INode
+    {
+        public MothershipLowShieldNode(float minValue) => _minValue = minValue;
+
+        public NodeState Evaluate(AiContext context)
+        {
+            if (!context.TryGetShip(context.Mothership, out var mothership))
+                return NodeState.Failure;
+
+            var resource = HasEnergyShield(context.ProfileOf(mothership)) ? mothership.Energy : mothership.Shield;
+            return MothershipLowEnergyNode.Share(resource) < _minValue ? NodeState.Success : NodeState.Failure;
+        }
+
+        private static bool HasEnergyShield(AiShipProfile profile)
+        {
+            foreach (var device in profile.Devices)
+                if (device.DeviceClass == DeviceClass.EnergyShield) return true;
+            return false;
         }
 
         private readonly float _minValue;

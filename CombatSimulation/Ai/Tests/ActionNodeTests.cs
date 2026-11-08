@@ -505,6 +505,40 @@ namespace CombatSimulation.Ai.Tests
             return context;
         }
 
+        // Phase 5, step 10d: legacy FrontalShieldNode turns to the sum of the threat directions and holds the shield
+        // while the heading is within 90 degrees of it; without threats it fails.
+        [Test]
+        public void DefendWithFrontalShieldTurnsToTheThreatsAndHoldsTheShieldWithinNinetyDegrees()
+        {
+            var runner = Battle(new FirePilots());
+            runner.Step();
+            var world = runner.Battle.World;
+            var target = runner.Battle.FindShip(runner.Snapshot.Ships[1].Id);
+            world.SetPose(runner.Battle.FindShip(runner.Snapshot.Ships[0].Id).Body, new Vec2(50f, 50f), 0f);
+            world.SetPose(target.Body, new Vec2(70f, 50f), 0f);
+            for (var i = 0; i < 5; ++i) runner.Step();
+
+            var context = new AiContext(ArmedShip, AiSettings.Default, 0.02f, Utilites.RandomState.FromSeed(1), BattleData());
+            context.Update(runner.Snapshot, runner.Snapshot.Ships[1]);
+            var node = new DefendWithFrontalShieldNode(1);
+            Assert.AreEqual(F, node.Evaluate(context), "no threats");
+
+            new LookForThreatsNode(0f).Evaluate(context);
+            Assert.Greater(context.Threats.Count, 0);
+            context.Controls.Reset();
+            Assert.AreEqual(R, node.Evaluate(context));
+            Assert.AreEqual(Math.PI, Math.Abs(context.Controls.Course.Value), 1e-3);
+            Assert.IsFalse(context.Controls.IsSystemActivated(1), "the shield faces away");
+
+            world.SetPose(target.Body, new Vec2(70f, 50f), 100f * LegacyMath.Degree);
+            runner.Step();
+            context.Update(runner.Snapshot, runner.Snapshot.Ships[1]);
+            new LookForThreatsNode(0f).Evaluate(context);
+            context.Controls.Reset();
+            Assert.AreEqual(R, node.Evaluate(context));
+            Assert.IsTrue(context.Controls.IsSystemActivated(1), "80 degrees from the threats");
+        }
+
         // Ship 0 holds its cannon; the enemy idles.
         private sealed class FirePilots : IPilotProvider
         {

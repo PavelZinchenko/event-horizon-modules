@@ -97,6 +97,9 @@ namespace CombatSimulation.Physics
         public float Restitution;
         public Filter Filter;
 
+        // The shape adds nothing to the body's mass centre and inertia (a ship's shield, phase 5 of the core migration).
+        public bool Massless;
+
         // The game's default material (step 5): friction 0.2, bounce 0.2. Pairs with every shape.
         public static ShapeDef Default => new ShapeDef { Friction = 0.2f, Restitution = 0.2f };
     }

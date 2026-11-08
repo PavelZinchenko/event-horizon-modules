@@ -31,13 +31,15 @@ namespace CombatSimulation.Core
                 !Setup.DamageTypes.Contains(hit.DamageType) || hit.Effect > HitEffect.Teleport)
                 return false;
             // An effect names a ship target (or a segment for Teleport), without damage type or push. The progressive ramp
-            // (step 5c) is damage of a type over time on shape 0; only it carries a ramp time.
+            // (step 5c) is damage of a type over time on shape 0, or on a shield shape (step 10d); only it carries a ramp
+            // time.
             var ramp = hit.Effect == HitEffect.ProgressiveDamage || hit.Effect == HitEffect.ProgressiveDamageIgnoringShield;
             if (hit.TargetIsBullet && hit.Effect != HitEffect.Damage && hit.Effect != HitEffect.Teleport) return false;
             if (hit.Effect != HitEffect.Damage && hit.Effect != HitEffect.DamageIgnoringShield &&
                 (hit.Impulse.X != 0f || hit.Impulse.Y != 0f || hit.DamageType != 0 && !ramp)) return false;
             if (ramp ? hit.ImpactKind != HitImpactKind.DamageOverTime ||
-                    hit.TargetShape != 0 || !Finite(hit.RampTime) || hit.RampTime < 0f : hit.RampTime != 0f)
+                    hit.TargetShape != 0 && !IsShieldShape(hit) || !Finite(hit.RampTime) || hit.RampTime < 0f
+                : hit.RampTime != 0f)
                 return false;
             if ((hit.Effect == HitEffect.Roll || hit.Effect == HitEffect.Teleport) &&
                 (hit.ImpactKind > HitImpactKind.Energy ||
@@ -101,6 +103,12 @@ namespace CombatSimulation.Core
             handle.Kind == EntityKind.Segment || handle.Kind == EntityKind.RepairBot || IsDecoy(handle);
 
         private bool IsDecoy(EntityHandle handle) => _world.Ships.Get(handle)?.IsDecoy == true;
+
+        private bool IsShieldShape(in ResolvedHit hit)
+        {
+            var ship = _world.FindShip(hit.TargetId);
+            return ship != null && ShieldRules.IsShieldShape(ship, hit.TargetShape);
+        }
 
         private DroneBayInventory FindBay(DroneBayKey key)
         {

@@ -261,6 +261,9 @@ namespace CombatSimulation.Core
             HasPendingDamage = true;
         }
 
+        // A shield's pending impact (phase 5, step 10d) reaches the ship's pending damage at stage 10.
+        public void MarkPendingImpact() => HasPendingDamage = true;
+
         public void ClearPendingDamage()
         {
             if (!HasPendingDamage) return;

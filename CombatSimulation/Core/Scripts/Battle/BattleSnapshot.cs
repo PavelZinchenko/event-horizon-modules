@@ -35,6 +35,9 @@ namespace CombatSimulation.Core
 
         // Live worm tail segments in storage order; the order has no meaning (phase 5, step 7d).
         public ReadOnlySpan<RepairBotState> RepairBots => new ReadOnlySpan<RepairBotState>(_repairBots, 0, _repairBotCount);
+
+        // The shield devices of the ships, in ship and device order (phase 5, step 10d).
+        public ReadOnlySpan<ShieldState> Shields => new ReadOnlySpan<ShieldState>(_shields, 0, _shieldCount);
         public ReadOnlySpan<TailSegmentState> Segments => new ReadOnlySpan<TailSegmentState>(_segments, 0, _segmentCount);
 
         // Every slot in setup order.
@@ -94,6 +97,7 @@ namespace CombatSimulation.Core
             var deviceCount = 0;
             var barrelCount = 0;
             var satelliteCount = 0;
+            _shieldCount = 0;
             for (var i = 0; i < battle.ShipEntryCount; ++i)
             {
                 var ship = battle.GetShipEntry(i);
@@ -103,7 +107,13 @@ namespace CombatSimulation.Core
                 if (_devices.Length < deviceCount + devices)
                     Array.Resize(ref _devices, Math.Max(deviceCount + devices, _devices.Length * 2));
                 for (var d = 0; d < devices; ++d)
-                    _devices[deviceCount + d] = ship.GetDevice(d).GetState(battle.DeviceContext, ship, tick);
+                {
+                    var device = ship.GetDevice(d);
+                    _devices[deviceCount + d] = device.GetState(battle.DeviceContext, ship, tick);
+                    if (!(device is ShieldDevice shield)) continue;
+                    if (_shieldCount == _shields.Length) Array.Resize(ref _shields, _shields.Length * 2);
+                    _shields[_shieldCount++] = new ShieldState(ship, shield, tick);
+                }
                 var barrels = ship.Definition.Barrels.Count;
                 if (_barrels.Length < barrelCount + barrels)
                     Array.Resize(ref _barrels, Math.Max(barrelCount + barrels, _barrels.Length * 2));
@@ -169,6 +179,8 @@ namespace CombatSimulation.Core
         private BulletState[] _bullets = new BulletState[16];
         private int _bulletCount;
         private RepairBotState[] _repairBots = new RepairBotState[4];
+        private ShieldState[] _shields = new ShieldState[4];
+        private int _shieldCount;
         private int _repairBotCount;
         private TailSegmentState[] _segments = new TailSegmentState[16];
         private int _segmentCount;

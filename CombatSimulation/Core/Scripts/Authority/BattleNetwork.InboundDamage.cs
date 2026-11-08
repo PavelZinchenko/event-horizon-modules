@@ -92,25 +92,52 @@ namespace CombatSimulation.Core
                 ? ImpactEffects.RampDamage(hit.Amount, hit.RampTime, from, to)
                 : (double)(to - from) * hit.Amount * Battle.TickDuration;
 
-        // A remote attacker's contact on a local ship (phase 5, step 9b): the stealth rule counts it when it arrives.
+        // A remote attacker's contact on a local ship (phase 5, step 9b): the stealth rule counts it when it arrives. A
+        // contact on a shield does not count (step 10d).
         private void MarkContact(in ResolvedHit hit)
         {
             var ship = LocalHitTarget(hit);
-            if (ship != null) ship.LastContactTick = Tick;
+            if (ship != null && hit.TargetShape < ship.ShapeCount) ship.LastContactTick = Tick;
         }
 
+        // The shape is a hull part or a shield device's (phase 5, step 10d).
         private ShipEntity LocalHitTarget(in ResolvedHit hit)
         {
             var ship = _world.FindShip(hit.TargetId);
             return ship != null && ship.Owner == hit.TargetOwner && Setup.IsLocalOwner(ship.Owner) &&
-                hit.TargetShape < ship.ShapeCount ? ship : null;
+                (hit.TargetShape < ship.ShapeCount || ShieldRules.IsShieldShape(ship, hit.TargetShape)) ? ship : null;
         }
 
-        // A drain (phase 5, step 5a) joins the target's pending effects; only damage makes a hit event.
+        // A drain (phase 5, step 5a) joins the target's pending effects; only damage makes a hit event. On a shield that
+        // is on (phase 5, step 10d), damage and shield drains and recharges pay its energy; the attacker sent the other
+        // effects already as a shield takes them. A shield that is off by now lets the hit reach the hull (hits in flight
+        // count, as in step 7a, finding 3).
         private void AddRemoteDamage(in ResolvedHit hit, float amount)
         {
             var ship = LocalHitTarget(hit);
             if (ship == null || !(amount > 0f)) return;
+            var shield = hit.TargetShape >= ship.ShapeCount ? ShieldRules.Find(ship, hit.TargetShape) : null;
+            if (shield != null)
+            {
+                shield.LastHitTick = Tick;
+                switch (hit.Effect)
+                {
+                    case HitEffect.ShieldDrain:
+                        shield.AddPendingDrain(ship, amount);
+                        return;
+                    case HitEffect.ShieldRecharge:
+                        shield.AddPendingRecharge(ship, amount);
+                        return;
+                    case HitEffect.DamageIgnoringShield:
+                        shield.RequestDrop(ship);
+                        return;
+                    case HitEffect.Damage:
+                    case HitEffect.ProgressiveDamage:
+                        shield.AddPendingDamage(ship, hit.DamageType, amount);
+                        _world.Events.Add(BattleEvent.RemoteHit(BattleId, Tick, _world.Events.Count, hit, amount));
+                        return;
+                }
+            }
             switch (hit.Effect)
             {
                 case HitEffect.Repair:

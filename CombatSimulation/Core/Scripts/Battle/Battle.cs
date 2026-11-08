@@ -662,6 +662,7 @@ namespace CombatSimulation.Core
             else if (ship.IsDecoy) CaptureRemoval(ship.Id, ship.Owner, reason);
             for (var i = 0; i < ship.ShapeCount; ++i)
                 _world.Shapes.Release(ship.GetShape(i));
+            ShieldRules.ReleaseShapes(_world, ship);
             _contacts.Ramming.Forget(ship.Id);
             if (!Setup.IsLocalOwner(ship.Owner)) _network.ForgetPredictedHits(ship.Id);
             Satellites.Remove(_world, ship);

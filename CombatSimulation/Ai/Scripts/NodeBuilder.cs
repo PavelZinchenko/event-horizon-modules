@@ -283,8 +283,12 @@ namespace CombatSimulation.Ai
             return devices.Count > 0 ? new UseRecoilNode(devices) : EmptyNode.Failure;
         }
 
-        public INode Create(BehaviorTreeNode_DefendWithFronalShield content) =>
-            HasDevice(DeviceClass.PartialShield) ? Stub(content) : EmptyNode.Failure;
+        // Legacy FrontalShieldNode.Create: the first frontal shield; none gives Failure (phase 5, step 10d).
+        public INode Create(BehaviorTreeNode_DefendWithFronalShield content)
+        {
+            var shield = FirstDevice(DeviceClass.PartialShield);
+            return shield != null ? new DefendWithFrontalShieldNode(shield.DeviceIndex) : EmptyNode.Failure;
+        }
         // Legacy NodeBuilder: TrackControllableAmmo.Create(Ship, true).
         public INode Create(BehaviorTreeNode_TrackControllableAmmo content)
         {
@@ -329,8 +333,8 @@ namespace CombatSimulation.Ai
             return maxRange > 0 ? new MothershipDistanceExceededNode(maxRange) : EmptyNode.Failure;
         }
         public INode Create(BehaviorTreeNode_MakeTargetMothership content) => Stub(content);
-        public INode Create(BehaviorTreeNode_MothershipLowEnergy content) => Stub(content);
-        public INode Create(BehaviorTreeNode_MothershipLowShield content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MothershipLowEnergy content) => new MothershipLowEnergyNode(content.MinValue);
+        public INode Create(BehaviorTreeNode_MothershipLowShield content) => new MothershipLowShieldNode(content.MinValue);
         public INode Create(BehaviorTreeNode_ShowMessage content) => new ShowMessageNode(content.Text, content.Color);
 
         private INode Stub(BehaviorTreeNode content)

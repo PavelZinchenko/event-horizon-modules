@@ -67,8 +67,12 @@ namespace CombatSimulation.Core
 
                 var relativeSpeed = (first.PreStepVelocity - second.PreStepVelocity).Length;
                 var mass = Math.Min(world.GetMass(first.Body), world.GetMass(second.Body));
-                if (first.Ship != null) AddCandidate(resolver, first.Ship, second, touch.SecondShape, relativeSpeed, mass, damageType);
-                if (second.Ship != null) AddCandidate(resolver, second.Ship, first, touch.FirstShape, relativeSpeed, mass, damageType);
+                // A shield has no collision behaviour (phase 5, step 10d, owner question 6): a ship that touches with its
+                // shield deals no ramming damage; the rammer's damage on a shield pays the shield's energy.
+                if (first.Ship != null && touch.FirstShape.Priority != ShapeHitPriority.Shield)
+                    AddCandidate(resolver, first.Ship, second, touch.SecondShape, relativeSpeed, mass, damageType);
+                if (second.Ship != null && touch.SecondShape.Priority != ShapeHitPriority.Shield)
+                    AddCandidate(resolver, second.Ship, first, touch.FirstShape, relativeSpeed, mass, damageType);
             }
         }
 

@@ -443,6 +443,34 @@ namespace CombatSimulation.Ai.Tests
             Assert.AreEqual(F, new MothershipDestroyedNode().Evaluate(context));
         }
 
+        // Phase 5, step 10d: legacy MothershipLowEnergy reads the mothership's energy share; MothershipLowShield reads it
+        // too when the mothership has an energy shield, else its shield share. A missing resource gives 0.
+        [Test]
+        public void MothershipLowEnergyAndLowShieldReadTheMothershipsShares()
+        {
+            var runner = CarrierBattle(out var carrier, out var drone, FragileCarrier);
+            var context = DroneContext(runner, drone);
+            Assert.IsTrue(runner.Snapshot.TryGetShip(carrier, out var mothership));
+            var energy = mothership.Energy.Value / mothership.Energy.Max;
+            Assert.AreEqual(F, new MothershipLowEnergyNode(energy).Evaluate(context));
+            Assert.AreEqual(S, new MothershipLowEnergyNode(energy + 0.01f).Evaluate(context));
+            Assert.AreEqual(S, new MothershipLowShieldNode(0.01f).Evaluate(context), "no shield resource");
+
+            var shielded = new AiContext(Drone, AiSettings.ForDrone(30f), 0.02f, default,
+                BattleData(definition => definition == DroneShip ? Drone : EnergyShieldShip));
+            Assert.IsTrue(runner.Snapshot.TryGetShip(drone, out var state));
+            shielded.Update(runner.Snapshot, state);
+            Assert.AreEqual(F, new MothershipLowShieldNode(energy).Evaluate(shielded), "reads the energy");
+            Assert.AreEqual(S, new MothershipLowShieldNode(energy + 0.01f).Evaluate(shielded));
+            Assert.AreEqual(F, new MothershipLowEnergyNode(2f).Evaluate(Context(out _)), "not a drone");
+            Assert.AreEqual(F, new MothershipLowShieldNode(2f).Evaluate(Context(out _)), "not a drone");
+        }
+
+        private static AiShipProfile EnergyShieldShip => new AiShipProfile(null,
+            new[] { new AiDevice(0, DeviceClass.EnergyShield, isAutomatic: false) }, null, isDrone: false, isStarbase: false,
+            SizeClass.Frigate, enginePower: 10f, turnRate: 10f, propulsion: 20f, kineticResistance: 0f,
+            rammingDamageMultiplier: 1f, modelScale: 2f, chanceToAvoidDrone: 0f);
+
         private static float Gap(in ShipState a, in ShipState b) => Arena.Delta(a.Position, b.Position).Length;
 
         private static ulong[] Select(params float[] distances)

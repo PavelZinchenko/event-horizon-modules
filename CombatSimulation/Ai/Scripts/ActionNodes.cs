@@ -544,6 +544,41 @@ namespace CombatSimulation.Ai
         }
     }
 
+    // Legacy FrontalShieldNode (phase 5, step 10d): turns to the sum of the directions to the threats and holds the shield
+    // while the heading is within 90 degrees of that course. Threats that left the battle since the list update are
+    // skipped; legacy reads their last state. Without a live threat the node fails, as with an empty list.
+    internal sealed class DefendWithFrontalShieldNode : INode
+    {
+        private const float MaxAngle = 90 * LegacyMath.Degree;
+
+        public DefendWithFrontalShieldNode(int deviceIndex) => _deviceIndex = deviceIndex;
+
+        public NodeState Evaluate(AiContext context)
+        {
+            var ship = context.Ship;
+            var target = Vec2.Zero;
+            var count = 0;
+            var threats = context.Threats;
+            for (var i = 0; i < threats.Count; ++i)
+            {
+                if (!context.TryGetBullet(threats[i], out var threat)) continue;
+                target += LegacyMath.Normalize(context.Delta(ship.Position, threat.Position));
+                count++;
+            }
+
+            if (count == 0)
+                return NodeState.Failure;
+
+            var course = LegacyMath.Angle(target);
+            context.Controls.Course = course;
+            if (System.Math.Abs(LegacyMath.DeltaAngle(course, ship.Angle)) < MaxAngle)
+                context.Controls.ActivateSystem(_deviceIndex);
+            return NodeState.Running;
+        }
+
+        private readonly int _deviceIndex;
+    }
+
     // Legacy LookAtTargetNode.
     internal sealed class LookAtTargetNode : INode
     {

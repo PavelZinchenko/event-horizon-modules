@@ -20,7 +20,8 @@ namespace CombatSimulation.Core
         public void QueueDeath(EntityId id) => _deathRequests.Add(id);
 
         // Stage 10. Tail segments first: the damage a tail cannot take passes to its ship (phase 5, step 7d). Then one
-        // pass, shield first, then armor (legacy Impact.ApplyShield and ShipStats.ApplyDamage).
+        // pass: the shield devices' energy (phase 5, step 10d), the shield, then armor (legacy Impact.ApplyShield and
+        // ShipStats.ApplyDamage).
         // Received hits add to a local target's pending damage. A remote target's pending damage is only the damage
         // this device sent it (N3): a prediction that corrections replace.
         public void Apply()
@@ -32,7 +33,11 @@ namespace CombatSimulation.Core
                 if (ship == null || !ship.HasPendingDamage) continue;
 
                 if (ship.IsDecoy) _world.Decoys.ApplyDamage(ship);
-                else ApplyShieldFirst(ship);
+                else
+                {
+                    ShieldRules.ApplyPending(_battle.DeviceContext, ship, Setup.DamageTypes);
+                    ApplyShieldFirst(ship);
+                }
                 ship.ClearPendingDamage();
             }
 

@@ -95,7 +95,8 @@ namespace CombatSimulation.Core
                     continue;
                 }
                 if (hit.Kind != ContactKind.Hit) continue;
-                if (hit.TargetHandle.Kind == EntityKind.Ship) MarkContact(hit);
+                // Legacy: a shield hit reaches its ship through Affect, not OnCollision, so it runs no OnHit trigger.
+                if (hit.TargetHandle.Kind == EntityKind.Ship && hit.TargetPriority != ShapeHitPriority.Shield) MarkContact(hit);
 
                 // Keep the first body as the ray endpoint even when this shot already hit it.
                 if (hit.Source == ContactSource.Ray && _world.Bullets.TryGet(hit.AttackerHandle, out var beamIndex))
@@ -185,6 +186,10 @@ namespace CombatSimulation.Core
                 {
                     var target = _world.Ships.Get(hit.TargetHandle);
                     if (target == null) continue;
+                    // Phase 5, step 10d: a contact on a shield shape. Legacy shield units take no push, slow-down, roll,
+                    // capture, siphon or lifetime restore; their damage pays the shield's energy at stage 10.
+                    var shield = hit.TargetPriority == ShapeHitPriority.Shield ? ShieldRules.Find(target, hit.TargetShapeOrder) : null;
+                    if (shield != null) shield.LastHitTick = Tick;
                     int owner, deviceIndex;
                     HitImpactKind kind;
                     var amount = hit.Damage;
@@ -225,7 +230,7 @@ namespace CombatSimulation.Core
                             amount = attacker.Definition.Damage;
                             damage = amount * Battle.TickDuration;
                             damageType = attacker.Definition.DamageType;
-                            shape = 0;
+                            if (shield == null) shape = 0;
                             effects = attacker.Definition.Effects;
                             effectScale = Battle.TickDuration;
                         }
@@ -249,8 +254,18 @@ namespace CombatSimulation.Core
                         deviceIndex = hit.AttackerDeviceIndex;
                         kind = hit.PointDefense != null ? HitImpactKind.Energy : HitImpactKind.Impact;
                     }
+                    if (shield != null) impulse = Vec2.Zero;
                     authority = _world.Authority(owner);
-                    if (authority == BattleEventAuthority.Committed)
+                    if (authority == BattleEventAuthority.Committed && shield != null && effects.IgnoreShield)
+                    {
+                        // Legacy IgnoresShield on a shield: the hit is lost and the shield turns off.
+                        if (Setup.IsLocalOwner(target.Owner)) shield.RequestDrop(target);
+                        else
+                            _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
+                                hit.Target, target.Owner, shape, HitContactState.Start, kind, amount,
+                                damageType: (byte)damageType, effect: HitEffect.DamageIgnoringShield));
+                    }
+                    else if (authority == BattleEventAuthority.Committed)
                     {
                         // A remote target's copy takes the same damage and push as a prediction (N3); it never dies of
                         // it. The push on a remote target travels in the first record (phase 4 E4).
@@ -264,14 +279,14 @@ namespace CombatSimulation.Core
                         }
                         else if (repairDamage > 0f)
                         {
-                            target.AddPendingDamage(effects.RepairDamageType, repairDamage * effectScale, effects.IgnoreShield);
+                            AddPendingDamage(target, shield, effects.RepairDamageType, repairDamage * effectScale, effects.IgnoreShield);
                             if (remote)
                                 _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                     hit.Target, target.Owner, shape, HitContactState.Start, kind, repairDamage,
                                     damageType: (byte)effects.RepairDamageType, effect: damageEffect));
                         }
                         // Motion changes precede push, both here and in the outgoing record order (step 5b).
-                        if (effects.SlowDown > 0f)
+                        if (effects.SlowDown > 0f && shield == null)
                         {
                             ApplySlowDown(Physics, target, effects.SlowDown * effectScale);
                             if (remote)
@@ -283,13 +298,13 @@ namespace CombatSimulation.Core
                         {
                             if (Entered(hit))
                             {
-                                if (!Setup.HasRemoteOwners && target.IsDrone && effects.ChangesDroneOwner)
+                                if (!Setup.HasRemoteOwners && target.IsDrone && effects.ChangesDroneOwner && shield == null)
                                 {
                                     ref readonly var source = ref _world.Bullets[index];
                                     _world.SetAllegiance(target, effects.DriveDronesCrazy ? Allegiance.Undefined : source.Allegiance);
                                     target.MothershipOverride = effects.DriveDronesCrazy ? default(EntityId) : source.SourceShipId;
                                 }
-                                if (effects.Roll > 0f)
+                                if (effects.Roll > 0f && shield == null)
                                 {
                                     var degrees = effects.Roll / (float)Math.Sqrt(target.Definition.Mass) * 180f;
                                     ApplyRoll(Physics, target, degrees);
@@ -308,7 +323,7 @@ namespace CombatSimulation.Core
                                 }
                             }
                         }
-                        target.AddPendingDamage(damageType, damage, effects.IgnoreShield);
+                        AddPendingDamage(target, shield, damageType, damage, effects.IgnoreShield);
                         if (remote)
                         {
                             _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
@@ -318,7 +333,7 @@ namespace CombatSimulation.Core
                             // ray stays on the target, so the target owner counts the ramp from its first tick.
                             if (effects.Ramp > 0f)
                                 _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner,
-                                    deviceIndex, hit.Target, target.Owner, 0, HitContactState.Start, kind, effects.Ramp,
+                                    deviceIndex, hit.Target, target.Owner, shield != null ? shape : 0, HitContactState.Start, kind, effects.Ramp,
                                     damageType: (byte)damageType, effect: effects.IgnoreShield
                                         ? HitEffect.ProgressiveDamageIgnoringShield : HitEffect.ProgressiveDamage,
                                     rampTime: effects.RampTime));
@@ -330,7 +345,7 @@ namespace CombatSimulation.Core
                             {
                                 var extraAmount = BulletStore.EffectDamage(projectile, extra[e].Amount, extra[e].Falloff,
                                     falloff);
-                                target.AddPendingDamage(extra[e].DamageType, extraAmount, effects.IgnoreShield);
+                                AddPendingDamage(target, shield, extra[e].DamageType, extraAmount, effects.IgnoreShield);
                                 if (remote)
                                     _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                         hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind,
@@ -338,11 +353,19 @@ namespace CombatSimulation.Core
                             }
                             if (impulse.X != 0f || impulse.Y != 0f) ApplyPush(target, impulse);
                         }
-                        var energyDrain = effects.EnergyDrain + (hostile ? effects.EnemyEnergyDrain : 0f);
+                        // Through a shield, an energy drain or recharge loses 75%; a shield drain or recharge also counts in
+                        // the shield's energy cost (legacy EnergyShieldDamageHandler).
+                        var energyShare = shield != null ? ShieldRules.EnergyDrainShare : 1f;
+                        var energyDrain = (effects.EnergyDrain + (hostile ? effects.EnemyEnergyDrain : 0f)) * energyShare;
                         var shieldDrain = effects.ShieldDrain + (hostile ? effects.EnemyShieldDrain : 0f);
                         if (energyDrain > 0f || shieldDrain > 0f)
                         {
-                            target.AddPendingDrain(energyDrain * effectScale, shieldDrain * effectScale);
+                            if (shield == null) target.AddPendingDrain(energyDrain * effectScale, shieldDrain * effectScale);
+                            else
+                            {
+                                target.AddPendingDrain(energyDrain * effectScale, 0f);
+                                shield.AddPendingDrain(target, shieldDrain * effectScale);
+                            }
                             if (remote)
                             {
                                 AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.EnergyDrain,
@@ -354,20 +377,26 @@ namespace CombatSimulation.Core
                         if (!hostile)
                         {
                             target.AddPendingRepair(effects.Repair * effectScale);
-                            target.AddPendingRecharge(effects.EnergyRecharge * effectScale, effects.ShieldRecharge * effectScale);
+                            if (shield == null)
+                                target.AddPendingRecharge(effects.EnergyRecharge * effectScale, effects.ShieldRecharge * effectScale);
+                            else
+                            {
+                                target.AddPendingRecharge(effects.EnergyRecharge * energyShare * effectScale, 0f);
+                                shield.AddPendingRecharge(target, effects.ShieldRecharge * effectScale);
+                            }
                             if (remote)
                             {
                                 AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.Repair, effects.Repair);
                                 AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.EnergyRecharge,
-                                    effects.EnergyRecharge);
+                                    effects.EnergyRecharge * energyShare);
                                 AddEffectRecord(hit, owner, deviceIndex, target, shape, kind, HitEffect.ShieldRecharge,
                                     effects.ShieldRecharge);
                             }
                         }
                         // Legacy SiphonHitPointsAction heals only from ships and drones (phase 5, step 10c).
-                        if (effects.Siphon > 0f && !target.IsDecoy) Siphon(attackerShip, target, damageType, damage * effects.Siphon);
+                        if (effects.Siphon > 0f && !target.IsDecoy && shield == null) Siphon(attackerShip, target, damageType, damage * effects.Siphon);
                         // A hit restores Restore seconds; over time, Restore seconds per second: Restore ticks per tick.
-                        if (effects.Restore > 0f)
+                        if (effects.Restore > 0f && shield == null)
                             RestoreLifetime(ref _world.Bullets[index], kind == HitImpactKind.DamageOverTime
                                 ? effects.Restore : TickTime.Ticks(effects.Restore));
                     }
@@ -409,6 +438,8 @@ namespace CombatSimulation.Core
                 ref readonly var contact = ref Physics.GetContact(i);
                 if (!contact.Touching || !_world.Shapes.TryGet(contact.ShapeA, out var a) ||
                     !_world.Shapes.TryGet(contact.ShapeB, out var b) || a.OwnerId == b.OwnerId) continue;
+                // A shield is its own legacy unit: its touches do not reach its ship's collision callbacks.
+                if (a.Priority == ShapeHitPriority.Shield || b.Priority == ShapeHitPriority.Shield) continue;
                 MarkTouch(a.Owner);
                 MarkTouch(b.Owner);
             }
@@ -435,6 +466,13 @@ namespace CombatSimulation.Core
             Physics.SetBulletOwner(target.Body, _world.FindShip(target.SourceShipId)?.Body ?? default);
             target.TargetId = default;
             target.NextSearchTick = Tick + 1;
+        }
+
+        // Phase 5, step 10d: a shield shape's damage pays the shield's energy at stage 10.
+        private static void AddPendingDamage(ShipEntity target, ShieldDevice shield, int type, float amount, bool ignoreShield)
+        {
+            if (shield != null) shield.AddPendingDamage(target, type, amount);
+            else target.AddPendingDamage(type, amount, ignoreShield);
         }
 
         // A ship effect on a remote target: its own record, or its own interval with the rate as amount.

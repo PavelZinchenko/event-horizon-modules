@@ -108,6 +108,7 @@ namespace CombatSimulation.Core
                 ship.AddShape(shape);
                 Shapes.Register(shape, new ShapeEntry(ship.Handle, ship.Id, ShapeHitPriority.Hull, i));
             }
+            ShieldRules.AddShapes(this, ship);
         }
 
         public ShapeId AddHullPart(BodyId body, in HullPart part, in ShapeDef shapeDef)
