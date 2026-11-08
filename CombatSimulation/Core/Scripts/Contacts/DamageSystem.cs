@@ -31,7 +31,8 @@ namespace CombatSimulation.Core
                 var ship = _world.GetShipEntry(i);
                 if (ship == null || !ship.HasPendingDamage) continue;
 
-                ApplyShieldFirst(ship);
+                if (ship.IsDecoy) _world.Decoys.ApplyDamage(ship);
+                else ApplyShieldFirst(ship);
                 ship.ClearPendingDamage();
             }
 
@@ -149,6 +150,7 @@ namespace CombatSimulation.Core
         private const long DrainTicksPerSecond = 50;
 
         // Stage 11. Marks deaths and bullet expiry; stage 12 applies them. Armor 0 is a death; so are missile hit points 0.
+        // A decoy dies at its expiry tick; its damage death is marked at stage 10 (phase 5, step 10c).
         public void MarkDeaths()
         {
             _world.Bullets.MarkDeaths(Tick, Setup);
@@ -164,7 +166,8 @@ namespace CombatSimulation.Core
             for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
                 var ship = _world.GetShipEntry(i);
-                if (ship != null && Setup.IsLocalOwner(ship.Owner) && ship.Armor.Value <= 0f) ship.PendingDeath = true;
+                if (ship != null && Setup.IsLocalOwner(ship.Owner) &&
+                    (ship.IsDecoy ? Tick >= ship.Decoy.ExpiryTick : ship.Armor.Value <= 0f)) ship.PendingDeath = true;
             }
         }
 

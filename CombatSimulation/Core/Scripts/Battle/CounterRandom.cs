@@ -23,6 +23,10 @@ namespace CombatSimulation.Core
 
         // A homing search's camouflage roll for one candidate (phase 5, step 9a).
         MissileDodge = 7,
+
+        // A decoy (phase 5, step 10c): its lifetime share, and its spin in whole degrees per second.
+        DecoyLifetime = 8,
+        DecoySpin = 9,
     }
 
     // Counter-based random (investigation 6.7): a draw is a function of match seed, entity, tick and purpose.

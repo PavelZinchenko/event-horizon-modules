@@ -21,7 +21,8 @@ namespace CombatSimulation.Core
             for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
                 var ship = _world.GetShipEntry(i);
-                if (ship == null || ship.Owner != owner) continue;
+                // A decoy's pose travels with the missiles (phase 5, step 10c).
+                if (ship == null || ship.Owner != owner || ship.IsDecoy) continue;
 
                 for (var d = 0; d < ship.DeviceCount; ++d)
                     if (ship.GetDevice(d) is PointDefenseDevice pointDefense) batch.AddTimers(pointDefense.Export(Tick - 1));
@@ -53,6 +54,7 @@ namespace CombatSimulation.Core
                 batch.AddMissile(new MissileCorrection(bullet.Id, position, rotation.Angle, !fullSpeed, velocity, priority));
             }
             _world.RepairBots.WriteCorrections(owner, batch);
+            _world.Decoys.WriteCorrections(owner, batch);
             batch.SortMissiles();
         }
 
@@ -77,6 +79,7 @@ namespace CombatSimulation.Core
         {
             var bot = _world.RepairBots.Find(id);
             if (bot != null) { bot.LastSentTick = tick; return; }
+            if (_world.Decoys.CorrectionSent(id, tick)) return;
             if (!_world.Entities.TryGet(id, out var handle) || !_world.Bullets.TryGet(handle, out var index)) return;
             ref var bullet = ref _world.Bullets[index];
             bullet.Corrected = true;
@@ -115,6 +118,11 @@ namespace CombatSimulation.Core
                     if (_world.RepairBots.HoldCorrection(bot, senderOwner, batch.Tick, missile)) ++held;
                     continue;
                 }
+                if (_world.Decoys.TryHoldCorrection(senderOwner, batch.Tick, missile, out var decoyHeld))
+                {
+                    if (decoyHeld) ++held;
+                    continue;
+                }
                 if (!_world.Entities.TryGet(missile.EntityId, out var handle) || !_world.Bullets.TryGet(handle, out var index)) continue;
                 ref var bullet = ref _world.Bullets[index];
                 if (bullet.Owner != senderOwner || bullet.IsBeam || !bullet.Definition.IsHoming || !ValidMissile(missile) ||
@@ -148,6 +156,7 @@ namespace CombatSimulation.Core
         {
             if (!Setup.HasRemoteOwners) return;
             _world.RepairBots.ApplyCorrections();
+            _world.Decoys.ApplyCorrections();
             for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
                 var ship = _world.GetShipEntry(i);

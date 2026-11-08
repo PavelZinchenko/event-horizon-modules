@@ -48,7 +48,7 @@ namespace CombatSimulation.Core
             // A bot takes a push once per contact record, including an over-time tick. An absent target may have
             // already died; accept and acknowledge that late hit without applying it.
             var auxiliaryPush = hit.TargetIsBullet && (!_world.Entities.TryGet(hit.TargetId, out var pushTarget) ||
-                pushTarget.Kind == EntityKind.RepairBot);
+                pushTarget.Kind == EntityKind.RepairBot || IsDecoy(pushTarget));
             if (!Finite(hit.Impulse.X) || !Finite(hit.Impulse.Y) ||
                 ((hit.Impulse.X != 0f || hit.Impulse.Y != 0f) && ((!auxiliaryPush &&
                     (hit.TargetIsBullet || hit.ImpactKind == HitImpactKind.DamageOverTime)) || hit.ContactState != HitContactState.Start)))
@@ -57,7 +57,7 @@ namespace CombatSimulation.Core
             if (_world.Entities.TryGet(hit.AttackerId, out var handle) && _world.EntityOwner(handle) != record.SenderOwner)
                 return false;
             if (_world.Entities.TryGet(hit.TargetId, out handle) &&
-                (IsContactTarget(handle.Kind) != hit.TargetIsBullet || _world.EntityOwner(handle) != hit.TargetOwner)) return false;
+                (IsContactTarget(handle) != hit.TargetIsBullet || _world.EntityOwner(handle) != hit.TargetOwner)) return false;
             if (hit.TargetIsBullet && hit.Effect == HitEffect.Teleport &&
                 _world.Entities.TryGet(hit.TargetId, out handle) && handle.Kind != EntityKind.Segment) return false;
             if (!AcceptSequence(_hitSequences, record.SenderOwner, record.Sequence)) return false;
@@ -95,8 +95,12 @@ namespace CombatSimulation.Core
         private static bool ValidPose(in SpawnPose pose) => Finite(pose.Position.X) && Finite(pose.Position.Y) &&
             Finite(pose.Angle) && Finite(pose.LinearVelocity.X) && Finite(pose.LinearVelocity.Y) && Finite(pose.AngularVelocity);
 
-        // A hit record on a bullet or a tail segment names one contact (ResolvedHit.TargetIsBullet; network plan 9d).
-        private static bool IsContactTarget(EntityKind kind) => kind == EntityKind.Bullet || kind == EntityKind.Segment || kind == EntityKind.RepairBot;
+        // A hit record on a bullet or a tail segment names one contact (ResolvedHit.TargetIsBullet; network plan 9d); so
+        // does one on a repair bot or a decoy (phase 5, steps 10b and 10c).
+        private bool IsContactTarget(EntityHandle handle) => handle.Kind == EntityKind.Bullet ||
+            handle.Kind == EntityKind.Segment || handle.Kind == EntityKind.RepairBot || IsDecoy(handle);
+
+        private bool IsDecoy(EntityHandle handle) => _world.Ships.Get(handle)?.IsDecoy == true;
 
         private DroneBayInventory FindBay(DroneBayKey key)
         {
@@ -145,19 +149,25 @@ namespace CombatSimulation.Core
                     }
                     return !_world.Entities.TryGet(operation.EntityId, out var handle) ||
                         (_world.EntityOwner(handle) == operation.Owner &&
-                         (IsContactTarget(handle.Kind) ? !operation.BayKey.HasValue :
+                         (IsContactTarget(handle) ? !operation.BayKey.HasValue :
                           _world.Ships.Get(handle)?.Bay?.Key == operation.BayKey && operation.BayKey.HasValue));
                 // The missile or its target may be gone; a live missile must be the owner's homing, sticky or harpoon
-                // projectile. Only sticky bullets and harpoons can name a tail segment.
+                // projectile. Only sticky bullets and harpoons can name a tail segment or a repair bot. A target named by
+                // its entity ID (TargetIsSegment) is a segment, a bot or a decoy (phase 5, step 10c).
                 case OwnerOperationKind.MissileTarget:
                     if (operation.EntityId.IsNull || operation.TargetIsSegment && operation.TargetId.IsNull) return false;
-                    if (_world.Entities.TryGet(operation.TargetId, out handle) && (handle.Kind == EntityKind.Bullet ||
-                        (handle.Kind == EntityKind.Segment || handle.Kind == EntityKind.RepairBot) != operation.TargetIsSegment)) return false;
+                    var attachable = false;
+                    if (_world.Entities.TryGet(operation.TargetId, out handle))
+                    {
+                        attachable = handle.Kind == EntityKind.Segment || handle.Kind == EntityKind.RepairBot;
+                        if (handle.Kind == EntityKind.Bullet || (attachable || IsDecoy(handle)) != operation.TargetIsSegment)
+                            return false;
+                    }
                     return !_world.Entities.TryGet(operation.EntityId, out handle) ||
                         (_world.Bullets.TryGet(handle, out var missile) && _world.Bullets[missile].Owner == operation.Owner &&
                          !_world.Bullets[missile].IsBeam && (_world.Bullets[missile].Definition.IsSticky ||
                          _world.Bullets[missile].Definition.IsHarpoon ||
-                         _world.Bullets[missile].Definition.IsHoming && !operation.TargetIsSegment));
+                         _world.Bullets[missile].Definition.IsHoming && !attachable));
                 // The ship may be gone; a live ship must be the owner's.
                 case OwnerOperationKind.Allegiance:
                     return !operation.EntityId.IsNull && Allegiances.IsValid(operation.Allegiance) &&
@@ -423,7 +433,8 @@ namespace CombatSimulation.Core
             else
             {
                 var ship = _world.Ships.Get(handle);
-                if (ship == null || !ship.IsDrone || ship.Bay.Key != operation.BayKey) return false;
+                if (ship == null || (ship.IsDecoy ? operation.BayKey.HasValue : !ship.IsDrone || ship.Bay.Key != operation.BayKey))
+                    return false;
                 _removedRemoteEntities.Add(ship.Id);
                 _world.Drones.Remove(ship);
                 _battle.RemoveShip(ship, operation.RemovalReason);
@@ -493,6 +504,14 @@ namespace CombatSimulation.Core
             if (ShouldCapture(ship.Owner))
                 _outgoingOperations.Add(OwnerOperation.BulletFired(BattleId, ship.Owner, NextOperationSequence(ship.Owner),
                     Tick, id, ship.Id, deviceIndex, 0, 0, position, angle));
+        }
+
+        // A decoy uses its number as the spawn slot and its launch angle as the pose angle (phase 5, step 10c).
+        internal void CaptureDecoySpawn(ShipEntity ship, int deviceIndex, int number, EntityId id, Vec2 position, float angle)
+        {
+            if (ShouldCapture(ship.Owner))
+                _outgoingOperations.Add(OwnerOperation.BulletFired(BattleId, ship.Owner, NextOperationSequence(ship.Owner),
+                    Tick, id, ship.Id, deviceIndex, number, 0, position, angle));
         }
 
         // A tail segment uses its number as the spawn slot (H8).

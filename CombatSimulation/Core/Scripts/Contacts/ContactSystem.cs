@@ -169,6 +169,11 @@ namespace CombatSimulation.Core
                     authority = _world.Authority(bot.Owner);
                     _world.RepairBots.Resolve(hit, bot);
                 }
+                else if (_world.Decoys.IsRemoteContact(hit, out var decoy))
+                {
+                    authority = _world.Authority(decoy.Owner);
+                    _world.Decoys.Resolve(hit, decoy);
+                }
                 else if (hit.TargetHandle.Kind == EntityKind.Segment)
                 {
                     var segment = _world.Segments.Get(hit.TargetHandle);
@@ -359,7 +364,8 @@ namespace CombatSimulation.Core
                                     effects.ShieldRecharge);
                             }
                         }
-                        if (effects.Siphon > 0f) Siphon(attackerShip, target, damageType, damage * effects.Siphon);
+                        // Legacy SiphonHitPointsAction heals only from ships and drones (phase 5, step 10c).
+                        if (effects.Siphon > 0f && !target.IsDecoy) Siphon(attackerShip, target, damageType, damage * effects.Siphon);
                         // A hit restores Restore seconds; over time, Restore seconds per second: Restore ticks per tick.
                         if (effects.Restore > 0f)
                             RestoreLifetime(ref _world.Bullets[index], kind == HitImpactKind.DamageOverTime

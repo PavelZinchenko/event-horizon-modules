@@ -27,7 +27,7 @@ namespace CombatSimulation.Core
         public BattleResult CandidateResult { get; private set; }
         public bool IsCompleted => Result.IsCompleted;
 
-        // Active roster ships in roster order, then drones in entity ID order.
+        // Active roster ships in roster order, then drones and decoys in entity ID order.
         public ReadOnlySpan<ShipState> Ships => new ReadOnlySpan<ShipState>(_ships, 0, _shipCount);
 
         // Live bullets in storage order; the order has no meaning.
@@ -113,7 +113,7 @@ namespace CombatSimulation.Core
                     Array.Resize(ref _satellites, Math.Max(satelliteCount + satellites, _satellites.Length * 2));
                 for (var s = 0; s < satellites; ++s)
                     _satellites[satelliteCount + s] = new SatelliteState(world, ship.GetSatellite(s));
-                _ships[_shipCount++] = new ShipState(ship, world, deviceCount, barrelCount, satelliteCount);
+                _ships[_shipCount++] = new ShipState(ship, world, deviceCount, barrelCount, satelliteCount, tick);
                 barrelCount += barrels;
                 satelliteCount += satellites;
                 deviceCount += devices;

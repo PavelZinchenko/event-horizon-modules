@@ -487,7 +487,7 @@ namespace CombatSimulation.Ai
                 if (!bullet.AttachedTargetId.IsNull)
                 {
                     if (!context.TryGetShip(bullet.AttachedTargetId, out var target) ||
-                        target.IsDrone || !context.IsEnemy(target)) continue;
+                        target.IsDrone || target.IsDecoy || !context.IsEnemy(target)) continue;
                     _timeLeft = 0.5f;
                 }
                 else

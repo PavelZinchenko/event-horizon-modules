@@ -33,7 +33,7 @@ namespace CombatSimulation.Core
 
             if (!isOwner || bullet.TargetId.IsNull) return;
             if (!Stick(battle, index, bullet.TargetId, battle.Tick)) bullet.TargetId = default;
-            else battle.CaptureMissileTarget(bullet, bullet.TargetId, battle.FindShip(bullet.TargetId) == null);
+            else battle.CaptureMissileTarget(bullet, bullet.TargetId, battle.IsAuxiliaryTarget(bullet.TargetId));
         }
 
         // The owner at stage 4, or the copy at the owner's record. False when the target has left.

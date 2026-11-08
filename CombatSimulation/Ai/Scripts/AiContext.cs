@@ -149,6 +149,7 @@ namespace CombatSimulation.Ai
         public AiShipProfile ProfileOf(in ShipState ship)
         {
             if (ship.Id == _ship.Id) return Profile;
+            if (ship.IsDecoy) return AiShipProfile.Decoy;
             return _battle.Profiles?.Invoke(ship.Definition) ?? throw new InvalidOperationException($"No AI profile for ship {ship.Id}");
         }
 

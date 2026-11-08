@@ -28,6 +28,11 @@ namespace CombatSimulation.Core
         public readonly EntityId MothershipId;
         public readonly EntityId? MothershipOverride;
         public bool IsDrone => BayKey.HasValue;
+
+        // A decoy (phase 5, step 10c): no slot, no bay and no pilot. Life is legacy View.Life, 1 at its spawn and 0 at
+        // its expiry; 1 for every other ship.
+        public readonly bool IsDecoy;
+        public readonly float Life;
         public readonly int Side;
         // Hostility (D13). A side's ships start with Allegiances.OfSide; a drone can change it.
         public readonly Allegiance Allegiance;
@@ -68,11 +73,14 @@ namespace CombatSimulation.Core
         internal readonly int BarrelStart;
         internal readonly int SatelliteStart;
 
-        internal ShipState(ShipEntity ship, PhysicsWorld world, int deviceStart, int barrelStart = 0, int satelliteStart = 0)
+        internal ShipState(ShipEntity ship, PhysicsWorld world, int deviceStart, int barrelStart = 0, int satelliteStart = 0,
+            long tick = 0)
         {
             Id = ship.Id;
             RosterId = ship.Slot?.RosterId ?? default;
             BayKey = ship.Bay?.Key;
+            IsDecoy = ship.IsDecoy;
+            Life = ship.IsDecoy ? ship.Decoy.Life(tick) : 1f;
             MothershipId = ship.MothershipId;
             MothershipOverride = ship.MothershipOverride;
             Side = ship.Side;

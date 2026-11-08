@@ -170,6 +170,12 @@ namespace CombatSimulation.Core
                 _tails.ApplySegmentContact(hit, _world.Segments.Get(handle));
                 return;
             }
+            if (handle.Kind == EntityKind.Ship)
+            {
+                var decoy = _world.Ships.Get(handle);
+                if (decoy != null && decoy.IsDecoy) _world.Decoys.ApplyHit(hit, decoy);
+                return;
+            }
             if (hit.Effect == HitEffect.Teleport) return;
             if (!_world.Bullets.TryGet(handle, out var index)) return;
             ref readonly var bullet = ref _world.Bullets[index];

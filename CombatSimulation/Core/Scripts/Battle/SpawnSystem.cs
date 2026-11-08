@@ -5,7 +5,7 @@ using Utilites;
 
 namespace CombatSimulation.Core
 {
-    // Spawns (phase 5, step 8b, item 7). Stage 5 creates the drones, clones, bullets and beams that devices request at
+    // Spawns (phase 5, step 8b, item 7). Stage 5 creates the drones, clones, decoys, bullets and beams that devices request at
     // stage 2. Battle runs the network records of stage 5 around it. Roster deployment uses the spawn placement.
     internal sealed class SpawnSystem
     {
@@ -41,6 +41,7 @@ namespace CombatSimulation.Core
                 var sequence = 0u;
                 for (var j = i - 1; j >= 0 && _requests[j].HasSameSlot(request); --j) ++sequence;
                 if (request.LaunchesShip) SpawnDrone(request, sequence);
+                else if (request.LaunchesDecoy) _world.Decoys.Spawn(request.Ship, request.DeviceIndex, request.BarrelIndex);
                 else
                 {
                     BarrelAiming.BeforeShot(_world, request.Ship, request.BarrelIndex, request.Bullet, request.BeamDefinition, _network);

@@ -25,6 +25,7 @@ namespace CombatSimulation.Core
             _targets = new TargetGrid(World.Torus, setup.MatchSeed);
             _tails = new WormTails(_world, this);
             _world.RepairBots = new RepairBots(_world, this);
+            _world.Decoys = new Decoys(_world, this);
             _triggers = new BulletTriggers(_world, this);
             var bulletContacts = new BulletContactLedger();
             if (setup.HasRemoteOwners) _network = new BattleNetwork(_world, this, _tails, _triggers, bulletContacts);
@@ -201,6 +202,7 @@ namespace CombatSimulation.Core
 
         // Tail and trigger members for beam queries and tests (8b, decision 1).
         internal RepairBots RepairBots => _world.RepairBots;
+        internal Decoys Decoys => _world.Decoys;
         internal RepairBot FindRepairBot(EntityId id) => RepairBots.Find(id);
         internal TailSegment FindSegment(EntityId id) => _tails.FindSegment(id);
         internal void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse) =>
@@ -229,6 +231,16 @@ namespace CombatSimulation.Core
             _network?.CaptureBulletSpawn(bullet, source, barrelIndex, sequence, spawnTick, sendLaunch, muzzle, angle);
         internal void CaptureRepairBotSpawn(ShipEntity ship, int deviceIndex, EntityId id, Vec2 position, float angle) =>
             _network?.CaptureRepairBotSpawn(ship, deviceIndex, id, position, angle);
+        internal void CaptureDecoySpawn(ShipEntity ship, int deviceIndex, int number, EntityId id, Vec2 position, float angle) =>
+            _network?.CaptureDecoySpawn(ship, deviceIndex, number, id, position, angle);
+
+        // A missile, sticky bullet or harpoon target that the stream names by its entity ID: a tail segment, a repair
+        // bot or a decoy (phase 5, step 10c). Other ships have stream names.
+        internal bool IsAuxiliaryTarget(EntityId id)
+        {
+            var ship = _world.FindShip(id);
+            return ship == null || ship.IsDecoy;
+        }
         internal void CaptureSegmentSpawn(ShipEntity ship, int deviceIndex, int number, EntityId id) =>
             _network?.CaptureSegmentSpawn(ship, deviceIndex, number, id);
         internal bool HasDueRemoval(EntityId id) => _network != null && _network.HasDueRemoval(id);
@@ -396,6 +408,7 @@ namespace CombatSimulation.Core
                 var input = ShipEngine.Input(ship);
                 ship.StepEngineInput = input;
                 ShipEngine.Update(World, ship.Body, input, TickDuration);
+                if (ship.IsDecoy) _world.Decoys.Update(ship);
 
                 // Physics reports a touch after the solve, so ramming uses the velocity from before the step.
                 ship.PreStepVelocity = World.GetLinearVelocity(ship.Body);
@@ -493,7 +506,7 @@ namespace CombatSimulation.Core
                 }
             }
 
-            // Mothership removal does not remove drones. Only their own damage or pilot command does.
+            // Mothership removal does not remove drones or decoys. Only their own damage, lifetime or pilot command does.
             for (var i = 0; i < _world.Drones.Count;)
             {
                 var drone = _world.Drones[i];
@@ -646,6 +659,7 @@ namespace CombatSimulation.Core
             RemoveAttachedBullets(ship);
             _world.Events.Add(BattleEvent.Removal(BattleId, Tick, _world.Events.Count, ship, reason));
             if (ship.IsDrone) CaptureRemoval(ship.Id, ship.Owner, reason, ship.Bay.Key);
+            else if (ship.IsDecoy) CaptureRemoval(ship.Id, ship.Owner, reason);
             for (var i = 0; i < ship.ShapeCount; ++i)
                 _world.Shapes.Release(ship.GetShape(i));
             _contacts.Ramming.Forget(ship.Id);

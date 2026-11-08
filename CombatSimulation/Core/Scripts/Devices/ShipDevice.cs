@@ -366,8 +366,8 @@ namespace CombatSimulation.Core
         public override void Update(DeviceContext context, ShipEntity ship) { }
     }
 
-    // A projectile, beam or launched ship (drone or clone) requested at stage 2. Stage 5 creates it at the weapon or bay
-    // pose, or at the ship centre.
+    // A projectile, beam, launched ship (drone or clone) or decoy requested at stage 2. Stage 5 creates it at the weapon
+    // or bay pose, or at the ship centre.
     internal readonly struct SpawnRequest
     {
         // A bullet at the ship centre, without a barrel (phase 5, step 7b); its spawn slot is 0.
@@ -375,7 +375,7 @@ namespace CombatSimulation.Core
 
         public readonly ShipEntity Ship;
         public readonly int DeviceIndex;
-        // Weapon barrel, the bay's lifetime launch slot for a launched ship, or ShipCentre.
+        // Weapon barrel, the bay's lifetime launch slot for a launched ship, the decoy's number, or ShipCentre.
         public readonly int BarrelIndex;
         public readonly float Spread;
         // Legacy BulletStats.RandomFactor of the weapon: the bullet's speed and lifetime vary (phase 5, step 4a).
@@ -385,6 +385,7 @@ namespace CombatSimulation.Core
         // A beam device's beam: the device definition, or its charged copy.
         public readonly BeamDefinition BeamDefinition;
         public readonly bool LaunchesShip;
+        public readonly bool LaunchesDecoy;
 
         // A charging weapon's shot (phase 5, step 4f): the charge ticks that chose Bullet or BeamDefinition; 0 otherwise.
         public readonly int ChargeTicks;
@@ -401,6 +402,7 @@ namespace CombatSimulation.Core
             Beam = null;
             BeamDefinition = null;
             LaunchesShip = false;
+            LaunchesDecoy = false;
             ChargeTicks = chargeTicks;
         }
 
@@ -419,25 +421,32 @@ namespace CombatSimulation.Core
             Beam = beam;
             BeamDefinition = beam.BeamFor(chargeTicks);
             LaunchesShip = false;
+            LaunchesDecoy = false;
             ChargeTicks = chargeTicks;
         }
 
-        private SpawnRequest(ShipEntity ship, int deviceIndex)
+        private SpawnRequest(ShipEntity ship, int deviceIndex, int slot, bool decoy)
         {
             Ship = ship;
             DeviceIndex = deviceIndex;
-            BarrelIndex = ship.Slot.GetBay(deviceIndex).Launched;
+            BarrelIndex = slot;
             Spread = 0f;
             RandomFactor = 0f;
             Bullet = null;
             Beam = null;
             BeamDefinition = null;
-            LaunchesShip = true;
+            LaunchesShip = !decoy;
+            LaunchesDecoy = decoy;
             ChargeTicks = 0;
         }
 
         // The ship of the device's bay inventory: a drone, or a clone.
-        public static SpawnRequest Launch(ShipEntity ship, int deviceIndex) => new SpawnRequest(ship, deviceIndex);
+        public static SpawnRequest Launch(ShipEntity ship, int deviceIndex) =>
+            new SpawnRequest(ship, deviceIndex, ship.Slot.GetBay(deviceIndex).Launched, false);
+
+        // One decoy of a use (phase 5, step 10c); its number is its spawn slot.
+        public static SpawnRequest Decoy(ShipEntity ship, int deviceIndex, int number) =>
+            new SpawnRequest(ship, deviceIndex, number, true);
 
         // Spawns from one spawn slot in one tick; the sequence counts them (Identity, item 3).
         public bool HasSameSlot(in SpawnRequest other) =>

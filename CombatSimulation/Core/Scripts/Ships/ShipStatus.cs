@@ -98,7 +98,7 @@ namespace CombatSimulation.Core
         // Query-only filters have no category; the point-defense query skips such a ship itself.
         public static Filter HullFilter(ShipEntity ship)
         {
-            var filter = ship.IsDrone ? CollisionFilters.Drone(ship.Allegiance) : CollisionFilters.Ship(ship.Allegiance);
+            var filter = ship.IsDrone || ship.IsDecoy ? CollisionFilters.Drone(ship.Allegiance) : CollisionFilters.Ship(ship.Allegiance);
             return (ship.Status & ShipStatusFlags.NoContacts) != 0 ? new Filter(filter.Categories, ~0UL) : filter;
         }
     }

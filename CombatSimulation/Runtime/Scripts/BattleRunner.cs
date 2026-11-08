@@ -105,7 +105,8 @@ namespace CombatSimulation.Runtime
                 }
                 else if (item.Kind == BattleEventKind.Spawn && snapshot.TryGetShip(item.EntityId, out var ship))
                 {
-                    if (!_battle.Setup.IsLocalOwner(ship.Owner)) continue;
+                    // A decoy has no pilot (phase 5, step 10c).
+                    if (!_battle.Setup.IsLocalOwner(ship.Owner) || ship.IsDecoy) continue;
                     var pilot = _provider.CreatePilot(snapshot, ship, out var schedule);
                     if (pilot == null) continue;
                     if (schedule.Period < 1)

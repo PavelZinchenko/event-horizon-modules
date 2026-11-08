@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CombatSimulation.Core;
 using GameDatabase.Enums;
 
 namespace CombatSimulation.Ai
@@ -164,6 +165,11 @@ namespace CombatSimulation.Ai
 
         // Legacy RequirementChecker HasEngine and NodeBuilder.CanMove.
         public bool HasEngine => !IsStarbase && EnginePower > MinEnginePower && TurnRate > MinEnginePower;
+
+        // The target facts of every decoy (phase 5, step 10c): legacy Decoy has no stats, engine or weapons, and its
+        // Body.Scale is 0.5.
+        public static readonly AiShipProfile Decoy = new AiShipProfile(null, null, null, false, false, default, 0f, 0f, 0f,
+            0f, 0f, DecoyDefinition.Size, 0f);
 
         private const float MinEnginePower = 0.1f;
     }

@@ -104,7 +104,24 @@ namespace CombatSimulation.Core
         }
     }
 
-    // A pooled ship. Drones and clones have a persistent bay instead of a roster slot.
+    // A decoy's life (phase 5, step 10c): the device that launched it, its lifetime and its owner's pose corrections,
+    // which use the missile correction format as repair bots do.
+    internal sealed class DecoyLife
+    {
+        public DecoyDefinition Definition;
+        public long SpawnTick;
+
+        // Stage 11 of this tick marks the decoy's death (legacy elapsed >= lifetime).
+        public long ExpiryTick;
+        public long LastCorrectionTick, CorrectionTick, LastSentTick;
+        public MissileCorrection Correction;
+
+        // Legacy View.Life: 1 at the spawn, 0 at the expiry.
+        public float Life(long tick) => ExpiryTick <= SpawnTick ? 0f :
+            System.Math.Max(0f, System.Math.Min(1f, 1f - (float)(tick - SpawnTick) / (ExpiryTick - SpawnTick)));
+    }
+
+    // A pooled ship. Drones and clones have a persistent bay instead of a roster slot; a decoy has neither.
     internal sealed class ShipEntity
     {
         public const long NoRetreat = -1;
@@ -132,6 +149,10 @@ namespace CombatSimulation.Core
         public RosterSlot Slot { get; private set; }
         public DroneBayInventory Bay { get; private set; }
         public bool IsDrone => Bay != null;
+
+        // Null unless the entity is a decoy (phase 5, step 10c).
+        public DecoyLife Decoy { get; private set; }
+        public bool IsDecoy => Decoy != null;
         // Null override keeps the original bay association; an explicit null entity means no owner.
         // Capture changes this link, never the bay's inventory or network owner.
         public EntityId? MothershipOverride { get; set; }
@@ -278,12 +299,28 @@ namespace CombatSimulation.Core
         internal void InitializeDrone(EntityId id, DroneBayInventory bay, BodyId body, long tick, int damageTypes)
             => Initialize(id, null, bay, bay.Drone, bay.Slot.Side, bay.Slot.Owner, body, tick, damageTypes);
 
+        // A decoy takes its parent's side, owner and allegiance.
+        internal void InitializeDecoy(EntityId id, ShipEntity parent, DecoyDefinition definition, BodyId body, long tick,
+            long expiryTick, int damageTypes)
+        {
+            Initialize(id, null, null, definition.Ship, parent.Side, parent.Owner, body, tick, damageTypes);
+            Allegiance = parent.Allegiance;
+            if (_decoy == null) _decoy = new DecoyLife();
+            _decoy.Definition = definition;
+            _decoy.SpawnTick = tick;
+            _decoy.ExpiryTick = expiryTick;
+            _decoy.LastCorrectionTick = _decoy.CorrectionTick = _decoy.LastSentTick = -1;
+            _decoy.Correction = default;
+            Decoy = _decoy;
+        }
+
         private void Initialize(EntityId id, RosterSlot slot, DroneBayInventory bay, ShipDefinition definition,
             int side, int owner, BodyId body, long tick, int damageTypes)
         {
             Id = id;
             Slot = slot;
             Bay = bay;
+            Decoy = null;
             MothershipOverride = null;
             Side = side;
             Allegiance = Allegiances.OfSide(side);
@@ -484,6 +521,7 @@ namespace CombatSimulation.Core
             Id = default;
             Slot = null;
             Bay = null;
+            Decoy = null;
             Body = default;
             Definition = null;
             RetreatCompletionTick = NoRetreat;
@@ -515,6 +553,7 @@ namespace CombatSimulation.Core
         }
 
         private TargetPriority _targetPriority;
+        private DecoyLife _decoy;
         private ShapeId[] _shapes = new ShapeId[1];
         private float[] _pendingDamage = System.Array.Empty<float>();
         private float[] _pendingDamageIgnoringShield = System.Array.Empty<float>();

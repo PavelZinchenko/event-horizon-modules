@@ -81,7 +81,7 @@ namespace CombatSimulation.Ai
         protected override bool IgnoreDrones => true;
 
         protected override bool IsValidEnemy(EntityId id, AiContext context) =>
-            context.TryGetShip(id, out var target) && id != context.Ship.Id && !target.IsDrone &&
+            context.TryGetShip(id, out var target) && id != context.Ship.Id && !target.IsDrone && !target.IsDecoy &&
             !context.IsEnemy(target) && target.Armor.Value / target.Armor.Max <= 0.99f && IsInRange(target, context);
 
         protected override bool IsInRange(in ShipState target, AiContext context)
@@ -412,8 +412,9 @@ namespace CombatSimulation.Ai
     }
 
     // Legacy ShipListExtensions.GetEnemy: the best enemy by priority, distance and size, in snapshot order. Legacy
-    // keeps scene order (spawn order); the snapshot lists roster ships in roster order, then drones by entity ID, so
-    // only ties can pick another ship.
+    // keeps scene order (spawn order); the snapshot lists roster ships in roster order, then drones and decoys by entity
+    // ID, so only ties and the decoy rule can pick another ship. Decoy rules (phase 5, step 10c): a ship search skips
+    // decoys; with TakeDecoyChance, the first decoy replaces any enemy that is not a decoy, whatever its score.
     internal static class EnemySearch
     {
         // A drone measures MaxDistance from its mothership, as legacy does from Type.Owner.
@@ -428,12 +429,14 @@ namespace CombatSimulation.Ai
             var selfScale = context.Profile.ModelScale;
             var origin = context.TryGetShip(whereToLook, out var look) ? look.Position : self.Position;
 
-            // Legacy decides the decoy rules first, with a draw only for a chance strictly between 0 and 100. The draws
-            // stay so the stream keeps the legacy order; the core has no decoys yet, so the rules never apply.
-            if (options.IgnoreDecoyChance > 0 && options.IgnoreDecoyChance < 100) context.Percentage(options.IgnoreDecoyChance);
-            if (options.TakeDecoyChance > 0 && options.TakeDecoyChance < 100) context.Percentage(options.TakeDecoyChance);
+            // Legacy decides the decoy rules first, with a draw only for a chance strictly between 0 and 100.
+            var ignoreDecoy = options.IgnoreDecoyChance >= 100 ||
+                              options.IgnoreDecoyChance > 0 && context.Percentage(options.IgnoreDecoyChance);
+            var takeDecoy = options.TakeDecoyChance >= 100 ||
+                            options.TakeDecoyChance > 0 && context.Percentage(options.TakeDecoyChance);
 
             var enemy = default(EntityId);
+            var enemyIsDecoy = false;
             var enemyStats = TargetStats.None;
             foreach (var ship in context.Snapshot.Ships)
             {
@@ -441,6 +444,7 @@ namespace CombatSimulation.Ai
                 var profile = context.ProfileOf(ship);
                 if (ship.TargetPriority == TargetPriority.None) continue;
                 if (options.IgnoreDrones && ship.IsDrone) continue;
+                if (ignoreDecoy && ship.IsDecoy) continue;
                 if (options.UseDroneCamouflage && profile.ChanceToAvoidDrone > 0f && context.Percentage(profile.ChanceToAvoidDrone))
                     continue;
 
@@ -455,9 +459,10 @@ namespace CombatSimulation.Ai
                 }
 
                 var stats = new TargetStats(ship, profile.ModelScale, distanceToShip);
-                if (enemy.IsNull || stats.IsBetterThan(enemyStats))
+                if (enemy.IsNull || takeDecoy && ship.IsDecoy && !enemyIsDecoy || stats.IsBetterThan(enemyStats))
                 {
                     enemy = ship.Id;
+                    enemyIsDecoy = ship.IsDecoy;
                     enemyStats = stats;
                 }
             }
@@ -524,7 +529,8 @@ namespace CombatSimulation.Ai
 
             foreach (var ship in context.Snapshot.Ships)
             {
-                if (ship.Id == self.Id || ship.Id == context.TargetShip) continue;
+                // Legacy TargetListBase.GetTargets skips decoys (phase 5, step 10c).
+                if (ship.Id == self.Id || ship.Id == context.TargetShip || ship.IsDecoy) continue;
                 if (!context.IsEnemy(ship)) continue;
 
                 enemies.Add(ship.Id);

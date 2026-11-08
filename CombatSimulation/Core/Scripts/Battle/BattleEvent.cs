@@ -67,6 +67,9 @@ namespace CombatSimulation.Core
         public readonly RosterId RosterId;
         public readonly DroneBayKey? BayKey;
         public bool IsDrone => BayKey.HasValue;
+
+        // Spawn and removal of a decoy (phase 5, step 10c): Definition is its DecoyDefinition.Ship.
+        public readonly bool IsDecoy;
         public readonly int Side;
         public readonly int Owner;
 
@@ -110,7 +113,8 @@ namespace CombatSimulation.Core
             float armorDeficit, float shieldDeficit, BattleResult result, EntityId attackerId = default,
             float damage = 0f, Vec2 point = default, BulletDefinition bulletDefinition = null, EntityId parentId = default,
             BeamDefinition beamDefinition = null, int deviceIndex = -1, DroneBayKey? bayKey = null,
-            BattleEventAuthority authority = BattleEventAuthority.Committed, EntityId previousId = default)
+            BattleEventAuthority authority = BattleEventAuthority.Committed, EntityId previousId = default,
+            bool isDecoy = false)
         {
             BattleId = battleId;
             Tick = tick;
@@ -120,6 +124,7 @@ namespace CombatSimulation.Core
             EntityId = entityId;
             RosterId = rosterId;
             BayKey = bayKey;
+            IsDecoy = isDecoy;
             Side = side;
             Owner = owner;
             Definition = definition;
@@ -145,12 +150,12 @@ namespace CombatSimulation.Core
             BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Spawn, ship.Id, ship.Slot?.RosterId ?? default, ship.Side,
                 ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f,
-                default, parentId: ship.MothershipId, bayKey: ship.Bay?.Key, authority: authority);
+                default, parentId: ship.MothershipId, bayKey: ship.Bay?.Key, authority: authority, isDecoy: ship.IsDecoy);
 
         internal static BattleEvent Removal(BattleId battleId, long tick, int sequence, ShipEntity ship, RemovalReason reason) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, ship.Id, ship.Slot?.RosterId ?? default, ship.Side,
                 ship.Owner, ship.Definition, reason, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
-                parentId: ship.MothershipId, bayKey: ship.Bay?.Key);
+                parentId: ship.MothershipId, bayKey: ship.Bay?.Key, isDecoy: ship.IsDecoy);
 
         internal static BattleEvent BulletSpawn(BattleId battleId, long tick, int sequence, in BulletEntity bullet,
             BattleEventAuthority authority = BattleEventAuthority.Committed) =>

@@ -42,7 +42,7 @@ namespace CombatSimulation.Core
 
             if (bullet.TargetId.IsNull) return;
             if (Stick(battle, index, bullet.TargetId))
-                battle.CaptureMissileTarget(bullet, bullet.TargetId, battle.FindShip(bullet.TargetId) == null);
+                battle.CaptureMissileTarget(bullet, bullet.TargetId, battle.IsAuxiliaryTarget(bullet.TargetId));
             else bullet.TargetId = default;
         }
 

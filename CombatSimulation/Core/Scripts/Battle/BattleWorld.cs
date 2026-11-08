@@ -34,12 +34,13 @@ namespace CombatSimulation.Core
         public Roster Roster { get; }
         public ShipStore Ships { get; } = new ShipStore();
 
-        // Live drones in entity ID order.
+        // Live drones and decoys (phase 5, step 10c) in entity ID order.
         public List<ShipEntity> Drones { get; } = new List<ShipEntity>();
 
         public BulletStore Bullets { get; } = new BulletStore();
         public TailSegmentStore Segments { get; } = new TailSegmentStore();
         public RepairBots RepairBots { get; set; }
+        public Decoys Decoys { get; set; }
         public EntityRegistry Entities { get; } = new EntityRegistry();
         public ShapeTable Shapes { get; } = new ShapeTable();
         public BattleEventBuffer Events { get; } = new BattleEventBuffer();
@@ -70,7 +71,7 @@ namespace CombatSimulation.Core
         public ShipEntity FindShip(EntityId id) =>
             Entities.TryGet(id, out var handle) ? Ships.Get(handle) : null;
 
-        // Roster entries can be empty; live drones follow them in stable entity ID order.
+        // Roster entries can be empty; live drones and decoys follow them in stable entity ID order.
         public int ShipEntryCount => Roster.Slots.Count + Drones.Count;
         public ShipEntity GetShipEntry(int index) => index < Roster.Slots.Count
             ? Roster.Slots[index].ActiveShip : Drones[index - Roster.Slots.Count];
