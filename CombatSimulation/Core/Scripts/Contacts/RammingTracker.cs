@@ -22,14 +22,14 @@ namespace CombatSimulation.Core
         // Stage 8. Begin events first, then end events: a pair that swaps one touching shape pair for another in
         // the same step stays touching. Adds one candidate per direction for each touch that started.
         public void Collect(PhysicsWorld world, ShapeTable shapes, ShipStore ships, TailSegmentStore segments,
-            ContactResolver resolver, int damageType)
+            ContactResolver resolver, int damageType, RepairBots bots = null)
         {
             _started.Clear();
 
             var begins = world.BeginEvents;
             for (var i = 0; i < begins.Length; ++i)
             {
-                if (!TryResolve(begins[i], shapes, ships, segments, out var a, out var entryA, out var b, out var entryB))
+                if (!TryResolve(begins[i], shapes, ships, segments, bots, out var a, out var entryA, out var b, out var entryB))
                     continue;
 
                 // Order the pair by entity ID, so the result does not depend on the physics shape order.
@@ -51,7 +51,7 @@ namespace CombatSimulation.Core
             for (var i = 0; i < ends.Length; ++i)
             {
                 // A stale shape (a removed ship) resolves to nothing; Forget already dropped its pairs.
-                if (!TryResolve(ends[i], shapes, ships, segments, out var a, out _, out var b, out _)) continue;
+                if (!TryResolve(ends[i], shapes, ships, segments, bots, out var a, out _, out var b, out _)) continue;
 
                 var pair = EntityPair.Unordered(a.Id, b.Id);
                 if (!_touching.TryGetValue(pair, out var count)) continue;
@@ -62,8 +62,8 @@ namespace CombatSimulation.Core
             for (var i = 0; i < _started.Count; ++i)
             {
                 var touch = _started[i];
-                var first = Party.Of(touch.FirstShape.Owner, ships, segments);
-                var second = Party.Of(touch.SecondShape.Owner, ships, segments);
+                var first = Party.Of(touch.FirstShape.Owner, ships, segments, bots);
+                var second = Party.Of(touch.SecondShape.Owner, ships, segments, bots);
 
                 var relativeSpeed = (first.PreStepVelocity - second.PreStepVelocity).Length;
                 var mass = Math.Min(world.GetMass(first.Body), world.GetMass(second.Body));
@@ -108,13 +108,13 @@ namespace CombatSimulation.Core
 
         // The shapes belong to two live hostile entities, at least one of them a ship.
         private static bool TryResolve(in ContactEvent contact, ShapeTable shapes, ShipStore ships,
-            TailSegmentStore segments, out Party a, out ShapeEntry entryA, out Party b, out ShapeEntry entryB)
+            TailSegmentStore segments, RepairBots bots, out Party a, out ShapeEntry entryA, out Party b, out ShapeEntry entryB)
         {
             a = b = default;
             if (!shapes.TryGet(contact.ShapeA, out entryA) | !shapes.TryGet(contact.ShapeB, out entryB)) return false;
 
-            a = Party.Of(entryA.Owner, ships, segments);
-            b = Party.Of(entryB.Owner, ships, segments);
+            a = Party.Of(entryA.Owner, ships, segments, bots);
+            b = Party.Of(entryB.Owner, ships, segments, bots);
             return a.IsAlive && b.IsAlive && (a.Ship != null || b.Ship != null) && a.Id != b.Id &&
                    Allegiances.IsHostile(a.Allegiance, b.Allegiance);
         }
@@ -124,25 +124,27 @@ namespace CombatSimulation.Core
         {
             public readonly ShipEntity Ship;
             public readonly TailSegment Segment;
+            public readonly RepairBot Bot;
 
-            private Party(ShipEntity ship, TailSegment segment)
+            private Party(ShipEntity ship, TailSegment segment, RepairBot bot)
             {
                 Ship = ship;
                 Segment = segment;
+                Bot = bot;
             }
 
-            public static Party Of(EntityHandle handle, ShipStore ships, TailSegmentStore segments)
+            public static Party Of(EntityHandle handle, ShipStore ships, TailSegmentStore segments, RepairBots bots)
             {
                 var ship = ships.Get(handle);
-                return new Party(ship, ship == null ? segments.Get(handle) : null);
+                return new Party(ship, ship == null ? segments.Get(handle) : null, bots?.Get(handle));
             }
 
-            public bool IsAlive => Ship != null || Segment != null;
-            public EntityId Id => Ship?.Id ?? Segment.Id;
-            public EntityHandle Handle => Ship?.Handle ?? Segment.Handle;
-            public Allegiance Allegiance => Ship?.Allegiance ?? Segment.Allegiance;
-            public BodyId Body => Ship?.Body ?? Segment.Body;
-            public Vec2 PreStepVelocity => Ship?.PreStepVelocity ?? Segment.PreStepVelocity;
+            public bool IsAlive => Ship != null || Segment != null || Bot != null;
+            public EntityId Id => Ship?.Id ?? Segment?.Id ?? Bot.Id;
+            public EntityHandle Handle => Ship?.Handle ?? Segment?.Handle ?? Bot.Handle;
+            public Allegiance Allegiance => Ship?.Allegiance ?? Segment?.Allegiance ?? Bot.Allegiance;
+            public BodyId Body => Ship?.Body ?? Segment?.Body ?? Bot.Body;
+            public Vec2 PreStepVelocity => Ship?.PreStepVelocity ?? Segment?.PreStepVelocity ?? Bot.PreStepVelocity;
         }
 
         // Keeps the target shape with the smallest (priority, order) among the pair's begin events in this step.

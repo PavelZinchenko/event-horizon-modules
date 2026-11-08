@@ -34,6 +34,7 @@ namespace CombatSimulation.Core
         public ReadOnlySpan<BulletState> Bullets => new ReadOnlySpan<BulletState>(_bullets, 0, _bulletCount);
 
         // Live worm tail segments in storage order; the order has no meaning (phase 5, step 7d).
+        public ReadOnlySpan<RepairBotState> RepairBots => new ReadOnlySpan<RepairBotState>(_repairBots, 0, _repairBotCount);
         public ReadOnlySpan<TailSegmentState> Segments => new ReadOnlySpan<TailSegmentState>(_segments, 0, _segmentCount);
 
         // Every slot in setup order.
@@ -125,6 +126,12 @@ namespace CombatSimulation.Core
             for (var i = 0; i < bullets.Capacity; ++i)
                 if (bullets.IsAlive(i)) _bullets[_bulletCount++] = new BulletState(bullets[i], world);
 
+            var bots = battle.RepairBots.Items;
+            if (_repairBots.Length < bots.Count) Array.Resize(ref _repairBots, Math.Max(bots.Count, _repairBots.Length * 2));
+            _repairBotCount = 0;
+            foreach (var bot in bots)
+                if (bot != null) _repairBots[_repairBotCount++] = new RepairBotState(bot, world);
+
             var segments = battle.Segments;
             if (_segments.Length < segments.AliveCount)
                 _segments = new TailSegmentState[Math.Max(segments.AliveCount, _segments.Length * 2)];
@@ -161,6 +168,8 @@ namespace CombatSimulation.Core
         private DeviceState[] _devices = new DeviceState[16];
         private BulletState[] _bullets = new BulletState[16];
         private int _bulletCount;
+        private RepairBotState[] _repairBots = new RepairBotState[4];
+        private int _repairBotCount;
         private TailSegmentState[] _segments = new TailSegmentState[16];
         private int _segmentCount;
         private BattleEvent[] _events = new BattleEvent[16];

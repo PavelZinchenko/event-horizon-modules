@@ -63,8 +63,9 @@ namespace CombatSimulation.Core
             }
 
             var segment = battle.FindSegment(id);
-            body = segment?.Body ?? default;
-            return segment != null;
+            var bot = battle.FindRepairBot(id);
+            body = segment?.Body ?? bot?.Body ?? default;
+            return segment != null || bot != null;
         }
     }
 }

@@ -46,9 +46,9 @@ namespace CombatSimulation.Core
             _beams.Collect(_resolver);
             _bolts.Collect(_resolver);
             _pointDefense.Collect(_resolver);
-            _world.Bullets.CollectHits(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver);
-            _world.Bullets.CollectStuckHits(Physics, _world.Entities, _world.Shapes, _world.Ships, _world.Segments, _resolver);
-            _ramming.Collect(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver, Setup.DamageTypes.RammingDamageType);
+            _world.Bullets.CollectHits(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver, _world.RepairBots);
+            _world.Bullets.CollectStuckHits(Physics, _world.Entities, _world.Shapes, _world.Ships, _world.Segments, _resolver, _world.RepairBots);
+            _ramming.Collect(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver, Setup.DamageTypes.RammingDamageType, _world.RepairBots);
 
             var duplicates = _resolver.Sort();
             if (duplicates > 0)
@@ -161,6 +161,13 @@ namespace CombatSimulation.Core
                             _network?.ClaimBulletContact(hit.Attacker, attackerOwner, hit.AttackerDeviceIndex, targetBullet,
                                 perTick ? HitImpactKind.DamageOverTime : HitImpactKind.Impact, hit.Damage);
                     }
+                }
+                else if (hit.TargetHandle.Kind == EntityKind.RepairBot)
+                {
+                    var bot = _world.RepairBots.Get(hit.TargetHandle);
+                    if (bot == null) continue;
+                    authority = _world.Authority(bot.Owner);
+                    _world.RepairBots.Resolve(hit, bot);
                 }
                 else if (hit.TargetHandle.Kind == EntityKind.Segment)
                 {

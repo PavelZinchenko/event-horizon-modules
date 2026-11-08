@@ -160,6 +160,11 @@ namespace CombatSimulation.Core
         private void ApplyBulletContact(in ResolvedHit hit)
         {
             if (!_world.Entities.TryGet(hit.TargetId, out var handle)) return;
+            if (handle.Kind == EntityKind.RepairBot)
+            {
+                _world.RepairBots.ApplyHit(hit, _world.RepairBots.Get(handle));
+                return;
+            }
             if (handle.Kind == EntityKind.Segment)
             {
                 _tails.ApplySegmentContact(hit, _world.Segments.Get(handle));

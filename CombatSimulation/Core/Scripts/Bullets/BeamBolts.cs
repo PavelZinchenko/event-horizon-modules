@@ -139,15 +139,16 @@ namespace CombatSimulation.Core
                 if (!battle.Shapes.TryGet(hit.Target.Shape, out var target)) return false;
                 var ship = battle.FindShip(target.OwnerId);
                 var segment = ship == null ? battle.FindSegment(target.OwnerId) : null;
-                if (ship == null && segment == null) return false;
-                if (definition.FriendlyFire && CollisionFilters.IsSource(bolt.SourceShipId, ship, segment)) return false;
-                targetAllegiance = ship?.Allegiance ?? segment.Allegiance;
+                var bot = battle.FindRepairBot(target.OwnerId);
+                if (ship == null && segment == null && bot == null) return false;
+                if (definition.FriendlyFire && (CollisionFilters.IsSource(bolt.SourceShipId, ship, segment) || bot?.ShipId == bolt.SourceShipId)) return false;
+                targetAllegiance = ship?.Allegiance ?? segment?.Allegiance ?? bot.Allegiance;
                 candidate.Target = target.OwnerId;
                 candidate.TargetHandle = target.Owner;
                 candidate.TargetPriority = target.Priority;
                 candidate.TargetShapeOrder = target.Order;
-                targetPosition = world.GetPosition(ship?.Body ?? segment.Body);
-                targetScale = ship?.Definition.Scale ?? segment.Scale;
+                targetPosition = world.GetPosition(ship?.Body ?? segment?.Body ?? bot.Body);
+                targetScale = ship?.Definition.Scale ?? segment?.Scale ?? bot.Scale;
             }
 
             candidate.Falloff = definition.HasFalloff

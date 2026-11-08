@@ -52,6 +52,7 @@ namespace CombatSimulation.Core
                     : (tick - bullet.CorrectedTick) * (IsNearPeer(peerOwner, position, bullet.Definition) ? NearWeight : 1f);
                 batch.AddMissile(new MissileCorrection(bullet.Id, position, rotation.Angle, !fullSpeed, velocity, priority));
             }
+            _world.RepairBots.WriteCorrections(owner, batch);
             batch.SortMissiles();
         }
 
@@ -74,6 +75,8 @@ namespace CombatSimulation.Core
         // Runtime calls this for each missile it sent from a batch for tick.
         internal void MissileCorrectionSent(EntityId id, long tick)
         {
+            var bot = _world.RepairBots.Find(id);
+            if (bot != null) { bot.LastSentTick = tick; return; }
             if (!_world.Entities.TryGet(id, out var handle) || !_world.Bullets.TryGet(handle, out var index)) return;
             ref var bullet = ref _world.Bullets[index];
             bullet.Corrected = true;
@@ -106,6 +109,12 @@ namespace CombatSimulation.Core
             }
             foreach (var missile in batch.Missiles)
             {
+                var bot = _world.RepairBots.Find(missile.EntityId);
+                if (bot != null)
+                {
+                    if (_world.RepairBots.HoldCorrection(bot, senderOwner, batch.Tick, missile)) ++held;
+                    continue;
+                }
                 if (!_world.Entities.TryGet(missile.EntityId, out var handle) || !_world.Bullets.TryGet(handle, out var index)) continue;
                 ref var bullet = ref _world.Bullets[index];
                 if (bullet.Owner != senderOwner || bullet.IsBeam || !bullet.Definition.IsHoming || !ValidMissile(missile) ||
@@ -138,6 +147,7 @@ namespace CombatSimulation.Core
         internal void ApplyCorrections()
         {
             if (!Setup.HasRemoteOwners) return;
+            _world.RepairBots.ApplyCorrections();
             for (var i = 0; i < _world.ShipEntryCount; ++i)
             {
                 var ship = _world.GetShipEntry(i);

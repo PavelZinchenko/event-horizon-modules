@@ -18,6 +18,7 @@ namespace CombatSimulation.Core
         public long Tick => _world.Tick;
         public PhysicsWorld Physics => _world.Physics;
         public BulletStore Bullets => _world.Bullets;
+        public RepairBots RepairBots => _world.RepairBots;
 
         // Stage 2: a device asks for a ship, a bullet or a beam; stage 5 creates it.
         public void RequestSpawn(in SpawnRequest request) => _spawns.Request(request);

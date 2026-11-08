@@ -11,6 +11,7 @@ namespace CombatSimulation.Core
 
         // Worm tail segments (TailSegmentStore; phase 5, step 7d).
         Segment = 3,
+        RepairBot = 4,
     }
 
     // Internal storage handle: kind, index and generation. Never exposed as a public ID.

@@ -92,7 +92,7 @@ namespace CombatSimulation.Core
         }
     }
 
-    // The owner's state of one homing projectile at the end of the batch tick (network plan, P3). Velocity is
+    // The owner's state of one homing projectile or repair bot at the end of the batch tick (network plan, P3). Velocity is
     // omitted at full speed along the heading; the receiver then uses Speed along the angle. Priority orders the
     // owner's batch (highest first) and does not travel.
     public readonly struct MissileCorrection
@@ -127,7 +127,7 @@ namespace CombatSimulation.Core
 
         public ReadOnlySpan<BodyCorrection> Bodies => new ReadOnlySpan<BodyCorrection>(_bodies, 0, _bodyCount);
 
-        // Homing projectiles. The owner's batch lists every one, highest priority first; Runtime sends a prefix.
+        // Homing projectiles and repair bots. Highest priority first; Runtime sends a prefix.
         public ReadOnlySpan<MissileCorrection> Missiles => new ReadOnlySpan<MissileCorrection>(_missiles, 0, _missileCount);
 
         public ReadOnlySpan<PointDefenseTimers> GetTimers(in BodyCorrection body) =>

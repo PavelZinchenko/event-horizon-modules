@@ -39,6 +39,7 @@ namespace CombatSimulation.Core
 
         public BulletStore Bullets { get; } = new BulletStore();
         public TailSegmentStore Segments { get; } = new TailSegmentStore();
+        public RepairBots RepairBots { get; set; }
         public EntityRegistry Entities { get; } = new EntityRegistry();
         public ShapeTable Shapes { get; } = new ShapeTable();
         public BattleEventBuffer Events { get; } = new BattleEventBuffer();
@@ -59,6 +60,7 @@ namespace CombatSimulation.Core
 
         public int EntityOwner(EntityHandle handle) => handle.Kind == EntityKind.Bullet
             ? (Bullets.TryGet(handle, out var index) ? Bullets[index].Owner : -1)
+            : handle.Kind == EntityKind.RepairBot ? RepairBots.Get(handle)?.Owner ?? -1
             : handle.Kind == EntityKind.Segment ? Segments.Get(handle)?.Owner ?? -1
             : (Ships.Get(handle)?.Owner ?? -1);
 

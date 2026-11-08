@@ -45,10 +45,13 @@ namespace CombatSimulation.Core
             // A bullet target: one record per contact. Disarm and Stop name bullets only.
             if (hit.TargetIsBullet ? hit.TargetShape != 0 || hit.ContactState != HitContactState.Start
                 : hit.ImpactKind > HitImpactKind.DamageOverTime) return false;
-            // A push travels only with the impact of a projectile on a ship (phase 4 E4).
+            // A bot takes a push once per contact record, including an over-time tick. An absent target may have
+            // already died; accept and acknowledge that late hit without applying it.
+            var auxiliaryPush = hit.TargetIsBullet && (!_world.Entities.TryGet(hit.TargetId, out var pushTarget) ||
+                pushTarget.Kind == EntityKind.RepairBot);
             if (!Finite(hit.Impulse.X) || !Finite(hit.Impulse.Y) ||
-                ((hit.Impulse.X != 0f || hit.Impulse.Y != 0f) && (hit.TargetIsBullet ||
-                    hit.ImpactKind == HitImpactKind.DamageOverTime || hit.ContactState != HitContactState.Start)))
+                ((hit.Impulse.X != 0f || hit.Impulse.Y != 0f) && ((!auxiliaryPush &&
+                    (hit.TargetIsBullet || hit.ImpactKind == HitImpactKind.DamageOverTime)) || hit.ContactState != HitContactState.Start)))
                 return false;
             // The attacker may already be gone. A live copy, when present, must agree with the sender.
             if (_world.Entities.TryGet(hit.AttackerId, out var handle) && _world.EntityOwner(handle) != record.SenderOwner)
@@ -93,7 +96,7 @@ namespace CombatSimulation.Core
             Finite(pose.Angle) && Finite(pose.LinearVelocity.X) && Finite(pose.LinearVelocity.Y) && Finite(pose.AngularVelocity);
 
         // A hit record on a bullet or a tail segment names one contact (ResolvedHit.TargetIsBullet; network plan 9d).
-        private static bool IsContactTarget(EntityKind kind) => kind == EntityKind.Bullet || kind == EntityKind.Segment;
+        private static bool IsContactTarget(EntityKind kind) => kind == EntityKind.Bullet || kind == EntityKind.Segment || kind == EntityKind.RepairBot;
 
         private DroneBayInventory FindBay(DroneBayKey key)
         {
@@ -149,7 +152,7 @@ namespace CombatSimulation.Core
                 case OwnerOperationKind.MissileTarget:
                     if (operation.EntityId.IsNull || operation.TargetIsSegment && operation.TargetId.IsNull) return false;
                     if (_world.Entities.TryGet(operation.TargetId, out handle) && (handle.Kind == EntityKind.Bullet ||
-                        (handle.Kind == EntityKind.Segment) != operation.TargetIsSegment)) return false;
+                        (handle.Kind == EntityKind.Segment || handle.Kind == EntityKind.RepairBot) != operation.TargetIsSegment)) return false;
                     return !_world.Entities.TryGet(operation.EntityId, out handle) ||
                         (_world.Bullets.TryGet(handle, out var missile) && _world.Bullets[missile].Owner == operation.Owner &&
                          !_world.Bullets[missile].IsBeam && (_world.Bullets[missile].Definition.IsSticky ||
@@ -395,7 +398,12 @@ namespace CombatSimulation.Core
                 return true;
             }
             if (_world.EntityOwner(handle) != operation.Owner) return false;
-            if (handle.Kind == EntityKind.Segment)
+            if (handle.Kind == EntityKind.RepairBot)
+            {
+                if (operation.BayKey.HasValue) return false;
+                _world.RepairBots.Remove(_world.RepairBots.Get(handle), operation.RemovalReason, operation.Tick);
+            }
+            else if (handle.Kind == EntityKind.Segment)
             {
                 if (operation.BayKey.HasValue) return false;
                 _tails.RemoveSegment(_world.Segments.Get(handle), operation.RemovalReason);
@@ -479,7 +487,15 @@ namespace CombatSimulation.Core
                 _outgoingOperations.Add(OwnerOperation.Remove(BattleId, owner, NextOperationSequence(owner), Tick, id, reason, bay));
         }
 
-        // A tail segment is a bullet spawn with the device index as source and the segment number as spawn slot (H8).
+        // A repair bot uses the device index and slot zero in the existing reliable spawn stream (H8).
+        internal void CaptureRepairBotSpawn(ShipEntity ship, int deviceIndex, EntityId id, Vec2 position, float angle)
+        {
+            if (ShouldCapture(ship.Owner))
+                _outgoingOperations.Add(OwnerOperation.BulletFired(BattleId, ship.Owner, NextOperationSequence(ship.Owner),
+                    Tick, id, ship.Id, deviceIndex, 0, 0, position, angle));
+        }
+
+        // A tail segment uses its number as the spawn slot (H8).
         internal void CaptureSegmentSpawn(ShipEntity ship, int deviceIndex, int number, EntityId id)
         {
             if (ShouldCapture(ship.Owner))

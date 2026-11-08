@@ -37,6 +37,19 @@ namespace CombatSimulation.Core
                         if (!target.IsBullet)
                         {
                             if (!battle.Shapes.TryGet(target.Shape, out var shape)) continue;
+                            var bot = battle.FindRepairBot(shape.OwnerId);
+                            if (bot != null && Allegiances.IsHostile(bot.Allegiance, ship.Allegiance) && _droneTargets.Add(bot.Id))
+                            {
+                                _candidates.Add(new ContactCandidate
+                                {
+                                    Time = 0f, Kind = ContactKind.Hit, Source = ContactSource.Overlap,
+                                    Attacker = ship.Id, AttackerHandle = ship.Handle, PointDefense = device,
+                                    AttackerPassThrough = true, Target = bot.Id, TargetHandle = bot.Handle,
+                                    TargetPriority = ShapeHitPriority.Hull, Damage = device.Definition.DroneDamage,
+                                    DamageType = device.Definition.DamageType, Point = battle.World.GetPosition(bot.Body),
+                                });
+                                continue;
+                            }
                             var drone = battle.FindShip(shape.OwnerId);
                             // A query has no category, so the hull filter of a drone without contacts does not stop it.
                             if (drone == null || !drone.IsDrone || !Allegiances.IsHostile(drone.Allegiance, ship.Allegiance) ||

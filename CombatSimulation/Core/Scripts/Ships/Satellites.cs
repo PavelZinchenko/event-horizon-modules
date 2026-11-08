@@ -205,7 +205,7 @@ namespace CombatSimulation.Core
 
         // Legacy UnitExtensions.MoveTowards. The impulses there set the velocities: the ship velocity plus the slot
         // offset times the factors, and the heading error times the factors. Unity's angular drag acts in its step.
-        private static void Steer(PhysicsWorld physics, BodyId body, SatelliteDefinition definition, Vec2 slot,
+        internal static void Steer(PhysicsWorld physics, BodyId body, SatelliteDefinition definition, Vec2 slot,
             float heading, Vec2 shipVelocity)
         {
             var direction = physics.Torus.Delta(physics.GetPosition(body), slot);

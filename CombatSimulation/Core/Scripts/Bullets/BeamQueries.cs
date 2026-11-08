@@ -83,11 +83,12 @@ namespace CombatSimulation.Core
                     else
                     {
                         if (!battle.Shapes.TryGet(hit.Target.Shape, out var target) ||
-                            (battle.FindShip(target.OwnerId) == null && battle.FindSegment(target.OwnerId) == null)) continue;
+                            (battle.FindShip(target.OwnerId) == null && battle.FindSegment(target.OwnerId) == null && battle.FindRepairBot(target.OwnerId) == null)) continue;
                         var targetShip = battle.FindShip(target.OwnerId);
                         var segment = targetShip == null ? battle.FindSegment(target.OwnerId) : null;
-                        if (definition.FriendlyFire && CollisionFilters.IsSource(beam.SourceShipId, targetShip, segment)) continue;
-                        targetAllegiance = targetShip?.Allegiance ?? segment.Allegiance;
+                        var bot = battle.FindRepairBot(target.OwnerId);
+                        if (definition.FriendlyFire && (CollisionFilters.IsSource(beam.SourceShipId, targetShip, segment) || bot?.ShipId == beam.SourceShipId)) continue;
+                        targetAllegiance = targetShip?.Allegiance ?? segment?.Allegiance ?? bot.Allegiance;
                         candidate.Target = target.OwnerId;
                         candidate.TargetHandle = target.Owner;
                         candidate.TargetPriority = target.Priority;
@@ -141,6 +142,12 @@ namespace CombatSimulation.Core
             if (ship != null)
             {
                 position = battle.World.GetPosition(ship.Body);
+                return true;
+            }
+            var bot = battle.FindRepairBot(id);
+            if (bot != null)
+            {
+                position = battle.World.GetPosition(bot.Body);
                 return true;
             }
             var segment = battle.FindSegment(id);

@@ -221,7 +221,7 @@ namespace CombatSimulation.Core
         // bullet marked for removal before the step (a detonation) takes no contacts and is no target; a sticky bullet
         // records the first ship, drone or tail segment it touches.
         public void CollectHits(PhysicsWorld world, ShapeTable shapes, ShipStore ships, TailSegmentStore segments,
-            ContactResolver resolver)
+            ContactResolver resolver, RepairBots bots = null)
         {
             var hits = world.BulletHits;
             for (var i = 0; i < hits.Length; ++i)
@@ -276,9 +276,10 @@ namespace CombatSimulation.Core
                     if (!shapes.TryGet(hit.Target.Shape, out var target)) continue;
                     var ship = ships.Get(target.Owner);
                     var segment = ship == null ? segments.Get(target.Owner) : null;
-                    if (ship == null && segment == null) continue;
-                    if (definition.FriendlyFire && CollisionFilters.IsSource(bullet.SourceShipId, ship, segment)) continue;
-                    targetAllegiance = ship?.Allegiance ?? segment.Allegiance;
+                    var bot = bots?.Get(target.Owner);
+                    if (ship == null && segment == null && bot == null) continue;
+                    if (definition.FriendlyFire && (CollisionFilters.IsSource(bullet.SourceShipId, ship, segment) || bot?.ShipId == bullet.SourceShipId)) continue;
+                    targetAllegiance = ship?.Allegiance ?? segment?.Allegiance ?? bot.Allegiance;
                     if ((definition.IsSticky || definition.IsHarpoon) && !bullet.Stuck && bullet.TargetId.IsNull)
                         _items[index].TargetId = target.OwnerId;
 
@@ -286,8 +287,8 @@ namespace CombatSimulation.Core
                     candidate.Target = target.OwnerId;
                     candidate.TargetShapeOrder = target.Order;
                     candidate.TargetHandle = target.Owner;
-                    targetPosition = world.GetPosition(ship?.Body ?? segment.Body);
-                    targetScale = ship?.Definition.Scale ?? segment.Scale;
+                    targetPosition = world.GetPosition(ship?.Body ?? segment?.Body ?? bot.Body);
+                    targetScale = ship?.Definition.Scale ?? segment?.Scale ?? bot.Scale;
                 }
 
                 // The total: a missile target sums every type; stage 9 splits it again for a ship target.
@@ -306,7 +307,7 @@ namespace CombatSimulation.Core
         // inside its target's collider, so its damage over time goes on. Each step a stuck OverTime bullet adds one
         // contact on its target's first shape, at time 0, without a physics query.
         public void CollectStuckHits(PhysicsWorld world, EntityRegistry entities, ShapeTable shapes, ShipStore ships,
-            TailSegmentStore segments, ContactResolver resolver)
+            TailSegmentStore segments, ContactResolver resolver, RepairBots bots = null)
         {
             for (var i = 0; i < _count; ++i)
             {
@@ -317,12 +318,14 @@ namespace CombatSimulation.Core
 
                 var ship = ships.Get(handle);
                 var segment = ship == null ? segments.Get(handle) : null;
+                var bot = bots?.Get(handle);
                 ShapeId shape;
                 if (ship != null && ship.ShapeCount > 0) shape = ship.GetShape(0);
                 else if (segment != null) shape = segment.Shape;
+                else if (bot != null) shape = bot.Shape;
                 else continue;
                 if (!shapes.TryGet(shape, out var target)) continue;
-                if (bullet.Definition.FriendlyFire && CollisionFilters.IsSource(bullet.SourceShipId, ship, segment)) continue;
+                if (bullet.Definition.FriendlyFire && (CollisionFilters.IsSource(bullet.SourceShipId, ship, segment) || bot?.ShipId == bullet.SourceShipId)) continue;
 
                 resolver.Add(new ContactCandidate
                 {
@@ -341,7 +344,7 @@ namespace CombatSimulation.Core
                     TargetHandle = target.Owner,
                     Falloff = 1f,
                     Damage = TotalDamage(bullet.Definition, 1f) + bullet.Definition.Effects.DamageAgainst(
-                        bullet.Allegiance, ship?.Allegiance ?? segment.Allegiance) * Battle.TickDuration,
+                        bullet.Allegiance, ship?.Allegiance ?? segment?.Allegiance ?? bot.Allegiance) * Battle.TickDuration,
                 });
             }
         }

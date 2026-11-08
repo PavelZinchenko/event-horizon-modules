@@ -24,6 +24,7 @@ namespace CombatSimulation.Core
             _flow = new CommittedBattleFlow(setup);
             _targets = new TargetGrid(World.Torus, setup.MatchSeed);
             _tails = new WormTails(_world, this);
+            _world.RepairBots = new RepairBots(_world, this);
             _triggers = new BulletTriggers(_world, this);
             var bulletContacts = new BulletContactLedger();
             if (setup.HasRemoteOwners) _network = new BattleNetwork(_world, this, _tails, _triggers, bulletContacts);
@@ -155,6 +156,7 @@ namespace CombatSimulation.Core
             _contacts.Collect();
             _contacts.Resolve();
             _network?.AccumulateRemoteDamage();
+            _world.RepairBots.ApplyDamage();
             _damage.Apply();
             _damage.MarkDeaths();
             ApplyStructureChanges();
@@ -198,6 +200,8 @@ namespace CombatSimulation.Core
         internal BattleEventAuthority Authority(int owner) => _world.Authority(owner);
 
         // Tail and trigger members for beam queries and tests (8b, decision 1).
+        internal RepairBots RepairBots => _world.RepairBots;
+        internal RepairBot FindRepairBot(EntityId id) => RepairBots.Find(id);
         internal TailSegment FindSegment(EntityId id) => _tails.FindSegment(id);
         internal void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse) =>
             _tails.QueueSegmentHit(segment, damage, impulse);
@@ -223,6 +227,8 @@ namespace CombatSimulation.Core
         internal void CaptureBulletSpawn(in BulletEntity bullet, int source, int barrelIndex, uint sequence, long spawnTick,
             bool sendLaunch = false, Vec2 muzzle = default, float angle = 0f) =>
             _network?.CaptureBulletSpawn(bullet, source, barrelIndex, sequence, spawnTick, sendLaunch, muzzle, angle);
+        internal void CaptureRepairBotSpawn(ShipEntity ship, int deviceIndex, EntityId id, Vec2 position, float angle) =>
+            _network?.CaptureRepairBotSpawn(ship, deviceIndex, id, position, angle);
         internal void CaptureSegmentSpawn(ShipEntity ship, int deviceIndex, int number, EntityId id) =>
             _network?.CaptureSegmentSpawn(ship, deviceIndex, number, id);
         internal bool HasDueRemoval(EntityId id) => _network != null && _network.HasDueRemoval(id);
@@ -396,6 +402,7 @@ namespace CombatSimulation.Core
                 Satellites.Update(_world, ship);
             }
             _tails.UpdateSegmentMotion();
+            _world.RepairBots.Update();
 
             // Each missile reads only its own state and the grid, so the storage order has no effect. Owner target
             // records of this tick apply first (P3). A rocket and a beam bolt read only their own state (phase 5, steps
@@ -496,6 +503,7 @@ namespace CombatSimulation.Core
             }
 
             _tails.RemoveDeadSegments();
+            _world.RepairBots.RemoveFinished();
             RemoveBullets();
         }
 
@@ -633,6 +641,7 @@ namespace CombatSimulation.Core
         internal void RemoveShip(ShipEntity ship, RemovalReason reason)
         {
             _tails.RemoveShipSegments(ship, reason);
+            _world.RepairBots.RemoveShip(ship, reason);
             for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Stop(DeviceContext);
             RemoveAttachedBullets(ship);
             _world.Events.Add(BattleEvent.Removal(BattleId, Tick, _world.Events.Count, ship, reason));
