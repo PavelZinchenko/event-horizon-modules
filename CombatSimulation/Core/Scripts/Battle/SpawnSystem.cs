@@ -129,6 +129,21 @@ namespace CombatSimulation.Core
             _triggers.RunCreatedTriggers(index);
         }
 
+        // Stage 12 (phase 5, step 11a): a death-spawn device's bullet at the dying ship's pose after this tick's physics,
+        // before RemoveShip releases the ship. Its spawn tick is the death tick, so on a receiver the owner's spawn record
+        // applies before the ship's removal record of the same tick. The bullet first moves in the next tick.
+        public void SpawnAtDeath(ShipEntity ship, int deviceIndex, BulletDefinition definition)
+        {
+            var index = _world.CreateBullet(ship, deviceIndex, SpawnRequest.ShipHeading, 0, definition, 0f, 0f, Tick,
+                _world.ReadSpawnSample(ship), out var muzzle, out _, out var angle);
+            if (index < 0) return;
+
+            ref readonly var bullet = ref _world.Bullets[index];
+            _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, bullet, _world.Authority(bullet.Owner)));
+            _network?.CaptureBulletSpawn(bullet, deviceIndex, 0, 0, Tick, true, muzzle, angle);
+            _triggers.RunCreatedTriggers(index);
+        }
+
         private void SpawnBeam(in SpawnRequest request, uint sequence)
         {
             var index = _world.CreateBeam(request.Ship, request.Beam, request.BeamDefinition, sequence, Tick);

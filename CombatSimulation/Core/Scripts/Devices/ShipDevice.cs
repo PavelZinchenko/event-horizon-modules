@@ -45,6 +45,10 @@ namespace CombatSimulation.Core
         // ship; the next devices are not asked.
         internal virtual bool OnLethalDamage(DeviceContext context, ShipEntity ship) => false;
 
+        // Stage 12, on the owner only (phase 5, step 11a): the ship leaves with reason Death. It is still alive, so its
+        // pose, velocity and allegiance can be read.
+        internal virtual void OnDeath(DeviceContext context, ShipEntity ship) { }
+
         // A remote copy follows its owner's record of a use that started or ended at the tick (H8).
         internal virtual void ApplyRemoteUse(DeviceContext context, ShipEntity ship, long tick, bool started) { }
 
@@ -373,6 +377,9 @@ namespace CombatSimulation.Core
         // A bullet at the ship centre, without a barrel (phase 5, step 7b); its spawn slot is 0.
         public const int ShipCentre = -1;
 
+        // A bullet at the ship centre and heading, without a barrel (phase 5, step 11a); its spawn slot is 0.
+        public const int ShipHeading = -2;
+
         public readonly ShipEntity Ship;
         public readonly int DeviceIndex;
         // Weapon barrel, the bay's lifetime launch slot for a launched ship, the decoy's number, or ShipCentre.
@@ -453,6 +460,6 @@ namespace CombatSimulation.Core
             Ship == other.Ship && DeviceIndex == other.DeviceIndex && BarrelIndex == other.BarrelIndex;
 
         // The spawn slot of the identity: the barrel or bay slot; 0 at the ship centre.
-        public static uint SpawnSlot(int barrelIndex) => barrelIndex == ShipCentre ? 0u : (uint)barrelIndex;
+        public static uint SpawnSlot(int barrelIndex) => barrelIndex < 0 ? 0u : (uint)barrelIndex;
     }
 }

@@ -653,6 +653,11 @@ namespace CombatSimulation.Core
 
         internal void RemoveShip(ShipEntity ship, RemovalReason reason)
         {
+            // Phase 5, step 11a: the owner's death devices spawn first, while the ship is alive. Their spawn records
+            // precede the ship's removal record.
+            if (reason == RemovalReason.Death && Setup.IsLocalOwner(ship.Owner))
+                for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).OnDeath(DeviceContext, ship);
+
             _tails.RemoveShipSegments(ship, reason);
             _world.RepairBots.RemoveShip(ship, reason);
             for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Stop(DeviceContext);

@@ -71,6 +71,7 @@ namespace CombatSimulation.Core
             if (ship.Owner != operation.Owner || operation.DeviceIndex >= ship.DeviceCount) return false;
             var device = ship.GetDevice(operation.DeviceIndex);
             if (device is DetonatorDevice detonator) return ApplyRemoteExplosion(ship, detonator, operation);
+            if (device is DeathSpawnDevice death) return ApplyRemoteDeathSpawn(ship, death, operation);
             if (device is RepairBotDevice repairBot) return _world.RepairBots.ApplySpawn(ship, repairBot, operation);
             if (device is DecoyDevice decoy) return _world.Decoys.ApplySpawn(ship, decoy, operation);
             if (device is WormTailDevice tail) return _tails.ApplyRemoteSegment(ship, tail, operation);
@@ -172,6 +173,33 @@ namespace CombatSimulation.Core
                 explosion, 0f, 0f, operation.Tick, _world.ReadSpawnSample(ship), out _, out _, out _, operation);
             if (index < 0) return false;
             _world.Bullets[index].Confirmed = true;
+            _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, _world.Bullets[index]));
+            return true;
+        }
+
+        // Phase 5, step 11a (H8): a remote death-spawn device's bullet at the owner's launch pose, with the velocity of this
+        // ship copy. The record precedes the owner's removal record of the ship, so the copy is still here. A bullet that
+        // has expired here is skipped, but its children may still arrive.
+        private bool ApplyRemoteDeathSpawn(ShipEntity ship, DeathSpawnDevice device, in OwnerOperation operation)
+        {
+            var bullet = device.Definition.Bullet;
+            if (!operation.HasLaunchPose || operation.BarrelIndex != 0 || operation.SpawnSequence != 0 ||
+                _world.Entities.TryGet(operation.EntityId, out _)) return false;
+
+            var sample = _world.ReadSpawnSample(ship);
+            if (operation.Tick + bullet.LifetimeTicks - 1 < Tick || HasDueRemoval(operation.EntityId))
+            {
+                _world.Launch(ship, SpawnRequest.ShipHeading, operation.EntityId, bullet, 0f, 0f, operation.Tick, sample,
+                    operation, out _, out _, out _, out var velocity, out _);
+                _triggers.RememberTriggerParent(ship, operation.DeviceIndex, bullet, operation.EntityId, velocity);
+                return true;
+            }
+
+            var index = _world.CreateBullet(ship, operation.DeviceIndex, SpawnRequest.ShipHeading, 0, bullet, 0f, 0f,
+                operation.Tick, sample, out _, out _, out _, operation);
+            if (index < 0) return false;
+            _world.Bullets[index].Confirmed = true;
+            _triggers.RememberTriggerParent(_world.Bullets[index]);
             _world.Events.Add(BattleEvent.BulletSpawn(BattleId, Tick, _world.Events.Count, _world.Bullets[index]));
             return true;
         }

@@ -23,6 +23,10 @@ namespace CombatSimulation.Core
         // Stage 2: a device asks for a ship, a bullet or a beam; stage 5 creates it.
         public void RequestSpawn(in SpawnRequest request) => _spawns.Request(request);
 
+        // Stage 12 (phase 5, step 11a): a bullet of the dying ship, created at once.
+        public void SpawnAtDeath(ShipEntity ship, int deviceIndex, BulletDefinition bullet) =>
+            _spawns.SpawnAtDeath(ship, deviceIndex, bullet);
+
         // The owner records a use that started or ended at the tick; without remote owners nothing is recorded.
         public void CaptureDeviceUse(ShipEntity ship, int deviceIndex, bool started, long tick) =>
             _network?.CaptureDeviceUse(ship, deviceIndex, started, tick);

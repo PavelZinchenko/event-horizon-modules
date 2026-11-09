@@ -133,7 +133,7 @@ namespace CombatSimulation.Core
         }
 
         // The body that carries a barrel: the hull, or the barrel's satellite (phase 5, step 12c). barrelIndex may be
-        // SpawnRequest.ShipCentre.
+        // SpawnRequest.ShipCentre or ShipHeading.
         public BodyId CarrierBody(ShipEntity ship, int barrelIndex)
         {
             var satellite = barrelIndex < 0 ? BarrelDefinition.Hull : ship.Definition.Barrels[barrelIndex].Satellite;
@@ -178,7 +178,7 @@ namespace CombatSimulation.Core
         // Legacy BulletFactory.ConfigureBody at the muzzle of the sample. A spawn tick before the present advances the
         // bullet on a line, step by step as physics moves it, without hit tests. Returns -1 on an ID collision.
         // With an owner launch pose (P1), the muzzle and angle come from it; the inherited velocity stays the carrier's.
-        // barrelIndex may be SpawnRequest.ShipCentre.
+        // barrelIndex may be SpawnRequest.ShipCentre or ShipHeading.
         public int CreateBullet(ShipEntity ship, int deviceIndex, int barrelIndex, uint sequence,
             BulletDefinition definition, float spread, float randomFactor, long spawnTick, in SpawnSample sample,
             out Vec2 muzzle, out Vec2 direction, out float angle, in OwnerOperation launch = default)
@@ -250,7 +250,7 @@ namespace CombatSimulation.Core
 
             // A manageable or continuous cannon holds its bullet (phase 5, steps 4b and 4g), as a beam device holds its
             // beam; a charging cannon shows it (step 4f).
-            if (barrelIndex != SpawnRequest.ShipCentre && ship.GetDevice(deviceIndex) is CannonDevice cannon)
+            if (barrelIndex >= 0 && ship.GetDevice(deviceIndex) is CannonDevice cannon)
                 cannon.OnBulletCreated(Bullets.GetHandle(index));
             return index;
         }
@@ -266,10 +266,10 @@ namespace CombatSimulation.Core
                 muzzle = launch.Pose.Position;
                 angle = launch.Pose.Angle;
             }
-            else if (barrelIndex == SpawnRequest.ShipCentre)
+            else if (barrelIndex < 0)
             {
                 muzzle = sample.Position;
-                angle = 0f;
+                angle = barrelIndex == SpawnRequest.ShipHeading ? sample.Angle : 0f;
             }
             else
             {
