@@ -159,8 +159,8 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_ForgetMainTarget content) => new ForgetTargetNode();
         public INode Create(BehaviorTreeNode_HasMainTarget content) => new HasTargetNode();
 
-        // Step 7e and phase 5 port these. A condition before Stub is the legacy Create that gives Failure when the ship lacks the
-        // weapon or device.
+        // Step 7e and phase 5 port these. A condition before a node is the legacy Create that gives Failure when the ship lacks
+        // the weapon or device.
         public INode Create(BehaviorTreeNode_HasEnoughEnergy content) => new HasEnoughEnergyNode(content.FailIfLess);
         public INode Create(BehaviorTreeNode_IsLowOnHp content) => new IsLowOnHpNode(content.MinValue);
         public INode Create(BehaviorTreeNode_IsNotControledByPlayer content) => new IsNotPlayerControlledNode(content.Cooldown);
@@ -170,9 +170,10 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_MainTargetIsAlly content) => new MainTargetIsAllyNode();
         public INode Create(BehaviorTreeNode_MainTargetIsEnemy content) => new MainTargetIsEnemyNode();
         public INode Create(BehaviorTreeNode_MainTargetLowHp content) => new MainTargetLowHpNode(content.MinValue);
-        public INode Create(BehaviorTreeNode_MainTargetWithinAttackRange content) => Stub(content);
-        public INode Create(BehaviorTreeNode_HasMothership content) => Stub(content);
-        public INode Create(BehaviorTreeNode_TargetDistance content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MainTargetWithinAttackRange content) => new MainTargetWithinAttackRangeNode(content.MinMaxLerp);
+        public INode Create(BehaviorTreeNode_HasMothership content) => new HasMothershipNode();
+        public INode Create(BehaviorTreeNode_TargetDistance content) =>
+            new TargetDistanceNode(content.MaxDistance > 0 ? content.MaxDistance : _settings.LimitedRange);
         public INode Create(BehaviorTreeNode_HasLongerAttackRange content) => new HasLongerAttackRangeNode(content.Multiplier);
         // Legacy NodeFactory: a drone with a range searches near its mothership; a defensive drone (InAttackRange) uses
         // a quarter of the range.
@@ -233,7 +234,7 @@ namespace CombatSimulation.Ai
             return detonator != null ? new DetonateShipNode(detonator, content.InAttackRange) : EmptyNode.Failure;
         }
         public INode Create(BehaviorTreeNode_Vanish content) => new VanishNode();
-        public INode Create(BehaviorTreeNode_MaintainAttackRange content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MaintainAttackRange content) => new MaintainAttackRangeNode(content.MinMaxLerp, content.Tolerance);
         public INode Create(BehaviorTreeNode_LookAtTarget content) => new LookAtTargetNode();
         public INode Create(BehaviorTreeNode_LookForAdditionalTargets content) => new LookForAdditionalTargetsNode(content.Cooldown);
         public INode Create(BehaviorTreeNode_LookForThreats content) => new LookForThreatsNode(content.Cooldown);
@@ -271,7 +272,7 @@ namespace CombatSimulation.Ai
         }
         public INode Create(BehaviorTreeNode_Chase content) => new ChaseNode(FirstDevice(DeviceClass.TeleporterV2));
         public INode Create(BehaviorTreeNode_AvoidThreats content) => new AvoidThreatsNode();
-        public INode Create(BehaviorTreeNode_SlowDown content) => Stub(content);
+        public INode Create(BehaviorTreeNode_SlowDown content) => new SlowDownNode(content.Tolerance);
         // Legacy RecoilNode.Create: the weapons with high recoil; none gives Failure.
         public INode Create(BehaviorTreeNode_UseRecoil content)
         {
@@ -301,8 +302,8 @@ namespace CombatSimulation.Ai
         public INode Create(BehaviorTreeNode_EscapeTargetAttackRadius content) => new EscapeTargetAttackRadiusNode();
         public INode Create(BehaviorTreeNode_AttackAdditionalTargets content) =>
             new AttackAdditionalTargetsNode(_profile.HasEngine && !content.NotMoving);
-        public INode Create(BehaviorTreeNode_TargetAllyStarbase content) => Stub(content);
-        public INode Create(BehaviorTreeNode_TargetEnemyStarbase content) => Stub(content);
+        public INode Create(BehaviorTreeNode_TargetAllyStarbase content) => new TargetStarbaseNode(true);
+        public INode Create(BehaviorTreeNode_TargetEnemyStarbase content) => new TargetStarbaseNode(false);
         public INode Create(BehaviorTreeNode_BypassObstacles content) => new BypassObstaclesNode();
         public INode Create(BehaviorTreeNode_AttackTurretTargets content) => new AttackTurretTargetsNode();
         public INode Create(BehaviorTreeNode_HoldHarpoon content)
@@ -318,7 +319,7 @@ namespace CombatSimulation.Ai
             var range = defensive ? _settings.LimitedRange / 4f : _settings.LimitedRange;
             return new FindDamagedAllyNode(content.MinCooldown, content.MaxCooldown, range);
         }
-        public INode Create(BehaviorTreeNode_EnginePropulsionForce content) => Stub(content);
+        public INode Create(BehaviorTreeNode_EnginePropulsionForce content) => new EnginePropulsionForceNode(content.MinValue);
         public INode Create(BehaviorTreeNode_MotherShipRetreated content) => new MothershipRetreatedNode();
         public INode Create(BehaviorTreeNode_MotherShipDestroyed content) => new MothershipDestroyedNode();
         // Legacy draws the distance once per ship at build time; the pilot stream draws it here (7b).
@@ -332,11 +333,12 @@ namespace CombatSimulation.Ai
             var maxRange = content.MaxDistance > 0 ? content.MaxDistance : _settings.LimitedRange;
             return maxRange > 0 ? new MothershipDistanceExceededNode(maxRange) : EmptyNode.Failure;
         }
-        public INode Create(BehaviorTreeNode_MakeTargetMothership content) => Stub(content);
+        public INode Create(BehaviorTreeNode_MakeTargetMothership content) => new MakeTargetMothershipNode();
         public INode Create(BehaviorTreeNode_MothershipLowEnergy content) => new MothershipLowEnergyNode(content.MinValue);
         public INode Create(BehaviorTreeNode_MothershipLowShield content) => new MothershipLowShieldNode(content.MinValue);
         public INode Create(BehaviorTreeNode_ShowMessage content) => new ShowMessageNode(content.Text, content.Color);
 
+        // No node type is a stub since the M3 stub ports; a node type the schema adds starts as one until its port.
         private INode Stub(BehaviorTreeNode content)
         {
             _stubs.TryGetValue(content.Type, out var count);

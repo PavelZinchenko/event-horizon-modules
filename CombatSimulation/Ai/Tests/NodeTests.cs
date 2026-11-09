@@ -384,16 +384,19 @@ namespace CombatSimulation.Ai.Tests
             Assert.IsInstanceOf<WaitNode>(Builder(Context(out _, profile: Drone)).Build(Node(node)));
         }
 
+        // Every node type has a port since the M3 stub ports. A type that needs content to build (children, a subtree)
+        // throws before the builder could count it, so it is skipped.
         [Test]
-        public void NodesWithoutPortAreCountedStubs()
+        public void EveryNodeTypeHasAPort()
         {
             var builder = Builder(Context(out _));
-            var node = builder.Build(Node(Composite(BehaviorNodeType.Selector, Leaf(BehaviorNodeType.MaintainAttackRange),
-                Leaf(BehaviorNodeType.MaintainAttackRange), Leaf(BehaviorNodeType.MainTargetWithinAttackRange))));
+            foreach (BehaviorNodeType type in Enum.GetValues(typeof(BehaviorNodeType)))
+            {
+                try { builder.Build(Node(Leaf(type))); }
+                catch (Exception) { }
+            }
 
-            Assert.AreSame(EmptyNode.Failure, node);
-            Assert.AreEqual(2, builder.Stubs[BehaviorNodeType.MaintainAttackRange]);
-            Assert.AreEqual(1, builder.Stubs[BehaviorNodeType.MainTargetWithinAttackRange]);
+            Assert.IsEmpty(builder.Stubs);
         }
     }
 

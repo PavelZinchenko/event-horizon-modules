@@ -427,6 +427,160 @@ namespace CombatSimulation.Ai
         private readonly float _maxRange;
     }
 
+    // Legacy MothershipAlive (M3 stub ports).
+    internal sealed class HasMothershipNode : INode
+    {
+        public NodeState Evaluate(AiContext context) => context.IsActive(context.Mothership) ? NodeState.Success : NodeState.Failure;
+    }
+
+    // Legacy SetMothershipNode (M3 stub ports): Failure when the target already is the mothership; a target that left is
+    // still set, and gives Failure.
+    internal sealed class MakeTargetMothershipNode : INode
+    {
+        public NodeState Evaluate(AiContext context)
+        {
+            var target = context.TargetShip;
+            if (context.Mothership == target)
+                return NodeState.Failure;
+
+            context.SetMothership(target);
+            return context.IsActive(target) ? NodeState.Success : NodeState.Failure;
+        }
+    }
+
+    // Legacy IsWithinAttackRange (M3 stub ports): the target is within the range between the selected weapons' ranges.
+    internal sealed class MainTargetWithinAttackRangeNode : INode
+    {
+        public MainTargetWithinAttackRangeNode(float lerpMinMax) => _lerpMinMax = LegacyMath.Clamp01(lerpMinMax);
+
+        public NodeState Evaluate(AiContext context)
+        {
+            if (!context.TryGetShip(context.TargetShip, out var target))
+                return NodeState.Failure;
+
+            var min = context.SelectedWeapons.RangeMin;
+            var max = context.SelectedWeapons.RangeMax;
+            var distance = min + (max - min) * _lerpMinMax;
+
+            if (distance <= 0)
+                return NodeState.Failure;
+
+            return context.Distance(context.Ship, target) <= distance ? NodeState.Success : NodeState.Failure;
+        }
+
+        private readonly float _lerpMinMax;
+    }
+
+    // Legacy DistanceToTargetNode (M3 stub ports): Success without a target, as legacy does. The builder passes
+    // LimitedRange for a distance that is not positive.
+    internal sealed class TargetDistanceNode : INode
+    {
+        public TargetDistanceNode(float maxRange) => _maxRange = maxRange;
+
+        public NodeState Evaluate(AiContext context)
+        {
+            if (!context.TryGetShip(context.TargetShip, out var target))
+                return NodeState.Success;
+
+            return context.Distance(context.Ship, target) <= _maxRange ? NodeState.Success : NodeState.Failure;
+        }
+
+        private readonly float _maxRange;
+    }
+
+    // Legacy TargetStarbaseNode (M3 stub ports): keeps a matching target, else the last starbase found, else searches at
+    // most once a second. Legacy takes the first match in scene order; here the first in snapshot order.
+    internal sealed class TargetStarbaseNode : INode
+    {
+        private const float Cooldown = 1.0f;
+
+        public TargetStarbaseNode(bool ally) => _ally = ally;
+
+        public NodeState Evaluate(AiContext context)
+        {
+            if (IsStarbase(context, context.TargetShip))
+                return NodeState.Success;
+
+            if (IsStarbase(context, _starbase))
+            {
+                context.TargetShip = _starbase;
+                return NodeState.Success;
+            }
+
+            if (context.Time - _lastSearchTime < Cooldown)
+                return NodeState.Failure;
+
+            _lastSearchTime = context.Time;
+            _starbase = default;
+            foreach (ref readonly var ship in context.Snapshot.Ships)
+            {
+                if (!IsStarbase(context, ship.Id)) continue;
+                _starbase = ship.Id;
+                break;
+            }
+
+            if (_starbase.IsNull)
+                return NodeState.Failure;
+
+            context.TargetShip = _starbase;
+            return NodeState.Success;
+        }
+
+        private bool IsStarbase(AiContext context, EntityId id) =>
+            context.TryGetShip(id, out var ship) && context.ProfileOf(ship).SizeClass == SizeClass.Starbase &&
+            _ally != context.IsEnemy(ship);
+
+        private readonly bool _ally;
+        private float _lastSearchTime = -Cooldown;
+        private EntityId _starbase;
+    }
+
+    // Legacy PropulsionForceNode (M3 stub ports): the forward thrust of the last tick over the propulsion. Question 2 (a):
+    // computed from the snapshot with the velocity after that thrust; legacy uses the velocity before it. The engine is the
+    // full engine without the accelerator scale, as in Navigation.
+    internal sealed class EnginePropulsionForceNode : INode
+    {
+        private const float MinThrottle = 0.01f;
+        private const float MinPropulsionDelta = 0.001f;
+
+        public EnginePropulsionForceNode(float minValue) => _minValue = minValue;
+
+        public NodeState Evaluate(AiContext context)
+        {
+            var engine = context.Ship.Definition.Engine;
+            if (context.Profile.IsStarbase || engine == null || engine.Propulsion <= 0)
+                return NodeState.Failure;
+
+            return ThrustShare(context.Ship, engine) >= _minValue ? NodeState.Success : NodeState.Failure;
+        }
+
+        // Legacy ShipEngine.ApplyAcceleration: throttle × (propulsion vector · forward), so the propulsion cancels. No thrust
+        // while retreating, drifting or with the engine off (core ShipEngine.Input).
+        internal static float ThrustShare(in ShipState ship, EngineDefinition engine)
+        {
+            if (ship.RetreatCompletionTick >= 0 || (ship.Status & (ShipStatusFlags.Drift | ShipStatusFlags.EngineOff)) != 0)
+                return 0f;
+
+            var throttle = (ship.Status & ShipStatusFlags.FullThrottle) != 0 ? 1f : ship.Throttle;
+            if (throttle <= MinThrottle)
+                return 0f;
+
+            var forward = LegacyMath.Direction(ship.Angle);
+            var maxVelocity = Math.Min(engine.MaxVelocity, engine.VelocityLimit);
+            var forwardVelocity = Vec2.Dot(ship.LinearVelocity, forward);
+            var requiredVelocity = forwardVelocity > maxVelocity ? forwardVelocity : maxVelocity;
+
+            var direction = requiredVelocity * forward - ship.LinearVelocity;
+            var length = direction.Length;
+            if (length < MinPropulsionDelta)
+                return 0f;
+
+            return throttle * Vec2.Dot(direction, forward) / Math.Max(0.5f * length, maxVelocity);
+        }
+
+        private readonly float _minValue;
+    }
+
     // Legacy EnemyMatchingOptions.
     internal readonly struct EnemyOptions
     {

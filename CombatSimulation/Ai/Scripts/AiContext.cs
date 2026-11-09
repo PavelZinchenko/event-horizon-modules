@@ -65,15 +65,34 @@ namespace CombatSimulation.Ai
         }
 
         // Keep the original deployment until capture explicitly replaces it. The old bay still owns the inventory.
-        // A cleared override removes the mothership; a later capture can give the drone another one.
+        // A cleared override removes the mothership; a later capture can give the drone another one. A ship has one only
+        // after SetMothership.
         public EntityId Mothership => _mothership;
 
-        // Legacy UnitState.Destroyed of the mothership: its slot was destroyed in the deployment that launched the drone.
-        public bool IsMothershipDestroyed => _ship.IsDrone && !_ownerRemoved && !IsActive(_mothership) &&
-            TryGetMothershipSlot(out var slot) && slot.Status == RosterStatus.Destroyed && slot.DeploymentCount == _mothershipDeployment;
+        // Legacy UnitState.Destroyed of the mothership: its slot was destroyed in the deployment that launched the drone
+        // (or in the deployment SetMothership saw). A mothership without a slot (a drone or a decoy) is destroyed when it
+        // leaves: drones and decoys have no retreat of their own.
+        public bool IsMothershipDestroyed => HasMothershipRecord && !IsActive(_mothership) && (!_mothershipHasSlot ||
+            TryGetMothershipSlot(out var slot) && slot.Status == RosterStatus.Destroyed && slot.DeploymentCount == _mothershipDeployment);
 
         // Legacy UnitState.Inactive of the mothership: it left the battle without being destroyed (retreat or vanish, D12).
-        public bool IsMothershipRetreated => _ship.IsDrone && !_ownerRemoved && !IsActive(_mothership) && !IsMothershipDestroyed;
+        public bool IsMothershipRetreated => HasMothershipRecord && !IsActive(_mothership) && !IsMothershipDestroyed;
+
+        // Legacy SetMothershipNode (M3 stub ports): Context.Mothership of a ship, Type.Owner of a drone. Question 1 (a):
+        // a drone keeps it in its AI only; its world owner and allegiance stay, and a later capture or berserk replaces it.
+        public void SetMothership(EntityId id)
+        {
+            _mothership = id;
+            _ownerRemoved = false;
+            _aiMothership = true;
+            _overrideAtSet = _ship.MothershipOverride;
+            _mothershipHasSlot = TryGetShip(id, out var mother) && !mother.IsDrone && !mother.IsDecoy;
+            _mothershipRosterId = _mothershipHasSlot ? mother.RosterId : default;
+            _mothershipDeployment = TryGetMothershipSlot(out var slot) ? slot.DeploymentCount : 0;
+        }
+
+        // A drone's mothership from its bay or the world override, or one SetMothership gave.
+        private bool HasMothershipRecord => !_ownerRemoved && (_aiMothership ? !_mothership.IsNull : _ship.IsDrone);
 
         // Legacy GoBerserkNode sets Type.Owner to null: the drone has no mothership and takes the Undefined side, so it
         // attacks everybody (D13). The allegiance changes when the core applies the command; the mothership is gone now.
@@ -230,6 +249,9 @@ namespace CombatSimulation.Ai
         // Shortest offset across the torus. Legacy subtracts positions; on the torus the nearest image counts.
         public Vec2 Delta(Vec2 from, Vec2 to) => _battle.Arena.Delta(from, to);
 
+        // Legacy Scene.Settings.AreaWidth.
+        public float AreaWidth => _battle.Arena.Width;
+
         // Legacy Helpers.Distance: the gap between the model circles (Body.Scale), at least 0.001.
         public float Distance(in ShipState first, in ShipState second) => Math.Max(0.001f,
             Delta(first.Position, second.Position).Length - 0.5f * ProfileOf(first).ModelScale - 0.5f * ProfileOf(second).ModelScale);
@@ -315,11 +337,15 @@ namespace CombatSimulation.Ai
             Snapshot = snapshot;
             _ship = ship;
             if (FrameId == 0) Start(snapshot.Tick);
-            if (_ship.IsDrone && _ship.MothershipOverride.HasValue &&
-                (FrameId == 0 || _mothership != _ship.MothershipId || _ownerRemoved != _ship.MothershipId.IsNull))
+            // An AI-set mothership gives way only when the world override changes after it.
+            if (_ship.IsDrone && _ship.MothershipOverride.HasValue && (_aiMothership
+                    ? !Nullable.Equals(_ship.MothershipOverride, _overrideAtSet)
+                    : FrameId == 0 || _mothership != _ship.MothershipId || _ownerRemoved != _ship.MothershipId.IsNull))
             {
                 _mothership = _ship.MothershipId;
                 _ownerRemoved = _mothership.IsNull;
+                _aiMothership = false;
+                _mothershipHasSlot = true;
                 _mothershipRosterId = TryGetShip(_mothership, out var mother) ? mother.RosterId : default;
                 _mothershipDeployment = TryGetMothershipSlot(out var slot) ? slot.DeploymentCount : 0;
             }
@@ -335,6 +361,7 @@ namespace CombatSimulation.Ai
             if (!_ship.IsDrone) return;
 
             _mothership = _ship.MothershipId;
+            _mothershipHasSlot = true;
             _mothershipRosterId = _ship.BayKey.Value.RosterId;
             if (TryGetMothershipSlot(out var slot))
                 _mothershipDeployment = slot.DeploymentCount;
@@ -342,7 +369,7 @@ namespace CombatSimulation.Ai
 
         private bool TryGetMothershipSlot(out RosterSlotState slot)
         {
-            if (_ship.IsDrone)
+            if (_mothershipHasSlot)
             {
                 foreach (var item in Snapshot.Roster)
                 {
@@ -370,6 +397,9 @@ namespace CombatSimulation.Ai
         private EntityId _mothership;
         private RosterId _mothershipRosterId;
         private uint _mothershipDeployment;
+        private bool _mothershipHasSlot;
+        private bool _aiMothership;
+        private EntityId? _overrideAtSet;
         private bool _ownerRemoved;
         private BitArray64 _flags;
         private RandomState _random;

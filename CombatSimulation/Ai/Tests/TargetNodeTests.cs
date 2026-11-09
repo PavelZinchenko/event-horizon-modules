@@ -669,6 +669,237 @@ namespace CombatSimulation.Ai.Tests
             Assert.AreEqual(F, new MothershipLowShieldNode(2f).Evaluate(Context(out _)), "not a drone");
         }
 
+        // M3 stub ports, examples 1-3: the lerped range of the selected weapons and the distance condition.
+        [Test]
+        public void AttackRangeAndDistanceConditions()
+        {
+            var runner = Battle2V2();
+            var ships = runner.Snapshot.Ships;
+            var gap = ContextOf(runner, 0).Distance(ships[0], ships[1]);
+            var context = ContextOf(runner, 0, WithWeaponRanges(0.5f * gap, 1.7f * gap));
+
+            Assert.AreEqual(F, new MainTargetWithinAttackRangeNode(0.5f).Evaluate(context), "no target");
+            Assert.AreEqual(S, new TargetDistanceNode(0.0001f).Evaluate(context), "legacy: no target is Success");
+
+            context.TargetShip = ships[1].Id;
+            Assert.AreEqual(S, new MainTargetWithinAttackRangeNode(0.5f).Evaluate(context), "1.1 × gap");
+            Assert.AreEqual(F, new MainTargetWithinAttackRangeNode(0f).Evaluate(context), "0.5 × gap");
+            Assert.AreEqual(S, new MainTargetWithinAttackRangeNode(2f).Evaluate(context), "clamped to 1.7 × gap");
+            Assert.AreEqual(S, new TargetDistanceNode(gap + 0.1f).Evaluate(context));
+            Assert.AreEqual(F, new TargetDistanceNode(gap - 0.1f).Evaluate(context));
+
+            var unarmed = ContextOf(runner, 0, Unarmed);
+            unarmed.TargetShip = ships[1].Id;
+            Assert.AreEqual(F, new MainTargetWithinAttackRangeNode(0.5f).Evaluate(unarmed), "range 0");
+
+            // MaxDistance 0 reads LimitedRange (the serializable default is 0.9).
+            var distance = new BehaviorTreeNodeSerializable { Type = BehaviorNodeType.TargetDistance, MaxValue = 0f };
+            foreach (var (range, expected) in new[] { (gap + 1f, S), (gap - 1f, F) })
+            {
+                var limited = new AiContext(ArmedShip, AiSettings.ForDrone(range), 0.02f, default, BattleData());
+                limited.Update(runner.Snapshot, ships[0]);
+                limited.TargetShip = ships[1].Id;
+                var builder = Builder(limited);
+                Assert.AreEqual(expected, builder.Build(Node(distance)).Evaluate(limited), $"limited range {range}");
+                Assert.IsEmpty(builder.Stubs);
+            }
+        }
+
+        // M3 stub ports, examples 6 and 7: the first starbase of the asked allegiance; a matching target is kept.
+        [Test]
+        public void TargetStarbaseFindsTheStarbaseOfTheAskedSide()
+        {
+            var runner = Battle2V2(OtherShip);
+            var ships = runner.Snapshot.Ships;
+            var starbase = ships[3].Id;
+
+            var player = ContextOf(runner, 0, profiles: StarbaseProfiles);
+            Assert.AreEqual(S, new TargetStarbaseNode(false).Evaluate(player));
+            Assert.AreEqual(starbase, player.TargetShip);
+            Assert.AreEqual(F, new TargetStarbaseNode(true).Evaluate(player), "no allied starbase");
+            Assert.AreEqual(starbase, player.TargetShip, "a failed search keeps the target");
+
+            var enemy = ContextOf(runner, 1, profiles: StarbaseProfiles);
+            enemy.TargetShip = ships[0].Id;
+            Assert.AreEqual(F, new TargetStarbaseNode(false).Evaluate(enemy), "no starbase on the player side");
+            Assert.AreEqual(S, new TargetStarbaseNode(true).Evaluate(enemy));
+            Assert.AreEqual(starbase, enemy.TargetShip);
+        }
+
+        // M3 stub ports, examples 7-9: a ship takes the allied starbase as its mothership; its death reads as destroyed.
+        [Test]
+        public void ShipTakesTheTargetAsMothership()
+        {
+            var runner = Battle2V2(OtherShip);
+            var self = runner.Snapshot.Ships[1].Id;
+            var starbase = runner.Snapshot.Ships[3].Id;
+            var context = ContextOf(runner, 1, profiles: StarbaseProfiles);
+            var make = new MakeTargetMothershipNode();
+
+            Assert.AreEqual(F, make.Evaluate(context), "no target and no mothership");
+            Assert.AreEqual(F, new HasMothershipNode().Evaluate(context));
+            Assert.AreEqual(S, new TargetStarbaseNode(true).Evaluate(context));
+            Assert.AreEqual(S, make.Evaluate(context));
+            Assert.AreEqual(starbase, context.Mothership);
+            Assert.AreEqual(F, make.Evaluate(context), "already the mothership");
+            Assert.AreEqual(S, new HasMothershipNode().Evaluate(context));
+            Assert.AreEqual(S, new MothershipLowHpNode(2f).Evaluate(context));
+            Assert.AreEqual(F, new MothershipDestroyedNode().Evaluate(context));
+            Assert.AreEqual(F, new MothershipRetreatedNode().Evaluate(context));
+
+            Think(runner, context, self);
+            Assert.AreEqual(starbase, context.Mothership, "a ship keeps it across thinks");
+
+            runner.Battle.QueueDeath(starbase);
+            StepUntilGone(runner, starbase);
+            Think(runner, context, self);
+            Assert.AreEqual(F, new HasMothershipNode().Evaluate(context));
+            Assert.AreEqual(S, new MothershipDestroyedNode().Evaluate(context));
+            Assert.AreEqual(F, new MothershipRetreatedNode().Evaluate(context));
+            Assert.AreEqual(F, new TargetMothershipNode().Evaluate(context));
+        }
+
+        [Test]
+        public void ShipMothershipThatRetreatsReadsAsRetreated()
+        {
+            var runner = Battle2V2(OtherShip);
+            var self = runner.Snapshot.Ships[1].Id;
+            var starbase = runner.Snapshot.Ships[3].Id;
+            var context = ContextOf(runner, 1, profiles: StarbaseProfiles);
+            context.TargetShip = starbase;
+            Assert.AreEqual(S, new MakeTargetMothershipNode().Evaluate(context));
+
+            Assert.IsTrue(runner.Retreat(starbase, runner.Tick));
+            StepUntilGone(runner, starbase);
+            Think(runner, context, self);
+            Assert.AreEqual(S, new MothershipRetreatedNode().Evaluate(context));
+            Assert.AreEqual(F, new MothershipDestroyedNode().Evaluate(context));
+
+            // A gone target is set anyway and gives Failure; a null target clears the mothership.
+            context.TargetShip = starbase;
+            Assert.AreEqual(F, new MakeTargetMothershipNode().Evaluate(context), "already the mothership");
+            context.TargetShip = default;
+            Assert.AreEqual(F, new MakeTargetMothershipNode().Evaluate(context));
+            Assert.IsTrue(context.Mothership.IsNull);
+            Assert.AreEqual(F, new MothershipRetreatedNode().Evaluate(context));
+            Assert.AreEqual(F, new MothershipDestroyedNode().Evaluate(context));
+        }
+
+        // M3 stub ports, question 1 (a): a drone keeps the new mothership in its AI; its allegiance stays. A later world
+        // change (berserk here) replaces it.
+        [Test]
+        public void DroneTakesTheTargetAsMothershipInItsAiOnly()
+        {
+            var crazy = new BulletDefinition(150f, 0f, 0f, 0f, lifetime: 0.02f,
+                impact: BulletImpact.AllTargets, friendlyFire: true,
+                effects: new ImpactEffects(driveDronesCrazy: true));
+            var controller = new ShipDefinition(1f, 1f, Ship.Engine, 1000f,
+                new ResourceDefinition(0f), new ResourceDefinition(1000f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[] { new CannonDefinition(0, 10f, 0f, 0f, crazy) });
+            var pilots = new DroneControlPilots(controller);
+            var runner = Start(new List<RosterSlotSetup>
+            {
+                new RosterSlotSetup(new RosterId(1), 0, Carrier),
+                new RosterSlotSetup(new RosterId(101), 1, controller),
+            }, 1, pilots);
+            for (var i = 0; i < 30; ++i) runner.Step();
+            var drone = default(EntityId);
+            foreach (var ship in runner.Snapshot.Ships) if (ship.IsDrone) drone = ship.Id;
+            Assert.IsFalse(drone.IsNull);
+            var context = DroneContext(runner, drone);
+            var enemy = runner.Snapshot.Ships[1].Id;
+            Assert.IsTrue(runner.Snapshot.TryGetShip(drone, out var before));
+
+            context.TargetShip = enemy;
+            Assert.AreEqual(S, new MakeTargetMothershipNode().Evaluate(context));
+            Assert.AreEqual(enemy, context.Mothership);
+            for (var i = 0; i < 3; ++i) Think(runner, context, drone);
+            Assert.AreEqual(enemy, context.Mothership, "the bay mothership does not come back");
+            Assert.IsTrue(runner.Snapshot.TryGetShip(drone, out var after));
+            Assert.AreEqual(before.Allegiance, after.Allegiance);
+
+            pilots.Systems = 1;
+            for (var i = 0; i < 3; ++i) runner.Step();
+            Think(runner, context, drone);
+            Assert.IsFalse(context.HasOwner);
+            Assert.IsTrue(context.Mothership.IsNull);
+        }
+
+        // M3 stub ports, examples 10 and 11: the thrust share of the last tick.
+        [Test]
+        public void EnginePropulsionForceReadsTheLastThrust()
+        {
+            var runner = Battle(new ThrustPilots());
+            for (var i = 0; i < 3; ++i) runner.Step();
+            var context = ContextOf(runner, 0);
+            var ship = runner.Snapshot.Ships[0];
+            Assert.AreEqual(1f, ship.Throttle);
+            Assert.Greater(EnginePropulsionForceNode.ThrustShare(ship, ship.Definition.Engine), 0.8f, "near rest");
+            Assert.AreEqual(S, new EnginePropulsionForceNode(0.5f).Evaluate(context));
+            Assert.AreEqual(F, new EnginePropulsionForceNode(1.01f).Evaluate(context));
+            Assert.AreEqual(F, new EnginePropulsionForceNode(0.5f).Evaluate(ContextOf(runner, 0, Starbase)), "starbase");
+
+            var coasting = Context(out _);
+            Assert.AreEqual(0f, coasting.Ship.Throttle);
+            Assert.AreEqual(F, new EnginePropulsionForceNode(0.5f).Evaluate(coasting));
+        }
+
+        // M3 stub ports, examples 4 and 5.
+        [Test]
+        public void SlowDownAndMaintainAttackRange()
+        {
+            var resting = Context(out _);
+            Assert.AreEqual(S, new SlowDownNode(0.5f).Evaluate(resting));
+
+            var runner = Battle(new ThrustPilots());
+            for (var i = 0; i < 50; ++i) runner.Step();
+            var moving = ContextOf(runner, 0);
+            var velocity = moving.Ship.LinearVelocity;
+            Assert.Greater(velocity.Length, 0.5f);
+            Assert.AreEqual(NodeState.Running, new SlowDownNode(0.5f).Evaluate(moving));
+            Assert.AreEqual(LegacyMath.Angle(-velocity), moving.Controls.Course, 1e-5f, "brakes against the velocity");
+
+            var battle = Battle2V2();
+            var ships = battle.Snapshot.Ships;
+            var centers = Arena.Delta(ships[0].Position, ships[1].Position).Length;
+            Assert.Less(centers, 100f, "below the half-width cap");
+            Assert.AreEqual(F, new MaintainAttackRangeNode(0.5f, 0.5f).Evaluate(ContextOf(battle, 0)), "no target");
+
+            // FlyAround widens the band by a third of each model scale (2 each).
+            var inBand = ContextOf(battle, 0, WithWeaponRange(centers));
+            inBand.TargetShip = ships[1].Id;
+            Assert.AreEqual(S, new MaintainAttackRangeNode(0.5f, 0.5f).Evaluate(inBand));
+
+            var tooFar = ContextOf(battle, 0, WithWeaponRange(0.25f * centers));
+            tooFar.TargetShip = ships[1].Id;
+            Assert.AreEqual(NodeState.Running, new MaintainAttackRangeNode(0.5f, 0.5f).Evaluate(tooFar));
+        }
+
+        private static AiShipProfile StarbaseProfiles(ShipDefinition definition) => definition == OtherShip ? Starbase : ArmedShip;
+
+        private static AiShipProfile WithWeaponRanges(float first, float second) => new AiShipProfile(new[]
+            {
+                new AiWeapon(0, AiWeaponClass.Common, AiBulletBehavior.Projectile, AiWeaponCapability.DamageEnemy, first, 0f),
+                new AiWeapon(1, AiWeaponClass.Common, AiBulletBehavior.Projectile, AiWeaponCapability.DamageEnemy, second, 0f),
+            }, null, null, false, false, SizeClass.Frigate, 10f, 10f, 20f, 0f, 1f, 2f, 0f);
+
+        // Full throttle straight ahead.
+        private sealed class ThrustPilots : IPilotProvider, IPilot
+        {
+            public IPilot CreatePilot(BattleSnapshot snapshot, in ShipState ship, out PilotSchedule schedule)
+            {
+                schedule = PilotSchedule.Ship;
+                return this;
+            }
+
+            public bool Think(BattleSnapshot snapshot, in ShipState self, out PilotControls controls)
+            {
+                controls = PilotControls.Create(null, 1f, 0UL);
+                return true;
+            }
+        }
+
         private static AiShipProfile EnergyShieldShip => new AiShipProfile(null,
             new[] { new AiDevice(0, DeviceClass.EnergyShield, isAutomatic: false) }, null, isDrone: false, isStarbase: false,
             SizeClass.Frigate, enginePower: 10f, turnRate: 10f, propulsion: 20f, kineticResistance: 0f,

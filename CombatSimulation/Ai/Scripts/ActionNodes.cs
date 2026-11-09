@@ -130,6 +130,48 @@ namespace CombatSimulation.Ai
         private readonly float _tolerance;
     }
 
+    // Legacy SlowDownNode (M3 stub ports): brakes to a stop within the tolerance.
+    internal sealed class SlowDownNode : INode
+    {
+        public SlowDownNode(float tolerance) => _tolerance = tolerance;
+
+        public NodeState Evaluate(AiContext context) =>
+            Navigation.TryReachVelocity(context, Vec2.Zero, _tolerance) ? NodeState.Success : NodeState.Running;
+
+        private readonly float _tolerance;
+    }
+
+    // Legacy MaintainAttackRange (M3 stub ports): circles the target between the lerped range, capped at half the area
+    // width, and that range less the tolerance share.
+    internal sealed class MaintainAttackRangeNode : INode
+    {
+        public MaintainAttackRangeNode(float lerpMinMax, float tolerance)
+        {
+            _lerpMinMax = LegacyMath.Clamp01(lerpMinMax);
+            _tolerance = tolerance;
+        }
+
+        public NodeState Evaluate(AiContext context)
+        {
+            if (!context.TryGetShip(context.TargetShip, out var target))
+                return NodeState.Failure;
+
+            var min = context.SelectedWeapons.RangeMin;
+            var max = context.SelectedWeapons.RangeMax;
+            var maxDistance = min + (max - min) * _lerpMinMax;
+
+            var distanceLimit = 0.5f * context.AreaWidth;
+            if (maxDistance > distanceLimit)
+                maxDistance = distanceLimit;
+
+            var minDistance = maxDistance - maxDistance * _tolerance;
+            return Navigation.FlyAround(context, target, minDistance, maxDistance, 0) ? NodeState.Success : NodeState.Running;
+        }
+
+        private readonly float _lerpMinMax;
+        private readonly float _tolerance;
+    }
+
     // Legacy ChaseNode: runs while it has a target, even one it cannot see.
     // Legacy ChaseNode with its warp drive branch (phase 5, step 7a): at full throttle the first warp drive jumps
     // toward a target within its range beyond the selected weapons' minimum range.
