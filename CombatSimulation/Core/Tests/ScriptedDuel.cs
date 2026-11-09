@@ -111,7 +111,8 @@ namespace CombatSimulation.Core.Tests
                 if (Log.Count > 0 && snapshot.Tick == _lastRecordedTick) return;
                 _lastRecordedTick = snapshot.Tick;
                 Log.Add($"{snapshot.Tick} {ScriptedBattle.Digest(snapshot, true, _barrelDigest):X16}");
-                foreach (var item in snapshot.Events) Log.Add(item.ToString());
+                foreach (var item in snapshot.Events)
+                    if (item.Kind != BattleEventKind.Damage) Log.Add(item.ToString());
                 UpdateRegistrations(snapshot);
             }
 

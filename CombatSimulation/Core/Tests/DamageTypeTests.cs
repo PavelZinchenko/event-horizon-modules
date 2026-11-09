@@ -78,6 +78,22 @@ namespace CombatSimulation.Core.Tests
         public void Example3ArmorTakesWhatPassesTheShield() =>
             AssertState(Apply(Target(), (LegacyDamageModel.Impact, 30f)), 0f, 195f);
 
+        // Phase 5b, step 4: the damage text events of example 3, the shield loss first.
+        [Test]
+        public void DamageEventsGiveTheShieldLossAndTheArmorDamageByType()
+        {
+            var target = Target();
+            Apply(target, (LegacyDamageModel.Impact, 30f), (LegacyDamageModel.Energy, 0f));
+            var events = target.Battle.Snapshot.Events.ToArray();
+            var damage = Array.FindAll(events, e => e.Kind == BattleEventKind.Damage);
+            Assert.AreEqual(2, damage.Length);
+            Assert.AreEqual(-1, damage[0].DeviceIndex);
+            Assert.AreEqual(20f, damage[0].Damage, Tolerance);
+            Assert.AreEqual(LegacyDamageModel.Impact, damage[1].DeviceIndex);
+            Assert.AreEqual(5f, damage[1].Damage, Tolerance);
+            Assert.AreEqual(target.Entity(1), damage[1].EntityId);
+        }
+
         [Test]
         public void Example4TypesInOneShieldGroupKeepTheirShares() =>
             AssertState(Apply(Target(), (LegacyDamageModel.Impact, 20f), (LegacyDamageModel.Energy, 20f)), 0f, 187f);

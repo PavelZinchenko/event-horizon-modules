@@ -46,9 +46,55 @@ namespace CombatSimulation.Core
             _world.Bullets.ApplyDamage(Setup);
         }
 
-        private void ApplyShieldFirst(ShipEntity ship) =>
+        private void ApplyShieldFirst(ShipEntity ship)
+        {
+            var shieldBefore = ship.Shield.Value;
             ApplyShieldFirst(ref ship.Shield, ref ship.Armor, ref ship.Energy, ship.PendingDamage, ship.PendingEffects,
                 ship.Definition, ship.ResistanceShare, ship.PendingDamageIgnoringShield);
+            AddDamageEvents(ship, shieldBefore - ship.Shield.Value);
+        }
+
+        // Stage 14, before the batch is written: the damage events of the tick (phase 5b, step 4) go last, after the
+        // result, so the other events keep their sequence numbers.
+        public void PublishDamageEvents()
+        {
+            foreach (var item in _damageEvents)
+                _world.Events.Add(BattleEvent.DamageTaken(_world.BattleId, Tick, _world.Events.Count, item.Ship, item.Type,
+                    item.Amount, _world.Authority(item.Ship.Owner)));
+            _damageEvents.Clear();
+        }
+
+        // Phase 5b, step 4 (owner, 2026-11-09): the damage text's numbers, as legacy DamageIndicator.ApplyDamage got
+        // them: the shield loss, then each type's armor damage after its resistance. ApplyShieldFirst left what passed
+        // the shield in PendingDamage. Presentation only; the network replay calls ApplyShieldFirst without events.
+        private void AddDamageEvents(ShipEntity ship, float shieldLoss)
+        {
+            if (shieldLoss > 0f)
+                _damageEvents.Add(new DamageEvent(ship, -1, shieldLoss));
+
+            var damage = ship.PendingDamage;
+            for (var type = 0; type < damage.Length; ++type)
+            {
+                if (!(damage[type] > 0f)) continue;
+                var amount = damage[type] * (1f - ArmorResistance(Setup.DamageTypes, ship.Definition, type, ship.ResistanceShare));
+                if (amount > 0f)
+                    _damageEvents.Add(new DamageEvent(ship, type, amount));
+            }
+        }
+
+        private readonly struct DamageEvent
+        {
+            public DamageEvent(ShipEntity ship, int type, float amount)
+            {
+                Ship = ship;
+                Type = type;
+                Amount = amount;
+            }
+
+            public readonly ShipEntity Ship;
+            public readonly int Type;
+            public readonly float Amount;
+        }
 
         // Legacy Impact.ApplyShield and ShipStats.ApplyDamage, by damage type (D4). A shield drain takes the shield
         // first (phase 5, step 5a). The shield left meets the types group by group in shield order; each type's load is
@@ -183,5 +229,6 @@ namespace CombatSimulation.Core
         private readonly Battle _battle;
         private readonly WormTails _tails;
         private readonly List<EntityId> _deathRequests = new List<EntityId>();
+        private readonly List<DamageEvent> _damageEvents = new List<DamageEvent>();
     }
 }

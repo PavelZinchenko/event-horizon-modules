@@ -48,7 +48,9 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(BattleOutcome.Victory, snapshot.Result.Outcome);
             Assert.AreEqual(BattleEndReason.Elimination, snapshot.Result.Reason);
             var events = snapshot.Events;
-            Assert.AreEqual(BattleEventKind.Result, events[events.Length - 1].Kind, "The result is the last event.");
+            var last = events.Length - 1;
+            while (last > 0 && events[last].Kind == BattleEventKind.Damage) --last;
+            Assert.AreEqual(BattleEventKind.Result, events[last].Kind, "The result is the last event before the damage events.");
 
             var loser = 1 - snapshot.Result.WinningSide;
             var winnerAlive = 0;

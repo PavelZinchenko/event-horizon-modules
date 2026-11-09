@@ -70,7 +70,7 @@ namespace CombatSimulation.Core.Tests
                 BattleEventKind.Removal,
                 BattleEventKind.RosterTransition,
                 BattleEventKind.Result,
-            }, events.Select(e => e.Kind).ToArray());
+            }, events.Select(e => e.Kind).Where(kind => kind != BattleEventKind.Damage).ToArray());
 
             Assert.AreEqual(victim, events[2].EntityId);
             Assert.AreEqual(RemovalReason.Death, events[2].RemovalReason);

@@ -577,6 +577,7 @@ namespace CombatSimulation.Core
         {
             _network?.RecordBodySamples();
             _network?.RecordPredictedHits();
+            _damage.PublishDamageEvents();
             _writing.Write(this, Tick, World, Roster, _world.Events);
             _world.Events.Clear();
             _network?.ClearTickRecords();

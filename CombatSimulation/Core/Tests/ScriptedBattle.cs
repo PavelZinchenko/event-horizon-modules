@@ -325,7 +325,8 @@ namespace CombatSimulation.Core.Tests
             for (var i = 0; i < events.Length; ++i)
             {
                 var item = events[i];
-                Log.Add(item.ToString());
+                // The damage text events (phase 5b, step 4) are presentation only and come last; the baselines predate them.
+                if (item.Kind != BattleEventKind.Damage) Log.Add(item.ToString());
                 switch (item.Kind)
                 {
                     case BattleEventKind.Spawn:

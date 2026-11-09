@@ -1,4 +1,4 @@
-using CombatSimulation.Physics;
+﻿using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
@@ -30,6 +30,12 @@ namespace CombatSimulation.Core
         // For presentation (phase 5, step 14): an asteroid died. EntityId is the asteroid, Point its last position. Side
         // is -1: an asteroid belongs to no side.
         AsteroidRemoval = 10,
+
+        // For presentation (phase 5b, step 4): what one ship lost at stage 10 of the tick, for the damage text.
+        // EntityId is the ship, Damage the amount and DeviceIndex the damage type, or -1 for the shield. Armor
+        // damage is after the shield and the armor resistance, by type; one event per type with damage. They come last
+        // in the batch, after the result.
+        Damage = 11,
     }
 
     public enum RemovalReason : byte
@@ -245,6 +251,12 @@ namespace CombatSimulation.Core
                 asteroid.Owner, null, RemovalReason.Death, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
                 point: position);
 
+        internal static BattleEvent DamageTaken(BattleId battleId, long tick, int sequence, ShipEntity ship, int damageType,
+            float amount, BattleEventAuthority authority) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Damage, ship.Id, ship.Slot?.RosterId ?? default,
+                ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0,
+                0f, 0f, default, damage: amount, deviceIndex: damageType, authority: authority);
+
         public override string ToString()
         {
             switch (Kind)
@@ -271,6 +283,8 @@ namespace CombatSimulation.Core
                     return $"{Tick}.{Sequence} Gravity wave {EntityId} device {DeviceIndex} at {Point}";
                 case BattleEventKind.AsteroidRemoval:
                     return $"{Tick}.{Sequence} Asteroid {EntityId} destroyed at {Point}";
+                case BattleEventKind.Damage:
+                    return $"{Tick}.{Sequence} Damage {EntityId} type {DeviceIndex}: {Damage}";
                 default:
                     return $"{Tick}.{Sequence} {Kind}";
             }
