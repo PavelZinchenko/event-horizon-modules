@@ -303,7 +303,7 @@ namespace CombatSimulation.Ai
             new AttackAdditionalTargetsNode(_profile.HasEngine && !content.NotMoving);
         public INode Create(BehaviorTreeNode_TargetAllyStarbase content) => Stub(content);
         public INode Create(BehaviorTreeNode_TargetEnemyStarbase content) => Stub(content);
-        public INode Create(BehaviorTreeNode_BypassObstacles content) => Stub(content);
+        public INode Create(BehaviorTreeNode_BypassObstacles content) => new BypassObstaclesNode();
         public INode Create(BehaviorTreeNode_AttackTurretTargets content) => new AttackTurretTargetsNode();
         public INode Create(BehaviorTreeNode_HoldHarpoon content)
         {

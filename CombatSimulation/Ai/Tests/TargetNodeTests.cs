@@ -262,6 +262,153 @@ namespace CombatSimulation.Ai.Tests
             Assert.IsTrue(context.Controls.IsSystemActivated(1), "the shield faces the asteroid");
         }
 
+        // Phase 5, step 14c, example 14: a ship of mass 50 touches an asteroid of mass 80 to its left. The node steers
+        // 60 degrees off the asteroid, widens the turn while it touches, and fails 0.5 s after the last obstacle contact.
+        [Test]
+        public void BypassObstaclesSteersOffAHeavierAsteroid()
+        {
+            var runner = ObstacleBattle(ShipOfMass(50f), Ship, Ship, Rock(new Vec2(52.9f, 50.5f), 80f));
+            var asteroid = runner.Snapshot.Asteroids[0].Id;
+            var context = SelfContext(runner);
+            Assert.AreEqual(asteroid, context.Ship.LastBodyContact);
+            Assert.IsTrue(context.Ship.TouchesLastBodyContact);
+
+            var node = new BypassObstaclesNode();
+            Assert.AreEqual(NodeState.Running, node.Evaluate(context));
+            Assert.AreEqual(BypassCourse(context, 61.2f), context.Controls.Course.Value, 1e-4f,
+                "60 degrees, wider by 1.2 while touching");
+            Assert.AreEqual(0f, context.Controls.Thrust, "the heading is not within 20.4 degrees of the course");
+
+            context.Controls.Reset();
+            Assert.AreEqual(NodeState.Running, node.Evaluate(context));
+            Assert.AreEqual(BypassCourse(context, 62.4f), context.Controls.Course.Value, 1e-4f);
+
+            var world = runner.Battle.World;
+            world.SetPose(runner.Battle.Asteroids.Items[0].Body, new Vec2(100f, 100f), 0f);
+            world.SetLinearVelocity(runner.Battle.Asteroids.Items[0].Body, Vec2.Zero);
+            runner.Step();
+            context.Update(runner.Snapshot, Self(runner));
+            Assert.AreEqual(asteroid, context.Ship.LastBodyContact, "the last contact stays");
+            Assert.IsFalse(context.Ship.TouchesLastBodyContact);
+
+            var thinks = 0;
+            while (thinks < 100 && node.Evaluate(context) == NodeState.Running) ++thinks;
+            Assert.That(thinks, Is.InRange(24, 25), "0.5 s after the last obstacle contact at 0.02 s per think");
+        }
+
+        // Example 15: a ship of mass 200 does not yield to the asteroid of mass 80.
+        [Test]
+        public void BypassObstaclesIgnoresALighterAsteroid()
+        {
+            var runner = ObstacleBattle(ShipOfMass(200f), Ship, Ship, Rock(new Vec2(52.9f, 50.5f), 80f));
+            var context = SelfContext(runner);
+            Assert.AreEqual(runner.Snapshot.Asteroids[0].Id, context.Ship.LastBodyContact);
+            Assert.AreEqual(F, new BypassObstaclesNode().Evaluate(context));
+        }
+
+        // Example 16: a drone yields to every asteroid, even a lighter one.
+        [Test]
+        public void BypassObstaclesOfADroneYieldsToAnyAsteroid()
+        {
+            var runner = CarrierBattle(out _, out var drone, asteroids: new[] { Rock(new Vec2(150f, 20f), 0.1f, 1f) });
+            Assert.IsTrue(runner.Snapshot.TryGetShip(drone, out var state));
+            var body = runner.Battle.Asteroids.Items[0].Body;
+            runner.Battle.World.SetPose(body, state.Position + new Vec2(0.7f, 0.1f), 0f);
+            runner.Battle.World.SetLinearVelocity(body, state.LinearVelocity);
+            runner.Step();
+
+            var context = DroneContext(runner, drone);
+            Assert.AreEqual(runner.Snapshot.Asteroids[0].Id, context.Ship.LastBodyContact);
+            Assert.Less(runner.Snapshot.Asteroids[0].Mass, context.Ship.Definition.Mass);
+            Assert.AreEqual(NodeState.Running, new BypassObstaclesNode().Evaluate(context));
+        }
+
+        // Example 17 and question 4 (a): an allied ship at least as heavy is an obstacle; an enemy or a lighter ally is not.
+        [TestCase(0, 200f, true)]
+        [TestCase(0, 50f, true)]
+        [TestCase(0, 10f, false)]
+        [TestCase(1, 200f, false)]
+        public void BypassObstaclesYieldsToAHeavierAlly(int side, float mass, bool obstacle)
+        {
+            var other = ShipOfMass(mass);
+            var runner = ObstacleBattle(ShipOfMass(50f), side == 0 ? other : Ship, side == 1 ? other : Ship);
+            var touched = side == 0 ? Ally(runner) : Enemy(runner);
+            Place(runner, touched, new Vec2(51.9f, 50.4f));
+            runner.Step();
+
+            var context = SelfContext(runner);
+            Assert.AreEqual(touched, context.Ship.LastBodyContact);
+            Assert.AreEqual(obstacle ? NodeState.Running : F, new BypassObstaclesNode().Evaluate(context));
+        }
+
+        private static AsteroidSetup Rock(Vec2 position, float mass, float size = 4f) =>
+            new AsteroidSetup(position, Vec2.Zero, size, mass, size * size * 100f, 1f);
+
+        private static ShipDefinition ShipOfMass(float mass) => new ShipDefinition(1f, mass, Ship.Engine, 1000f,
+            new ResourceDefinition(500f), new ResourceDefinition(300f));
+
+        // Slot 1 (side 0) waits at (50, 50) facing +x; slot 2 (its ally) and slot 101 (the enemy) wait far away. The
+        // asteroids take their setup positions at rest; then the battle steps once.
+        private static BattleRunner ObstacleBattle(ShipDefinition self, ShipDefinition ally, ShipDefinition enemy,
+            params AsteroidSetup[] asteroids)
+        {
+            var roster = new List<RosterSlotSetup>
+            {
+                new RosterSlotSetup(new RosterId(1), 0, self),
+                new RosterSlotSetup(new RosterId(101), 1, enemy),
+                new RosterSlotSetup(new RosterId(2), 0, ally),
+            };
+            var runner = Start(roster, 2, new NoPilots(), asteroids);
+            var world = runner.Battle.World;
+            Place(runner, Self(runner).Id, new Vec2(50f, 50f));
+            Place(runner, Ally(runner), new Vec2(150f, 50f));
+            Place(runner, Enemy(runner), new Vec2(150f, 150f));
+            for (var i = 0; i < asteroids.Length; ++i)
+            {
+                var body = runner.Battle.Asteroids.Items[i].Body;
+                world.SetPose(body, asteroids[i].Position, 0f);
+                world.SetLinearVelocity(body, Vec2.Zero);
+            }
+            runner.Step();
+            return runner;
+        }
+
+        private static void Place(BattleRunner runner, EntityId id, Vec2 position)
+        {
+            var body = runner.Battle.FindShip(id).Body;
+            runner.Battle.World.SetPose(body, position, 0f);
+            runner.Battle.World.SetLinearVelocity(body, Vec2.Zero);
+            runner.Battle.World.SetAngularVelocity(body, 0f);
+        }
+
+        private static ShipState Self(BattleRunner runner) => ShipOf(runner, 1);
+        private static EntityId Ally(BattleRunner runner) => ShipOf(runner, 2).Id;
+        private static EntityId Enemy(BattleRunner runner) => ShipOf(runner, 101).Id;
+
+        private static ShipState ShipOf(BattleRunner runner, uint rosterId)
+        {
+            foreach (var ship in runner.Snapshot.Ships)
+                if (ship.RosterId.Equals(new RosterId(rosterId))) return ship;
+            throw new AssertionException($"No ship in slot {rosterId}");
+        }
+
+        private static AiContext SelfContext(BattleRunner runner)
+        {
+            var context = new AiContext(ArmedShip, AiSettings.Default, 0.02f, Utilites.RandomState.FromSeed(1), BattleData());
+            context.Update(runner.Snapshot, Self(runner));
+            return context;
+        }
+
+        // The direction to the last contact, turned away from it by the given degrees.
+        private static float BypassCourse(AiContext context, float turn)
+        {
+            Assert.IsTrue(context.TryGetBodyPosition(context.Ship.LastBodyContact, out var position));
+            var angle = LegacyMath.Angle(context.Delta(context.Ship.Position, position));
+            return LegacyMath.DeltaAngle(context.Ship.Angle, angle) > 0
+                ? angle - turn * LegacyMath.Degree
+                : angle + turn * LegacyMath.Degree;
+        }
+
         private static AiContext AsteroidContext(params AsteroidSetup[] asteroids)
         {
             var roster = new List<RosterSlotSetup>
@@ -566,9 +713,11 @@ namespace CombatSimulation.Ai.Tests
             return Start(roster, 16, new NoPilots());
         }
 
-        private static BattleRunner Start(List<RosterSlotSetup> roster, int maxActive, IPilotProvider pilots)
+        private static BattleRunner Start(List<RosterSlotSetup> roster, int maxActive, IPilotProvider pilots,
+            IReadOnlyList<AsteroidSetup> asteroids = null)
         {
-            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: maxActive), pilots);
+            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: maxActive,
+                asteroids: asteroids), pilots);
             foreach (var slot in roster)
                 runner.Deploy(slot.RosterId, runner.Tick);
             runner.Step();
@@ -614,7 +763,8 @@ namespace CombatSimulation.Ai.Tests
             new ResourceDefinition(0f), new ResourceDefinition(0f));
 
         // Slot 1 is a carrier that holds its bay key, so it launches one drone; slot 101 is an enemy and slot 2 a reserve.
-        internal static BattleRunner CarrierBattle(out EntityId carrier, out EntityId drone, ShipDefinition carrierShip = null)
+        internal static BattleRunner CarrierBattle(out EntityId carrier, out EntityId drone, ShipDefinition carrierShip = null,
+            IReadOnlyList<AsteroidSetup> asteroids = null)
         {
             var roster = new List<RosterSlotSetup>
             {
@@ -622,7 +772,7 @@ namespace CombatSimulation.Ai.Tests
                 new RosterSlotSetup(new RosterId(101), 1, carrierShip == FragileCarrier ? HeavyShip : Ship),
                 new RosterSlotSetup(new RosterId(2), 0, Ship),
             };
-            var runner = Start(roster, 1, new LaunchPilots());
+            var runner = Start(roster, 1, new LaunchPilots(), asteroids);
             carrier = runner.Snapshot.Ships[0].Id;
             drone = default;
             for (var i = 0; i < 100 && drone.IsNull; ++i)

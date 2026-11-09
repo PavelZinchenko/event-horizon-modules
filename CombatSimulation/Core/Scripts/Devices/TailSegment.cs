@@ -171,10 +171,12 @@ namespace CombatSimulation.Core
         public readonly EntityId Id;
         public readonly EntityId ShipId;
         public readonly int Side;
+        public readonly Allegiance Allegiance;
         public readonly int Owner;
         public readonly WormTailDefinition Definition;
         public readonly int Number;
         public readonly bool Detached;
+        public readonly float Mass;
 
         // The legacy body scale: the view draws the segment sprite at it.
         public readonly float Scale;
@@ -188,10 +190,12 @@ namespace CombatSimulation.Core
             Id = segment.Id;
             ShipId = segment.ShipId;
             Side = segment.Side;
+            Allegiance = segment.Allegiance;
             Owner = segment.Owner;
             Definition = segment.Definition;
             Number = segment.Number;
             Detached = segment.Detached;
+            Mass = segment.Mass;
             Scale = segment.Scale;
             Position = world.GetPosition(segment.Body);
             Angle = world.GetAngle(segment.Body);

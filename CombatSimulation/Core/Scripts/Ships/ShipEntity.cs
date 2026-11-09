@@ -229,6 +229,11 @@ namespace CombatSimulation.Core
         // Linear velocity at the end of stage 4, before the physics step (ramming speed).
         public Vec2 PreStepVelocity { get; set; }
 
+        // The last body the hull touched and whether it still touches it (legacy Collider.LastCollision and
+        // ActiveCollision; phase 5, step 14c): stage 8 sets them (BodyContactMemory). The AI reads them.
+        public EntityId LastBodyContact { get; set; }
+        public bool TouchesLastBodyContact { get; set; }
+
         // Damage accumulated at stage 9, by damage type (D4), and the other effects; stage 10 applies them in one pass.
         public float[] PendingDamage => _pendingDamage;
         public float[] PendingDamageIgnoringShield => _pendingDamageIgnoringShield;
@@ -341,6 +346,8 @@ namespace CombatSimulation.Core
             Status = ShipStatusFlags.None;
             BlockedDevices = 0;
             LastContactTick = NoContact;
+            LastBodyContact = default;
+            TouchesLastBodyContact = false;
             Tint = 0f;
             ResistanceShare = 0f;
             EngineScale = 1f;
@@ -535,6 +542,8 @@ namespace CombatSimulation.Core
             Status = ShipStatusFlags.None;
             BlockedDevices = 0;
             LastContactTick = NoContact;
+            LastBodyContact = default;
+            TouchesLastBodyContact = false;
             StealthDevices = 0;
             HasContactStealth = false;
             Tint = 0f;

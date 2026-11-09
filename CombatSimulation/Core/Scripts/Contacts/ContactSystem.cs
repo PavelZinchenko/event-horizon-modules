@@ -44,6 +44,7 @@ namespace CombatSimulation.Core
         // Stage 8. Every source adds its candidates; the resolver sorts them by the contact key.
         public void Collect()
         {
+            _bodyContacts.Update(Physics, _world.Shapes, _world.Ships);
             _resolver.BeginStep();
             _beams.Collect(_resolver);
             _bolts.Collect(_resolver);
@@ -630,6 +631,7 @@ namespace CombatSimulation.Core
         private readonly BulletContactLedger _ledger;
         private readonly ContactResolver _resolver = new ContactResolver();
         private readonly RammingTracker _ramming = new RammingTracker();
+        private readonly BodyContactMemory _bodyContacts = new BodyContactMemory();
         private readonly BeamQueries _beams = new BeamQueries();
         private readonly BeamBolts _bolts = new BeamBolts();
         private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();

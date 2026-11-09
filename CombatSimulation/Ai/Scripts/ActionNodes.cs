@@ -579,6 +579,57 @@ namespace CombatSimulation.Ai
         private readonly int _deviceIndex;
     }
 
+    // Legacy BypassObstaclesNode (phase 5, step 14c): after a touch with an obstacle the ship steers off it for 0.5 s. The
+    // course is the direction to the obstacle turned away by 60 degrees; the turn widens by 60 degrees per second while the
+    // ship still touches it, up to 180. The ship thrusts while its heading is within a third of the turn of that course.
+    // An obstacle that left the battle keeps its last position; legacy reads the last state of the unit.
+    internal sealed class BypassObstaclesNode : INode
+    {
+        private const float Cooldown = 0.5f;
+        private const float InitialTurn = 60 * LegacyMath.Degree;
+        private const float MaxTurn = 180 * LegacyMath.Degree;
+
+        public NodeState Evaluate(AiContext context)
+        {
+            var ship = context.Ship;
+            _elapsedTime += context.DeltaTime;
+
+            var contact = ship.LastBodyContact;
+            if (TargetLists.IsObstacle(context, contact, out var position))
+            {
+                if (_obstacle != contact)
+                    _turn = InitialTurn;
+
+                _obstacle = contact;
+                _position = position;
+                _elapsedTime = 0f;
+            }
+
+            if (_elapsedTime > Cooldown)
+                _obstacle = default;
+
+            if (_obstacle.IsNull)
+                return NodeState.Failure;
+
+            if (ship.TouchesLastBodyContact && ship.LastBodyContact == _obstacle)
+                _turn = System.Math.Min(MaxTurn, _turn + InitialTurn * context.DeltaTime);
+
+            if (context.TryGetBodyPosition(_obstacle, out var current))
+                _position = current;
+
+            var angle = LegacyMath.Angle(context.Delta(ship.Position, _position));
+            angle = LegacyMath.DeltaAngle(ship.Angle, angle) > 0 ? angle - _turn : angle + _turn;
+            context.Controls.Course = angle;
+            context.Controls.Thrust = System.Math.Abs(LegacyMath.DeltaAngle(ship.Angle, angle)) < _turn / 3 ? 1 : 0;
+            return NodeState.Running;
+        }
+
+        private float _elapsedTime = Cooldown;
+        private float _turn = InitialTurn;
+        private EntityId _obstacle;
+        private Vec2 _position;
+    }
+
     // Legacy LookAtTargetNode.
     internal sealed class LookAtTargetNode : INode
     {

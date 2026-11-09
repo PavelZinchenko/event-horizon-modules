@@ -634,6 +634,54 @@ namespace CombatSimulation.Ai
                 timeToHit = threatTime;
         }
 
+        // Legacy ThreatAnalyzer.IsObstacle (phase 5, step 14c): a body in the battle within 1 unit of the ship, measured
+        // between the Body.Scale circles, and not exactly behind it. A drone yields to every asteroid. A ship yields to an
+        // asteroid, an allied ship or an allied tail segment at least as heavy. Legacy also lists satellites, which take
+        // no core contacts, and shields, which weigh 0 there and never pass the mass check.
+        internal static bool IsObstacle(AiContext context, EntityId id, out Vec2 position)
+        {
+            var self = context.Ship;
+            var mass = self.Definition.Mass;
+            float scale;
+            position = default;
+            if (id.IsNull || id == self.Id) return false;
+
+            if (context.TryGetAsteroid(id, out var asteroid))
+            {
+                if (!self.IsDrone && mass > asteroid.Mass) return false;
+                position = asteroid.Position;
+                scale = asteroid.Size;
+            }
+            else if (self.IsDrone)
+            {
+                return false;
+            }
+            else if (context.TryGetShip(id, out var ship))
+            {
+                if (ship.IsDecoy || ship.IsDrone || context.IsEnemy(ship) || mass > ship.Definition.Mass) return false;
+                position = ship.Position;
+                scale = context.ProfileOf(ship).ModelScale;
+            }
+            else if (context.TryGetSegment(id, out var segment))
+            {
+                if (context.IsEnemy(segment) || mass > segment.Mass) return false;
+                position = segment.Position;
+                scale = segment.Scale;
+            }
+            else
+            {
+                return false;
+            }
+
+            var direction = context.Delta(self.Position, position);
+            var distance = direction.Length - 0.5f * (context.Profile.ModelScale + scale);
+            var delta = Math.Abs(LegacyMath.DeltaAngle(self.Angle, LegacyMath.Angle(direction)));
+            return distance < MaxObstacleDistance && delta < MaxObstacleAngle;
+        }
+
+        private const float MaxObstacleDistance = 1f;
+        private const float MaxObstacleAngle = (float)Math.PI;
+
         // The closest approach of a bullet at the offset, with the ship's velocity relative to it, against the sum of
         // both scales. A zero relative velocity gives a NaN time, which is never a threat, as in legacy.
         internal static bool IsThreat(Vec2 itemPosition, Vec2 velocity, float scales, out float threatTime)

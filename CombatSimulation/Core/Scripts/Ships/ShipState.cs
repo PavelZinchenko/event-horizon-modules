@@ -68,6 +68,11 @@ namespace CombatSimulation.Core
         // The resistance share of the tick's device statuses (ShipStatus.ResistanceShare; phase 5, step 7d), for the HUD.
         public readonly float ResistanceShare;
 
+        // The last ship, tail segment, repair bot or asteroid the hull touched, and whether it still touches it (legacy
+        // Collider.LastCollision and ActiveCollision; phase 5, step 14c). The entity may have left the battle.
+        public readonly EntityId LastBodyContact;
+        public readonly bool TouchesLastBodyContact;
+
         // The first of this ship's Definition.Devices.Count entries in the snapshot's device buffer.
         internal readonly int DeviceStart;
         internal readonly int BarrelStart;
@@ -103,6 +108,8 @@ namespace CombatSimulation.Core
             Status = ship.Status;
             Tint = ship.Tint;
             ResistanceShare = ship.ResistanceShare;
+            LastBodyContact = ship.LastBodyContact;
+            TouchesLastBodyContact = ship.TouchesLastBodyContact;
             DeviceStart = deviceStart;
             BarrelStart = barrelStart;
             SatelliteStart = satelliteStart;

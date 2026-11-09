@@ -89,6 +89,7 @@ namespace CombatSimulation.Ai
         // Legacy UnitSideExtensions.IsEnemy on the current allegiances (D13).
         public bool IsEnemy(in ShipState ship) => Allegiances.IsHostile(ship.Allegiance, _ship.Allegiance);
         public bool IsEnemy(in BulletState bullet) => Allegiances.IsHostile(bullet.Allegiance, _ship.Allegiance);
+        public bool IsEnemy(in TailSegmentState segment) => Allegiances.IsHostile(segment.Allegiance, _ship.Allegiance);
 
         // Legacy AiManager.TimeSinceLastPlayerInput: one clock for the battle, from its start or the last player input.
         public float TimeSinceLastPlayerInput => _battle.TimeSinceLastPlayerInput(Snapshot.Tick);
@@ -151,20 +152,63 @@ namespace CombatSimulation.Ai
                 return true;
             }
 
-            if (!id.IsNull)
+            if (TryGetAsteroid(id, out var asteroid))
             {
-                foreach (var item in Snapshot.Asteroids)
-                {
-                    if (item.Id != id) continue;
-                    position = item.Position;
-                    velocity = item.LinearVelocity;
-                    return true;
-                }
+                position = asteroid.Position;
+                velocity = asteroid.LinearVelocity;
+                return true;
             }
 
             position = default;
             velocity = default;
             return false;
+        }
+
+        public bool TryGetAsteroid(EntityId id, out AsteroidState asteroid)
+        {
+            if (!id.IsNull)
+            {
+                foreach (var item in Snapshot.Asteroids)
+                {
+                    if (item.Id != id) continue;
+                    asteroid = item;
+                    return true;
+                }
+            }
+
+            asteroid = default;
+            return false;
+        }
+
+        public bool TryGetSegment(EntityId id, out TailSegmentState segment)
+        {
+            if (!id.IsNull)
+            {
+                foreach (var item in Snapshot.Segments)
+                {
+                    if (item.Id != id) continue;
+                    segment = item;
+                    return true;
+                }
+            }
+
+            segment = default;
+            return false;
+        }
+
+        // The position of a ship, an asteroid or a tail segment in the snapshot (phase 5, step 14c).
+        public bool TryGetBodyPosition(EntityId id, out Vec2 position)
+        {
+            if (TryGetShip(id, out var ship)) position = ship.Position;
+            else if (TryGetAsteroid(id, out var asteroid)) position = asteroid.Position;
+            else if (TryGetSegment(id, out var segment)) position = segment.Position;
+            else
+            {
+                position = default;
+                return false;
+            }
+
+            return true;
         }
 
         // The state of one of the own ship's devices at the end of the last tick (step 3b).
