@@ -93,8 +93,10 @@ namespace CombatSimulation.Core
             }
             var segment = battle.FindSegment(id);
             var bot = battle.FindRepairBot(id);
-            body = segment?.Body ?? bot?.Body ?? default;
-            return segment != null || bot != null;
+            // Legacy HarpoonController holds any unit with a collider, an asteroid too (phase 5, step 14).
+            var asteroid = battle.FindAsteroid(id);
+            body = segment?.Body ?? bot?.Body ?? asteroid?.Body ?? default;
+            return segment != null || bot != null || asteroid != null;
         }
     }
 }

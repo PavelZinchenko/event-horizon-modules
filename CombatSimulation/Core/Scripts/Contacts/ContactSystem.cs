@@ -7,8 +7,8 @@ namespace CombatSimulation.Core
     // Contacts (phase 5, step 8b, item 7). Stage 6: the beam, beam bolt (step 4e), point-defense and gravity-wave (step 11c)
     // queries. Stage 8: every source adds its
     // contact candidates. Stage 9: the resolver accepts them in key order, and each accepted contact reaches its
-    // target: pending damage and a push on a ship, damage or removal on a bullet, a queued hit on a tail segment.
-    // Stage 10 applies the damage (DamageSystem).
+    // target: pending damage and a push on a ship, damage or removal on a bullet, a queued hit on a tail segment, damage
+    // and a push on an asteroid (step 14). Stage 10 applies the damage (DamageSystem).
     internal sealed class ContactSystem
     {
         public ContactSystem(BattleWorld world, Battle battle, WormTails tails, BulletTriggers triggers,
@@ -49,9 +49,12 @@ namespace CombatSimulation.Core
             _bolts.Collect(_resolver);
             _pointDefense.Collect(_resolver);
             _gravityWaves.Collect(_resolver);
-            _world.Bullets.CollectHits(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver, _world.RepairBots);
-            _world.Bullets.CollectStuckHits(Physics, _world.Entities, _world.Shapes, _world.Ships, _world.Segments, _resolver, _world.RepairBots);
-            _ramming.Collect(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver, Setup.DamageTypes.RammingDamageType, _world.RepairBots);
+            _world.Bullets.CollectHits(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver, _world.RepairBots,
+                _world.Asteroids);
+            _world.Bullets.CollectStuckHits(Physics, _world.Entities, _world.Shapes, _world.Ships, _world.Segments, _resolver,
+                _world.RepairBots, _world.Asteroids);
+            _ramming.Collect(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver,
+                Setup.DamageTypes.RammingDamageType, _world.RepairBots, _world.Asteroids);
 
             var duplicates = _resolver.Sort();
             if (duplicates > 0)
@@ -190,6 +193,14 @@ namespace CombatSimulation.Core
                     authority = _world.Authority(segment.Owner);
                     _tails.ResolveSegmentHit(hit, segment);
                 }
+                else if (hit.TargetHandle.Kind == EntityKind.Asteroid)
+                {
+                    var asteroid = _world.Asteroids.Get(hit.TargetHandle);
+                    if (asteroid == null) continue;
+                    // Every owner is local in a battle with asteroids (owner question 2).
+                    authority = BattleEventAuthority.Committed;
+                    _world.Asteroids.Resolve(hit, asteroid, AsteroidImpulse(hit, asteroid));
+                }
                 else
                 {
                     var target = _world.Ships.Get(hit.TargetHandle);
@@ -253,6 +264,13 @@ namespace CombatSimulation.Core
                             impulse = PushImpulse(attacker, Physics.GetPosition(target.Body), falloff);
                             effects = projectile.Effects;
                         }
+                    }
+                    else if (_world.Asteroids.Get(hit.AttackerHandle) is Asteroid rammer)
+                    {
+                        // An asteroid rams (phase 5, step 14); physics already bounced the bodies.
+                        owner = rammer.Owner;
+                        deviceIndex = -1;
+                        kind = HitImpactKind.Impact;
                     }
                     else
                     {
@@ -537,6 +555,16 @@ namespace CombatSimulation.Core
             }
             bullet.ExpiryTick += (long)whole;
             bullet.RestoreCarry = (float)(total - whole);
+        }
+
+        // Legacy Asteroid.OnCollision applies the impact's impulse: a projectile's push, or a gravity wave's (step 11c). A
+        // beam and a ram push nothing.
+        private Vec2 AsteroidImpulse(in ContactCandidate hit, Asteroid asteroid)
+        {
+            if (!_world.Bullets.TryGet(hit.AttackerHandle, out var index)) return hit.Impulse;
+            ref readonly var bullet = ref _world.Bullets[index];
+            return bullet.IsBeam ? Vec2.Zero : PushImpulse(bullet, Physics.GetPosition(asteroid.Body),
+                bullet.Definition.HasFalloff ? hit.Falloff : 1f);
         }
 
         // Legacy PushAction: the impulse acts at the target's origin, so it never turns the target.

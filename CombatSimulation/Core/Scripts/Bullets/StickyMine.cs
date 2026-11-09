@@ -2,8 +2,8 @@ using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
-    // Legacy StickyController (phase 5, step 4b), at stage 4. Stage 8 records the first ship, drone or tail segment
-    // that a sticky bullet touches. At the next stage 4 the bullet sticks to it, if it is still in the battle: it rides
+    // Legacy StickyController (phase 5, step 4b), at stage 4. Stage 8 records the first ship, drone, tail segment or
+    // asteroid (step 14) that a sticky bullet touches. At the next stage 4 the bullet sticks to it, if it is still in the battle: it rides
     // on the target's body at its pose in the target frame, with the offset x 0.9 (legacy). Its lifetime grows by the
     // sticky lifetime, and it detonates at stage 4 of the tick StickyTicks - 1 after the stick tick, before it moves
     // (legacy cooldown). If the target leaves first, the bullet vanishes without triggers. Physics never hits the body
@@ -64,8 +64,9 @@ namespace CombatSimulation.Core
 
             var segment = battle.FindSegment(id);
             var bot = battle.FindRepairBot(id);
-            body = segment?.Body ?? bot?.Body ?? default;
-            return segment != null || bot != null;
+            var asteroid = battle.FindAsteroid(id);
+            body = segment?.Body ?? bot?.Body ?? asteroid?.Body ?? default;
+            return segment != null || bot != null || asteroid != null;
         }
     }
 }

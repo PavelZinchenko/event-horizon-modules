@@ -6,9 +6,9 @@ using Utilites;
 
 namespace CombatSimulation.Core
 {
-    // The state that every battle system shares: the tick, physics, the roster, the ship, drone, bullet and segment
-    // stores, the entity registry, the shape table and the event batch of the tick. Its changes touch only this state.
-    // A change that other systems react to (a ship or bullet removal, an operation record) stays with Battle, which
+    // The state that every battle system shares: the tick, physics, the roster, the ship, drone, bullet, segment and
+    // asteroid stores, the entity registry, the shape table and the event batch of the tick. Its changes touch only this
+    // state. A change that other systems react to (a ship or bullet removal, an operation record) stays with Battle, which
     // calls them in stage order (phase 5, step 8b, H13).
     internal sealed class BattleWorld
     {
@@ -22,6 +22,7 @@ namespace CombatSimulation.Core
                 Substeps = Battle.PhysicsSubsteps,
             });
             Roster = new Roster(setup);
+            Asteroids = new Asteroids(this);
         }
 
         public BattleSetup Setup { get; }
@@ -40,6 +41,7 @@ namespace CombatSimulation.Core
         public BulletStore Bullets { get; } = new BulletStore();
         public TailSegmentStore Segments { get; } = new TailSegmentStore();
         public RepairBots RepairBots { get; set; }
+        public Asteroids Asteroids { get; }
         public Decoys Decoys { get; set; }
         public EntityRegistry Entities { get; } = new EntityRegistry();
         public ShapeTable Shapes { get; } = new ShapeTable();
@@ -63,6 +65,7 @@ namespace CombatSimulation.Core
             ? (Bullets.TryGet(handle, out var index) ? Bullets[index].Owner : -1)
             : handle.Kind == EntityKind.RepairBot ? RepairBots.Get(handle)?.Owner ?? -1
             : handle.Kind == EntityKind.Segment ? Segments.Get(handle)?.Owner ?? -1
+            : handle.Kind == EntityKind.Asteroid ? Asteroids.Get(handle)?.Owner ?? -1
             : (Ships.Get(handle)?.Owner ?? -1);
 
         public BattleEventAuthority Authority(int owner) => Setup.IsLocalOwner(owner)

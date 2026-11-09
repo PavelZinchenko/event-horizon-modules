@@ -7,7 +7,8 @@ namespace CombatSimulation.Core
     // Ramming (Q8). A touch between two enemy ships begins with the first begin event of any of their shape pairs
     // and ends after the last end event. Damage applies once per ship pair per touch, when the count of touching
     // shape pairs goes from 0 to 1, not once per shape pair. A ship also rams a hostile worm tail segment; a segment
-    // deals no ramming damage (legacy WormSegmentBase has no collision behaviour; phase 5, step 7d).
+    // deals no ramming damage (legacy WormSegmentBase has no collision behaviour; phase 5, step 7d). An asteroid rams and
+    // is rammed as a ship, with its own multiplier (legacy DefaultCollisionBehaviour; step 14). Two asteroids are friends.
     internal sealed class RammingTracker
     {
         // Legacy DefaultCollisionBehaviour: 0.1 × relative speed × the smaller mass × the attacker's multiplier,
@@ -22,14 +23,15 @@ namespace CombatSimulation.Core
         // Stage 8. Begin events first, then end events: a pair that swaps one touching shape pair for another in
         // the same step stays touching. Adds one candidate per direction for each touch that started.
         public void Collect(PhysicsWorld world, ShapeTable shapes, ShipStore ships, TailSegmentStore segments,
-            ContactResolver resolver, int damageType, RepairBots bots = null)
+            ContactResolver resolver, int damageType, RepairBots bots = null, Asteroids asteroids = null)
         {
             _started.Clear();
 
             var begins = world.BeginEvents;
             for (var i = 0; i < begins.Length; ++i)
             {
-                if (!TryResolve(begins[i], shapes, ships, segments, bots, out var a, out var entryA, out var b, out var entryB))
+                if (!TryResolve(begins[i], shapes, ships, segments, bots, asteroids, out var a, out var entryA, out var b,
+                        out var entryB))
                     continue;
 
                 // Order the pair by entity ID, so the result does not depend on the physics shape order.
@@ -51,7 +53,8 @@ namespace CombatSimulation.Core
             for (var i = 0; i < ends.Length; ++i)
             {
                 // A stale shape (a removed ship) resolves to nothing; Forget already dropped its pairs.
-                if (!TryResolve(ends[i], shapes, ships, segments, bots, out var a, out _, out var b, out _)) continue;
+                if (!TryResolve(ends[i], shapes, ships, segments, bots, asteroids, out var a, out _, out var b, out _))
+                    continue;
 
                 var pair = EntityPair.Unordered(a.Id, b.Id);
                 if (!_touching.TryGetValue(pair, out var count)) continue;
@@ -62,17 +65,17 @@ namespace CombatSimulation.Core
             for (var i = 0; i < _started.Count; ++i)
             {
                 var touch = _started[i];
-                var first = Party.Of(touch.FirstShape.Owner, ships, segments, bots);
-                var second = Party.Of(touch.SecondShape.Owner, ships, segments, bots);
+                var first = Party.Of(touch.FirstShape.Owner, ships, segments, bots, asteroids);
+                var second = Party.Of(touch.SecondShape.Owner, ships, segments, bots, asteroids);
 
                 var relativeSpeed = (first.PreStepVelocity - second.PreStepVelocity).Length;
                 var mass = Math.Min(world.GetMass(first.Body), world.GetMass(second.Body));
                 // A shield has no collision behaviour (phase 5, step 10d, owner question 6): a ship that touches with its
                 // shield deals no ramming damage; the rammer's damage on a shield pays the shield's energy.
-                if (first.Ship != null && touch.FirstShape.Priority != ShapeHitPriority.Shield)
-                    AddCandidate(resolver, first.Ship, second, touch.SecondShape, relativeSpeed, mass, damageType);
-                if (second.Ship != null && touch.SecondShape.Priority != ShapeHitPriority.Shield)
-                    AddCandidate(resolver, second.Ship, first, touch.FirstShape, relativeSpeed, mass, damageType);
+                if (first.Rams && touch.FirstShape.Priority != ShapeHitPriority.Shield)
+                    AddCandidate(resolver, first, second, touch.SecondShape, relativeSpeed, mass, damageType);
+                if (second.Rams && touch.SecondShape.Priority != ShapeHitPriority.Shield)
+                    AddCandidate(resolver, second, first, touch.FirstShape, relativeSpeed, mass, damageType);
             }
         }
 
@@ -88,10 +91,10 @@ namespace CombatSimulation.Core
                 _touching.Remove(_scratch[i]);
         }
 
-        private static void AddCandidate(ContactResolver resolver, ShipEntity attacker, in Party target,
+        private static void AddCandidate(ContactResolver resolver, in Party attacker, in Party target,
             in ShapeEntry targetShape, float relativeSpeed, float mass, int damageType)
         {
-            var damage = DamageFactor * relativeSpeed * mass * attacker.Definition.RammingDamageMultiplier;
+            var damage = DamageFactor * relativeSpeed * mass * attacker.RammingDamageMultiplier;
             if (!(damage > MinDamage)) return;
 
             resolver.Add(new ContactCandidate
@@ -110,45 +113,55 @@ namespace CombatSimulation.Core
             });
         }
 
-        // The shapes belong to two live hostile entities, at least one of them a ship.
+        // The shapes belong to two live hostile entities, at least one of them a ship or an asteroid.
         private static bool TryResolve(in ContactEvent contact, ShapeTable shapes, ShipStore ships,
-            TailSegmentStore segments, RepairBots bots, out Party a, out ShapeEntry entryA, out Party b, out ShapeEntry entryB)
+            TailSegmentStore segments, RepairBots bots, Asteroids asteroids, out Party a, out ShapeEntry entryA,
+            out Party b, out ShapeEntry entryB)
         {
             a = b = default;
             if (!shapes.TryGet(contact.ShapeA, out entryA) | !shapes.TryGet(contact.ShapeB, out entryB)) return false;
 
-            a = Party.Of(entryA.Owner, ships, segments, bots);
-            b = Party.Of(entryB.Owner, ships, segments, bots);
-            return a.IsAlive && b.IsAlive && (a.Ship != null || b.Ship != null) && a.Id != b.Id &&
+            a = Party.Of(entryA.Owner, ships, segments, bots, asteroids);
+            b = Party.Of(entryB.Owner, ships, segments, bots, asteroids);
+            return a.IsAlive && b.IsAlive && (a.Rams || b.Rams) && a.Id != b.Id &&
                    Allegiances.IsHostile(a.Allegiance, b.Allegiance);
         }
 
-        // A ship or a tail segment in a touch.
+        // A ship, a tail segment, a repair bot or an asteroid in a touch.
         private readonly struct Party
         {
             public readonly ShipEntity Ship;
             public readonly TailSegment Segment;
             public readonly RepairBot Bot;
+            public readonly Asteroid Asteroid;
 
-            private Party(ShipEntity ship, TailSegment segment, RepairBot bot)
+            private Party(ShipEntity ship, TailSegment segment, RepairBot bot, Asteroid asteroid)
             {
                 Ship = ship;
                 Segment = segment;
                 Bot = bot;
+                Asteroid = asteroid;
             }
 
-            public static Party Of(EntityHandle handle, ShipStore ships, TailSegmentStore segments, RepairBots bots)
+            public static Party Of(EntityHandle handle, ShipStore ships, TailSegmentStore segments, RepairBots bots,
+                Asteroids asteroids)
             {
                 var ship = ships.Get(handle);
-                return new Party(ship, ship == null ? segments.Get(handle) : null, bots?.Get(handle));
+                return new Party(ship, ship == null ? segments.Get(handle) : null, bots?.Get(handle), asteroids?.Get(handle));
             }
 
-            public bool IsAlive => Ship != null || Segment != null || Bot != null;
-            public EntityId Id => Ship?.Id ?? Segment?.Id ?? Bot.Id;
-            public EntityHandle Handle => Ship?.Handle ?? Segment?.Handle ?? Bot.Handle;
-            public Allegiance Allegiance => Ship?.Allegiance ?? Segment?.Allegiance ?? Bot.Allegiance;
-            public BodyId Body => Ship?.Body ?? Segment?.Body ?? Bot.Body;
-            public Vec2 PreStepVelocity => Ship?.PreStepVelocity ?? Segment?.PreStepVelocity ?? Bot.PreStepVelocity;
+            public bool IsAlive => Ship != null || Segment != null || Bot != null || Asteroid != null;
+
+            // Only a ship and an asteroid have a collision behaviour that deals damage.
+            public bool Rams => Ship != null || Asteroid != null;
+            public float RammingDamageMultiplier =>
+                Ship?.Definition.RammingDamageMultiplier ?? Asteroid.Setup.RammingDamageMultiplier;
+            public EntityId Id => Ship?.Id ?? Segment?.Id ?? Bot?.Id ?? Asteroid.Id;
+            public EntityHandle Handle => Ship?.Handle ?? Segment?.Handle ?? Bot?.Handle ?? Asteroid.Handle;
+            public Allegiance Allegiance => Ship?.Allegiance ?? Segment?.Allegiance ?? Bot?.Allegiance ?? Asteroid.Allegiance;
+            public BodyId Body => Ship?.Body ?? Segment?.Body ?? Bot?.Body ?? Asteroid.Body;
+            public Vec2 PreStepVelocity =>
+                Ship?.PreStepVelocity ?? Segment?.PreStepVelocity ?? Bot?.PreStepVelocity ?? Asteroid.PreStepVelocity;
         }
 
         // Keeps the target shape with the smallest (priority, order) among the pair's begin events in this step.

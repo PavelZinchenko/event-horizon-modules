@@ -13,6 +13,11 @@ namespace CombatSimulation.Core
         private const int MissileClass = 2;
         private const int DroneClass = 3;
 
+        // Phase 5, step 14: legacy layer Default, which pairs with every layer. Its own category, outside the
+        // allegiance groups, so every shape and bullet meets it unless it ignores everything; point defense skips it.
+        private const int AsteroidClass = 4;
+        public static readonly Filter Asteroid = new Filter(1UL << (AsteroidClass * Allegiances.GroupCount), 0);
+
         public static ulong ShipCategory(Allegiance allegiance) => Category(ShipClass, allegiance);
         public static ulong EnergyCategory(Allegiance allegiance) => Category(EnergyClass, allegiance);
         public static ulong MissileCategory(Allegiance allegiance) => Category(MissileClass, allegiance);

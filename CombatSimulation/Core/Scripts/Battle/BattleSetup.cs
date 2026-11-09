@@ -39,7 +39,8 @@ namespace CombatSimulation.Core
             TimerMode timerMode = TimerMode.Draw,
             int playerSide = 0,
             IReadOnlyList<int> maxActiveShipsBySide = null,
-            bool onlyOneShip = false)
+            bool onlyOneShip = false,
+            IReadOnlyList<AsteroidSetup> asteroids = null)
         {
             if (roster == null) throw new ArgumentNullException(nameof(roster));
             if (!(width > 0f) || float.IsInfinity(width))
@@ -124,6 +125,15 @@ namespace CombatSimulation.Core
                         throw new ArgumentOutOfRangeException(nameof(ownerDelays), "Known owners require delays from 0 to 5 ticks.");
                     _ownerDelays.Add(pair.Key, pair.Value);
                 }
+
+            var rocks = new AsteroidSetup[asteroids?.Count ?? 0];
+            for (var i = 0; i < rocks.Length; ++i)
+                rocks[i] = asteroids[i] ?? throw new ArgumentException("Asteroids contain a null entry.", nameof(asteroids));
+            // Owner question 2 (a): nobody owns an asteroid, so a battle with a remote owner has none until a network task
+            // gives them an authority.
+            if (rocks.Length > 0 && HasRemoteOwners)
+                throw new ArgumentException("A battle with remote owners has no asteroids.", nameof(asteroids));
+            Asteroids = Array.AsReadOnly(rocks);
         }
 
         public BattleId BattleId { get; }
@@ -151,6 +161,9 @@ namespace CombatSimulation.Core
         // Legacy PlayerShipSelectionMode.OnlyOneShip: the first death of a player roster ship ends the battle
         // Battle.ShipLostTicks later, unless an elimination comes first; the player reserves stay ready.
         public bool OnlyOneShip { get; }
+
+        // Phase 5, step 14: created before tick 0, in this order. Empty with remote owners.
+        public IReadOnlyList<AsteroidSetup> Asteroids { get; }
 
         // D4. The legacy table by default.
         public DamageTypeTable DamageTypes { get; }

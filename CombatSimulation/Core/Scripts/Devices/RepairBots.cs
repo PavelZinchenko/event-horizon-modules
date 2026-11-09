@@ -144,8 +144,8 @@ namespace CombatSimulation.Core
         public void Resolve(in ContactCandidate hit, RepairBot bot)
         {
             var bulletHit = _world.Bullets.TryGet(hit.AttackerHandle, out var index);
-            var attacker = _world.Ships.Get(hit.AttackerHandle);
-            var owner = bulletHit ? _world.Bullets[index].Owner : attacker?.Owner ?? -1;
+            // A bullet, a ship or an asteroid that rams (phase 5, step 14).
+            var owner = _world.EntityOwner(hit.AttackerHandle);
             var deviceIndex = bulletHit ? _world.Bullets[index].DeviceIndex : hit.PointDefense?.Index ?? -1;
             var perTick = !bulletHit || (_world.Bullets[index].IsBeam
                 ? _world.Bullets[index].BeamDefinition.Impact == BulletImpact.OverTime

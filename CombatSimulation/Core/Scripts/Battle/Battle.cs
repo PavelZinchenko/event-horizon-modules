@@ -33,6 +33,7 @@ namespace CombatSimulation.Core
             DeviceContext = new DeviceContext(_world, _spawns, _tails, _network);
             _contacts = new ContactSystem(_world, this, _tails, _triggers, _network, bulletContacts);
             _damage = new DamageSystem(_world, this, _tails);
+            _world.Asteroids.Create();
 
             _published = new BattleSnapshot(BattleId, Roster.Slots.Count);
             _writing = new BattleSnapshot(BattleId, Roster.Slots.Count);
@@ -158,6 +159,7 @@ namespace CombatSimulation.Core
             _contacts.Resolve();
             _network?.AccumulateRemoteDamage();
             _world.RepairBots.ApplyDamage();
+            _world.Asteroids.ApplyDamage();
             _damage.Apply();
             _damage.MarkDeaths();
             ApplyStructureChanges();
@@ -205,6 +207,8 @@ namespace CombatSimulation.Core
         internal Decoys Decoys => _world.Decoys;
         internal RepairBot FindRepairBot(EntityId id) => RepairBots.Find(id);
         internal TailSegment FindSegment(EntityId id) => _tails.FindSegment(id);
+        internal Asteroids Asteroids => _world.Asteroids;
+        internal Asteroid FindAsteroid(EntityId id) => _world.Asteroids.Find(id);
         internal void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse) =>
             _tails.QueueSegmentHit(segment, damage, impulse);
         internal int TriggerParentCount => _triggers.TriggerParentCount;
@@ -416,6 +420,7 @@ namespace CombatSimulation.Core
             }
             _tails.UpdateSegmentMotion();
             _world.RepairBots.Update();
+            _world.Asteroids.RecordPreStepVelocities();
 
             // Each missile reads only its own state and the grid, so the storage order has no effect. Owner target
             // records of this tick apply first (P3). A rocket and a beam bolt read only their own state (phase 5, steps
@@ -453,8 +458,8 @@ namespace CombatSimulation.Core
         private void StepPhysics() => World.Step(TickDuration);
 
         // Stage 12. One batch, in roster order: deaths, then retreat completions, then surrender and kill-all.
-        // Drone deaths follow the roster batch, then tail segments. Bullets leave last, by ID. Attached beams die with
-        // their ship.
+        // Drone deaths follow the roster batch, then tail segments, repair bots and asteroids. Bullets leave last, by ID.
+        // Attached beams die with their ship.
         private void ApplyStructureChanges()
         {
             _network?.ApplyRemoteOperations(12);
@@ -517,6 +522,7 @@ namespace CombatSimulation.Core
 
             _tails.RemoveDeadSegments();
             _world.RepairBots.RemoveFinished();
+            _world.Asteroids.RemoveDead(this);
             RemoveBullets();
         }
 

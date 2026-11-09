@@ -26,6 +26,10 @@ namespace CombatSimulation.Core
         // For presentation (phase 5, step 11c): a gravity generator use. EntityId is the ship, Point the centre of the
         // wave, DeviceIndex the generator.
         GravityWave = 9,
+
+        // For presentation (phase 5, step 14): an asteroid died. EntityId is the asteroid, Point its last position. Side
+        // is -1: an asteroid belongs to no side.
+        AsteroidRemoval = 10,
     }
 
     public enum RemovalReason : byte
@@ -235,6 +239,12 @@ namespace CombatSimulation.Core
                 ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0,
                 0f, 0f, default, point: origin, deviceIndex: deviceIndex, authority: authority);
 
+        internal static BattleEvent AsteroidRemoval(BattleId battleId, long tick, int sequence, Asteroid asteroid,
+            Vec2 position) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.AsteroidRemoval, asteroid.Id, default, -1,
+                asteroid.Owner, null, RemovalReason.Death, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                point: position);
+
         public override string ToString()
         {
             switch (Kind)
@@ -259,6 +269,8 @@ namespace CombatSimulation.Core
                     return $"{Tick}.{Sequence} Teleport {EntityId} device {DeviceIndex}: {Point} -> {Destination}";
                 case BattleEventKind.GravityWave:
                     return $"{Tick}.{Sequence} Gravity wave {EntityId} device {DeviceIndex} at {Point}";
+                case BattleEventKind.AsteroidRemoval:
+                    return $"{Tick}.{Sequence} Asteroid {EntityId} destroyed at {Point}";
                 default:
                     return $"{Tick}.{Sequence} {Kind}";
             }

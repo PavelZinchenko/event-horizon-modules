@@ -40,6 +40,9 @@ namespace CombatSimulation.Core
         public ReadOnlySpan<ShieldState> Shields => new ReadOnlySpan<ShieldState>(_shields, 0, _shieldCount);
         public ReadOnlySpan<TailSegmentState> Segments => new ReadOnlySpan<TailSegmentState>(_segments, 0, _segmentCount);
 
+        // Live asteroids in setup order (phase 5, step 14).
+        public ReadOnlySpan<AsteroidState> Asteroids => new ReadOnlySpan<AsteroidState>(_asteroids, 0, _asteroidCount);
+
         // Every slot in setup order.
         public ReadOnlySpan<RosterSlotState> Roster => new ReadOnlySpan<RosterSlotState>(_roster, 0, _roster.Length);
 
@@ -149,6 +152,12 @@ namespace CombatSimulation.Core
             for (var i = 0; i < segments.Capacity; ++i)
                 if (segments[i].IsAlive) _segments[_segmentCount++] = new TailSegmentState(segments[i], world);
 
+            var asteroids = battle.Asteroids.Items;
+            if (_asteroids.Length < asteroids.Count) Array.Resize(ref _asteroids, asteroids.Count);
+            _asteroidCount = 0;
+            for (var i = 0; i < asteroids.Count; ++i)
+                if (asteroids[i] != null) _asteroids[_asteroidCount++] = new AsteroidState(asteroids[i], world);
+
             if (_events.Length < events.Count)
                 _events = new BattleEvent[Math.Max(events.Count, _events.Length * 2)];
             events.CopyTo(_events);
@@ -184,6 +193,8 @@ namespace CombatSimulation.Core
         private int _repairBotCount;
         private TailSegmentState[] _segments = new TailSegmentState[16];
         private int _segmentCount;
+        private AsteroidState[] _asteroids = Array.Empty<AsteroidState>();
+        private int _asteroidCount;
         private BattleEvent[] _events = new BattleEvent[16];
         private int _eventCount;
         private ResolvedHit[] _outgoingHits = new ResolvedHit[16];

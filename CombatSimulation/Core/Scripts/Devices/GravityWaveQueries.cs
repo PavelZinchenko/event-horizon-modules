@@ -79,6 +79,11 @@ namespace CombatSimulation.Core
                         if (bot == null || bot.ShipId == ship.Id) continue;
                         body = bot.Body;
                         break;
+                    case EntityKind.Asteroid:
+                        var asteroid = battle.Asteroids.Get(shape.Owner);
+                        if (asteroid == null) continue;
+                        body = asteroid.Body;
+                        break;
                     default:
                         continue;
                 }

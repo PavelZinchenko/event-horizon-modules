@@ -7,6 +7,9 @@ namespace CombatSimulation.Core
         private const byte RootTag = 1;
         private const byte ChildTag = 2;
 
+        // Tag 3 is CounterRandom's.
+        private const byte AsteroidTag = 4;
+
         // Root: tag 1, battle u64, roster u32, deployment u32, tick u64.
         // A roster deployment creates one root, so its spawn slot is implicit.
         internal static EntityId CreateRoot(BattleId battleId, RosterId rosterId, uint deploymentNumber, long spawnTick)
@@ -36,6 +39,15 @@ namespace CombatSimulation.Core
             hash = StableHash.Append(hash, sourceIndex, 4);
             hash = StableHash.Append(hash, spawnSlot, 4);
             hash = StableHash.Append(hash, sequence, 4);
+            return Finish(hash);
+        }
+
+        // Asteroid (phase 5, step 14): tag 4, battle u64, index u32 in BattleSetup.Asteroids. Created before tick 0.
+        internal static EntityId CreateAsteroid(BattleId battleId, uint index)
+        {
+            var hash = StableHash.Begin(AsteroidTag);
+            hash = StableHash.Append(hash, battleId.Value, 8);
+            hash = StableHash.Append(hash, index, 4);
             return Finish(hash);
         }
 

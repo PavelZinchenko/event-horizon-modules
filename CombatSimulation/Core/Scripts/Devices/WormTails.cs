@@ -240,9 +240,9 @@ namespace CombatSimulation.Core
             }
             else
             {
-                var ship = _world.Ships.Get(hit.AttackerHandle);
-                if (ship == null) return;
-                attackerOwner = ship.Owner;
+                // A ship, or an asteroid that rams (phase 5, step 14).
+                attackerOwner = _world.EntityOwner(hit.AttackerHandle);
+                if (attackerOwner < 0) return;
                 deviceIndex = -1;
                 kind = HitImpactKind.Impact;
                 // A gravity wave's push (phase 5, step 11c). The contact record has no push, so a remote segment
