@@ -18,6 +18,10 @@ namespace CombatSimulation.Core
         // Network only (P2): a predicted copy of a remote bullet takes its owner's ID. EntityId is the new ID and
         // PreviousId the copy's; the body and its view stay.
         Rename = 7,
+
+        // For presentation (phase 5, step 11b): a teleporter jump. EntityId is the ship, Point the start and Destination
+        // the end, DeviceIndex the teleporter.
+        Teleport = 8,
     }
 
     public enum RemovalReason : byte
@@ -73,7 +77,7 @@ namespace CombatSimulation.Core
         public readonly int Side;
         public readonly int Owner;
 
-        // Spawn and removal of a ship: the view factory builds the view from it. Null for a bullet.
+        // Spawn and removal of a ship: the view factory builds the view from it. Teleport: the ship's. Null for a bullet.
         public readonly ShipDefinition Definition;
 
         public readonly RemovalReason RemovalReason;
@@ -93,8 +97,11 @@ namespace CombatSimulation.Core
         public readonly EntityId AttackerId;
         public readonly float Damage;
         public readonly Vec2 Point;
-        // Point-defense hit or disarm: index on the attacking ship. Other events use -1.
+        // Point-defense hit or disarm: index on the attacking ship. Teleport: the teleporter. Other events use -1.
         public readonly int DeviceIndex;
+
+        // Teleport: the landing point.
+        public readonly Vec2 Destination;
 
         // Bullet definitions are null for ships. ParentId is the firing entity or a drone's current mothership.
         public readonly BulletDefinition BulletDefinition;
@@ -114,7 +121,7 @@ namespace CombatSimulation.Core
             float damage = 0f, Vec2 point = default, BulletDefinition bulletDefinition = null, EntityId parentId = default,
             BeamDefinition beamDefinition = null, int deviceIndex = -1, DroneBayKey? bayKey = null,
             BattleEventAuthority authority = BattleEventAuthority.Committed, EntityId previousId = default,
-            bool isDecoy = false)
+            bool isDecoy = false, Vec2 destination = default)
         {
             BattleId = battleId;
             Tick = tick;
@@ -140,6 +147,7 @@ namespace CombatSimulation.Core
             Damage = damage;
             Point = point;
             DeviceIndex = deviceIndex;
+            Destination = destination;
             BulletDefinition = bulletDefinition;
             BeamDefinition = beamDefinition;
             ParentId = parentId;
@@ -209,6 +217,12 @@ namespace CombatSimulation.Core
                 hit.TargetOwner, null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f,
                 default, hit.AttackerId, damage, deviceIndex: hit.DeviceIndex);
 
+        internal static BattleEvent Teleport(BattleId battleId, long tick, int sequence, ShipEntity ship, int deviceIndex,
+            Vec2 from, Vec2 to, BattleEventAuthority authority) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Teleport, ship.Id, ship.Slot?.RosterId ?? default,
+                ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0,
+                0f, 0f, default, point: from, deviceIndex: deviceIndex, authority: authority, destination: to);
+
         public override string ToString()
         {
             switch (Kind)
@@ -229,6 +243,8 @@ namespace CombatSimulation.Core
                     return $"{Tick}.{Sequence} Disarm {AttackerId} device {DeviceIndex} -> {EntityId}";
                 case BattleEventKind.Rename:
                     return $"{Tick}.{Sequence} Rename bullet {PreviousId} -> {EntityId}";
+                case BattleEventKind.Teleport:
+                    return $"{Tick}.{Sequence} Teleport {EntityId} device {DeviceIndex}: {Point} -> {Destination}";
                 default:
                     return $"{Tick}.{Sequence} {Kind}";
             }

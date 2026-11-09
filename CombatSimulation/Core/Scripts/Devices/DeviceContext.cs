@@ -31,6 +31,11 @@ namespace CombatSimulation.Core
         public void CaptureDeviceUse(ShipEntity ship, int deviceIndex, bool started, long tick) =>
             _network?.CaptureDeviceUse(ship, deviceIndex, started, tick);
 
+        // A teleporter jump for the view (phase 5, step 11b): the start and end points.
+        public void AddTeleport(ShipEntity ship, int deviceIndex, Vec2 from, Vec2 to) =>
+            _world.Events.Add(BattleEvent.Teleport(_world.BattleId, _world.Tick, _world.Events.Count, ship, deviceIndex,
+                from, to, _world.Authority(ship.Owner)));
+
         public int CountAttachedSegments(WormTailDevice device) => _tails.CountAttachedSegments(device);
         public void GrowTail(ShipEntity ship, WormTailDevice device) => _tails.GrowTail(ship, device);
 
