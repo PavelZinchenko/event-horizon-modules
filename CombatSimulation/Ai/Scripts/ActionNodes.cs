@@ -523,10 +523,10 @@ namespace CombatSimulation.Ai
             var threats = context.Threats;
             for (var i = 0; i < threats.Count; ++i)
             {
-                if (!context.TryGetBullet(threats[i], out var threat)) continue;
-                if (threat.LinearVelocity.Length > maxVelocity) continue;
+                if (!context.TryGetThreat(threats[i], out var position, out var velocity)) continue;
+                if (velocity.Length > maxVelocity) continue;
 
-                target += LegacyMath.Normalize(context.Delta(ship.Position, threat.Position));
+                target += LegacyMath.Normalize(context.Delta(ship.Position, position));
                 count++;
             }
 
@@ -561,8 +561,8 @@ namespace CombatSimulation.Ai
             var threats = context.Threats;
             for (var i = 0; i < threats.Count; ++i)
             {
-                if (!context.TryGetBullet(threats[i], out var threat)) continue;
-                target += LegacyMath.Normalize(context.Delta(ship.Position, threat.Position));
+                if (!context.TryGetThreat(threats[i], out var position, out _)) continue;
+                target += LegacyMath.Normalize(context.Delta(ship.Position, position));
                 count++;
             }
 

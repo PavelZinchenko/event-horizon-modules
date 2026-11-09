@@ -234,6 +234,62 @@ namespace CombatSimulation.Ai.Tests
             Assert.AreEqual(S, new HasIncomingThreatNode(1000f).Evaluate(context));
         }
 
+        // Phase 5, step 14b, example 13: legacy ThreatList reads an asteroid as a bullet of its size. The ship (model
+        // scale 2) waits at (50, 50) facing +x; asteroids of size 4 approach at 5 units per second.
+        [Test]
+        public void AsteroidsOnACollisionCourseAreThreats()
+        {
+            var context = AsteroidContext(
+                new AsteroidSetup(new Vec2(65f, 50f), new Vec2(-5f, 0f), 4f, 80f, 1600f, 1f),
+                new AsteroidSetup(new Vec2(65f, 55f), new Vec2(-5f, 0f), 4f, 80f, 1600f, 1f),
+                new AsteroidSetup(new Vec2(71f, 50f), new Vec2(-5f, 0f), 4f, 80f, 1600f, 1f),
+                new AsteroidSetup(new Vec2(35f, 50f), new Vec2(-5f, 0f), 4f, 80f, 1600f, 1f));
+            var asteroids = context.Snapshot.Asteroids;
+
+            Assert.AreEqual(S, new LookForThreatsNode(0f).Evaluate(context));
+            CollectionAssert.AreEqual(new[] { asteroids[0].Id }, context.Threats,
+                "the wide pass (5 > 3 units), the far one (21 units) and the receding one are not threats");
+            Assert.AreEqual(3f, context.TimeToCollision, 0.05f);
+            Assert.AreEqual(S, new HasIncomingThreatNode(5f).Evaluate(context));
+
+            context.Controls.Reset();
+            Assert.AreEqual(NodeState.Running, new AvoidThreatsNode().Evaluate(context));
+            Assert.AreEqual(1f, context.Controls.Thrust);
+
+            context.Controls.Reset();
+            Assert.AreEqual(NodeState.Running, new DefendWithFrontalShieldNode(1).Evaluate(context));
+            Assert.AreEqual(0f, context.Controls.Course.Value, 1e-3f);
+            Assert.IsTrue(context.Controls.IsSystemActivated(1), "the shield faces the asteroid");
+        }
+
+        private static AiContext AsteroidContext(params AsteroidSetup[] asteroids)
+        {
+            var roster = new List<RosterSlotSetup>
+            {
+                new RosterSlotSetup(new RosterId(1), 0, Ship),
+                new RosterSlotSetup(new RosterId(101), 1, Ship),
+            };
+            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster, asteroids: asteroids), new NoPilots());
+            foreach (var slot in roster) runner.Deploy(slot.RosterId, runner.Tick);
+            runner.Step();
+
+            var world = runner.Battle.World;
+            var ships = runner.Snapshot.Ships;
+            world.SetPose(runner.Battle.FindShip(ships[0].Id).Body, new Vec2(50f, 50f), 0f);
+            world.SetPose(runner.Battle.FindShip(ships[1].Id).Body, new Vec2(150f, 150f), 0f);
+            for (var i = 0; i < asteroids.Length; ++i)
+            {
+                var body = runner.Battle.Asteroids.Items[i].Body;
+                world.SetPose(body, asteroids[i].Position, 0f);
+                world.SetLinearVelocity(body, asteroids[i].Velocity);
+            }
+            runner.Step();
+
+            var context = new AiContext(ArmedShip, AiSettings.Default, 0.02f, Utilites.RandomState.FromSeed(1), BattleData());
+            context.Update(runner.Snapshot, runner.Snapshot.Ships[0]);
+            return context;
+        }
+
         // Legacy AiManager: more than 30 pilots read no threats.
         [Test]
         public void ThreatsStopAboveThirtyPilots()

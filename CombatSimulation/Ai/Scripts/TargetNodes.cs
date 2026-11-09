@@ -596,33 +596,42 @@ namespace CombatSimulation.Ai
             distances.RemoveRange(MaxEnemies, distances.Count - MaxEnemies);
         }
 
-        // Legacy ThreatList.Update: enemy bullets within 20 units whose path passes the ship within 5 seconds. Returns
-        // the shortest time to hit, 1000 without a threat. Beams are attached to their ship, so legacy skips them;
-        // area effects are skipped for now (D6).
+        // Legacy ThreatList.Update: enemy bullets and asteroids within 20 units whose path passes the ship within
+        // 5 seconds. Returns the shortest time to hit, 1000 without a threat. Beams are attached to their ship, so legacy
+        // skips them; area effects are skipped for now (D6). An asteroid is on side Undefined, the enemy of every side,
+        // and its body scale is its size (phase 5, step 14b).
         public static float UpdateThreats(AiContext context, List<EntityId> threats)
         {
             threats.Clear();
             var timeToHit = NoThreatTime;
-            var self = context.Ship;
-            var selfScale = context.Profile.ModelScale;
 
             foreach (var bullet in context.Snapshot.Bullets)
             {
                 if (bullet.IsBeam || !context.IsEnemy(bullet)) continue;
-
-                var itemPosition = context.Delta(self.Position, bullet.Position);
-                if (itemPosition.LengthSquared >= ThreatSearchRadius * ThreatSearchRadius) continue;
-
-                if (IsThreat(itemPosition, self.LinearVelocity - bullet.LinearVelocity, context.ScaleOf(bullet) + selfScale,
-                        out var threatTime))
-                {
-                    threats.Add(bullet.Id);
-                    if (threatTime < timeToHit)
-                        timeToHit = threatTime;
-                }
+                TryAddThreat(context, threats, bullet.Id, bullet.Position, bullet.LinearVelocity, context.ScaleOf(bullet),
+                    ref timeToHit);
             }
 
+            foreach (var asteroid in context.Snapshot.Asteroids)
+                TryAddThreat(context, threats, asteroid.Id, asteroid.Position, asteroid.LinearVelocity, asteroid.Size,
+                    ref timeToHit);
+
             return timeToHit;
+        }
+
+        private static void TryAddThreat(AiContext context, List<EntityId> threats, EntityId id, Vec2 position,
+            Vec2 velocity, float scale, ref float timeToHit)
+        {
+            var self = context.Ship;
+            var itemPosition = context.Delta(self.Position, position);
+            if (itemPosition.LengthSquared >= ThreatSearchRadius * ThreatSearchRadius) return;
+
+            if (!IsThreat(itemPosition, self.LinearVelocity - velocity, scale + context.Profile.ModelScale,
+                    out var threatTime)) return;
+
+            threats.Add(id);
+            if (threatTime < timeToHit)
+                timeToHit = threatTime;
         }
 
         // The closest approach of a bullet at the offset, with the ship's velocity relative to it, against the sum of

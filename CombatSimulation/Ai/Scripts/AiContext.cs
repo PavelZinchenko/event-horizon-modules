@@ -100,7 +100,7 @@ namespace CombatSimulation.Ai
         // until the next update, as legacy does.
         public IReadOnlyList<EntityId> SecondaryTargets => (IReadOnlyList<EntityId>)_targetList ?? Array.Empty<EntityId>();
 
-        // Legacy ThreatList: enemy bullets on a collision course. Legacy AiManager reads no threats while more than 30
+        // Legacy ThreatList: enemy bullets and asteroids on a collision course. Legacy AiManager reads no threats while more than 30
         // pilots run.
         public IReadOnlyList<EntityId> Threats =>
             _threatsDisabled || _threatList == null ? (IReadOnlyList<EntityId>)Array.Empty<EntityId>() : _threatList;
@@ -138,6 +138,32 @@ namespace CombatSimulation.Ai
             }
 
             bullet = default;
+            return false;
+        }
+
+        // A bullet or an asteroid of the threat list (phase 5, step 14b): its position and velocity.
+        public bool TryGetThreat(EntityId id, out Vec2 position, out Vec2 velocity)
+        {
+            if (TryGetBullet(id, out var bullet))
+            {
+                position = bullet.Position;
+                velocity = bullet.LinearVelocity;
+                return true;
+            }
+
+            if (!id.IsNull)
+            {
+                foreach (var item in Snapshot.Asteroids)
+                {
+                    if (item.Id != id) continue;
+                    position = item.Position;
+                    velocity = item.LinearVelocity;
+                    return true;
+                }
+            }
+
+            position = default;
+            velocity = default;
             return false;
         }
 
