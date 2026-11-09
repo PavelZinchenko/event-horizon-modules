@@ -23,10 +23,12 @@ namespace CombatSimulation.Core.Tests
             EngineDefinition engineWithoutEnergy = null, IReadOnlyList<Circle> extraHullParts = null,
             float rammingDamageMultiplier = 1f, IReadOnlyList<BarrelDefinition> barrels = null,
             IReadOnlyList<DeviceDefinition> devices = null, IReadOnlyList<DamageResistance> resistances = null,
-            TargetPriority targetPriority = TargetPriority.Normal, float chanceToAvoidMissile = 0f) =>
+            TargetPriority targetPriority = TargetPriority.Normal, float chanceToAvoidMissile = 0f,
+            float armorRepairRate = 0f, float armorRepairDelay = 0f) =>
             new ShipDefinition(hullRadius, mass, engine ?? Engine, armor, shield ?? Shield, energy ?? Energy,
                 engineWithoutEnergy, extraHullParts, rammingDamageMultiplier, barrels, devices, resistances,
-                targetPriority: targetPriority, chanceToAvoidMissile: chanceToAvoidMissile);
+                targetPriority: targetPriority, chanceToAvoidMissile: chanceToAvoidMissile,
+                armorRepairRate: armorRepairRate, armorRepairDelay: armorRepairDelay);
 
         // Legacy PlasmaBolt (ammunition 103): size 0.5, velocity 20, range 10, damage 5, weight 0.
         public static readonly BulletDefinition Bolt = new BulletDefinition(0.25f, 20f, 10f, 5f);

@@ -1,7 +1,7 @@
 namespace CombatSimulation.Core
 {
     // A ship resource: legacy Energy (IResourcePoints.cs), stored as an absolute value.
-    // Armor uses rate 0, so it never regenerates and a spend never starts a delay.
+    // Armor repairs only with a positive rate (phase 5, step 13); at rate 0 a spend never starts a delay.
     internal struct ResourcePool
     {
         public float Value;
@@ -64,7 +64,8 @@ namespace CombatSimulation.Core
             return before - Value;
         }
 
-        private void RestartDelay(float amount)
+        // A loss above 0 restarts the delay of a recharging pool.
+        public void RestartDelay(float amount)
         {
             if (amount > 0f && RechargeRate > 0f) DelayRemaining = RechargeDelay;
         }

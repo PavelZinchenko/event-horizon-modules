@@ -16,10 +16,11 @@ namespace CombatSimulation.Core
             IReadOnlyList<Circle> extraHullParts = null, float rammingDamageMultiplier = 1f,
             IReadOnlyList<BarrelDefinition> barrels = null, IReadOnlyList<DeviceDefinition> devices = null,
             IReadOnlyList<DamageResistance> resistances = null, float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal,
-            IReadOnlyList<SatelliteDefinition> satellites = null, float chanceToAvoidMissile = 0f)
+            IReadOnlyList<SatelliteDefinition> satellites = null, float chanceToAvoidMissile = 0f,
+            float armorRepairRate = 0f, float armorRepairDelay = 0f)
             : this(CircleHull(hullRadius, extraHullParts), mass, engine, armor, shield, energy, engineWithoutEnergy,
                 rammingDamageMultiplier, barrels, devices, resistances, scale, teleportImmune, targetPriority, satellites,
-                chanceToAvoidMissile)
+                chanceToAvoidMissile, armorRepairRate, armorRepairDelay)
         {
         }
 
@@ -30,7 +31,8 @@ namespace CombatSimulation.Core
             float rammingDamageMultiplier = 1f, IReadOnlyList<BarrelDefinition> barrels = null,
             IReadOnlyList<DeviceDefinition> devices = null, IReadOnlyList<DamageResistance> resistances = null,
             float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal,
-            IReadOnlyList<SatelliteDefinition> satellites = null, float chanceToAvoidMissile = 0f)
+            IReadOnlyList<SatelliteDefinition> satellites = null, float chanceToAvoidMissile = 0f,
+            float armorRepairRate = 0f, float armorRepairDelay = 0f)
         {
             if (hull == null) throw new ArgumentNullException(nameof(hull));
             if (hull.Count == 0) throw new ArgumentException("A hull needs at least one shape.", nameof(hull));
@@ -44,6 +46,10 @@ namespace CombatSimulation.Core
                 throw new ArgumentOutOfRangeException(nameof(scale), "Scale must be finite and not negative.");
             if (!(chanceToAvoidMissile >= 0f && chanceToAvoidMissile <= 1f))
                 throw new ArgumentOutOfRangeException(nameof(chanceToAvoidMissile), "The chance must be within [0, 1].");
+            if (!(armorRepairRate >= 0f) || float.IsInfinity(armorRepairRate))
+                throw new ArgumentOutOfRangeException(nameof(armorRepairRate), "Armor repair rate must be finite and not negative.");
+            if (!(armorRepairDelay >= 0f) || float.IsInfinity(armorRepairDelay))
+                throw new ArgumentOutOfRangeException(nameof(armorRepairDelay), "Armor repair delay must be finite and not negative.");
 
             var parts = new List<HullPart>();
             var hullRadius = 0f;
@@ -109,7 +115,7 @@ namespace CombatSimulation.Core
             Engine = hasTail ? WormTailDefinition.CapEngine(engine) : engine;
             EngineWithoutEnergy = hasTail ? WormTailDefinition.CapEngine(engineWithoutEnergy) : engineWithoutEnergy;
             Armor = armor;
-            ArmorResource = new ResourceDefinition(armor);
+            ArmorResource = new ResourceDefinition(armor, armorRepairRate, armorRepairDelay);
             Shield = shield;
             Energy = energy;
             RammingDamageMultiplier = rammingDamageMultiplier;
@@ -154,12 +160,18 @@ namespace CombatSimulation.Core
         // The engine while energy is zero. Null: the ship neither thrusts nor turns without energy.
         public EngineDefinition EngineWithoutEnergy { get; }
 
-        // Maximum armor. Armor does not regenerate (Q7).
+        // Maximum armor. Armor repairs only at the rate below (Q7; phase 5, step 13).
         public float Armor { get; }
 
-        // Armor as a resource, the one source for the armor pool and its correction bits. Legacy armor repair
-        // (ArmorRepairRate, ArmorRepairCooldown) is not in the core yet, so the rate and delay are 0.
+        // Armor as a resource, the one source for the armor pool and its correction bits. Rate and delay are legacy
+        // ArmorRepairRate and ArmorRepairCooldown (bionic ships, bionic armor, the infected modification); 0 for other ships.
         internal ResourceDefinition ArmorResource { get; }
+
+        // Armor per second after the repair delay; 0 means armor never repairs.
+        public float ArmorRepairRate => ArmorResource.RechargeRate;
+
+        // Seconds without repair after armor damage.
+        public float ArmorRepairDelay => ArmorResource.RechargeDelay;
 
         public ResourceDefinition Shield { get; }
         public ResourceDefinition Energy { get; }

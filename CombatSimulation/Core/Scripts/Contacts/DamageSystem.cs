@@ -104,6 +104,9 @@ namespace CombatSimulation.Core
                 armorDamage += damage[type] * (1f - ArmorResistance(types, definition, type, resistanceShare));
                 energyGain += damage[type] * definition.Resistance(type).EnergyGain;
             }
+            // Legacy applies each impact alone, so armor damage restarts the repair delay even when a larger repair
+            // in the same tick nets it out (phase 5, step 13, question 2).
+            armor.RestartDelay(armorDamage);
             armor.Consume(armorDamage - effects.Repair);
             // A gain does not restart the energy delay (legacy Energy.Get with a negative amount).
             if (energyGain > 0f) energy.Consume(-energyGain);

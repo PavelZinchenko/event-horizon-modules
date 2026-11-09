@@ -2,7 +2,7 @@ using System;
 
 namespace CombatSimulation.Core
 {
-    // Parameters of a regenerating resource (shield, energy). A zero maximum means the ship has none.
+    // Parameters of a regenerating resource (shield, energy, armor). A zero maximum means the ship has none.
     public readonly struct ResourceDefinition
     {
         public ResourceDefinition(float max, float rechargeRate = 0f, float rechargeDelay = 0f)
