@@ -224,7 +224,8 @@ namespace CombatSimulation.Core
                     _world.Events.Add(BattleEvent.RemoteDisarm(BattleId, Tick, _world.Events.Count, hit));
                     break;
                 case HitImpactKind.Stop:
-                    if (stops) _triggers.AddPendingHit(index);
+                    // A stop with a device index is a gravity wave (phase 5, step 11c): no Hit trigger.
+                    if (stops && hit.DeviceIndex < 0) _triggers.AddPendingHit(index);
                     _world.Bullets.MarkRemoval(handle, RemovalReason.Death);
                     break;
                 default:

@@ -150,7 +150,8 @@ namespace CombatSimulation.Core
             var perTick = !bulletHit || (_world.Bullets[index].IsBeam
                 ? _world.Bullets[index].BeamDefinition.Impact == BulletImpact.OverTime
                 : _world.Bullets[index].Definition.Impact == BulletImpact.OverTime);
-            var impulse = Vec2.Zero;
+            // A gravity wave's push comes with its contact (phase 5, step 11c).
+            var impulse = hit.Impulse;
             if (bulletHit && !_world.Bullets[index].IsBeam)
             {
                 ref readonly var projectile = ref _world.Bullets[index];
@@ -168,6 +169,7 @@ namespace CombatSimulation.Core
                     if (!hit.AttackerPassThrough && !_world.Setup.IsLocalOwner(owner))
                         _battle.ClaimBulletContact(bot.Id, bot.Owner, -1, bullet, HitImpactKind.Stop, 0f);
                 }
+                else if (hit.GravityWave != null) _world.Physics.ApplyImpulseToCenter(bot.Body, impulse);
             }
             else if (_world.Setup.IsLocalOwner(owner))
                 _battle.SendBulletContact(new ResolvedHit(_world.BattleId, _world.Tick, hit.Attacker, owner, deviceIndex,

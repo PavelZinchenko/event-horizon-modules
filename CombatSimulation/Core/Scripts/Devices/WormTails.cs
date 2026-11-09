@@ -245,6 +245,9 @@ namespace CombatSimulation.Core
                 attackerOwner = ship.Owner;
                 deviceIndex = -1;
                 kind = HitImpactKind.Impact;
+                // A gravity wave's push (phase 5, step 11c). The contact record has no push, so a remote segment
+                // follows corrections.
+                impulse = hit.Impulse;
             }
 
             // Teleport destroys a destroyable segment instead of moving it (6c row 5). Legacy FixedWormSegment.Affect

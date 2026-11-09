@@ -36,6 +36,11 @@ namespace CombatSimulation.Core
             _world.Events.Add(BattleEvent.Teleport(_world.BattleId, _world.Tick, _world.Events.Count, ship, deviceIndex,
                 from, to, _world.Authority(ship.Owner)));
 
+        // A gravity wave for the view (phase 5, step 11c): its centre.
+        public void AddGravityWave(ShipEntity ship, int deviceIndex, Vec2 origin) =>
+            _world.Events.Add(BattleEvent.GravityWave(_world.BattleId, _world.Tick, _world.Events.Count, ship, deviceIndex,
+                origin, _world.Authority(ship.Owner)));
+
         public int CountAttachedSegments(WormTailDevice device) => _tails.CountAttachedSegments(device);
         public void GrowTail(ShipEntity ship, WormTailDevice device) => _tails.GrowTail(ship, device);
 

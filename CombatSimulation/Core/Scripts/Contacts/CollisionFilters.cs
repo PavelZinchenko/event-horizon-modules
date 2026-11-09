@@ -47,6 +47,10 @@ namespace CombatSimulation.Core
             new Filter(0, ~((AllEnergy | AllMissiles | AllDrones) & ~(EnergyCategory(allegiance) |
                 MissileCategory(allegiance) | DroneCategory(allegiance))));
 
+        // Phase 5, step 11c: a query category of its own (no shape has it), so only a shape that ignores everything (a
+        // shield that is off, a unit without contacts, a beam bolt) ignores the gravity wave.
+        public static readonly Filter GravityWave = new Filter(1UL << 63, 0);
+
         private static readonly ulong AllEnergy = ClassMask(EnergyClass);
         private static readonly ulong AllMissiles = ClassMask(MissileClass);
         private static readonly ulong AllDrones = ClassMask(DroneClass);

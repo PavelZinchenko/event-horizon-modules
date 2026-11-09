@@ -156,7 +156,8 @@ namespace CombatSimulation.Core
             var perTick = !bulletHit || (_world.Bullets[index].IsBeam
                 ? _world.Bullets[index].BeamDefinition.Impact == BulletImpact.OverTime
                 : _world.Bullets[index].Definition.Impact == BulletImpact.OverTime);
-            var impulse = Vec2.Zero;
+            // A gravity wave's push comes with its contact (phase 5, step 11c).
+            var impulse = hit.Impulse;
             if (bulletHit && !_world.Bullets[index].IsBeam)
             {
                 ref readonly var projectile = ref _world.Bullets[index];

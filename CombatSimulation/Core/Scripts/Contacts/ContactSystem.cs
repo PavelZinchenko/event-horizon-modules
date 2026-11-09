@@ -4,7 +4,8 @@ using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core
 {
-    // Contacts (phase 5, step 8b, item 7). Stage 6: the beam, beam bolt (step 4e) and point-defense queries. Stage 8: every source adds its
+    // Contacts (phase 5, step 8b, item 7). Stage 6: the beam, beam bolt (step 4e), point-defense and gravity-wave (step 11c)
+    // queries. Stage 8: every source adds its
     // contact candidates. Stage 9: the resolver accepts them in key order, and each accepted contact reaches its
     // target: pending damage and a push on a ship, damage or removal on a bullet, a queued hit on a tail segment.
     // Stage 10 applies the damage (DamageSystem).
@@ -37,6 +38,7 @@ namespace CombatSimulation.Core
             _beams.Run(_battle);
             _bolts.Run(_battle);
             _pointDefense.Run(_battle);
+            _gravityWaves.Run(_battle);
         }
 
         // Stage 8. Every source adds its candidates; the resolver sorts them by the contact key.
@@ -46,6 +48,7 @@ namespace CombatSimulation.Core
             _beams.Collect(_resolver);
             _bolts.Collect(_resolver);
             _pointDefense.Collect(_resolver);
+            _gravityWaves.Collect(_resolver);
             _world.Bullets.CollectHits(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver, _world.RepairBots);
             _world.Bullets.CollectStuckHits(Physics, _world.Entities, _world.Shapes, _world.Ships, _world.Segments, _resolver, _world.RepairBots);
             _ramming.Collect(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver, Setup.DamageTypes.RammingDamageType, _world.RepairBots);
@@ -95,6 +98,11 @@ namespace CombatSimulation.Core
                     continue;
                 }
                 if (hit.Kind != ContactKind.Hit) continue;
+                if (hit.GravityWave != null && hit.TargetHandle.Kind == EntityKind.Bullet)
+                {
+                    DestroyByWave(hit);
+                    continue;
+                }
                 // Legacy: a shield hit reaches its ship through Affect, not OnCollision, so it runs no OnHit trigger.
                 if (hit.TargetHandle.Kind == EntityKind.Ship && hit.TargetPriority != ShapeHitPriority.Shield) MarkContact(hit);
 
@@ -253,6 +261,7 @@ namespace CombatSimulation.Core
                         owner = attacker.Owner;
                         deviceIndex = hit.AttackerDeviceIndex;
                         kind = hit.PointDefense != null ? HitImpactKind.Energy : HitImpactKind.Impact;
+                        impulse = hit.Impulse;
                     }
                     if (shield != null) impulse = Vec2.Zero;
                     authority = _world.Authority(owner);
@@ -351,8 +360,9 @@ namespace CombatSimulation.Core
                                         hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind,
                                         extraAmount, damageType: (byte)extra[e].DamageType, effect: damageEffect));
                             }
-                            if (impulse.X != 0f || impulse.Y != 0f) ApplyPush(target, impulse);
                         }
+                        // A projectile's push, or a gravity wave's (step 11c).
+                        if (impulse.X != 0f || impulse.Y != 0f) ApplyPush(target, impulse);
                         // Through a shield, an energy drain or recharge loses 75%; a shield drain or recharge also counts in
                         // the shield's energy cost (legacy EnergyShieldDamageHandler).
                         var energyShare = shield != null ? ShieldRules.EnergyDrainShare : 1f;
@@ -406,6 +416,21 @@ namespace CombatSimulation.Core
             }
             _network?.OutgoingHits.CompleteContacts(Tick);
             MarkTouches();
+        }
+
+        // Phase 5, step 11c (owner decisions 4 and 5, question 6): a gravity wave removes a bullet with reason Death, so its
+        // Destroyed and Detonated triggers run but no Hit trigger. The wave's owner removes its own bullets; for a remote
+        // bullet it predicts the removal and sends a stop record with the generator's index, which its owner reads as the
+        // same removal.
+        private void DestroyByWave(in ContactCandidate hit)
+        {
+            if (!_world.Bullets.TryGet(hit.TargetHandle, out var index)) return;
+            _world.Bullets.MarkRemoval(hit.TargetHandle, RemovalReason.Death);
+            var owner = _world.Ships.Get(hit.AttackerHandle)?.Owner ?? -1;
+            _network?.ClaimBulletContact(hit.Attacker, owner, hit.AttackerDeviceIndex, _world.Bullets[index],
+                HitImpactKind.Stop, 0f);
+            _world.Events.Add(BattleEvent.HitEvent(BattleId, Tick, _world.Events.Count, hit,
+                _world.Authority(_world.Bullets[index].Owner)));
         }
 
         // Legacy Ship.OnCollision (phase 5, step 9b): every contact of a local attacker counts, with or without damage,
@@ -580,6 +605,7 @@ namespace CombatSimulation.Core
         private readonly BeamQueries _beams = new BeamQueries();
         private readonly BeamBolts _bolts = new BeamBolts();
         private readonly PointDefenseQueries _pointDefense = new PointDefenseQueries();
+        private readonly GravityWaveQueries _gravityWaves = new GravityWaveQueries();
         private HashSet<EntityPair> _previousEntries = new HashSet<EntityPair>();
         private HashSet<EntityPair> _currentEntries = new HashSet<EntityPair>();
     }

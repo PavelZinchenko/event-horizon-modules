@@ -22,6 +22,10 @@ namespace CombatSimulation.Core
         // For presentation (phase 5, step 11b): a teleporter jump. EntityId is the ship, Point the start and Destination
         // the end, DeviceIndex the teleporter.
         Teleport = 8,
+
+        // For presentation (phase 5, step 11c): a gravity generator use. EntityId is the ship, Point the centre of the
+        // wave, DeviceIndex the generator.
+        GravityWave = 9,
     }
 
     public enum RemovalReason : byte
@@ -77,7 +81,8 @@ namespace CombatSimulation.Core
         public readonly int Side;
         public readonly int Owner;
 
-        // Spawn and removal of a ship: the view factory builds the view from it. Teleport: the ship's. Null for a bullet.
+        // Spawn and removal of a ship: the view factory builds the view from it. Teleport and gravity wave: the ship's.
+        // Null for a bullet.
         public readonly ShipDefinition Definition;
 
         public readonly RemovalReason RemovalReason;
@@ -97,7 +102,8 @@ namespace CombatSimulation.Core
         public readonly EntityId AttackerId;
         public readonly float Damage;
         public readonly Vec2 Point;
-        // Point-defense hit or disarm: index on the attacking ship. Teleport: the teleporter. Other events use -1.
+        // Point-defense or gravity-wave hit, disarm: index on the attacking ship. Teleport and gravity wave: the device.
+        // Other events use -1.
         public readonly int DeviceIndex;
 
         // Teleport: the landing point.
@@ -223,6 +229,12 @@ namespace CombatSimulation.Core
                 ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0,
                 0f, 0f, default, point: from, deviceIndex: deviceIndex, authority: authority, destination: to);
 
+        internal static BattleEvent GravityWave(BattleId battleId, long tick, int sequence, ShipEntity ship, int deviceIndex,
+            Vec2 origin, BattleEventAuthority authority) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.GravityWave, ship.Id, ship.Slot?.RosterId ?? default,
+                ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0,
+                0f, 0f, default, point: origin, deviceIndex: deviceIndex, authority: authority);
+
         public override string ToString()
         {
             switch (Kind)
@@ -245,6 +257,8 @@ namespace CombatSimulation.Core
                     return $"{Tick}.{Sequence} Rename bullet {PreviousId} -> {EntityId}";
                 case BattleEventKind.Teleport:
                     return $"{Tick}.{Sequence} Teleport {EntityId} device {DeviceIndex}: {Point} -> {Destination}";
+                case BattleEventKind.GravityWave:
+                    return $"{Tick}.{Sequence} Gravity wave {EntityId} device {DeviceIndex} at {Point}";
                 default:
                     return $"{Tick}.{Sequence} {Kind}";
             }

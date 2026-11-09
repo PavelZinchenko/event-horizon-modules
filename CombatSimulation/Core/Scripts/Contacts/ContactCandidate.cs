@@ -34,7 +34,9 @@ namespace CombatSimulation.Core
         public EntityId Attacker;
         // Devices share a ship attacker. Other contact sources keep the neutral index.
         public PointDefenseDevice PointDefense;
-        public int AttackerDeviceIndex => PointDefense?.Index ?? -1;
+        // Phase 5, step 11c: a gravity wave destroys a target bullet and pushes any other target by Impulse.
+        public GravityGeneratorDevice GravityWave;
+        public int AttackerDeviceIndex => PointDefense?.Index ?? GravityWave?.Index ?? -1;
         // Distance fraction within a ray. Zero for other sources; never used as ordering time.
         public float RayFraction;
         public ShapeHitPriority TargetPriority;
@@ -70,6 +72,9 @@ namespace CombatSimulation.Core
 
         // Contact point in canonical torus coordinates. Zero for a body contact: physics reports none.
         public Vec2 Point;
+
+        // A gravity wave's push on a non-bullet target, from the poses at the start of the step. Zero for other sources.
+        public Vec2 Impulse;
 
         // A tuple comparison, not one packed number, so the full 64-bit entity IDs stay intact.
         public static int Compare(in ContactCandidate a, in ContactCandidate b)
