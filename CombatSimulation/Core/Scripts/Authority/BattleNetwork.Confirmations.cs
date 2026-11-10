@@ -388,7 +388,8 @@ namespace CombatSimulation.Core
             ref var bullet = ref _world.Bullets[index];
             bullet.PendingRemoval = reason;
             if (bullet.IsBeam) DetachBeam(bullet, _world.Bullets.GetHandle(index));
-            _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet, BattleEventAuthority.Predicted));
+            _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet,
+                BulletTriggers.RemovalConditions(bullet), BattleEventAuthority.Predicted));
             _battle.ReleaseBullet(index);
         }
 

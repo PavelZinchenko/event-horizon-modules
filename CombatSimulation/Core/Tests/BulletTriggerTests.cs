@@ -164,7 +164,27 @@ namespace CombatSimulation.Core.Tests
             var parent = Spawns(events).Single(e => e.BulletDefinition == missile);
             var removal = CannonTests.BulletRemovals(events).Single(e => e.EntityId == parent.EntityId);
             Assert.AreEqual(RemovalReason.Death, removal.RemovalReason);
+            Assert.AreEqual(BulletTriggerConditions.Destroyed | BulletTriggerConditions.Detonated, removal.RemovalConditions);
             Assert.AreSame(Other, ChildrenOf(events, parent.EntityId).Single().BulletDefinition);
+        }
+
+        // Phase 5b, step 6: the removal names the conditions that fired for the view's sound and effect triggers, also
+        // for a bullet without gameplay triggers.
+        [Test]
+        public void TheRemovalNamesTheConditionsThatFired()
+        {
+            BattleEvent Expiry(BulletDefinition bullet)
+            {
+                var events = Fire(bullet).StepCollecting(40);
+                return CannonTests.BulletRemovals(events).First(e => e.BulletDefinition == bullet);
+            }
+
+            const BulletTriggerConditions expired = BulletTriggerConditions.Expired | BulletTriggerConditions.Destroyed;
+            var plain = Expiry(Bolt(false));
+            Assert.AreEqual(RemovalReason.Expiry, plain.RemovalReason);
+            Assert.AreEqual(expired, plain.RemovalConditions);
+            Assert.AreEqual(expired | BulletTriggerConditions.Detonated,
+                Expiry(Bolt(false, BulletTriggerDefinition.Detonate(BulletTriggerConditions.Expired))).RemovalConditions);
         }
 
         [Test]
@@ -230,6 +250,7 @@ namespace CombatSimulation.Core.Tests
             var parent = Spawns(events).First();
             var removal = CannonTests.BulletRemovals(events).Single(e => e.EntityId == parent.EntityId);
             Assert.AreEqual(RemovalReason.Disposal, removal.RemovalReason);
+            Assert.AreEqual(BulletTriggerConditions.Disarmed, removal.RemovalConditions);
             CollectionAssert.AreEqual(new[] { Child, Other },
                 ChildrenOf(events, parent.EntityId).Select(c => c.BulletDefinition).ToArray());
         }

@@ -434,7 +434,8 @@ namespace CombatSimulation.Core
                 if (bullet.IsBeam) DetachBeam(bullet, handle, operation.Tick);
                 else if (_world.FindShip(bullet.ParentId)?.GetDevice(bullet.DeviceIndex) is CannonDevice cannon)
                     cannon.OnRemoteRemoval(handle, operation.Tick);
-                _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet));
+                _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet,
+                    BulletTriggers.RemovalConditions(bullet)));
                 _battle.ReleaseBullet(index);
                 _triggers.MarkTriggerParentRemoved(operation.EntityId, operation.Tick);
             }

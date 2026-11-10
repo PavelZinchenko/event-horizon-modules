@@ -97,6 +97,11 @@ namespace CombatSimulation.Core
 
         public readonly RemovalReason RemovalReason;
 
+        // Bullet removal (phase 5b, step 6, owner question 7 (a)): the trigger conditions of the removal, for the sound
+        // and effect triggers of the view. Presentation only. The owner gives the conditions that fired; another device
+        // derives them from the reason and the definition (BulletTriggers.RemovalConditions).
+        public readonly BulletTriggerConditions RemovalConditions;
+
         public readonly RosterStatus PreviousStatus;
         public readonly RosterStatus Status;
         public readonly RosterTransitionReason TransitionReason;
@@ -137,7 +142,8 @@ namespace CombatSimulation.Core
             float damage = 0f, Vec2 point = default, BulletDefinition bulletDefinition = null, EntityId parentId = default,
             BeamDefinition beamDefinition = null, int deviceIndex = -1, DroneBayKey? bayKey = null,
             BattleEventAuthority authority = BattleEventAuthority.Committed, EntityId previousId = default,
-            bool isDecoy = false, Vec2 destination = default)
+            bool isDecoy = false, Vec2 destination = default,
+            BulletTriggerConditions removalConditions = BulletTriggerConditions.None)
         {
             BattleId = battleId;
             Tick = tick;
@@ -152,6 +158,7 @@ namespace CombatSimulation.Core
             Owner = owner;
             Definition = definition;
             RemovalReason = removalReason;
+            RemovalConditions = removalConditions;
             PreviousStatus = previousStatus;
             Status = status;
             TransitionReason = transitionReason;
@@ -188,10 +195,11 @@ namespace CombatSimulation.Core
                 bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition, authority: authority);
 
         internal static BattleEvent BulletRemoval(BattleId battleId, long tick, int sequence, in BulletEntity bullet,
-            BattleEventAuthority authority = BattleEventAuthority.Committed) =>
+            BulletTriggerConditions conditions, BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, bullet.Id, default, bullet.Side, bullet.Owner,
                 null, bullet.PendingRemoval, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
-                bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition, authority: authority);
+                bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition, authority: authority,
+                removalConditions: conditions);
 
         internal static BattleEvent BulletRename(BattleId battleId, long tick, int sequence, in BulletEntity bullet,
             EntityId previousId) =>

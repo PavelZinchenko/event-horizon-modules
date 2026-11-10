@@ -34,7 +34,9 @@ namespace CombatSimulation.Core
         // Stage 12, before the bullet leaves: one Hit run per pending contact, then the conditions of its removal
         // (legacy Bullet.OnCollision, Detonate, Destroy, Expire and Disarm). Children of stage 12 start to move in the
         // next tick, so that tick is their spawn tick.
-        public void RunStructureTriggers(int index)
+        // Phase 5b, step 6: returns the conditions of the removal for the view, also for a bullet without gameplay
+        // triggers; None when the bullet stays.
+        public BulletTriggerConditions RunStructureTriggers(int index)
         {
             ref var bullet = ref _world.Bullets[index];
             var hits = bullet.PendingHits;
@@ -43,10 +45,10 @@ namespace CombatSimulation.Core
             {
                 if (!bullet.SkipTriggers && Setup.IsLocalOwner(bullet.Owner))
                     for (var i = 0; i < hits; ++i) FireTriggers(index, BulletTriggerConditions.Hit, Tick + 1);
-                return;
+                return RemovalConditions(_world.Bullets[index]);
             }
             if (bullet.SkipTriggers || bullet.Definition.TriggerConditions == BulletTriggerConditions.None ||
-                !Setup.IsLocalOwner(bullet.Owner)) return;
+                !Setup.IsLocalOwner(bullet.Owner)) return RemovalConditions(bullet);
 
             var spawnTick = Tick + 1;
             for (var i = 0; i < hits; ++i)
@@ -61,19 +63,60 @@ namespace CombatSimulation.Core
             {
                 case RemovalReason.Death:
                     FireTriggers(index, BulletTriggerConditions.Destroyed, spawnTick);
-                    if (_world.Bullets[index].Definition.DetonateWhenDestroyed || _world.Bullets[index].Detonates)
-                        FireTriggers(index, BulletTriggerConditions.Detonated, spawnTick);
-                    break;
+                    if (!_world.Bullets[index].Definition.DetonateWhenDestroyed && !_world.Bullets[index].Detonates)
+                        return BulletTriggerConditions.Destroyed;
+                    FireTriggers(index, BulletTriggerConditions.Detonated, spawnTick);
+                    return BulletTriggerConditions.Destroyed | BulletTriggerConditions.Detonated;
                 case RemovalReason.Expiry:
                     // Legacy Expire: a Detonate trigger among the Expired ones makes the bullet detonate.
                     var detonate = FireTriggers(index, BulletTriggerConditions.Expired, spawnTick);
                     FireTriggers(index, BulletTriggerConditions.Destroyed, spawnTick);
-                    if (detonate) FireTriggers(index, BulletTriggerConditions.Detonated, spawnTick);
-                    break;
+                    if (!detonate)
+                        return BulletTriggerConditions.Expired | BulletTriggerConditions.Destroyed;
+                    FireTriggers(index, BulletTriggerConditions.Detonated, spawnTick);
+                    return BulletTriggerConditions.Expired | BulletTriggerConditions.Destroyed | BulletTriggerConditions.Detonated;
                 case RemovalReason.Disposal:
                     FireTriggers(index, BulletTriggerConditions.Disarmed, spawnTick);
-                    break;
+                    return BulletTriggerConditions.Disarmed;
+                default:
+                    return BulletTriggerConditions.None;
             }
+        }
+
+        // Phase 5b, step 6 (owner question 7 (a)): the conditions of a removal that this device did not run, from its
+        // reason and definition. It is exact for a bullet without gameplay triggers on its owner. Elsewhere it misses a
+        // manageable or sticky detonation (the owner's Detonates flag) and the cooldown of an Expired Detonate trigger. A
+        // beam has no Disarmed condition: a stopped beam counts as expired, as the legacy beam ran out its lifetime after
+        // the release. A bullet that leaves with its ship, or an unconfirmed prediction, has none.
+        internal static BulletTriggerConditions RemovalConditions(in BulletEntity bullet)
+        {
+            if (bullet.SkipTriggers)
+                return BulletTriggerConditions.None;
+
+            switch (bullet.PendingRemoval)
+            {
+                case RemovalReason.Death:
+                    return bullet.Detonates || !bullet.IsBeam && bullet.Definition.DetonateWhenDestroyed
+                        ? BulletTriggerConditions.Destroyed | BulletTriggerConditions.Detonated
+                        : BulletTriggerConditions.Destroyed;
+                case RemovalReason.Disposal when !bullet.IsBeam:
+                    return BulletTriggerConditions.Disarmed;
+                case RemovalReason.Expiry:
+                case RemovalReason.Disposal:
+                    return HasExpiredDetonation(bullet.Triggers)
+                        ? BulletTriggerConditions.Expired | BulletTriggerConditions.Destroyed | BulletTriggerConditions.Detonated
+                        : BulletTriggerConditions.Expired | BulletTriggerConditions.Destroyed;
+                default:
+                    return BulletTriggerConditions.None;
+            }
+        }
+
+        private static bool HasExpiredDetonation(IReadOnlyList<BulletTriggerDefinition> triggers)
+        {
+            for (var i = 0; i < triggers.Count; ++i)
+                if (triggers[i].IsDetonate && (triggers[i].Conditions & BulletTriggerConditions.Expired) != 0)
+                    return true;
+            return false;
         }
 
         // Owner only: counts a contact of a local projectile for its Hit triggers (stage 12).

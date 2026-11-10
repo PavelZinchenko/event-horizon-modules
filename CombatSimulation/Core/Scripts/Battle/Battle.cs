@@ -534,11 +534,12 @@ namespace CombatSimulation.Core
             for (var i = 0; i < _bulletRemovals.Count; ++i)
             {
                 var index = _bulletRemovals[i];
-                _triggers.RunStructureTriggers(index);
+                var conditions = _triggers.RunStructureTriggers(index);
                 ref readonly var bullet = ref _world.Bullets[index];
                 if (bullet.PendingRemoval == RemovalReason.None) continue;
                 _network?.OutgoingHits.RemoveAttacker(bullet.Id, Tick + 1);
-                _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet, _world.Authority(bullet.Owner)));
+                _world.Events.Add(BattleEvent.BulletRemoval(BattleId, Tick, _world.Events.Count, bullet, conditions,
+                    _world.Authority(bullet.Owner)));
                 CaptureRemoval(bullet.Id, bullet.Owner, bullet.PendingRemoval);
                 if (!bullet.Confirmed && Setup.HasRemoteOwners && !Setup.IsLocalOwner(bullet.Owner))
                     _network.RecordPredictedRemoval(bullet);
