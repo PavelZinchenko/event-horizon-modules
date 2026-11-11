@@ -30,7 +30,7 @@ namespace CombatSimulation.Core
             var bulletContacts = new BulletContactLedger();
             if (setup.HasRemoteOwners) _network = new BattleNetwork(_world, this, _tails, _triggers, bulletContacts);
             _spawns = new SpawnSystem(_world, this, _triggers, _network);
-            DeviceContext = new DeviceContext(_world, _spawns, _tails, _network);
+            DeviceContext = new DeviceContext(_world, this, _spawns, _tails, _network);
             _contacts = new ContactSystem(_world, this, _tails, _triggers, _network, bulletContacts);
             _damage = new DamageSystem(_world, this, _tails);
             _world.Asteroids.Create();

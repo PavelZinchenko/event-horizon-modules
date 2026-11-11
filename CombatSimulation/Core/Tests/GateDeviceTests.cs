@@ -386,27 +386,28 @@ namespace CombatSimulation.Core.Tests
             Assert.IsEmpty(CannonTests.BulletSpawns(events));
         }
 
-        // Row 5 and the approved timer change: a ready InfinityStone saves the ship; the cooldown runs from the explosion,
-        // and the next use locks the ship for the full time again.
+        // Row 5, owner rule (phase 5b, step 7c): nothing saves a detonating ship. Legacy let a ready InfinityStone or a
+        // repair in the explosion tick save it.
         [Test]
-        public void AShipThatSurvivedLocksAgainForTheFullTime()
+        public void AReadyInfinityStoneDoesNotSaveTheShip()
         {
             var driver = DetonatorDuel(DetonatorShip(Stone));
             var tick = driver.Tick;
             driver.Control(1, systems: 1);
-            driver.StepUntil(tick + 51);
+            driver.StepUntil(tick + 50);
             Assert.AreEqual(RosterStatus.Active, driver.Status(1));
-            Assert.AreEqual(1000f, driver.Ship(1).Armor.Value, Tolerance);
-
-            // 20 s from the explosion tick.
-            driver.StepUntil(tick + 50 + 1000);
-            Assert.AreEqual(ShipStatusFlags.None, driver.Ship(1).Status & ShipStatusFlags.Drift);
             driver.Step();
-            Assert.AreEqual(ShipStatusFlags.Drift, driver.Ship(1).Status & ShipStatusFlags.Drift);
+            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+        }
 
-            // The stone is cooling down (60 s), so the second explosion kills.
-            driver.StepUntil(tick + 1050 + 50);
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+        [Test]
+        public void ARepairInTheExplosionTickDoesNotSaveTheShip()
+        {
+            var driver = DetonatorDuel(DetonatorShip());
+            var tick = driver.Tick;
+            driver.Control(1, systems: 1);
+            driver.StepUntil(tick + 50);
+            driver.Ship(1).AddPendingRepair(1000f);
             driver.Step();
             Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
         }

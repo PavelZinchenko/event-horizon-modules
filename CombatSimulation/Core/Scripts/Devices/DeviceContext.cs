@@ -6,9 +6,10 @@ namespace CombatSimulation.Core
     // it to every device call.
     internal sealed class DeviceContext
     {
-        public DeviceContext(BattleWorld world, SpawnSystem spawns, WormTails tails, BattleNetwork network)
+        public DeviceContext(BattleWorld world, Battle battle, SpawnSystem spawns, WormTails tails, BattleNetwork network)
         {
             _world = world;
+            _battle = battle;
             _spawns = spawns;
             _tails = tails;
             _network = network;
@@ -22,6 +23,9 @@ namespace CombatSimulation.Core
 
         // Stage 2: a device asks for a ship, a bullet or a beam; stage 5 creates it.
         public void RequestSpawn(in SpawnRequest request) => _spawns.Request(request);
+
+        // Stage 11 marks the ship dead, whatever its armor at the end of stage 10 (phase 5b, step 7c: a detonation).
+        public void QueueDeath(ShipEntity ship) => _battle.QueueDeath(ship.Id);
 
         // Stage 12 (phase 5, step 11a): a bullet of the dying ship, created at once.
         public void SpawnAtDeath(ShipEntity ship, int deviceIndex, BulletDefinition bullet) =>
@@ -45,6 +49,7 @@ namespace CombatSimulation.Core
         public void GrowTail(ShipEntity ship, WormTailDevice device) => _tails.GrowTail(ship, device);
 
         private readonly BattleWorld _world;
+        private readonly Battle _battle;
         private readonly SpawnSystem _spawns;
         private readonly WormTails _tails;
         // Null without remote owners (decision 3b).

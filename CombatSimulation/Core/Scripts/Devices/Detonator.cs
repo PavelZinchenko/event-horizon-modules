@@ -2,10 +2,10 @@ namespace CombatSimulation.Core
 {
     // Legacy DetonatorDevice (DeviceClass.Detonator; phase 5, step 7b). A use spends the energy cost and locks the ship
     // for Lifetime: it drifts, every other device is blocked, and its colour moves to the device colour. In the first tick
-    // after the lock the explosion spawns at the ship centre and the ship takes lethal damage (legacy
-    // CollisionEffect.Destroy: all armor); a ready InfinityStone still saves it. The cooldown starts with the explosion.
-    // The lock runs on without the key and during a retreat. Legacy never resets its lock timer, so a ship that survived
-    // explodes one tick after its next start; the core restarts the lock at each use (approved change).
+    // after the lock the explosion spawns at the ship centre and the ship dies. Owner rule (phase 5b, step 7c): nothing
+    // saves it. Legacy CollisionEffect.Destroy took all armor, so a ready InfinityStone or a repair in the same tick saved
+    // the ship; the core queues the death instead. The cooldown starts with the explosion. The lock runs on without the
+    // key and during a retreat. The core restarts the lock at each use (approved change; legacy never reset its timer).
     public sealed class DetonatorDefinition : DeviceDefinition
     {
         // Legacy CreateStrongExplosion: the area lives 0.3 s.
@@ -108,7 +108,7 @@ namespace CombatSimulation.Core
             if (!context.Setup.IsLocalOwner(ship.Owner)) return;
 
             context.RequestSpawn(new SpawnRequest(ship, Index, Definition.Explosion));
-            ship.Armor.Consume(ship.Armor.Max);
+            context.QueueDeath(ship);
         }
 
         private DeviceActivation _use;
