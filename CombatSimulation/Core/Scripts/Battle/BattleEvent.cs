@@ -36,6 +36,11 @@ namespace CombatSimulation.Core
         // damage is after the shield and the armor resistance, by type; one event per type with damage. They come last
         // in the batch, after the result.
         Damage = 11,
+
+        // For presentation (phase 5b, step 7b): a repair bot or a tail segment left the battle. EntityId is the object,
+        // ParentId its ship, Point its last position and RemovalReason the reason. The views of these objects live by
+        // the snapshot; this tells a death from an expiry or a vanish.
+        AuxiliaryRemoval = 12,
     }
 
     public enum RemovalReason : byte
@@ -259,6 +264,11 @@ namespace CombatSimulation.Core
                 asteroid.Owner, null, RemovalReason.Death, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
                 point: position);
 
+        internal static BattleEvent AuxiliaryRemoval(BattleId battleId, long tick, int sequence, EntityId id, int owner,
+            EntityId shipId, Vec2 position, RemovalReason reason) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.AuxiliaryRemoval, id, default, -1, owner, null, reason,
+                default, default, RosterTransitionReason.None, 0, 0f, 0f, default, point: position, parentId: shipId);
+
         internal static BattleEvent DamageTaken(BattleId battleId, long tick, int sequence, ShipEntity ship, int damageType,
             float amount, BattleEventAuthority authority) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Damage, ship.Id, ship.Slot?.RosterId ?? default,
@@ -291,6 +301,8 @@ namespace CombatSimulation.Core
                     return $"{Tick}.{Sequence} Gravity wave {EntityId} device {DeviceIndex} at {Point}";
                 case BattleEventKind.AsteroidRemoval:
                     return $"{Tick}.{Sequence} Asteroid {EntityId} destroyed at {Point}";
+                case BattleEventKind.AuxiliaryRemoval:
+                    return $"{Tick}.{Sequence} Removal {EntityId} of {ParentId} ({RemovalReason}) at {Point}";
                 case BattleEventKind.Damage:
                     return $"{Tick}.{Sequence} Damage {EntityId} type {DeviceIndex}: {Damage}";
                 default:

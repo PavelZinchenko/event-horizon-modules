@@ -260,6 +260,8 @@ namespace CombatSimulation.Core
                 if (reason == RemovalReason.Death) device.RespawnTick = tick + 1 + device.Definition.RespawnTicks;
             }
             _battle.CaptureRemoval(bot.Id, bot.Owner, reason);
+            // Phase 5b, step 7b: the view's removal event, before the body goes.
+            _world.AddAuxiliaryRemoval(bot.Id, bot.Owner, bot.ShipId, _world.Physics.GetPosition(bot.Body), reason);
             _world.Shapes.Release(bot.Shape);
             _battle.ForgetContacts(bot.Id);
             _world.Physics.DestroyBody(bot.Body);

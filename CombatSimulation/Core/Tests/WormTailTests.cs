@@ -160,6 +160,26 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(0, Count(driver, detached: true));
         }
 
+        // Phase 5b, step 7b: a segment that leaves gives the view an AuxiliaryRemoval with its reason, last in the batch
+        // with the other view-only events.
+        [Test]
+        public void ADeadSegmentGivesItsRemovalEventLast()
+        {
+            var driver = WormDuel();
+            driver.StepUntil(30);
+            var id = Segment(driver, 4).Id;
+            Hit(driver, 4, 350f);
+            driver.Step();
+
+            var events = driver.Battle.Snapshot.Events.ToArray();
+            var index = Array.FindIndex(events, e => e.Kind == BattleEventKind.AuxiliaryRemoval);
+            Assert.GreaterOrEqual(index, 0);
+            Assert.AreEqual(id, events[index].EntityId);
+            Assert.AreEqual(driver.Ship(1).Id, events[index].ParentId);
+            Assert.AreEqual(RemovalReason.Death, events[index].RemovalReason);
+            Assert.IsTrue(events.Skip(index).All(e => ScriptedBattle.IsViewOnly(e.Kind)));
+        }
+
         // Row 4: the recent damage falls by 5 x the hit points per second, so two hits tear only close together.
         [TestCase(1, true)]
         [TestCase(10, false)]

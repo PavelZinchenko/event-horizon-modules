@@ -416,11 +416,13 @@ namespace CombatSimulation.Core
             }
 
             _battle.CaptureRemoval(segment.Id, segment.Owner, reason);
-            ReleaseSegment(segment);
+            ReleaseSegment(segment, reason);
         }
 
-        private void ReleaseSegment(TailSegment segment)
+        // Phase 5b, step 7b: the view's removal event, before the body goes.
+        private void ReleaseSegment(TailSegment segment, RemovalReason reason)
         {
+            _world.AddAuxiliaryRemoval(segment.Id, segment.Owner, segment.ShipId, Physics.GetPosition(segment.Body), reason);
             _world.Shapes.Release(segment.Shape);
             _battle.ForgetContacts(segment.Id);
             Physics.DestroyBody(segment.Body);
@@ -447,7 +449,7 @@ namespace CombatSimulation.Core
                 {
                     var next = _world.Segments.Get(segment.Next);
                     _battle.CaptureRemoval(segment.Id, segment.Owner, reason);
-                    ReleaseSegment(segment);
+                    ReleaseSegment(segment, reason);
                     segment = next;
                 }
                 device.Head = default;

@@ -47,6 +47,19 @@ namespace CombatSimulation.Core
         public ShapeTable Shapes { get; } = new ShapeTable();
         public BattleEventBuffer Events { get; } = new BattleEventBuffer();
 
+        // Phase 5b, step 7b: the removal events of repair bots and tail segments wait for stage 14 and go last in the
+        // batch, after the result, so the other events keep their sequence numbers.
+        public void AddAuxiliaryRemoval(EntityId id, int owner, EntityId shipId, Vec2 position, RemovalReason reason) =>
+            _auxiliaryRemovals.Add(new AuxiliaryRemoval(id, owner, shipId, position, reason));
+
+        public void PublishAuxiliaryRemovals()
+        {
+            foreach (var item in _auxiliaryRemovals)
+                Events.Add(BattleEvent.AuxiliaryRemoval(BattleId, Tick, Events.Count, item.Id, item.Owner, item.ShipId,
+                    item.Position, item.Reason));
+            _auxiliaryRemovals.Clear();
+        }
+
         // The order of the last deployment. A received deployment raises it to its owner's value.
         public long DeploymentOrder { get; set; }
 
@@ -367,6 +380,26 @@ namespace CombatSimulation.Core
             beam.ExpiryTick = long.MaxValue; // Device-owned lifetime, without projectile expiry.
             device.Attach(handle);
             return index;
+        }
+
+        private readonly List<AuxiliaryRemoval> _auxiliaryRemovals = new List<AuxiliaryRemoval>();
+
+        private readonly struct AuxiliaryRemoval
+        {
+            public AuxiliaryRemoval(EntityId id, int owner, EntityId shipId, Vec2 position, RemovalReason reason)
+            {
+                Id = id;
+                Owner = owner;
+                ShipId = shipId;
+                Position = position;
+                Reason = reason;
+            }
+
+            public readonly EntityId Id;
+            public readonly int Owner;
+            public readonly EntityId ShipId;
+            public readonly Vec2 Position;
+            public readonly RemovalReason Reason;
         }
     }
 }

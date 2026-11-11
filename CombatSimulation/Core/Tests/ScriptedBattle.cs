@@ -325,8 +325,9 @@ namespace CombatSimulation.Core.Tests
             for (var i = 0; i < events.Length; ++i)
             {
                 var item = events[i];
-                // The damage text events (phase 5b, step 4) are presentation only and come last; the baselines predate them.
-                if (item.Kind != BattleEventKind.Damage) Log.Add(item.ToString());
+                // The damage text events (phase 5b, step 4) and the auxiliary removals (step 7b) are presentation only;
+                // the baselines predate them.
+                if (!ScriptedBattle.IsViewOnly(item.Kind)) Log.Add(item.ToString());
                 switch (item.Kind)
                 {
                     case BattleEventKind.Spawn:
@@ -392,6 +393,10 @@ namespace CombatSimulation.Core.Tests
         }
 
         public int SpawnsOf(BulletDefinition definition) => BulletSpawns.TryGetValue(definition, out var count) ? count : 0;
+
+        // Presentation events that the event logs leave out: the logs predate them.
+        internal static bool IsViewOnly(BattleEventKind kind) =>
+            kind == BattleEventKind.Damage || kind == BattleEventKind.AuxiliaryRemoval;
 
         // Catches a divergence that produces no event: poses, velocities and resources as raw bits. Full adds the ship
         // status, the device states and the tail segments. Barrels adds each barrel's angle and target.
