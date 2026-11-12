@@ -318,9 +318,10 @@ namespace CombatSimulation.Core
             _commands.TakeDue(Tick, _dueFrames);
             foreach (var frame in _dueFrames)
             {
-                // A frame for a removed or unknown entity is dropped (commands, rule 4).
+                // A frame for a removed or unknown entity is dropped (commands, rule 4). A pilot's frame applies at its think
+                // tick + delay, so a ship that dies in between leaves one: counted, not logged (owner, 2026-11-12).
                 var ship = _world.FindShip(frame.EntityId);
-                if (ship == null) Reject(frame, "unknown entity");
+                if (ship == null) ++RejectedCommandCount;
                 else ship.ApplyControls(frame);
             }
         }
