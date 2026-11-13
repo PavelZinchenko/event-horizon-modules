@@ -1,0 +1,6 @@
+<linker>
+  <!-- SetupHash (CombatSimulation.Runtime) reads the definitions' properties and fields by reflection (phase 7, step 4).
+       Stripping must not remove a member that only this walk reads. -->
+  <assembly fullname="CombatSimulation.Core" preserve="all" />
+  <assembly fullname="CombatSimulation.Physics" preserve="all" />
+</linker>

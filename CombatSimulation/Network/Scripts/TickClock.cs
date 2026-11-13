@@ -10,6 +10,8 @@ namespace CombatSimulation.Network
         public const double ProbeInterval = 0.25;
         public bool IsReference { get; }
         public bool HasEstimate => IsReference || _sampleCount != 0;
+        // Valid round-trip samples in the window, at most 16. Both peers count them; the reference too.
+        public int Samples => _sampleCount;
         public bool IsStarted { get; private set; }
         public double RoundTripSeconds { get; private set; }
         public double OffsetSeconds { get; private set; }

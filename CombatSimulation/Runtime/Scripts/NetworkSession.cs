@@ -41,9 +41,20 @@ namespace CombatSimulation.Runtime
     {
         public IBattleObserver Observer { get => _runner.Observer; set => _runner.Observer = value; }
         public NetworkSession(BattleSetup setup, IPilotProvider pilots, ITransport transport, NetworkSessionOptions options)
+            : this(setup, pilots, options, transport, null) { }
+
+        // Takes over a connection that already ran the match handshake (MatchHandshake). The connection's receiver
+        // forwards every message to this session, so its clock keeps the samples of the handshake.
+        public NetworkSession(BattleSetup setup, IPilotProvider pilots, PeerConnection peer, NetworkSessionOptions options)
+            : this(setup, pilots, options, null, peer ?? throw new ArgumentNullException(nameof(peer))) { }
+
+        private NetworkSession(BattleSetup setup, IPilotProvider pilots, NetworkSessionOptions options, ITransport transport,
+            PeerConnection peer)
         {
             if (setup == null) throw new ArgumentNullException(nameof(setup));
             _options = options ?? throw new ArgumentNullException(nameof(options));
+            if (peer != null && (peer.Clock.IsReference != options.IsClockReference || peer.MaxDatagramSize != options.MaxDatagramSize))
+                throw new ArgumentException("The connection must match the session options.", nameof(peer));
             if (!setup.HasOwner(options.LocalOwner) || !setup.IsLocalOwner(options.LocalOwner) ||
                 !setup.HasOwner(options.RemoteOwner) || setup.IsLocalOwner(options.RemoteOwner))
                 throw new ArgumentException("Session owners must match the battle's authority configuration.", nameof(setup));
@@ -51,7 +62,7 @@ namespace CombatSimulation.Runtime
                 if (setup.Roster[i].Owner != options.LocalOwner && setup.Roster[i].Owner != options.RemoteOwner)
                     throw new ArgumentException("A session supports exactly two owners.", nameof(setup));
             _runner = new BattleRunner(setup, pilots, QueueControls);
-            _peer = new PeerConnection(transport, this, options.IsClockReference, options.MaxDatagramSize);
+            _peer = peer ?? new PeerConnection(transport, this, options.IsClockReference, options.MaxDatagramSize);
             _correction = new byte[_peer.MaxUnreliablePayload];
             _input = new byte[_peer.MaxInputPayload];
             _arena = new CorrectionCodec.Arena(setup.Width, setup.Height);
