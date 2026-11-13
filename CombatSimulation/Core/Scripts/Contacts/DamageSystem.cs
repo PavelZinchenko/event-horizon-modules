@@ -184,7 +184,7 @@ namespace CombatSimulation.Core
         // Legacy CombatTimer, DrainPlayerHp (TM3): after the limit, each active player roster ship loses k % of its
         // maximum armor and of its maximum shield per second, k being the whole overtime seconds already passed.
         // No resistances; both restart their delay. It reads the timer of the previous tick. Only the owner drains;
-        // a remote copy follows through corrections. Drones are not drained.
+        // a remote copy follows through corrections. Drones are not drained. With remote owners both sides drain.
         private void DrainPlayerShips()
         {
             if (Setup.TimerMode != TimerMode.DrainPlayerHp || Setup.TimeLimitTicks <= 0) return;
@@ -195,7 +195,7 @@ namespace CombatSimulation.Core
             foreach (var slot in _world.Roster.Slots)
             {
                 var ship = slot.ActiveShip;
-                if (slot.Side != Setup.PlayerSide || ship == null || !Setup.IsLocalOwner(ship.Owner)) continue;
+                if (!Setup.HasPlayerRules(slot.Side) || ship == null || !Setup.IsLocalOwner(ship.Owner)) continue;
                 ship.Armor.Consume(fraction * ship.Armor.Max);
                 ship.Shield.Consume(fraction * ship.Shield.Max);
             }

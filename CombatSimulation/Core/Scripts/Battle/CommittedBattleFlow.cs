@@ -12,6 +12,7 @@ namespace CombatSimulation.Core
             _mode = setup.TimerMode;
             _playerSide = setup.PlayerSide;
             _onlyOneShip = setup.OnlyOneShip;
+            _remoteOwners = setup.HasRemoteOwners;
             foreach (var slot in setup.Roster)
                 if (slot.Side == 0) ++_confirmed.Alive0; else ++_confirmed.Alive1;
             _confirmed.Tick = -1;
@@ -62,7 +63,7 @@ namespace CombatSimulation.Core
                     }
                     state.Tick = gapEnd;
                 }
-                if (state.Tick == state.LossDeadline) return ShipLost(state.Tick);
+                if (state.Tick == state.LossDeadline) return ShipLost(state);
                 if (state.Tick == end) break;
                 state.Tick = next;
                 var resets = Resets.None;
@@ -76,9 +77,9 @@ namespace CombatSimulation.Core
                     if (change.Side == 0) { state.Alive0 += alive; state.Active0 += active; }
                     else { state.Alive1 += alive; state.Active1 += active; }
                     resets |= Classify(change);
-                    if (_onlyOneShip && change.Side == _playerSide && change.Before == RosterStatus.Active &&
-                        change.After == RosterStatus.Destroyed && state.LossDeadline == long.MaxValue)
-                        state.LossDeadline = next + Battle.ShipLostTicks;
+                    if (_onlyOneShip && (_remoteOwners || change.Side == _playerSide) &&
+                        change.Before == RosterStatus.Active && change.After == RosterStatus.Destroyed)
+                        MarkLoss(ref state, next, change.Side);
                 }
                 if (ShouldReset(resets, state)) state.Elapsed = 0;
                 if (state.Alive0 == 0 || state.Alive1 == 0)
@@ -91,14 +92,28 @@ namespace CombatSimulation.Core
                     if (limit > 0 && state.Elapsed >= limit)
                         return new BattleResult(BattleOutcome.Draw, 0, BattleEndReason.Timeout, next);
                 }
-                if (next == state.LossDeadline) return ShipLost(next);
+                if (next == state.LossDeadline) return ShipLost(state);
             }
             return default;
         }
 
-        // OnlyOneShip: the enemy side wins; the player reserves stay ready (legacy IsPlayerDefeated).
-        private BattleResult ShipLost(long tick) =>
-            new BattleResult(BattleOutcome.Victory, 1 - _playerSide, BattleEndReason.ShipLost, tick);
+        // OnlyOneShip: the first death sets the deadline. With remote owners either side can lose, and first deaths
+        // of both sides in one tick are a draw (phase 7, Q1).
+        private static void MarkLoss(ref State state, long tick, int side)
+        {
+            if (state.LossDeadline == long.MaxValue)
+            {
+                state.LossDeadline = tick + Battle.ShipLostTicks;
+                state.LosingSide = side;
+            }
+            else if (state.LossDeadline == tick + Battle.ShipLostTicks && state.LosingSide != side)
+                state.LosingSide = -1;
+        }
+
+        // OnlyOneShip: the other side wins; the reserves stay ready (legacy IsPlayerDefeated).
+        private static BattleResult ShipLost(in State state) => state.LosingSide < 0
+            ? new BattleResult(BattleOutcome.Draw, 0, BattleEndReason.ShipLost, state.LossDeadline)
+            : new BattleResult(BattleOutcome.Victory, 1 - state.LosingSide, BattleEndReason.ShipLost, state.LossDeadline);
 
         // The elapsed ticks that end the battle in a draw; 0: the timer never draws (it holds, or drains).
         private long DrawLimit(in State state)
@@ -128,10 +143,12 @@ namespace CombatSimulation.Core
         }
 
         // Legacy CombatTimer, read after every transition of the tick. Draw: any deployment or removal resets.
+        // With remote owners a removal on either side resets (phase 7, Q1).
         private bool ShouldReset(Resets resets, in State state)
         {
             if (resets == Resets.None) return false;
             if (_mode == TimerMode.Draw) return true;
+            if (_remoteOwners && (resets & (Resets.PlayerRemoved | Resets.EnemyRemoved)) != 0) return true;
             if ((resets & Resets.EnemyDeployed) != 0) return true;
             if ((resets & Resets.PlayerRemoved) != 0 && _mode == TimerMode.DrainPlayerHp) return true;
             if ((resets & Resets.EnemyRemoved) != 0)
@@ -142,8 +159,10 @@ namespace CombatSimulation.Core
         private struct State
         {
             internal long Tick, Elapsed;
-            // OnlyOneShip: the tick that ends the battle after a player death; long.MaxValue while none.
+            // OnlyOneShip: the tick that ends the battle after the first death; long.MaxValue while none.
             internal long LossDeadline;
+            // OnlyOneShip: the side whose death set LossDeadline; -1 when both sides lost a ship in that tick.
+            internal int LosingSide;
             internal int Alive0, Alive1, Active0, Active1;
             internal readonly int Ready(int side) => side == 0 ? Alive0 - Active0 : Alive1 - Active1;
         }
@@ -160,6 +179,7 @@ namespace CombatSimulation.Core
         private readonly TimerMode _mode;
         private readonly int _playerSide;
         private readonly bool _onlyOneShip;
+        private readonly bool _remoteOwners;
         private readonly List<Transition> _pending = new List<Transition>();
     }
 }

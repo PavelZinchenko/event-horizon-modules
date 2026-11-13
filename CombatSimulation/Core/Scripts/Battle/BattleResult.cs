@@ -17,7 +17,8 @@ namespace CombatSimulation.Core
         // The time limit ran out.
         Timeout,
 
-        // OnlyOneShip: a player roster ship died, and its reserves may not deploy (phase 4, step 9).
+        // OnlyOneShip: a player roster ship died, and its reserves may not deploy (phase 4, step 9). With remote
+        // owners either side can lose; first deaths of both sides in one tick are a draw (phase 7, Q1).
         ShipLost,
     }
 

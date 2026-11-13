@@ -158,6 +158,10 @@ namespace CombatSimulation.Core
         public int PlayerSide { get; }
         public int EnemySide => 1 - PlayerSide;
 
+        // The sides the legacy player rules (the DrainPlayerHp drain, OnlyOneShip) apply to: PlayerSide alone, or
+        // both sides with remote owners (phase 7, Q1). Single-player battles are unchanged.
+        public bool HasPlayerRules(int side) => side == PlayerSide || HasRemoteOwners;
+
         // Legacy PlayerShipSelectionMode.OnlyOneShip: the first death of a player roster ship ends the battle
         // Battle.ShipLostTicks later, unless an elimination comes first; the player reserves stay ready.
         public bool OnlyOneShip { get; }

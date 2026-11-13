@@ -617,7 +617,7 @@ namespace CombatSimulation.Core
             if (!Setup.IsLocalOwner(slot.Owner)) { Reject(command, "remote owner"); return; }
             if (slot.Status != RosterStatus.Ready) { Reject(command, $"slot is {slot.Status}"); return; }
             if (Roster.CountActive(slot.Side) >= Setup.MaxActiveShips(slot.Side)) { Reject(command, "side limit"); return; }
-            if (Setup.OnlyOneShip && slot.Side == Setup.PlayerSide && Roster.HasDestroyed(slot.Side))
+            if (Setup.OnlyOneShip && Setup.HasPlayerRules(slot.Side) && Roster.HasDestroyed(slot.Side))
             { Reject(command, "only one ship"); return; }
 
             if (!DeploySlot(slot)) Reject(command, "entity ID collision");

@@ -670,16 +670,19 @@ namespace CombatSimulation.Core.Tests
     }
 
     // Two cores in one process. A owns slot 101 (owner 20); B owns slot 1 (owner 10). Each step runs both,
-    // then delivers operations, hits and a watermark each way before the next tick.
+    // then delivers operations, hits and a watermark each way before the next tick. With reserves, A also owns
+    // slot 102 and B slot 2; they stay ready.
     internal sealed class NetPair
     {
         public const int OwnerA = 20;
         public const int OwnerB = 10;
 
-        public NetPair(ShipDefinition ship1 = null, ShipDefinition ship101 = null, int delayB = 0, int delayA = 0)
+        public NetPair(ShipDefinition ship1 = null, ShipDefinition ship101 = null, int delayB = 0, int delayA = 0,
+            TimerMode timerMode = TimerMode.Draw, long timeLimitTicks = 0, bool onlyOneShip = false, bool reserves = false)
         {
-            A = new Driver(Setup(OwnerA, ship1, ship101, delayB, delayA));
-            B = new Driver(Setup(OwnerB, ship1, ship101, delayB, delayA));
+            var rules = new Rules(timerMode, timeLimitTicks, onlyOneShip, reserves);
+            A = new Driver(Setup(OwnerA, ship1, ship101, delayB, delayA, rules));
+            B = new Driver(Setup(OwnerB, ship1, ship101, delayB, delayA, rules));
             A.Deploy(101);
             B.Deploy(1);
             // Each deployment reaches the other core in the next tick.
@@ -697,14 +700,17 @@ namespace CombatSimulation.Core.Tests
         public bool HoldHitsFromB { get; set; }
         public readonly List<ResolvedHit> HeldHits = new List<ResolvedHit>(64);
 
+        // A core with a result neither steps nor receives records.
         public void Step(int count = 1)
         {
             for (var i = 0; i < count; ++i)
             {
-                A.Step();
-                B.Step();
-                Relay(A, B, OwnerA, false);
-                Relay(B, A, OwnerB, HoldHitsFromB);
+                var stepA = !A.Battle.IsCompleted;
+                var stepB = !B.Battle.IsCompleted;
+                if (stepA) A.Step();
+                if (stepB) B.Step();
+                if (stepA && !B.Battle.IsCompleted) Relay(A, B, OwnerA, false);
+                if (stepB && !A.Battle.IsCompleted) Relay(B, A, OwnerB, HoldHitsFromB);
             }
         }
 
@@ -742,12 +748,32 @@ namespace CombatSimulation.Core.Tests
         }
 
         private static BattleSetup Setup(int localOwner, ShipDefinition ship1, ShipDefinition ship101, int delayB,
-            int delayA) => new BattleSetup(new BattleId(77), 13, new[]
+            int delayA, Rules rules)
+        {
+            var roster = new List<RosterSlotSetup>
             {
                 new RosterSlotSetup(new RosterId(1), 0, ship1 ?? Fixtures.Ship, OwnerB),
                 new RosterSlotSetup(new RosterId(101), 1, ship101 ?? Fixtures.Ship, OwnerA),
-            }, localOwners: new[] { localOwner },
-            ownerDelays: new Dictionary<int, int> { [OwnerB] = delayB, [OwnerA] = delayA });
+            };
+            if (rules.Reserves)
+            {
+                roster.Add(new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship, OwnerB));
+                roster.Add(new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship, OwnerA));
+            }
+            return new BattleSetup(new BattleId(77), 13, roster, localOwners: new[] { localOwner },
+                ownerDelays: new Dictionary<int, int> { [OwnerB] = delayB, [OwnerA] = delayA },
+                timeLimitTicks: rules.TimeLimitTicks, timerMode: rules.TimerMode, onlyOneShip: rules.OnlyOneShip);
+        }
+
+        private readonly struct Rules
+        {
+            public readonly TimerMode TimerMode;
+            public readonly long TimeLimitTicks;
+            public readonly bool OnlyOneShip;
+            public readonly bool Reserves;
+            public Rules(TimerMode timerMode, long timeLimitTicks, bool onlyOneShip, bool reserves)
+            { TimerMode = timerMode; TimeLimitTicks = timeLimitTicks; OnlyOneShip = onlyOneShip; Reserves = reserves; }
+        }
 
         private readonly CorrectionBatch _batch = new CorrectionBatch();
         private ulong _lastA;
