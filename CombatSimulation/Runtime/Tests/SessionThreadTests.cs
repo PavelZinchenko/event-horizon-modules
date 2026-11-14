@@ -1,0 +1,207 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
+using CombatSimulation.Core;
+using CombatSimulation.Network;
+using NUnit.Framework;
+
+namespace CombatSimulation.Runtime.Tests
+{
+    // Phase 7, step 5: two sessions, each on its own thread, in real time over an in-memory link.
+    public class SessionThreadTests
+    {
+        private const double TimeoutSeconds = 10;
+        private readonly Stopwatch _clock = Stopwatch.StartNew();
+        private readonly List<SessionThread> _threads = new List<SessionThread>();
+
+        [TearDown]
+        public void TearDown()
+        {
+            foreach (var thread in _threads) thread.Dispose();
+            _threads.Clear();
+        }
+
+        [Test]
+        public void EveryTickIsPublishedOnceAndInOrder()
+        {
+            var (a, b) = StartPair();
+            var readers = new[] { new Reader(a), new Reader(b) };
+            RunUntil(() =>
+            {
+                foreach (var reader in readers) reader.TakeAll();
+                return readers[0].NextTick > 150 && readers[1].NextTick > 150;
+            });
+            foreach (var reader in readers)
+            {
+                CollectionAssert.IsSubsetOf(new[] { new RosterId(1), new RosterId(101) }, reader.Deployed);
+                Assert.IsNull(reader.Thread.Error);
+                Assert.IsTrue(reader.Thread.Status.IsRunning);
+                var status = reader.Thread.Status;
+                TestContext.WriteLine($"Iterations {status.Iterations}, catch-up ticks {status.CatchUpTicks}, " +
+                    $"max gap {status.MaxGap:F1} ms, max late {status.MaxLate:F1} ms, round trip {status.RoundTrip:F1} ms");
+            }
+        }
+
+        // The main thread stalls while it holds a copy: the copy stays intact, and no tick is lost.
+        [Test]
+        public void StalledReaderGetsIntactCopiesAndEveryTick()
+        {
+            var (a, b) = StartPair();
+            var readers = new[] { new Reader(a), new Reader(b) };
+            for (var stall = 0; stall < 3; ++stall)
+            {
+                RunUntil(() =>
+                {
+                    foreach (var reader in readers) reader.TakeAll();
+                    return readers[0].NextTick > 50 * (stall + 1) && readers[1].NextTick > 50 * (stall + 1);
+                });
+                BattleSnapshot held = null;
+                RunUntil(() => a.TryTake(out held));
+                var before = Fingerprint(held);
+                Thread.Sleep(300);
+                Assert.GreaterOrEqual(a.Status.QueuedSnapshots, 5, "The worker kept publishing during the stall.");
+                Assert.AreEqual(before, Fingerprint(held), "A held copy changed.");
+                readers[0].Check(held);
+                a.Release(held);
+            }
+            foreach (var reader in readers)
+            {
+                reader.TakeAll();
+                Assert.IsNull(reader.Thread.Error);
+                Assert.Greater(reader.Reused, 0, "Released copies are reused.");
+            }
+        }
+
+        [Test]
+        public void ReaderTooFarBehindStopsTheThread()
+        {
+            var (a, _) = StartPair(maxQueued: 20);
+            RunUntil(() => !a.Status.IsRunning);
+            StringAssert.Contains("20 ticks behind", a.Error?.Message);
+        }
+
+        [Test]
+        public void InvalidControlsAreCountedAndTheThreadKeepsRunning()
+        {
+            var (a, _) = StartPair();
+            a.Post(SessionCommand.Submit(default, PilotControls.Create(0f, 0.5f, 0)));
+            RunUntil(() => a.Status.RejectedCommands == 1);
+            var tick = a.Status.Tick;
+            RunUntil(() => a.Status.Tick > tick + 5);
+            Assert.IsNull(a.Error);
+        }
+
+        // Both threads start with one deployment each and a clock epoch 0.1 s ahead.
+        private (SessionThread a, SessionThread b) StartPair(int maxQueued = SessionThread.MaxQueuedSnapshots)
+        {
+            var linkA = new Link();
+            var linkB = new Link();
+            linkA.Other = linkB; linkB.Other = linkA;
+            var pilots = new SessionFixtures.Pilots { Enabled = true, Throttle = 1, AimAtEnemy = true };
+            var a = new NetworkSession(SessionFixtures.Setup(10), pilots, linkA, new NetworkSessionOptions(10, 20, true));
+            var b = new NetworkSession(SessionFixtures.Setup(20), pilots, linkB, new NetworkSessionOptions(20, 10, false));
+            RunUntil(() =>
+            {
+                a.Pump(Now()); b.Pump(Now());
+                return b.Clock.HasEstimate;
+            });
+            var epoch = Now() + 0.1;
+            a.StartClock(Now(), epoch);
+            b.StartClock(Now(), epoch);
+            var threadA = new SessionThread(a, linkA, Now, maxQueued);
+            var threadB = new SessionThread(b, linkB, Now, maxQueued);
+            _threads.Add(threadA); _threads.Add(threadB);
+            threadA.Post(SessionCommand.Deploy(new RosterId(1)));
+            threadB.Post(SessionCommand.Deploy(new RosterId(101)));
+            threadA.Start();
+            threadB.Start();
+            return (threadA, threadB);
+        }
+
+        private double Now() => _clock.Elapsed.TotalSeconds;
+
+        private static void RunUntil(Func<bool> done)
+        {
+            var clock = Stopwatch.StartNew();
+            while (!done())
+            {
+                if (clock.Elapsed.TotalSeconds > TimeoutSeconds) Assert.Fail("Timed out");
+                Thread.Sleep(1);
+            }
+        }
+
+        private static long Fingerprint(BattleSnapshot snapshot)
+        {
+            unchecked
+            {
+                var hash = snapshot.Tick * 31 + snapshot.TimerElapsedTicks;
+                foreach (var ship in snapshot.Ships)
+                    hash = hash * 31 + (long)ship.Id.GetHashCode() * 17 + BitConverter.DoubleToInt64Bits(
+                        ship.Position.X * 3.0 + ship.Position.Y * 7.0 + ship.Angle + ship.Armor.Value + ship.Energy.Value);
+                foreach (var slot in snapshot.Roster) hash = hash * 31 + (long)slot.Status;
+                foreach (var item in snapshot.Events) hash = hash * 31 + (long)item.Kind * 7 + item.Tick;
+                return hash;
+            }
+        }
+
+        private sealed class Reader
+        {
+            internal readonly SessionThread Thread;
+            internal readonly List<RosterId> Deployed = new List<RosterId>();
+            internal long NextTick;
+            internal int Reused;
+            private readonly HashSet<BattleSnapshot> _seen = new HashSet<BattleSnapshot>();
+
+            internal Reader(SessionThread thread) { Thread = thread; }
+
+            internal void TakeAll()
+            {
+                while (Thread.TryTake(out var snapshot))
+                {
+                    Check(snapshot);
+                    if (!_seen.Add(snapshot)) ++Reused;
+                    Thread.Release(snapshot);
+                }
+            }
+
+            // Ticks arrive one by one, and a copy holds only its own tick's events.
+            internal void Check(BattleSnapshot snapshot)
+            {
+                Assert.AreEqual(NextTick++, snapshot.Tick, "Snapshot order");
+                foreach (var item in snapshot.Events)
+                {
+                    Assert.AreEqual(snapshot.Tick, item.Tick, "Event of another tick");
+                    if (item.Kind == BattleEventKind.Spawn && !item.IsBullet && !item.RosterId.Equals(default(RosterId)))
+                        Deployed.Add(item.RosterId);
+                }
+            }
+        }
+
+        // Thread-safe; Update and Flush do nothing, as the link delivers at once.
+        private sealed class Link : IPumpedTransport
+        {
+            internal Link Other;
+            private readonly ConcurrentQueue<byte[]> _inbox = new ConcurrentQueue<byte[]>();
+
+            public bool TrySend(ReadOnlySpan<byte> datagram)
+            {
+                Other._inbox.Enqueue(datagram.ToArray());
+                return true;
+            }
+
+            public bool TryReceive(Span<byte> buffer, out int length)
+            {
+                length = 0;
+                if (!_inbox.TryDequeue(out var datagram)) return false;
+                length = datagram.Length;
+                datagram.AsSpan(0, Math.Min(length, buffer.Length)).CopyTo(buffer);
+                return true;
+            }
+
+            public void Update() { }
+            public void Flush() { }
+        }
+    }
+}

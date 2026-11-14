@@ -118,6 +118,8 @@ namespace CombatSimulation.Runtime
         public MatchPlan Plan { get; private set; }
         public BattleSetup Setup { get; private set; }
         public ulong SetupHashValue { get; private set; }
+        // The reference clock's start time from Start; valid in Ready.
+        public double Epoch => _epoch;
         public int LocalDelay { get; private set; }
         public TickClock Clock => _peer.Clock;
         public bool IsFaulted => _peer.IsFaulted;

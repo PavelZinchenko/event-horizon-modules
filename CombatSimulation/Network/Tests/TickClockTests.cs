@@ -65,6 +65,28 @@ namespace CombatSimulation.Network.Tests
             Assert.Throws<InvalidOperationException>(() => follower.Start(102, 2));
         }
 
+        // Phase 7, step 5: the session thread sleeps by it.
+        [Test]
+        public void SecondsUntilIsTheTimeToTheTickAtTheCurrentRate()
+        {
+            var clock = new TickClock(true);
+            Assert.Throws<InvalidOperationException>(() => clock.SecondsUntil(0));
+            clock.Start(1, 2);
+            Assert.AreEqual(1, clock.SecondsUntil(0), 1e-9);
+            clock.Advance(2.01);
+            Assert.AreEqual(0.01, clock.SecondsUntil(1), 1e-9);
+            Assert.AreEqual(0, clock.SecondsUntil(0));
+
+            // A new estimate ten seconds ahead makes the follower run fast.
+            var fast = new TickClock(false);
+            fast.Observe(0, 0.1, 0.1, 0.2);
+            fast.Start(1, 1);
+            fast.Observe(1, 11.01, 11.01, 1.02);
+            fast.Advance(1.02);
+            Assert.AreEqual(1.02, fast.Rate);
+            Assert.AreEqual((5 - fast.TickPosition) / (50 * 1.02), fast.SecondsUntil(5), 1e-12);
+        }
+
         [Test]
         public void RunningClockNeverSnapsOrRewindsAndPacesWithinTwoPercent()
         {

@@ -5,7 +5,7 @@ namespace CombatSimulation.Core
 {
     // The published state and event batch of one completed tick. A reader must finish with a snapshot
     // before the next Step returns: the battle reuses two buffers, so a snapshot stays intact only while
-    // the following tick runs.
+    // the following tick runs. A reader on another thread takes a copy (CopyTo).
     public sealed class BattleSnapshot
     {
         internal BattleSnapshot(BattleId battleId, int rosterSize)
@@ -80,6 +80,42 @@ namespace CombatSimulation.Core
             return false;
         }
 
+        // A copy for a reader on another thread (phase 7, step 5): the battle never writes it. Pass a copy of the same
+        // battle to reuse its arrays; it allocates only to grow them. The state structs hold only immutable definitions.
+        public BattleSnapshot CopyTo(BattleSnapshot target = null)
+        {
+            target ??= new BattleSnapshot(BattleId, _roster.Length);
+            if (target == this) throw new ArgumentException("A snapshot cannot copy itself.", nameof(target));
+            if (target.BattleId != BattleId || target._roster.Length != _roster.Length)
+                throw new ArgumentException("The copy belongs to another battle.", nameof(target));
+            target.Tick = Tick;
+            target.TimerElapsedTicks = TimerElapsedTicks;
+            target.Result = Result;
+            target.CandidateResult = CandidateResult;
+            Array.Copy(_roster, target._roster, _roster.Length);
+            target._shipCount = Copy(_ships, _shipCount, ref target._ships);
+            target._deviceCount = Copy(_devices, _deviceCount, ref target._devices);
+            target._barrelCount = Copy(_barrels, _barrelCount, ref target._barrels);
+            target._satelliteCount = Copy(_satellites, _satelliteCount, ref target._satellites);
+            target._bulletCount = Copy(_bullets, _bulletCount, ref target._bullets);
+            target._repairBotCount = Copy(_repairBots, _repairBotCount, ref target._repairBots);
+            target._shieldCount = Copy(_shields, _shieldCount, ref target._shields);
+            target._segmentCount = Copy(_segments, _segmentCount, ref target._segments);
+            target._asteroidCount = Copy(_asteroids, _asteroidCount, ref target._asteroids);
+            target._eventCount = Copy(_events, _eventCount, ref target._events);
+            target._hitCount = Copy(_outgoingHits, _hitCount, ref target._outgoingHits);
+            target._operationCount = Copy(_outgoingOperations, _operationCount, ref target._outgoingOperations);
+            target._appliedOperationCount = Copy(_appliedOperations, _appliedOperationCount, ref target._appliedOperations);
+            return target;
+        }
+
+        private static int Copy<T>(T[] source, int count, ref T[] target)
+        {
+            if (target.Length < count) target = new T[Math.Max(count, target.Length * 2)];
+            Array.Copy(source, target, count);
+            return count;
+        }
+
         internal void Write(Battle battle, long tick, PhysicsWorld world, Roster roster, BattleEventBuffer events)
         {
             Tick = tick;
@@ -131,6 +167,9 @@ namespace CombatSimulation.Core
                 satelliteCount += satellites;
                 deviceCount += devices;
             }
+            _deviceCount = deviceCount;
+            _barrelCount = barrelCount;
+            _satelliteCount = satelliteCount;
 
             var bullets = battle.Bullets;
             if (_bullets.Length < bullets.AliveCount)
@@ -185,6 +224,7 @@ namespace CombatSimulation.Core
         private BarrelState[] _barrels = new BarrelState[16];
         private SatelliteState[] _satellites = Array.Empty<SatelliteState>();
         private DeviceState[] _devices = new DeviceState[16];
+        private int _deviceCount, _barrelCount, _satelliteCount;
         private BulletState[] _bullets = new BulletState[16];
         private int _bulletCount;
         private RepairBotState[] _repairBots = new RepairBotState[4];

@@ -66,6 +66,13 @@ namespace CombatSimulation.Network
         }
 
         public bool IsTickDue(long nextTick) => IsStarted && nextTick >= 0 && nextTick <= TickPosition;
+
+        // Local seconds from the last Advance until nextTick is due, at the current rate; 0 when it is due.
+        public double SecondsUntil(long nextTick)
+        {
+            if (!IsStarted) throw new InvalidOperationException("Start the clock first.");
+            return Math.Max(0, (nextTick - TickPosition) / (TicksPerSecond * Rate));
+        }
         internal static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
         private struct Sample { internal double RoundTrip, Offset; }

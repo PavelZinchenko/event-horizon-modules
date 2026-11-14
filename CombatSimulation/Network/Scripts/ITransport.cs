@@ -13,6 +13,14 @@ namespace CombatSimulation.Network
         bool TryReceive(Span<byte> buffer, out int length);
     }
 
+    // A transport that its loop pumps: Update receives before the connection's update, Flush sends after it.
+    // All calls come from one thread at a time.
+    public interface IPumpedTransport : ITransport
+    {
+        void Update();
+        void Flush();
+    }
+
     public interface IPeerReceiver
     {
         // Spans are valid only during the callback. Callbacks must not reenter PeerConnection.
