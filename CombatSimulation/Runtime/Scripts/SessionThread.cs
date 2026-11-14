@@ -61,11 +61,14 @@ namespace CombatSimulation.Runtime
         public const double SpinSeconds = 0.002;
 
         // clock: monotonic seconds, the source the handshake and the session clock used. afterStep runs on the worker
-        // after each tick with the iteration's time, for measurements; it must not keep the session.
+        // after each tick with the iteration's time, for measurements; it must not keep the session. beforeStep runs on
+        // the worker before each tick with the tick about to run (the game's player input reaches its pilots there).
         public SessionThread(NetworkSession session, IPumpedTransport transport, Func<double> clock,
-            int maxQueuedSnapshots = MaxQueuedSnapshots, Action<NetworkSession, double> afterStep = null)
+            int maxQueuedSnapshots = MaxQueuedSnapshots, Action<NetworkSession, double> afterStep = null,
+            Action<long> beforeStep = null)
         {
             _afterStep = afterStep;
+            _beforeStep = beforeStep;
             if (maxQueuedSnapshots < 1) throw new ArgumentOutOfRangeException(nameof(maxQueuedSnapshots));
             _maxQueued = maxQueuedSnapshots;
             _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -96,11 +99,15 @@ namespace CombatSimulation.Runtime
         }
 
         // The oldest snapshot copy not taken yet. Give it back with Release when done.
-        public bool TryTake(out BattleSnapshot snapshot)
+        public bool TryTake(out BattleSnapshot snapshot) => TryTake(out snapshot, out _);
+
+        // publishedAt: the clock time at which the worker queued the copy, right after its step.
+        public bool TryTake(out BattleSnapshot snapshot, out double publishedAt)
         {
             lock (_lock)
             {
                 snapshot = _published.Count == 0 ? null : _published.Dequeue();
+                publishedAt = snapshot == null ? 0 : _publishTimes.Dequeue();
                 _status.QueuedSnapshots = _published.Count;
                 return snapshot != null;
             }
@@ -158,10 +165,11 @@ namespace CombatSimulation.Runtime
                 while (!_session.IsCompleted && _session.Clock.IsTickDue(_session.Tick))
                 {
                     _maxLate = Math.Max(_maxLate, (_session.Clock.TickPosition - _session.Tick) / TickClock.TicksPerSecond);
+                    _beforeStep?.Invoke(_session.Tick);
                     _session.Step(now);
                     if (++steps > 1) ++_catchUpTicks;
                     _afterStep?.Invoke(_session, now);
-                    Publish();
+                    Publish(now);
                 }
             }
             _transport.Flush();
@@ -207,7 +215,7 @@ namespace CombatSimulation.Runtime
         }
 
         // The copy runs outside the lock; the reader never sees a copy before it is complete.
-        private void Publish()
+        private void Publish(double now)
         {
             BattleSnapshot copy;
             lock (_lock)
@@ -220,6 +228,7 @@ namespace CombatSimulation.Runtime
             lock (_lock)
             {
                 _published.Enqueue(copy);
+                _publishTimes.Enqueue(now);
                 _status.QueuedSnapshots = _published.Count;
                 _status.Tick = copy.Tick;
             }
@@ -250,10 +259,12 @@ namespace CombatSimulation.Runtime
         private readonly Func<double> _clock;
         private readonly int _maxQueued;
         private readonly Action<NetworkSession, double> _afterStep;
+        private readonly Action<long> _beforeStep;
         private readonly Thread _thread;
         private readonly object _lock = new object();
         private List<SessionCommand> _posted = new List<SessionCommand>(), _commands = new List<SessionCommand>();
         private readonly Queue<BattleSnapshot> _published = new Queue<BattleSnapshot>();
+        private readonly Queue<double> _publishTimes = new Queue<double>();
         private readonly Stack<BattleSnapshot> _pool = new Stack<BattleSnapshot>();
         private SessionThreadStatus _status;
         private Exception _error;

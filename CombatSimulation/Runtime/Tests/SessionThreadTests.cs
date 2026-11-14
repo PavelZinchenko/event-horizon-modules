@@ -93,8 +93,34 @@ namespace CombatSimulation.Runtime.Tests
             Assert.IsNull(a.Error);
         }
 
-        // Both threads start with one deployment each and a clock epoch 0.1 s ahead.
-        private (SessionThread a, SessionThread b) StartPair(int maxQueued = SessionThread.MaxQueuedSnapshots)
+        // Phase 7, step 6: beforeStep sees each tick before it runs, and each copy carries the time it was queued.
+        [Test]
+        public void BeforeStepRunsBeforeEachTickAndCopiesCarryTheirPublishTime()
+        {
+            var before = new ConcurrentQueue<long>();
+            var (a, _) = StartPair(beforeStep: before.Enqueue);
+            var taken = new List<(long Tick, double Time)>();
+            RunUntil(() =>
+            {
+                while (a.TryTake(out var snapshot, out var time))
+                {
+                    taken.Add((snapshot.Tick, time));
+                    a.Release(snapshot);
+                }
+                return taken.Count > 50;
+            });
+            var ticks = before.ToArray();
+            for (var i = 0; i < taken.Count; ++i)
+            {
+                Assert.AreEqual(ticks[i], taken[i].Tick, "beforeStep gets the tick about to run");
+                if (i > 0) Assert.GreaterOrEqual(taken[i].Time, taken[i - 1].Time);
+            }
+            Assert.LessOrEqual(taken[taken.Count - 1].Time, Now());
+        }
+
+        // Both threads start with one deployment each and a clock epoch 0.1 s ahead. beforeStep goes to the first.
+        private (SessionThread a, SessionThread b) StartPair(int maxQueued = SessionThread.MaxQueuedSnapshots,
+            Action<long> beforeStep = null)
         {
             var linkA = new Link();
             var linkB = new Link();
@@ -110,7 +136,7 @@ namespace CombatSimulation.Runtime.Tests
             var epoch = Now() + 0.1;
             a.StartClock(Now(), epoch);
             b.StartClock(Now(), epoch);
-            var threadA = new SessionThread(a, linkA, Now, maxQueued);
+            var threadA = new SessionThread(a, linkA, Now, maxQueued, beforeStep: beforeStep);
             var threadB = new SessionThread(b, linkB, Now, maxQueued);
             _threads.Add(threadA); _threads.Add(threadB);
             threadA.Post(SessionCommand.Deploy(new RosterId(1)));
