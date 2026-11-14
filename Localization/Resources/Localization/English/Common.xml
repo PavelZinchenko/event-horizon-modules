@@ -96,6 +96,7 @@
     <string name="CreateGame">Create game</string>
     <string name="JoinGame">Join game</string>
     <string name="CancelGame">Cancel</string>
+    <string name="Copy">Copy</string>
     <string name="LoginRequiredText">Sign in with Google to play online multiplayer</string>
     <string name="ConnectingText">Connecting...</string>
     <string name="Error_ConnectionFailed">Failed to connect to Google Play Services. Check your internet connection and try again.</string>

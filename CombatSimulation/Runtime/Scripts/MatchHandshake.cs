@@ -15,11 +15,14 @@ namespace CombatSimulation.Runtime
         Protocol = 1,
         GameVersion = 2,
         Database = 3,
+        // No longer sent (phase 7, step 9): a different setup hash is a warning, MatchHandshake.SetupHashDiffers.
         SetupMismatch = 4,
         SetupFailed = 5,
         InvalidMessage = 6,
         // Set locally when the peer stays silent for LinkTimeoutSeconds; never sent.
         Timeout = 7,
+        // The combat source code differs (MatchIdentity.SourceHash).
+        Source = 8,
     }
 
     // What a player brings to the match. The game fills it; the handshake compares it with the peer's.
@@ -27,20 +30,26 @@ namespace CombatSimulation.Runtime
     {
         public const int MaxGameVersionLength = 64;
         public const int MaxDatabaseHashLength = 64;
+        public const int MaxSourceHashLength = 64;
         public const int MaxFleetLength = 64 * 1024;
 
         public string GameVersion { get; }
         public byte[] DatabaseHash { get; }
+        // A hash of the combat source code (phase 7, step 9): builds of one game version with different combat code
+        // refuse each other. Opaque here; empty when the caller has none.
+        public byte[] SourceHash { get; }
         // The serialized fleet; opaque here.
         public byte[] Fleet { get; }
 
-        public MatchIdentity(string gameVersion, byte[] databaseHash, byte[] fleet)
+        public MatchIdentity(string gameVersion, byte[] databaseHash, byte[] fleet, byte[] sourceHash = null)
         {
             GameVersion = gameVersion ?? throw new ArgumentNullException(nameof(gameVersion));
             DatabaseHash = databaseHash ?? throw new ArgumentNullException(nameof(databaseHash));
             Fleet = fleet ?? throw new ArgumentNullException(nameof(fleet));
+            SourceHash = sourceHash ?? Array.Empty<byte>();
             if (Encoding.UTF8.GetByteCount(gameVersion) > MaxGameVersionLength) throw new ArgumentOutOfRangeException(nameof(gameVersion));
             if (databaseHash.Length > MaxDatabaseHashLength) throw new ArgumentOutOfRangeException(nameof(databaseHash));
+            if (SourceHash.Length > MaxSourceHashLength) throw new ArgumentOutOfRangeException(nameof(sourceHash));
             if (fleet.Length > MaxFleetLength) throw new ArgumentOutOfRangeException(nameof(fleet));
         }
     }
@@ -75,16 +84,17 @@ namespace CombatSimulation.Runtime
 
     // The match handshake (phase 7, step 4) on the connection that the battle then uses. Single thread.
     // 1. Each player waits for ClockSamples round trips, then sends Hello: protocol and game version, database hash,
-    //    its input delay D (N1) and its fleet. A mismatch sends Reject.
+    //    source hash, its input delay D (N1) and its fleet. A mismatch sends Reject.
     // 2. The host builds the setup and sends Setup: battle ID, seed and the setup hash.
-    // 3. The guest builds the setup and compares the hash: Accept, or Reject.
+    // 3. The guest builds the setup and sends Accept with its own setup hash; a different hash is only a warning.
     // 4. The host sends Start with the clock epoch, StartDelaySeconds ahead. Then each player calls CreateSession.
     // The handshake stays the connection's receiver and forwards to the session. The peer's messages after its last
     // handshake message (Accept from the guest, Start from the host) belong to the session; until CreateSession they wait
     // in a buffer.
     public sealed class MatchHandshake : IPeerReceiver
     {
-        public const ushort ProtocolVersion = 1;
+        // 2: Hello carries the source hash (phase 7, step 9).
+        public const ushort ProtocolVersion = 2;
         public const int ClockSamples = 8;
         public const double StartDelaySeconds = 1;
         public const int MaxInputDelay = 5;
@@ -122,6 +132,9 @@ namespace CombatSimulation.Runtime
         public MatchPlan Plan { get; private set; }
         public BattleSetup Setup { get; private set; }
         public ulong SetupHashValue { get; private set; }
+        // The peer's setup hash, from Setup (guest) or Accept (host). A difference is a warning (NoteSetupHash).
+        public ulong RemoteSetupHash { get; private set; }
+        public bool SetupHashDiffers { get; private set; }
         // The reference clock's start time from Start; valid in Ready.
         public double Epoch => _epoch;
         public int LocalDelay { get; private set; }
@@ -237,7 +250,8 @@ namespace CombatSimulation.Runtime
         private void SendHello()
         {
             var version = Encoding.UTF8.GetBytes(_identity.GameVersion);
-            var buffer = new byte[1 + 2 + 5 + version.Length + 5 + _identity.DatabaseHash.Length + 1 + 5 + _identity.Fleet.Length];
+            var buffer = new byte[1 + 2 + 5 + version.Length + 5 + _identity.DatabaseHash.Length + 5 + _identity.SourceHash.Length +
+                1 + 5 + _identity.Fleet.Length];
             var writer = new ByteWriter(buffer);
             writer.WriteByte((byte)MessageKind.Hello);
             writer.WriteUInt16(ProtocolVersion);
@@ -245,6 +259,8 @@ namespace CombatSimulation.Runtime
             writer.WriteBytes(version);
             writer.WriteVarUInt((ulong)_identity.DatabaseHash.Length);
             writer.WriteBytes(_identity.DatabaseHash);
+            writer.WriteVarUInt((ulong)_identity.SourceHash.Length);
+            writer.WriteBytes(_identity.SourceHash);
             writer.WriteByte((byte)LocalDelay);
             writer.WriteVarUInt((ulong)_identity.Fleet.Length);
             writer.WriteBytes(_identity.Fleet);
@@ -259,11 +275,13 @@ namespace CombatSimulation.Runtime
             if (protocol != ProtocolVersion) { Reject(HandshakeRejection.Protocol); return; }
             if (!ReadBlock(ref reader, MatchIdentity.MaxGameVersionLength, out var version) ||
                 !ReadBlock(ref reader, MatchIdentity.MaxDatabaseHashLength, out var database) ||
+                !ReadBlock(ref reader, MatchIdentity.MaxSourceHashLength, out var source) ||
                 !reader.ReadByte(out var delay) || delay > MaxInputDelay ||
                 !ReadBlock(ref reader, MatchIdentity.MaxFleetLength, out var fleet) || reader.Remaining != 0)
             { Reject(HandshakeRejection.InvalidMessage); return; }
             if (Encoding.UTF8.GetString(version) != _identity.GameVersion) { Reject(HandshakeRejection.GameVersion); return; }
             if (!((ReadOnlySpan<byte>)database).SequenceEqual(_identity.DatabaseHash)) { Reject(HandshakeRejection.Database); return; }
+            if (!((ReadOnlySpan<byte>)source).SequenceEqual(_identity.SourceHash)) { Reject(HandshakeRejection.Source); return; }
             _remoteHello = new Hello { Delay = delay, Fleet = fleet };
             if (State == HandshakeState.Exchanging) OnHellos();
         }
@@ -290,7 +308,7 @@ namespace CombatSimulation.Runtime
                 !reader.ReadUInt64(out var hash) || reader.Remaining != 0)
             { Reject(HandshakeRejection.InvalidMessage); return; }
             if (!TryBuild(new BattleId(battleId), seed)) return;
-            if (hash != SetupHashValue) { Reject(HandshakeRejection.SetupMismatch); return; }
+            NoteSetupHash(hash);
             var buffer = new byte[1 + 8];
             var writer = new ByteWriter(buffer);
             writer.WriteByte((byte)MessageKind.Accept);
@@ -302,7 +320,7 @@ namespace CombatSimulation.Runtime
         private void ReadAccept(ref ByteReader reader, double now)
         {
             if (!reader.ReadUInt64(out var hash) || reader.Remaining != 0) { Reject(HandshakeRejection.InvalidMessage); return; }
-            if (hash != SetupHashValue) { Reject(HandshakeRejection.SetupMismatch); return; }
+            NoteSetupHash(hash);
             _epoch = now + StartDelaySeconds;
             var buffer = new byte[1 + 8];
             var writer = new ByteWriter(buffer);
@@ -319,6 +337,15 @@ namespace CombatSimulation.Runtime
             { Reject(HandshakeRejection.InvalidMessage); return; }
             _epoch = epoch;
             State = HandshakeState.Ready;
+        }
+
+        // Phase 7, step 9 (owner, 2026-11-14): a different setup hash warns, it does not reject. Equal source data (versions,
+        // database, fleets) can still give values that differ in the last bits: the editor's Mono and Mono builds (macOS)
+        // round floats differently from IL2CPP. Owner corrections repair the drift, and refusing such players is worse.
+        private void NoteSetupHash(ulong remote)
+        {
+            RemoteSetupHash = remote;
+            SetupHashDiffers = remote != SetupHashValue;
         }
 
         private bool TryBuild(BattleId battleId, ulong seed)

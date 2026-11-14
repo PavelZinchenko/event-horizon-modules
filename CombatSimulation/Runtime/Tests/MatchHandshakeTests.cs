@@ -25,6 +25,7 @@ namespace CombatSimulation.Runtime.Tests
             pair.RunUntil(() => pair.Host.State == HandshakeState.Ready && pair.Guest.State == HandshakeState.Ready);
             Assert.AreNotEqual(0UL, pair.Host.SetupHashValue);
             Assert.AreEqual(pair.Host.SetupHashValue, pair.Guest.SetupHashValue);
+            Assert.IsFalse(pair.Host.SetupHashDiffers || pair.Guest.SetupHashDiffers);
             Assert.AreEqual(pair.Host.Setup.BattleId, pair.Guest.Setup.BattleId);
             Assert.AreEqual(77UL, pair.Guest.Setup.MatchSeed);
             Assert.AreEqual(pair.Host.LocalDelay, pair.Guest.Plan.HostDelay);
@@ -65,14 +66,24 @@ namespace CombatSimulation.Runtime.Tests
         }
 
         [Test]
-        public void SetupMismatchRejectsOnTheGuestAndReachesTheHost()
+        public void SourceMismatchRejectsOnBothPlayers()
+        {
+            var pair = new Pair(guestSource: new byte[] { 7, 8 });
+            pair.RunUntil(() => pair.Host.State == HandshakeState.Rejected && pair.Guest.State == HandshakeState.Rejected);
+            Assert.AreEqual(HandshakeRejection.Source, pair.Host.Rejection);
+            Assert.AreEqual(HandshakeRejection.Source, pair.Guest.Rejection);
+            Assert.IsNull(pair.Host.Setup);
+        }
+
+        [Test]
+        public void SetupHashDifferenceWarnsOnBothPlayersAndReachesReady()
         {
             var pair = new Pair(guestArmor: 999);
-            pair.RunUntil(() => pair.Host.State == HandshakeState.Rejected && pair.Guest.State == HandshakeState.Rejected);
-            Assert.AreEqual(HandshakeRejection.SetupMismatch, pair.Guest.Rejection);
-            Assert.IsFalse(pair.Guest.RejectedByPeer);
-            Assert.AreEqual(HandshakeRejection.SetupMismatch, pair.Host.Rejection);
-            Assert.IsTrue(pair.Host.RejectedByPeer);
+            pair.RunUntil(() => pair.Host.State == HandshakeState.Ready && pair.Guest.State == HandshakeState.Ready);
+            Assert.IsTrue(pair.Guest.SetupHashDiffers);
+            Assert.IsTrue(pair.Host.SetupHashDiffers);
+            Assert.AreEqual(pair.Host.SetupHashValue, pair.Guest.RemoteSetupHash);
+            Assert.AreEqual(pair.Guest.SetupHashValue, pair.Host.RemoteSetupHash);
         }
 
         [Test]
@@ -192,8 +203,10 @@ namespace CombatSimulation.Runtime.Tests
         private static MatchPlan Plan(bool isHost, int hostDelay, int guestDelay) =>
             new MatchPlan(isHost, new BattleId(5), 77, new byte[] { 9 }, new byte[] { 8 }, hostDelay, guestDelay);
 
-        private static MatchIdentity Identity(string version, byte[] database, byte fleet) =>
-            new MatchIdentity(version, database, new[] { fleet });
+        private static readonly byte[] Source = { 7, 7 };
+
+        private static MatchIdentity Identity(string version, byte[] database, byte fleet, byte[] source = null) =>
+            new MatchIdentity(version, database, new[] { fleet }, source ?? Source);
 
         private static BattleSetup Build(MatchPlan plan, float armor)
         {
@@ -212,13 +225,14 @@ namespace CombatSimulation.Runtime.Tests
             internal readonly MatchHandshake Host, Guest;
             internal double Now;
 
-            internal Pair(string guestVersion = Version, byte[] guestDatabase = null, float guestArmor = 100, bool guestFails = false)
+            internal Pair(string guestVersion = Version, byte[] guestDatabase = null, float guestArmor = 100, bool guestFails = false,
+                byte[] guestSource = null)
             {
                 var host = new SessionFixtures.Transport();
                 var guest = new SessionFixtures.Transport();
                 host.Other = guest; guest.Other = host;
                 Host = MatchHandshake.Host(host, Identity(Version, Database, 9), plan => Build(plan, 100), new BattleId(5), 77);
-                Guest = MatchHandshake.Guest(guest, Identity(guestVersion, guestDatabase ?? Database, 8),
+                Guest = MatchHandshake.Guest(guest, Identity(guestVersion, guestDatabase ?? Database, 8, guestSource),
                     plan => guestFails ? throw new InvalidOperationException("No ships") : Build(plan, guestArmor));
             }
 
