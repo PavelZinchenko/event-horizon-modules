@@ -140,6 +140,37 @@ namespace CombatSimulation.Runtime.Tests
             Assert.AreEqual(1, Count(guest.Snapshot, MatchPlan.HostOwner));
         }
 
+        // Phase 7, step 8: a peer that never answers ends the handshake after LinkTimeoutSeconds.
+        [Test]
+        public void SilentPeerTimesOutWithoutAReject()
+        {
+            var pair = new Pair();
+            while (pair.Now < MatchHandshake.LinkTimeoutSeconds - 0.1)
+            {
+                pair.Now += 0.02;
+                pair.Guest.Update(pair.Now);
+                Assert.AreEqual(HandshakeState.Measuring, pair.Guest.State);
+            }
+            pair.Now += 0.2;
+            pair.Guest.Update(pair.Now);
+            Assert.AreEqual(HandshakeState.Rejected, pair.Guest.State);
+            Assert.AreEqual(HandshakeRejection.Timeout, pair.Guest.Rejection);
+            Assert.IsFalse(pair.Guest.RejectedByPeer);
+            Assert.AreEqual(0, pair.Guest.PendingReliablePackets, "A silent peer gets no Reject.");
+        }
+
+        [Test]
+        public void SilenceUnderTheLimitIsNoTimeout()
+        {
+            var pair = new Pair();
+            while (pair.Now < MatchHandshake.LinkTimeoutSeconds - 0.5)
+            {
+                pair.Now += 0.02;
+                pair.Guest.Update(pair.Now);
+            }
+            pair.RunUntil(() => pair.Host.State == HandshakeState.Ready && pair.Guest.State == HandshakeState.Ready);
+        }
+
         [Test]
         public void SetupHashIgnoresLocalOwnersAndCountsDelaysAndValues()
         {

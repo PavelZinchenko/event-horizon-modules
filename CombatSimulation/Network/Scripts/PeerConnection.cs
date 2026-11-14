@@ -34,6 +34,11 @@ namespace CombatSimulation.Network
         public int MaxInputPayload => PacketFormat.MaxPayload(MaxDatagramSize - PacketFormat.HeaderSize);
         public int MaxUnreliablePayload => MaxInputPayload;
         public int PendingReliablePackets => _reliable.PendingPackets;
+        // Queued and unacknowledged reliable stream bytes. A blackout grows it; the owner of the match sets the limit.
+        public long PendingReliableBytes => _reliable.PendingBytes;
+        // The update time of the last well-formed datagram; before the first, the time of the first Update. The disconnect
+        // timeout (phase 7, Q4) measures the silence from here.
+        public double LastReceiveTime { get; private set; } = double.NaN;
         // Malformed datagrams, and sections with invalid contents.
         public long InvalidPackets { get; private set; }
         public bool IsFaulted => _reliable.IsFaulted;
@@ -66,6 +71,7 @@ namespace CombatSimulation.Network
             EnsureHealthy();
             if (!TickClock.Finite(now) || now < _lastUpdate) throw new ArgumentOutOfRangeException(nameof(now));
             _lastUpdate = now;
+            if (double.IsNaN(LastReceiveTime)) LastReceiveTime = now;
             while (_transport.TryReceive(_receiveBuffer, out var length))
             {
                 var datagram = _receiveBuffer.AsSpan(0, Math.Max(0, Math.Min(length, _receiveBuffer.Length)));
@@ -75,6 +81,7 @@ namespace CombatSimulation.Network
                     ++InvalidPackets;
                     continue;
                 }
+                LastReceiveTime = now;
                 var sections = PacketFormat.Sections(datagram);
                 while (PacketFormat.ReadSection(ref sections, out var kind, out var payload))
                 {

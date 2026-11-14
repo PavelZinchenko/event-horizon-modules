@@ -8,6 +8,20 @@ namespace CombatSimulation.Runtime
 {
     public enum SessionCommandKind : byte { Deploy, Retreat, SelfDestruct, Surrender, Controls }
 
+    // Why the session thread gave up the link before the result (phase 7, step 8). The game ends the match in a draw.
+    public enum SessionLinkLoss : byte
+    {
+        None,
+        // The reader took nothing for the link timeout: the app was in the background or its main thread stalled.
+        ReaderStalled,
+        // The transport closed: the peer left, or the Relay server dropped the allocation.
+        TransportClosed,
+        // No datagram from the peer for the link timeout (Q4).
+        Silence,
+        // The unacknowledged reliable stream outgrew its limit: the peer receives nothing, but still sends.
+        Backlog,
+    }
+
     // A roster command or player input for the session thread. It runs at the session's tick when the thread takes it.
     public readonly struct SessionCommand
     {
@@ -47,6 +61,8 @@ namespace CombatSimulation.Runtime
         public long RejectedCommands;
         public double RoundTrip;
         public double ClockErrorTicks;
+        // Set once the thread gave up the link; it then stops.
+        public SessionLinkLoss LinkLoss;
     }
 
     // Runs one NetworkSession and its transport on a worker thread (phase 7, step 5; network gate D1: a loop driven by
@@ -54,23 +70,36 @@ namespace CombatSimulation.Runtime
     // and the transport. The caller posts commands and takes a copy of every published snapshot, oldest first, so no
     // tick's events are lost. The loop sleeps until SpinSeconds before the next due tick, then spins to it.
     // After the result it keeps pumping, so the final packets reach the peer, until Dispose.
+    // Phase 7, step 8: before the result, a lost link (SessionLinkLoss) stops the thread without an error.
     public sealed class SessionThread : IDisposable
     {
         // Ten seconds of ticks by default. A reader that falls further behind stops the thread with an error.
         public const int MaxQueuedSnapshots = 500;
         public const double SpinSeconds = 0.002;
+        // A guard for a one-way link; the silence timeout ends a blackout long before it is reached.
+        public const long MaxReliableBacklogBytes = 1 << 20;
+        // A peer that leaves at its result closes the link; the ticks of this grace still step what it sent before, so
+        // a result that its last batch completes is not lost to a draw.
+        public const double ClosedGraceSeconds = 0.5;
 
         // clock: monotonic seconds, the source the handshake and the session clock used. afterStep runs on the worker
         // after each tick with the iteration's time, for measurements; it must not keep the session. beforeStep runs on
         // the worker before each tick with the tick about to run (the game's player input reaches its pilots there).
+        // linkTimeoutSeconds limits both the peer's silence and the reader's; the reader's counts from its first TryTake,
+        // so a scene load before it does not count.
         public SessionThread(NetworkSession session, IPumpedTransport transport, Func<double> clock,
             int maxQueuedSnapshots = MaxQueuedSnapshots, Action<NetworkSession, double> afterStep = null,
-            Action<long> beforeStep = null)
+            Action<long> beforeStep = null, double linkTimeoutSeconds = MatchHandshake.LinkTimeoutSeconds,
+            long maxReliableBacklogBytes = MaxReliableBacklogBytes)
         {
             _afterStep = afterStep;
             _beforeStep = beforeStep;
             if (maxQueuedSnapshots < 1) throw new ArgumentOutOfRangeException(nameof(maxQueuedSnapshots));
+            if (!(linkTimeoutSeconds > 0)) throw new ArgumentOutOfRangeException(nameof(linkTimeoutSeconds));
+            if (maxReliableBacklogBytes < 1) throw new ArgumentOutOfRangeException(nameof(maxReliableBacklogBytes));
             _maxQueued = maxQueuedSnapshots;
+            _linkTimeout = linkTimeoutSeconds;
+            _maxBacklog = maxReliableBacklogBytes;
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _clock = clock ?? throw new ArgumentNullException(nameof(clock));
@@ -104,8 +133,10 @@ namespace CombatSimulation.Runtime
         // publishedAt: the clock time at which the worker queued the copy, right after its step.
         public bool TryTake(out BattleSnapshot snapshot, out double publishedAt)
         {
+            var now = _clock();
             lock (_lock)
             {
+                _lastRead = now;
                 snapshot = _published.Count == 0 ? null : _published.Dequeue();
                 publishedAt = snapshot == null ? 0 : _publishTimes.Dequeue();
                 _status.QueuedSnapshots = _published.Count;
@@ -138,6 +169,7 @@ namespace CombatSimulation.Runtime
                     if (running && !double.IsNaN(last)) _maxGap = Math.Max(_maxGap, now - last);
                     last = running ? now : double.NaN;
                     Iterate(now);
+                    if (_linkLoss != SessionLinkLoss.None) break;
                     Wait(now);
                 }
             }
@@ -175,8 +207,10 @@ namespace CombatSimulation.Runtime
             _transport.Flush();
             ++_iterations;
             if (_session.IsFaulted) throw new InvalidOperationException("The network session faulted at tick " + _session.Tick);
+            if (!_session.IsCompleted) _linkLoss = CheckLink(now);
             lock (_lock)
             {
+                _status.LinkLoss = _linkLoss;
                 _status.IsCompleted = _session.IsCompleted;
                 _status.PendingReliablePackets = _session.PendingReliablePackets;
                 _status.Iterations = _iterations;
@@ -187,6 +221,22 @@ namespace CombatSimulation.Runtime
                 _status.RoundTrip = _session.Clock.RoundTripSeconds * 1000;
                 _status.ClockErrorTicks = _session.Clock.ErrorTicks;
             }
+        }
+
+        // The local cause first: after a long background pause the peer is silent too.
+        private SessionLinkLoss CheckLink(double now)
+        {
+            double lastRead;
+            lock (_lock) lastRead = _lastRead;
+            if (now - lastRead > _linkTimeout) return SessionLinkLoss.ReaderStalled;
+            if (_transport.IsClosed)
+            {
+                if (double.IsNaN(_closedAt)) _closedAt = now;
+                if (now - _closedAt > ClosedGraceSeconds) return SessionLinkLoss.TransportClosed;
+            }
+            if (now - _session.LastReceiveTime > _linkTimeout) return SessionLinkLoss.Silence;
+            if (_session.PendingReliableBytes > _maxBacklog) return SessionLinkLoss.Backlog;
+            return SessionLinkLoss.None;
         }
 
         private void RunCommands()
@@ -258,6 +308,8 @@ namespace CombatSimulation.Runtime
         private readonly IPumpedTransport _transport;
         private readonly Func<double> _clock;
         private readonly int _maxQueued;
+        private readonly double _linkTimeout;
+        private readonly long _maxBacklog;
         private readonly Action<NetworkSession, double> _afterStep;
         private readonly Action<long> _beforeStep;
         private readonly Thread _thread;
@@ -270,7 +322,11 @@ namespace CombatSimulation.Runtime
         private Exception _error;
         private bool _started;
         private volatile bool _stopping;
+        // The clock time of the reader's last TryTake; positive infinity before the first.
+        private double _lastRead = double.PositiveInfinity;
         // Worker thread only.
+        private SessionLinkLoss _linkLoss;
+        private double _closedAt = double.NaN;
         private double _sleepCost = 0.016, _maxGap, _maxLate;
         private long _iterations, _catchUpTicks, _rejectedCommands;
     }

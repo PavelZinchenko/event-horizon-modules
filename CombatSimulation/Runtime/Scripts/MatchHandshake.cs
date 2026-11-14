@@ -18,6 +18,8 @@ namespace CombatSimulation.Runtime
         SetupMismatch = 4,
         SetupFailed = 5,
         InvalidMessage = 6,
+        // Set locally when the peer stays silent for LinkTimeoutSeconds; never sent.
+        Timeout = 7,
     }
 
     // What a player brings to the match. The game fills it; the handshake compares it with the peer's.
@@ -88,6 +90,8 @@ namespace CombatSimulation.Runtime
         public const int MaxInputDelay = 5;
         // Session datagrams that may wait for CreateSession; later ones are dropped like network loss.
         public const int MaxBufferedMessages = 256;
+        // Q4: a peer without any datagram for this long is gone. The session thread uses the same limit.
+        public const double LinkTimeoutSeconds = 10;
 
         public static MatchHandshake Host(ITransport transport, MatchIdentity identity, Func<MatchPlan, BattleSetup> buildSetup,
             BattleId battleId, ulong seed, int maxDatagramSize = PeerConnection.DefaultDatagramSize) =>
@@ -150,6 +154,13 @@ namespace CombatSimulation.Runtime
                 SendHello();
                 State = HandshakeState.Exchanging;
                 if (_remoteHello != null) OnHellos();
+            }
+            // A silent peer cannot get a Reject, so none is sent.
+            if ((State == HandshakeState.Measuring || State == HandshakeState.Exchanging) &&
+                now - _peer.LastReceiveTime > LinkTimeoutSeconds)
+            {
+                State = HandshakeState.Rejected;
+                Rejection = HandshakeRejection.Timeout;
             }
         }
 

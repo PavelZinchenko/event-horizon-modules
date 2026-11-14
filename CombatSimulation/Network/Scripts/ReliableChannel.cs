@@ -25,6 +25,16 @@ namespace CombatSimulation.Network
         // The most stream bytes one packet carries: a datagram with only this section.
         internal int DataCapacity { get; }
         internal int PendingPackets => (int)unchecked(_nextSend - _sendBase) + (_unsentLength + DataCapacity - 1) / DataCapacity;
+        internal long PendingBytes
+        {
+            get
+            {
+                long bytes = _unsentLength;
+                for (var sequence = _sendBase; sequence != _nextSend; ++sequence)
+                    if (!_sent[sequence % WindowSize].Acknowledged) bytes += _sent[sequence % WindowSize].Length;
+                return bytes;
+            }
+        }
         internal bool IsFaulted { get; private set; }
         internal bool AckDue => _ackDirty;
 

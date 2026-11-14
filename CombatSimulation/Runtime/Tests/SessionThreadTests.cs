@@ -15,6 +15,7 @@ namespace CombatSimulation.Runtime.Tests
         private const double TimeoutSeconds = 10;
         private readonly Stopwatch _clock = Stopwatch.StartNew();
         private readonly List<SessionThread> _threads = new List<SessionThread>();
+        private Link _linkA, _linkB;
 
         [TearDown]
         public void TearDown()
@@ -118,12 +119,104 @@ namespace CombatSimulation.Runtime.Tests
             Assert.LessOrEqual(taken[taken.Count - 1].Time, Now());
         }
 
+        // Phase 7, step 8: a cut link ends both threads after the silence limit, without an error.
+        [Test]
+        public void CutLinkEndsBothThreadsWithSilence()
+        {
+            var (a, b) = StartPair(linkTimeout: 0.5);
+            var readers = new[] { new Reader(a), new Reader(b) };
+            RunUntil(() =>
+            {
+                foreach (var reader in readers) reader.TakeAll();
+                return readers[0].NextTick > 50 && readers[1].NextTick > 50;
+            });
+            Assert.AreEqual(SessionLinkLoss.None, a.Status.LinkLoss, "Normal traffic is never silent for 0.5 s.");
+            _linkA.Cut = _linkB.Cut = true;
+            RunUntil(() =>
+            {
+                foreach (var reader in readers) reader.TakeAll();
+                return !a.Status.IsRunning && !b.Status.IsRunning;
+            });
+            foreach (var thread in new[] { a, b })
+            {
+                Assert.AreEqual(SessionLinkLoss.Silence, thread.Status.LinkLoss);
+                Assert.IsFalse(thread.Status.IsCompleted);
+                Assert.IsNull(thread.Error);
+            }
+        }
+
+        [Test]
+        public void ClosedTransportEndsTheThread()
+        {
+            var (a, b) = StartPair();
+            var readers = new[] { new Reader(a), new Reader(b) };
+            RunUntil(() =>
+            {
+                foreach (var reader in readers) reader.TakeAll();
+                return readers[0].NextTick > 20;
+            });
+            _linkA.Closed = true;
+            RunUntil(() =>
+            {
+                foreach (var reader in readers) reader.TakeAll();
+                return !a.Status.IsRunning;
+            });
+            Assert.AreEqual(SessionLinkLoss.TransportClosed, a.Status.LinkLoss);
+            Assert.IsNull(a.Error);
+        }
+
+        // The reader's limit counts from its first TryTake, so a scene load before it does not end the match.
+        [Test]
+        public void StalledReaderEndsTheThreadOnlyAfterItsFirstTake()
+        {
+            var (a, b) = StartPair(linkTimeout: 0.5);
+            var readerB = new Reader(b);
+            var start = Now();
+            RunUntil(() =>
+            {
+                readerB.TakeAll();
+                return Now() - start > 1;
+            });
+            Assert.IsTrue(a.Status.IsRunning);
+            Assert.AreEqual(SessionLinkLoss.None, a.Status.LinkLoss);
+            if (a.TryTake(out var snapshot)) a.Release(snapshot);
+            RunUntil(() =>
+            {
+                readerB.TakeAll();
+                return !a.Status.IsRunning;
+            });
+            Assert.AreEqual(SessionLinkLoss.ReaderStalled, a.Status.LinkLoss);
+            Assert.IsNull(a.Error);
+        }
+
+        // A one-way link: A receives B's data, so A is never silent, but nothing A sends is acknowledged.
+        [Test]
+        public void OneWayLinkEndsWithTheBacklogLimit()
+        {
+            var (a, b) = StartPair(linkTimeout: 30, maxBacklog: 200);
+            var readers = new[] { new Reader(a), new Reader(b) };
+            RunUntil(() =>
+            {
+                foreach (var reader in readers) reader.TakeAll();
+                return readers[0].NextTick > 20;
+            });
+            _linkA.Cut = true;
+            RunUntil(() =>
+            {
+                foreach (var reader in readers) reader.TakeAll();
+                return !a.Status.IsRunning;
+            });
+            Assert.AreEqual(SessionLinkLoss.Backlog, a.Status.LinkLoss);
+            Assert.IsNull(a.Error);
+        }
+
         // Both threads start with one deployment each and a clock epoch 0.1 s ahead. beforeStep goes to the first.
         private (SessionThread a, SessionThread b) StartPair(int maxQueued = SessionThread.MaxQueuedSnapshots,
-            Action<long> beforeStep = null)
+            Action<long> beforeStep = null, double linkTimeout = MatchHandshake.LinkTimeoutSeconds,
+            long maxBacklog = SessionThread.MaxReliableBacklogBytes)
         {
-            var linkA = new Link();
-            var linkB = new Link();
+            var linkA = _linkA = new Link();
+            var linkB = _linkB = new Link();
             linkA.Other = linkB; linkB.Other = linkA;
             var pilots = new SessionFixtures.Pilots { Enabled = true, Throttle = 1, AimAtEnemy = true };
             var a = new NetworkSession(SessionFixtures.Setup(10), pilots, linkA, new NetworkSessionOptions(10, 20, true));
@@ -136,8 +229,10 @@ namespace CombatSimulation.Runtime.Tests
             var epoch = Now() + 0.1;
             a.StartClock(Now(), epoch);
             b.StartClock(Now(), epoch);
-            var threadA = new SessionThread(a, linkA, Now, maxQueued, beforeStep: beforeStep);
-            var threadB = new SessionThread(b, linkB, Now, maxQueued);
+            var threadA = new SessionThread(a, linkA, Now, maxQueued, beforeStep: beforeStep, linkTimeoutSeconds: linkTimeout,
+                maxReliableBacklogBytes: maxBacklog);
+            var threadB = new SessionThread(b, linkB, Now, maxQueued, linkTimeoutSeconds: linkTimeout,
+                maxReliableBacklogBytes: maxBacklog);
             _threads.Add(threadA); _threads.Add(threadB);
             threadA.Post(SessionCommand.Deploy(new RosterId(1)));
             threadB.Post(SessionCommand.Deploy(new RosterId(101)));
@@ -205,15 +300,18 @@ namespace CombatSimulation.Runtime.Tests
             }
         }
 
-        // Thread-safe; Update and Flush do nothing, as the link delivers at once.
+        // Thread-safe; Update and Flush do nothing, as the link delivers at once. Cut drops this side's sends.
         private sealed class Link : IPumpedTransport
         {
             internal Link Other;
+            internal volatile bool Cut, Closed;
             private readonly ConcurrentQueue<byte[]> _inbox = new ConcurrentQueue<byte[]>();
+
+            public bool IsClosed => Closed;
 
             public bool TrySend(ReadOnlySpan<byte> datagram)
             {
-                Other._inbox.Enqueue(datagram.ToArray());
+                if (!Cut) Other._inbox.Enqueue(datagram.ToArray());
                 return true;
             }
 

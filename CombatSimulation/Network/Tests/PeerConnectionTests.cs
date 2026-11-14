@@ -379,6 +379,46 @@ namespace CombatSimulation.Network.Tests
             Assert.Greater(ra.UnreliableCount, 0);
         }
 
+        // Phase 7, step 8: the disconnect timeout measures silence from LastReceiveTime.
+        [Test]
+        public void LastReceiveTimeFollowsWellFormedDatagramsOnly()
+        {
+            var link = new TestLink { Now = 5 };
+            var a = new PeerConnection(link.A, new CountingReceiver(), true);
+            var b = new PeerConnection(link.B, new CountingReceiver(), false);
+            b.Update(link.Now);
+            Assert.AreEqual(5, b.LastReceiveTime, "Before any datagram: the first update.");
+            Pump(link, a, b, 100);
+            var talking = b.LastReceiveTime;
+            Assert.Greater(talking, 5.5);
+            link.A.BlackoutStart = link.Now;
+            link.A.BlackoutEnd = double.MaxValue;
+            Pump(link, a, b, 100);
+            Assert.LessOrEqual(b.LastReceiveTime, link.A.BlackoutStart);
+            var silent = b.LastReceiveTime;
+            link.B.Inject(new byte[] { 0xFF, 1, 2 }, link.Now);
+            b.Update(link.Now);
+            Assert.AreEqual(1, b.InvalidPackets);
+            Assert.AreEqual(silent, b.LastReceiveTime, "A malformed datagram is not a sign of life.");
+        }
+
+        [Test]
+        public void PendingReliableBytesCountQueuedAndUnacknowledgedStream()
+        {
+            var link = new TestLink();
+            var a = new PeerConnection(link.A, new CountingReceiver(), true);
+            var b = new PeerConnection(link.B, new CountingReceiver(), false);
+            a.QueueReliable(new byte[100]);
+            a.QueueReliable(new byte[200]);
+            Assert.AreEqual(1 + 100 + 2 + 200, a.PendingReliableBytes, "Messages with their length prefixes");
+            link.A.BlackoutStart = 0;
+            link.A.BlackoutEnd = 1;
+            Pump(link, a, b, 50);
+            Assert.AreEqual(303, a.PendingReliableBytes, "Sent but not acknowledged");
+            Pump(link, a, b, 200);
+            Assert.AreEqual(0, a.PendingReliableBytes);
+        }
+
         private static void Traffic(TestLink link, PeerConnection a, PeerConnection b, byte[] payload, int tick)
         {
             a.QueueReliable(payload); b.QueueReliable(payload);

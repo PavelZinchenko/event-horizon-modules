@@ -77,6 +77,8 @@ namespace CombatSimulation.Runtime
         public bool IsCompleted => _runner.IsCompleted;
         public TickClock Clock => _peer.Clock;
         public int PendingReliablePackets => _peer.PendingReliablePackets;
+        public long PendingReliableBytes => _peer.PendingReliableBytes;
+        public double LastReceiveTime => _peer.LastReceiveTime;
         public long InvalidMessages { get; private set; }
         public long SentCorrectionBatches { get; private set; }
         public long ReceivedCorrectionBatches { get; private set; }

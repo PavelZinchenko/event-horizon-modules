@@ -19,6 +19,8 @@ namespace CombatSimulation.Network
     {
         void Update();
         void Flush();
+        // The link is gone for good: the peer left, or the Relay server dropped the allocation.
+        bool IsClosed { get; }
     }
 
     public interface IPeerReceiver
