@@ -272,7 +272,7 @@ namespace ShipEditor.UI
 
             _shipView.InitializeShip(_shipEditor.Layout(ShipElementType.Ship), sprite, ship.Model.Satellites);
 			_shipInitialName = _localization.GetString(_shipEditor.ShipName);
-			_shipNameInputField.text = _shipInitialName;
+			_shipNameInputField.SetTextWithoutNotify(_shipInitialName);
 
             _shipView.Position = data.Position;
             _shipView.Rotation = data.Rotation;

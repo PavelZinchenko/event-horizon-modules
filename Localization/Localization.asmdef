@@ -2,6 +2,7 @@
     "name": "Localization",
     "rootNamespace": "",
     "references": [
+        "Localization.Abstractions",
         "AppConfiguration",
         "CommonComponents",
         "Database",

@@ -22,9 +22,11 @@
     <string name="Shield">Shield</string>
     <string name="ShieldPoints">Shield Points</string>
     <string name="ShieldRechargeRate">Recharge rate</string>
-    <string name="ShieldRechargeCooldown">Recharge cooldown</string>
+    <string name="ShieldRechargeCooldown">Shield Recharge cooldown</string>
     <string name="RepairRate">Repair rate</string>
     <string name="RepairCooldown">Repair cooldown</string>
+    <string name="EnergyRechargeRate">Energy Recharge rate</string>
+    <string name="EnergyRechargeCooldown">Energy Recharge cooldown</string>
     <string name="RechargeRate">Recharge rate</string>
     <string name="RechargeCooldown">Recharge cooldown</string>
     <string name="Weight">Mass</string>
@@ -107,6 +109,7 @@
     <string name="EnergyDPS">Energy DPS</string>
     <string name="CorrosiveDamage">Corrosive damage</string>
     <string name="CorrosiveDPS">Corrosive DPS</string>
+    <string name="ActiveConsumption">Active consumption</string>
     <string name="WeaponEnergy">Energy consumption</string>
     <string name="WeaponEPS">Energy per second</string>
     <string name="WeaponRange">Range</string>

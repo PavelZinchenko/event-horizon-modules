@@ -79,7 +79,7 @@ namespace ShipEditor.UI
 
 			public Layout Layout => Component.Data.Layout;
 			public SpriteId Icon => Component.Data.Icon;
-			public Color Color => Component.Data.Color;
+			public Color Color => Component.Data.Color.ToUnity();
 
 			public Content(ComponentInfo component, int keyBinding = 0, int behaviour = 0)
 			{

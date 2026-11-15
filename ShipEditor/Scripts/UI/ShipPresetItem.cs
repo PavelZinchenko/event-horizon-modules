@@ -19,7 +19,7 @@ namespace ShipEditor.UI
         {
             ShipPreset = preset;
 			_icon.sprite = resourceLocator.GetSprite(preset.Ship.ModelImage);
-			_inputField.text = string.IsNullOrEmpty(preset.Name) ? localization.GetString(preset.Ship.Name) : preset.Name;
+			_inputField.SetTextWithoutNotify(string.IsNullOrEmpty(preset.Name) ? localization.GetString(preset.Ship.Name) : preset.Name);
 		}
 
         public void OnTextChanged(string text)

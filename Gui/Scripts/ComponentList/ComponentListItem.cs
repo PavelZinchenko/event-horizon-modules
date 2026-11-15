@@ -22,7 +22,7 @@ namespace Gui.ComponentList
         {
             _component = item;
             Icon.sprite = _resourceLocator.GetSprite(item.Data.Icon);
-            Icon.color = item.Data.Color;
+            Icon.color = item.Data.Color.ToUnity();
             NameText.text = item.GetName(_localization);
             var descriptionText = item.CreateModification().GetDescription(_localization);
             DescriptionText.gameObject.SetActive(!string.IsNullOrEmpty(DescriptionText.text = descriptionText));

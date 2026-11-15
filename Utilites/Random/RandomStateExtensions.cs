@@ -13,5 +13,13 @@
 
         public static float NextFloat(ref ulong state, ulong increment) => PcgRandomAlgorithm.NextUint(ref state, increment) % (_maxFloatMantissa + 1) * _toFloat01;
         public static double NextDouble(ref ulong state, ulong increment) => PcgRandomAlgorithm.NextUint(ref state, increment) * _toDouble01;
+
+        // Uniform random point inside the unit circle.
+        public static (float x, float y) InsideUnitCircle(this ref RandomState state)
+        {
+            var r = (float)System.Math.Sqrt(state.NextFloat());
+            var angle = 2f * (float)System.Math.PI * state.NextFloat();
+            return (r * (float)System.Math.Cos(angle), r * (float)System.Math.Sin(angle));
+        }
     }
 }

@@ -135,6 +135,7 @@ namespace ShipEditor.Model
 		{
 			RemoveSatellite(mountPoint);
 			InitializeSatellite(mountPoint, satellite);
+			SaveShip(_ship);
 		}
 
 		public bool TryInstallSatellite(int mountPoint, Satellite satellite)
@@ -151,6 +152,7 @@ namespace ShipEditor.Model
                 return false;
 
 			InitializeSatellite(mountPoint, new CommonSatellite(satellite, Enumerable.Empty<IntegratedComponent>()));
+			SaveShip(_ship);
             return true;
 		}
 
@@ -168,6 +170,7 @@ namespace ShipEditor.Model
 			_satellites[mountPoint] = null;
 
 			_context.Inventory.AddSatellite(satellite.BaseModel);
+			SaveShip(_ship);
 			_events.OnSatelliteChanged(mountPoint);
 		}
 
@@ -203,6 +206,7 @@ namespace ShipEditor.Model
 				throw new InvalidOperationException();
 
 			UpdateComponent(component, new ComponentSettings(component.KeyBinding, component.Behaviour, false));
+			SaveShip(_ship);
 		}
 
 		public bool TryInstallComponent(ShipElementType shipElement, UnityEngine.Vector2Int position, ComponentInfo componentInfo, ComponentSettings settings)
@@ -221,6 +225,7 @@ namespace ShipEditor.Model
 				return false;
 
 			var component = layout.InstallComponent(position.x, position.y, componentInfo, settings);
+			SaveShip(_ship);
 			_events.OnComponentAdded(component);
 			return true;
 		}
@@ -232,6 +237,7 @@ namespace ShipEditor.Model
 
 			_layouts[component.Location].RemoveComponent(component);
 			_context.Inventory.AddComponent(component.Info);
+			SaveShip(_ship);
 			_events.OnComponentRemoved(component);
 		}
 
@@ -239,7 +245,7 @@ namespace ShipEditor.Model
 		{
             foreach (var layout in _layouts.All)
 			    RemoveAllComopnents(layout);
-
+			SaveShip(_ship);
 			_events.OnMultipleComponentsChanged();
 		}
 
@@ -285,6 +291,8 @@ namespace ShipEditor.Model
                     result &= TryInstallSatellite(i, preset.Satellites[i].BaseModel) && 
                         InstallComponentsFromPreset(preset.Satellites[i].Components, ShipElementType.Satellite(i));
 
+            SaveShip(_ship);
+
             for (int i = 0; i < _satellites.Count; ++i)
                 _events.OnSatelliteChanged(i);
             _events.OnMultipleComponentsChanged();
@@ -299,7 +307,9 @@ namespace ShipEditor.Model
 
             foreach (var component in components)
             {
+                // Locked components survive RemoveAllComponents(), so they are already in place.
                 if (layout.FindComponent(component.X, component.Y, component.Info) != null) continue;
+
                 if (!layout.IsSuitableLocation(component.X, component.Y, component.Info.Data) ||
                     !_compatibilityChecker.IsCompatible(component.Info.Data) ||
                     !_context.Inventory.TryRemoveComponent(component.Info))
@@ -308,8 +318,9 @@ namespace ShipEditor.Model
                     continue;
                 }
 
+                // Components taken from the inventory are always unlocked (#539).
                 layout.InstallComponent(component.X, component.Y, component.Info,
-                    new ComponentSettings(component.KeyBinding, component.Behaviour, component.Locked));
+                    new ComponentSettings(component.KeyBinding, component.Behaviour, false));
             }
 
             return result;

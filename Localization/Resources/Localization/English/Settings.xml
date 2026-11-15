@@ -9,6 +9,7 @@
     <string name="MenuNewGame">New game</string>
     <string name="MenuContinueGame">Resume game</string>
     <string name="MenuCombat">Quick battle</string>
+    <string name="MenuOnlineDuel">Online duel</string>
     <string name="MenuSettings">Settings</string>
     <string name="Settings">Settings</string>
     <string name="DeleteSavedGameText">If you want to delete the saved game, press this button.</string>

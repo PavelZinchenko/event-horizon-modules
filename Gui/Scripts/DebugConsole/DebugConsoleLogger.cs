@@ -81,25 +81,25 @@ namespace Gui.DebugConsole
             }
         }
 
-        public void Log(string message, GameObject context = null)
+        public void Log(string message, object context = null)
         {
             WriteLogMessage(new LogEntry(message, null, LogType.Log));
             GameDiagnostics.UnityLogger.Instance.Log(message, context);
         }
 
-        public void LogWarning(string message, GameObject context = null)
+        public void LogWarning(string message, object context = null)
         {
             WriteLogMessage(new LogEntry(message, null, LogType.Warning));
             GameDiagnostics.UnityLogger.Instance.LogWarning(message, context);
         }
 
-        public void LogError(string message, GameObject context = null)
+        public void LogError(string message, object context = null)
         {
             WriteLogMessage(new LogEntry(message, null, LogType.Error));
             GameDiagnostics.UnityLogger.Instance.LogError(message, context);
         }
 
-        public void LogException(Exception e, GameObject context = null)
+        public void LogException(Exception e, object context = null)
         {
             WriteLogMessage(new LogEntry(e.Message, e.StackTrace, LogType.Exception));
             GameDiagnostics.UnityLogger.Instance.LogException(e, context);

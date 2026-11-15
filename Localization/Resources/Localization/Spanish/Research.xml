@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources>
+    <string name="Resource1">Esencia de vacío</string>
+    <string name="Resource2">Bio-Nanomáquinas</string>
+    <string name="Resource3">Artefacto alienígena</string>
+    <string name="Resource4">Chip cuántico</string>
+    <string name="Resource5">Piedra de éter</string>
+
+    <string name="StatCurrentValue">Valor actual:</string>
+    <string name="StatValueAfterUpgrade">Después de mejorar:</string>
+    <string name="StatUpgradeLevel">(Nivel $1)</string>
+    <string name="ResearchLabDesciption">Mejora las estadísticas del módulo aquí para actualizar todos tus módulos de este tipo en el juego</string>
+    <string name="RecycleDesciption">Desmonte sus módulos para tener la oportunidad de adquirir componentes valiosos. Cuanto mayor sea la calidad, mejor será el resultado</string>
+</resources>
