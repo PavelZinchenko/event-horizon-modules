@@ -47,10 +47,10 @@ namespace CombatSimulation.Core
             // A bullet target: one record per contact. Disarm and Stop name bullets only.
             if (hit.TargetIsBullet ? hit.TargetShape != 0 || hit.ContactState != HitContactState.Start
                 : hit.ImpactKind > HitImpactKind.DamageOverTime) return false;
-            // A bot takes a push once per contact record, including an over-time tick. An absent target may have
-            // already died; accept and acknowledge that late hit without applying it.
+            // A bot or a satellite takes a push once per contact record, including an over-time tick. An absent target may
+            // have already died; accept and acknowledge that late hit without applying it.
             var auxiliaryPush = hit.TargetIsBullet && (!_world.Entities.TryGet(hit.TargetId, out var pushTarget) ||
-                pushTarget.Kind == EntityKind.RepairBot || IsDecoy(pushTarget));
+                pushTarget.Kind == EntityKind.RepairBot || pushTarget.Kind == EntityKind.Satellite || IsDecoy(pushTarget));
             if (!Finite(hit.Impulse.X) || !Finite(hit.Impulse.Y) ||
                 ((hit.Impulse.X != 0f || hit.Impulse.Y != 0f) && ((!auxiliaryPush &&
                     (hit.TargetIsBullet || hit.ImpactKind == HitImpactKind.DamageOverTime)) || hit.ContactState != HitContactState.Start)))
@@ -98,9 +98,10 @@ namespace CombatSimulation.Core
             Finite(pose.Angle) && Finite(pose.LinearVelocity.X) && Finite(pose.LinearVelocity.Y) && Finite(pose.AngularVelocity);
 
         // A hit record on a bullet or a tail segment names one contact (ResolvedHit.TargetIsBullet; network plan 9d); so
-        // does one on a repair bot or a decoy (phase 5, steps 10b and 10c).
+        // does one on a repair bot, a decoy (phase 5, steps 10b and 10c) or a destructible satellite.
         private bool IsContactTarget(EntityHandle handle) => handle.Kind == EntityKind.Bullet ||
-            handle.Kind == EntityKind.Segment || handle.Kind == EntityKind.RepairBot || IsDecoy(handle);
+            handle.Kind == EntityKind.Segment || handle.Kind == EntityKind.RepairBot ||
+            handle.Kind == EntityKind.Satellite || IsDecoy(handle);
 
         private bool IsDecoy(EntityHandle handle) => _world.Ships.Get(handle)?.IsDecoy == true;
 
@@ -168,7 +169,9 @@ namespace CombatSimulation.Core
                     if (_world.Entities.TryGet(operation.TargetId, out handle))
                     {
                         attachable = handle.Kind == EntityKind.Segment || handle.Kind == EntityKind.RepairBot;
-                        if (handle.Kind == EntityKind.Bullet || (attachable || IsDecoy(handle)) != operation.TargetIsSegment)
+                        // Nothing sticks to a satellite (BulletStore.CollectHits).
+                        if (handle.Kind == EntityKind.Bullet || handle.Kind == EntityKind.Satellite ||
+                            (attachable || IsDecoy(handle)) != operation.TargetIsSegment)
                             return false;
                     }
                     return !_world.Entities.TryGet(operation.EntityId, out handle) ||
@@ -425,6 +428,12 @@ namespace CombatSimulation.Core
             {
                 if (operation.BayKey.HasValue) return false;
                 _tails.RemoveSegment(_world.Segments.Get(handle), operation.RemovalReason);
+            }
+            else if (handle.Kind == EntityKind.Satellite)
+            {
+                // The owner's death record: the copy dies at the owner's tick and respawns with it. Its entity stays.
+                if (operation.BayKey.HasValue || operation.RemovalReason != RemovalReason.Death) return false;
+                _world.SatelliteStore.Destroy(_world.SatelliteStore.Get(handle), operation.Tick);
             }
             else if (handle.Kind == EntityKind.Bullet)
             {

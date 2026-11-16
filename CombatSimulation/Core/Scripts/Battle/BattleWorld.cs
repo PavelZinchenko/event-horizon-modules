@@ -41,6 +41,7 @@ namespace CombatSimulation.Core
         public BulletStore Bullets { get; } = new BulletStore();
         public TailSegmentStore Segments { get; } = new TailSegmentStore();
         public RepairBots RepairBots { get; set; }
+        public SatelliteStore SatelliteStore { get; set; }
         public Asteroids Asteroids { get; }
         public Decoys Decoys { get; set; }
         public EntityRegistry Entities { get; } = new EntityRegistry();
@@ -79,6 +80,7 @@ namespace CombatSimulation.Core
             : handle.Kind == EntityKind.RepairBot ? RepairBots.Get(handle)?.Owner ?? -1
             : handle.Kind == EntityKind.Segment ? Segments.Get(handle)?.Owner ?? -1
             : handle.Kind == EntityKind.Asteroid ? Asteroids.Get(handle)?.Owner ?? -1
+            : handle.Kind == EntityKind.Satellite ? SatelliteStore.Get(handle)?.Owner ?? -1
             : (Ships.Get(handle)?.Owner ?? -1);
 
         public BattleEventAuthority Authority(int owner) => Setup.IsLocalOwner(owner)

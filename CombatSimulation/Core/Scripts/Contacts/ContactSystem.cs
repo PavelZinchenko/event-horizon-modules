@@ -8,7 +8,7 @@ namespace CombatSimulation.Core
     // queries. Stage 8: every source adds its
     // contact candidates. Stage 9: the resolver accepts them in key order, and each accepted contact reaches its
     // target: pending damage and a push on a ship, damage or removal on a bullet, a queued hit on a tail segment, damage
-    // and a push on an asteroid (step 14). Stage 10 applies the damage (DamageSystem).
+    // and a push on an asteroid (step 14), a repair bot or a destructible satellite. Stage 10 applies the damage (DamageSystem).
     internal sealed class ContactSystem
     {
         public ContactSystem(BattleWorld world, Battle battle, WormTails tails, BulletTriggers triggers,
@@ -51,11 +51,11 @@ namespace CombatSimulation.Core
             _pointDefense.Collect(_resolver);
             _gravityWaves.Collect(_resolver);
             _world.Bullets.CollectHits(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver, _world.RepairBots,
-                _world.Asteroids);
+                _world.Asteroids, _world.SatelliteStore);
             _world.Bullets.CollectStuckHits(Physics, _world.Entities, _world.Shapes, _world.Ships, _world.Segments, _resolver,
                 _world.RepairBots, _world.Asteroids);
             _ramming.Collect(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver,
-                Setup.DamageTypes.RammingDamageType, _world.RepairBots, _world.Asteroids);
+                Setup.DamageTypes.RammingDamageType, _world.RepairBots, _world.Asteroids, _world.SatelliteStore);
 
             var duplicates = _resolver.Sort();
             if (duplicates > 0)
@@ -181,6 +181,13 @@ namespace CombatSimulation.Core
                     if (bot == null) continue;
                     authority = _world.Authority(bot.Owner);
                     _world.RepairBots.Resolve(hit, bot);
+                }
+                else if (hit.TargetHandle.Kind == EntityKind.Satellite)
+                {
+                    var satellite = _world.SatelliteStore.Get(hit.TargetHandle);
+                    if (satellite == null) continue;
+                    authority = _world.Authority(satellite.Owner);
+                    _world.SatelliteStore.Resolve(hit, satellite);
                 }
                 else if (_world.Decoys.IsRemoteContact(hit, out var decoy))
                 {

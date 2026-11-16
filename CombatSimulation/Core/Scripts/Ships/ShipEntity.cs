@@ -15,6 +15,9 @@ namespace CombatSimulation.Core
 
         // Asteroids (Asteroids; phase 5, step 14).
         Asteroid = 5,
+
+        // Destructible satellites (SatelliteStore; satellite plan, phase 6).
+        Satellite = 6,
     }
 
     // Internal storage handle: kind, index and generation. Never exposed as a public ID.
@@ -416,8 +419,8 @@ namespace CombatSimulation.Core
         public int DeviceCount => _devices.Length;
         public ShipDevice GetDevice(int index) => _devices[index];
 
-        // Legacy FixedPlatform.IsReady: more than 0.04 s since the barrel's last shot, a strict check. A barrel on an
-        // inactive satellite is not ready (Frontier; built-in satellites stay active).
+        // Legacy FixedPlatform.IsReady: more than 0.04 s since the barrel's last shot, a strict check. A barrel on a
+        // destroyed satellite is not ready (Frontier SatellitePlatform; built-in satellites stay active).
         public bool IsBarrelReady(int barrel, long tick) => tick - _barrelShotTicks[barrel] >= BarrelCooldownTicks &&
             (Definition.Barrels[barrel].Satellite < 0 || _satellites[Definition.Barrels[barrel].Satellite].ActiveTick <= tick);
         internal void RecordBarrelShot(int barrel, long tick) => _barrelShotTicks[barrel] = tick;

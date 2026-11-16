@@ -86,10 +86,13 @@ namespace CombatSimulation.Core
                         var targetShip = battle.FindShip(target.OwnerId);
                         var segment = targetShip == null ? battle.FindSegment(target.OwnerId) : null;
                         var bot = battle.FindRepairBot(target.OwnerId);
+                        var satellite = battle.SatelliteStore.Get(target.Owner);
                         var asteroid = battle.Asteroids.Get(target.Owner);
-                        if (targetShip == null && segment == null && bot == null && asteroid == null) continue;
-                        if (definition.FriendlyFire && (CollisionFilters.IsSource(beam.SourceShipId, targetShip, segment) || bot?.ShipId == beam.SourceShipId)) continue;
-                        targetAllegiance = targetShip?.Allegiance ?? segment?.Allegiance ?? bot?.Allegiance ?? asteroid.Allegiance;
+                        if (targetShip == null && segment == null && bot == null && satellite == null && asteroid == null) continue;
+                        if (definition.FriendlyFire && (CollisionFilters.IsSource(beam.SourceShipId, targetShip, segment) ||
+                            bot?.ShipId == beam.SourceShipId || satellite?.Ship.Id == beam.SourceShipId)) continue;
+                        targetAllegiance = targetShip?.Allegiance ?? segment?.Allegiance ?? bot?.Allegiance ??
+                            satellite?.Allegiance ?? asteroid.Allegiance;
                         candidate.Target = target.OwnerId;
                         candidate.TargetHandle = target.Owner;
                         candidate.TargetPriority = target.Priority;
@@ -134,7 +137,7 @@ namespace CombatSimulation.Core
                 : barrelAngle + (draw - 0.5f) * definition.Spread;
         }
 
-        // Legacy Body.WorldPosition of the touched unit: a ship, a tail segment or a missile.
+        // Legacy Body.WorldPosition of the touched unit: a ship, a tail segment, a satellite or a missile.
         private static bool TryGetTargetPosition(Battle battle, EntityId id, out Vec2 position)
         {
             position = Vec2.Zero;
@@ -161,6 +164,12 @@ namespace CombatSimulation.Core
             if (asteroid != null)
             {
                 position = battle.World.GetPosition(asteroid.Body);
+                return true;
+            }
+            var satellite = battle.FindSatellite(id);
+            if (satellite != null)
+            {
+                position = battle.World.GetPosition(satellite.Body);
                 return true;
             }
             if (!battle.TryGetBullet(id, out var index)) return false;

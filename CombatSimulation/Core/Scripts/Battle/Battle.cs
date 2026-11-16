@@ -25,6 +25,7 @@ namespace CombatSimulation.Core
             _targets = new TargetGrid(World.Torus, setup.MatchSeed);
             _tails = new WormTails(_world, this);
             _world.RepairBots = new RepairBots(_world, this);
+            _world.SatelliteStore = new SatelliteStore(_world, this);
             _world.Decoys = new Decoys(_world, this);
             _triggers = new BulletTriggers(_world, this);
             var bulletContacts = new BulletContactLedger();
@@ -159,6 +160,7 @@ namespace CombatSimulation.Core
             _contacts.Resolve();
             _network?.AccumulateRemoteDamage();
             _world.RepairBots.ApplyDamage();
+            _world.SatelliteStore.ApplyDamage();
             _world.Asteroids.ApplyDamage();
             _damage.Apply();
             _damage.MarkDeaths();
@@ -206,6 +208,8 @@ namespace CombatSimulation.Core
         internal RepairBots RepairBots => _world.RepairBots;
         internal Decoys Decoys => _world.Decoys;
         internal RepairBot FindRepairBot(EntityId id) => RepairBots.Find(id);
+        internal SatelliteStore SatelliteStore => _world.SatelliteStore;
+        internal Satellite FindSatellite(EntityId id) => _world.SatelliteStore.Find(id);
         internal TailSegment FindSegment(EntityId id) => _tails.FindSegment(id);
         internal Asteroids Asteroids => _world.Asteroids;
         internal Asteroid FindAsteroid(EntityId id) => _world.Asteroids.Find(id);
@@ -334,6 +338,7 @@ namespace CombatSimulation.Core
                 var ship = _world.GetShipEntry(i);
                 if (ship == null) continue;
 
+                Satellites.Respawn(_world, ship);
                 BarrelAiming.Update(_world, ship, _network);
                 ship.EngineHasEnergy = ship.Energy.Value > 0f;
                 ship.Energy.Update(TickDuration);
@@ -459,7 +464,8 @@ namespace CombatSimulation.Core
         private void StepPhysics() => World.Step(TickDuration);
 
         // Stage 12. One batch, in roster order: deaths, then retreat completions, then surrender and kill-all.
-        // Drone deaths follow the roster batch, then tail segments, repair bots and asteroids. Bullets leave last, by ID.
+        // Drone deaths follow the roster batch, then tail segments, repair bots, satellites and asteroids. Bullets leave
+        // last, by ID.
         // Attached beams die with their ship.
         private void ApplyStructureChanges()
         {
@@ -523,6 +529,7 @@ namespace CombatSimulation.Core
 
             _tails.RemoveDeadSegments();
             _world.RepairBots.RemoveFinished();
+            _world.SatelliteStore.DestroyDead();
             _world.Asteroids.RemoveDead(this);
             RemoveBullets();
         }

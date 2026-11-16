@@ -41,6 +41,10 @@ namespace CombatSimulation.Core
         // ParentId its ship, Point its last position and RemovalReason the reason. The views of these objects live by
         // the snapshot; this tells a death from an expiry or a vanish.
         AuxiliaryRemoval = 12,
+
+        // For presentation (satellite plan, phase 6): a destructible satellite died or respawned. EntityId is its ship,
+        // DeviceIndex the satellite index, Point its position, and RemovalReason Death for a death or None for a respawn.
+        SatelliteChange = 13,
     }
 
     public enum RemovalReason : byte
@@ -269,6 +273,12 @@ namespace CombatSimulation.Core
             new BattleEvent(battleId, tick, sequence, BattleEventKind.AuxiliaryRemoval, id, default, -1, owner, null, reason,
                 default, default, RosterTransitionReason.None, 0, 0f, 0f, default, point: position, parentId: shipId);
 
+        internal static BattleEvent SatelliteChange(BattleId battleId, long tick, int sequence, ShipEntity ship, int satellite,
+            Vec2 position, bool destroyed, BattleEventAuthority authority) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.SatelliteChange, ship.Id, ship.Slot?.RosterId ?? default,
+                ship.Side, ship.Owner, ship.Definition, destroyed ? RemovalReason.Death : RemovalReason.None, default, default,
+                RosterTransitionReason.None, 0, 0f, 0f, default, point: position, deviceIndex: satellite, authority: authority);
+
         internal static BattleEvent DamageTaken(BattleId battleId, long tick, int sequence, ShipEntity ship, int damageType,
             float amount, BattleEventAuthority authority) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Damage, ship.Id, ship.Slot?.RosterId ?? default,
@@ -303,6 +313,8 @@ namespace CombatSimulation.Core
                     return $"{Tick}.{Sequence} Asteroid {EntityId} destroyed at {Point}";
                 case BattleEventKind.AuxiliaryRemoval:
                     return $"{Tick}.{Sequence} Removal {EntityId} of {ParentId} ({RemovalReason}) at {Point}";
+                case BattleEventKind.SatelliteChange:
+                    return $"{Tick}.{Sequence} Satellite {DeviceIndex} of {EntityId} {(RemovalReason == RemovalReason.Death ? "destroyed" : "respawned")} at {Point}";
                 case BattleEventKind.Damage:
                     return $"{Tick}.{Sequence} Damage {EntityId} type {DeviceIndex}: {Damage}";
                 default:

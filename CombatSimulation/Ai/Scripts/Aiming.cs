@@ -400,15 +400,25 @@ namespace CombatSimulation.Ai
         }
 
         // Legacy WeaponWrapperExtensions.IsReadyToFire on the device state (step 3b). A charging weapon needs a full
-        // charge (phase 5, step 4f). A harpoon with a hook out is maintained by HoldHarpoon.
+        // charge (phase 5, step 4f). A harpoon with a hook out is maintained by HoldHarpoon. A weapon on a destroyed
+        // satellite is not ready (Frontier SatellitePlatform.IsActive).
         public static bool IsReadyToFire(AiContext context, AiWeapon weapon)
         {
             var device = context.DeviceOf(weapon.DeviceIndex);
-            if (!device.Ready) return false;
+            if (!device.Ready || !IsCarrierActive(context, weapon)) return false;
             if (weapon.BulletBehavior == AiBulletBehavior.Harpoon &&
                 context.TryGetBullet(device.ActiveBullet, out _)) return false;
             if (weapon.WeaponClass == AiWeaponClass.RequiredCharging && device.Charge < 1f) return false;
             return true;
+        }
+
+        private static bool IsCarrierActive(AiContext context, AiWeapon weapon)
+        {
+            var ship = context.Ship;
+            var definition = ship.Definition.Devices[weapon.DeviceIndex];
+            var barrel = (definition as CannonDefinition)?.BarrelIndex ?? (definition as BeamDefinition)?.BarrelIndex ?? -1;
+            var satellite = barrel < 0 ? BarrelDefinition.Hull : ship.Definition.Barrels[barrel].Satellite;
+            return satellite < 0 || context.Snapshot.GetSatellites(ship)[satellite].IsActive;
         }
 
         // Legacy WeaponWrapperExtensions.Activate: a charging weapon fires when its bit is released.

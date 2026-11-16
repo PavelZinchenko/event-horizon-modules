@@ -63,6 +63,7 @@ namespace CombatSimulation.Core
                     break;
                 case EntityKind.Segment:
                 case EntityKind.RepairBot:
+                case EntityKind.Satellite:
                 case EntityKind.Asteroid:
                     break;
                 default:

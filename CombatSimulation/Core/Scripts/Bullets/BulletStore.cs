@@ -221,7 +221,7 @@ namespace CombatSimulation.Core
         // bullet marked for removal before the step (a detonation) takes no contacts and is no target; a sticky bullet
         // records the first ship, drone, tail segment or asteroid it touches.
         public void CollectHits(PhysicsWorld world, ShapeTable shapes, ShipStore ships, TailSegmentStore segments,
-            ContactResolver resolver, RepairBots bots = null, Asteroids asteroids = null)
+            ContactResolver resolver, RepairBots bots = null, Asteroids asteroids = null, SatelliteStore satellites = null)
         {
             var hits = world.BulletHits;
             for (var i = 0; i < hits.Length; ++i)
@@ -277,19 +277,23 @@ namespace CombatSimulation.Core
                     var ship = ships.Get(target.Owner);
                     var segment = ship == null ? segments.Get(target.Owner) : null;
                     var bot = bots?.Get(target.Owner);
+                    var satellite = satellites?.Get(target.Owner);
                     var asteroid = asteroids?.Get(target.Owner);
-                    if (ship == null && segment == null && bot == null && asteroid == null) continue;
-                    if (definition.FriendlyFire && (CollisionFilters.IsSource(bullet.SourceShipId, ship, segment) || bot?.ShipId == bullet.SourceShipId)) continue;
-                    targetAllegiance = ship?.Allegiance ?? segment?.Allegiance ?? bot?.Allegiance ?? asteroid.Allegiance;
-                    if ((definition.IsSticky || definition.IsHarpoon) && !bullet.Stuck && bullet.TargetId.IsNull)
+                    if (ship == null && segment == null && bot == null && satellite == null && asteroid == null) continue;
+                    if (definition.FriendlyFire && (CollisionFilters.IsSource(bullet.SourceShipId, ship, segment) ||
+                        bot?.ShipId == bullet.SourceShipId || satellite?.Ship.Id == bullet.SourceShipId)) continue;
+                    targetAllegiance = ship?.Allegiance ?? segment?.Allegiance ?? bot?.Allegiance ?? satellite?.Allegiance ??
+                        asteroid.Allegiance;
+                    // A satellite dies and respawns, so nothing sticks to it: the bullet hits it as any other target.
+                    if ((definition.IsSticky || definition.IsHarpoon) && !bullet.Stuck && bullet.TargetId.IsNull && satellite == null)
                         _items[index].TargetId = target.OwnerId;
 
                     candidate.TargetPriority = target.Priority;
                     candidate.Target = target.OwnerId;
                     candidate.TargetShapeOrder = target.Order;
                     candidate.TargetHandle = target.Owner;
-                    targetPosition = world.GetPosition(ship?.Body ?? segment?.Body ?? bot?.Body ?? asteroid.Body);
-                    targetScale = ship?.Definition.Scale ?? segment?.Scale ?? bot?.Scale ?? asteroid.Scale;
+                    targetPosition = world.GetPosition(ship?.Body ?? segment?.Body ?? bot?.Body ?? satellite?.Body ?? asteroid.Body);
+                    targetScale = ship?.Definition.Scale ?? segment?.Scale ?? bot?.Scale ?? satellite?.Scale ?? asteroid.Scale;
                 }
 
                 // The total: a missile target sums every type; stage 9 splits it again for a ship target.

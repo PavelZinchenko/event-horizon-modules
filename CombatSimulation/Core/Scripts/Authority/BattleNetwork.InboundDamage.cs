@@ -192,6 +192,11 @@ namespace CombatSimulation.Core
                 _world.RepairBots.ApplyHit(hit, _world.RepairBots.Get(handle));
                 return;
             }
+            if (handle.Kind == EntityKind.Satellite)
+            {
+                _world.SatelliteStore.ApplyHit(hit, _world.SatelliteStore.Get(handle));
+                return;
+            }
             if (handle.Kind == EntityKind.Segment)
             {
                 _tails.ApplySegmentContact(hit, _world.Segments.Get(handle));
