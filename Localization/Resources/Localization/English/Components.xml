@@ -160,6 +160,7 @@
   <string name="Companion_7l">Barrel M3</string>
   <string name="Hovertank">Hovertank</string>
   <string name="PowerBank">Power Bank</string>
+  <string name="Shelter">Shelter</string>
   <string name="IronBall">Iron Ball</string>
   <string name="Teleporter">Warp Drive</string>
   <string name="Afterburner">Afterburner</string>
@@ -399,4 +400,5 @@
   <string name="WraithMissile_L">Heavy Wraith Missile</string>
   <string name="StickyBomb">Sticky Bomb</string>
   <string name="GravityShield">Repulsion Field Generator</string>
+  <string name="GravityBomb">Gravity Bomb</string>
 </resources>

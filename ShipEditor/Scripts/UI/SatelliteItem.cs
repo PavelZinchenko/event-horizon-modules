@@ -21,7 +21,7 @@ namespace ShipEditor.UI
 
 		public void Initialize(ISatellite satellite, bool canBeInstalled, IResourceLocator resourceLocator, ILocalization localization)
 		{
-			Initialize(satellite.Information, 1, canBeInstalled, resourceLocator, localization);
+			Initialize(satellite.BaseModel, 1, canBeInstalled, resourceLocator, localization);
 			SatelliteBuild = satellite;
 			_name.text = localization.Localize(satellite.Name);
 			_quantity.text = string.Empty;

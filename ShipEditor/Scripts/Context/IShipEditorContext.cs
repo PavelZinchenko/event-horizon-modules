@@ -13,7 +13,9 @@ namespace ShipEditor.Context
         IShipDataProvider ShipDataProvider { get; }
         IShipPresetStorage ShipPresetStorage { get; }
         IComponentUpgradesProvider UpgradesProvider { get; }
+#if !EH_FRONTIER
         ShipSettings ShipSettings { get; }
+#endif
         bool CanBeUnlocked(Component component);
         bool IsShipNameEditable { get; }
     }

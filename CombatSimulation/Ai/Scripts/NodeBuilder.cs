@@ -270,6 +270,10 @@ namespace CombatSimulation.Ai
                     weapons.Add(weapon);
             return weapons.Count > 0 ? new ChargeWeaponsNode(weapons) : EmptyNode.Failure;
         }
+#if EH_FRONTIER
+        // TODO: Implement KeepAoeActive in core AI; see TASKS.md. The legacy battle simulator handles it.
+        public INode Create(BehaviorTreeNode_KeepAoeActive content) => EmptyNode.Failure;
+#endif
         public INode Create(BehaviorTreeNode_Chase content) => new ChaseNode(FirstDevice(DeviceClass.TeleporterV2));
         public INode Create(BehaviorTreeNode_AvoidThreats content) => new AvoidThreatsNode();
         public INode Create(BehaviorTreeNode_SlowDown content) => new SlowDownNode(content.Tolerance);

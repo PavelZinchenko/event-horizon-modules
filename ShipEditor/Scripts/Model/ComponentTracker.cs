@@ -18,7 +18,7 @@ namespace ShipEditor.Model
 
 	public interface ICompatibilityChecker
 	{
-		bool IsCompatible(Satellite satellite);
+		bool IsCompatible(Satellite satellite, int mountPoint);
 		bool IsCompatible(Component component);
 		bool ComponentLimitReached(Component component);
 		int GetDefaultKey(Component component);
@@ -29,16 +29,25 @@ namespace ShipEditor.Model
 		private const int _actionKeyCount = 6;
 
 		private readonly IShip _ship;
+#if !EH_FRONTIER
         private readonly ShipSettings _settings;
+#endif
         private readonly Inventory<Component> _components = new();
 		private readonly Inventory<ComponentGroupTag> _tags = new();
 		private readonly Dictionary<Component, int> _keyBindings = new();
 
+#if EH_FRONTIER
+		public ComponentTracker(IShip ship)
+		{
+			_ship = ship;
+		}
+#else
 		public ComponentTracker(IShip ship, ShipSettings settings)
 		{
 			_ship = ship;
 			_settings = settings;
 		}
+#endif
 
 		public bool ComponentLimitReached(Component component)
 		{
@@ -51,9 +60,13 @@ namespace ShipEditor.Model
             return false;
         }
 
-		public bool IsCompatible(Satellite satellite)
+		public bool IsCompatible(Satellite satellite, int mountPoint)
 		{
-			return _ship.IsSuitableSatelliteSize(satellite, _settings);
+#if EH_FRONTIER
+			return _ship.IsSuitableSatelliteSize(satellite, mountPoint);
+#else
+			return _ship.IsSuitableSatelliteSize(satellite, mountPoint, _settings);
+#endif
 		}
 
 		public bool IsCompatible(Component component)

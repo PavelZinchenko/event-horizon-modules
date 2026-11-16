@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using Services.ObjectPool;
 using UnityEngine;
-using UnityEngine.UI;
 
 public static class LayoutGroupExtensions
 {
@@ -42,7 +41,7 @@ public static class LayoutGroupExtensions
         while (enumerator.MoveNext())
         {
             var newItem = factory.Create(item.gameObject).GetComponent<ViewModelType>();
-            var rectTransform = newItem.GetComponent<RectTransform>();
+            var rectTransform = newItem.GetComponent<Transform>();
             rectTransform.SetParent(parent);
             rectTransform.localScale = Vector3.one;
             rectTransform.SetSiblingIndex(++index);
@@ -95,7 +94,7 @@ public static class LayoutGroupExtensions
         while (enumerator.MoveNext())
         {
             var newItem = (ViewModelType)GameObject.Instantiate(item);
-            var rectTransform = newItem.GetComponent<RectTransform>();
+            var rectTransform = newItem.GetComponent<Transform>();
             rectTransform.SetParent(parent);
             rectTransform.localScale = Vector3.one;
             rectTransform.SetSiblingIndex(++index);

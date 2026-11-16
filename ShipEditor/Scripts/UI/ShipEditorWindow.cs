@@ -91,8 +91,8 @@ namespace ShipEditor.UI
             yield return new WaitForEndOfFrame();
 
 			OnShipChanged(_shipEditor.Ship);
-			OnSatelliteChanged(SatelliteLocation.Left);
-			OnSatelliteChanged(SatelliteLocation.Right);
+            for (int i = 0; i < _shipEditor.Ship.Model.Satellites.Count; ++i)
+                OnSatelliteChanged(i);
 			OpenComponentList();
 			ZoomToShip();
         }
@@ -130,12 +130,9 @@ namespace ShipEditor.UI
 			ShowPanel(PanelType.Component);
 		}
 
-		public void OpenLeftSatellitePanel() => OpenSatellitePanel(SatelliteLocation.Left);
-		public void OpenRightSatellitePanel() => OpenSatellitePanel(SatelliteLocation.Right);
-
-		public void OpenSatellitePanel(SatelliteLocation satelliteLocation)
+		public void OpenSatellitePanel(int mountPoint)
 		{
-			_satelliteListPanel.Location = satelliteLocation;
+			_satelliteListPanel.MountPoint = mountPoint;
 			ShowPanel(PanelType.SatelliteList);
 		}
 
@@ -148,10 +145,12 @@ namespace ShipEditor.UI
 		{
 			_shipView.ShowSelection(Vector2.zero, null);
 
-			if (!_commandList.TryExecute(CreateInstallCommand(ShipElementType.Ship, item, position)))
-				if (!_commandList.TryExecute(CreateInstallCommand(ShipElementType.SatelliteL, item, position)))
-					if (!_commandList.TryExecute(CreateInstallCommand(ShipElementType.SatelliteR, item, position)))
-						return;
+            if (_commandList.TryExecute(CreateInstallCommand(ShipElementType.Ship, item, position))) 
+                return;
+
+            for (int i = 0; i < _shipEditor.Ship.Model.Satellites.Count; ++i)
+                if (_commandList.TryExecute(CreateInstallCommand(ShipElementType.Satellite(i), item, position)))
+                    return;
 		}
 
 		public void Undo()
@@ -271,7 +270,7 @@ namespace ShipEditor.UI
 
             var sprite = data.HasImage ? null : _resourceLocator.GetSprite(ship.Model.ModelImage);
 
-            _shipView.InitializeShip(_shipEditor.Layout(ShipElementType.Ship), sprite);
+            _shipView.InitializeShip(_shipEditor.Layout(ShipElementType.Ship), sprite, ship.Model.Satellites);
 			_shipInitialName = _localization.GetString(_shipEditor.ShipName);
 			_shipNameInputField.SetTextWithoutNotify(_shipInitialName);
 
@@ -321,30 +320,33 @@ namespace ShipEditor.UI
 			_shipView.UpdateComponent(component);
 		}
 
-		private void OnSatelliteChanged(SatelliteLocation location)
+		private void OnSatelliteChanged(int mountPoint)
 		{
-			var layout = _shipEditor.Layout(location);
+			var layout = _shipEditor.Layout(ShipElementType.Satellite(mountPoint));
 			if (layout == null)
-				_shipView.RemoveSatellite(location);
+				_shipView.RemoveSatellite(mountPoint);
 			else
-				_shipView.InitializeSatellite(location, layout, _resourceLocator.GetSprite(_shipEditor.Satellite(location).ModelImage));
+				_shipView.InitializeSatellite(mountPoint, layout, _resourceLocator.GetSprite(_shipEditor.Satellite(mountPoint).ModelImage));
 
-			_commandList.Clear(location.ToShipElement());
+			_commandList.Clear(ShipElementType.Satellite(mountPoint));
 		}
 
 		private void OnMultipleComponentsChanged()
 		{
 			_shipView.ReloadAllComponents(ShipElementType.Ship);
-			_shipView.ReloadAllComponents(ShipElementType.SatelliteL);
-			_shipView.ReloadAllComponents(ShipElementType.SatelliteR);
+            for (int i = 0; i < _shipEditor.Ship.Model.Satellites.Count; ++i)
+                _shipView.ReloadAllComponents(ShipElementType.Satellite(i));
 			_commandList.Clear();
 		}
 
 		private bool TrySelectComponent(Vector2 position, out IComponentModel component)
 		{
-			return TrySelectComponent(position, ShipElementType.Ship, out component) ||
-				TrySelectComponent(position, ShipElementType.SatelliteL, out component) ||
-				TrySelectComponent(position, ShipElementType.SatelliteR, out component);
+            if (TrySelectComponent(position, ShipElementType.Ship, out component)) return true;
+            for (int i = 0; i < _shipEditor.Ship.Model.Satellites.Count; ++i)
+                if (TrySelectComponent(position, ShipElementType.Satellite(i), out component))
+                    return true;
+
+			return false;
 		}
 
 		private bool TrySelectComponent(Vector2 position, ShipElementType elementType, out IComponentModel component)
