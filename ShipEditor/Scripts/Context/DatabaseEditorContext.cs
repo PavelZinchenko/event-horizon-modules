@@ -29,7 +29,9 @@ namespace ShipEditor.Context
         public bool IsShipNameEditable => false;
         public IShipPresetStorage ShipPresetStorage { get; }
         public IComponentUpgradesProvider UpgradesProvider { get; }
+#if !EH_FRONTIER
         public ShipSettings ShipSettings => _database.ShipSettings;
+#endif
 
         public bool CanBeUnlocked(Component component)
 		{

@@ -113,7 +113,11 @@ namespace ShipEditor.Model
 			SaveShip(_ship);
 
 			_ship = ship;
+#if EH_FRONTIER
 			_compatibilityChecker = new ComponentTracker(ship);
+#else
+			_compatibilityChecker = new ComponentTracker(ship, _context.ShipSettings);
+#endif
 			_shipName = null;
 
             _layouts = new LayoutList(_ship);
