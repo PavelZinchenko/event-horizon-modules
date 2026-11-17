@@ -107,6 +107,16 @@ Known limits: a captured missile keeps its firing unit's credit. The split uses 
 
 The change kept the scripted battle log and its SHA-256, and every engine-free test (2026-11-17).
 
+## Docking
+
+`Docking` (`CombatSimulation.Modes`) is a mode helper for F10. It reads only the snapshot, so it needs no core change.
+
+1. The mode adds circle areas, each with a `long` tag, a center and a radius. `Move` follows a moving object; `Remove` undocks a docked ship at once.
+2. The mode calls `Update(context, ship)` once a tick, in `BeginTick` or `EndTick`. It checks the ship of the last completed tick.
+3. The ship docks when its hull circle touches an area (legacy `PlayerDockingAction`: the collider touches the trigger). It undocks when the gap is larger than the release margin, so a ship at the edge does not flicker.
+4. Each change is a `ModeEvent` with the mode's docked or undocked code, the tag (`Value0`) and the ship's entity ID (`Value1`).
+5. A null or absent ship undocks from every area. A new ship first undocks the previous one. Areas dock on their own, in the order they were added.
+
 ## World size
 
 `BattleSetup` rejects a width or height above `MaxWorldSize` (2048). Above about 4096, one float step is a tenth of the contact slop and contacts lose precision. `WorldSizeTests` runs the scripted fleets near (300, 300) and near (1900, 1900) of a 2048 world: the logs differ by rounding, but the hits stay within 5 %, and the deaths and survivors match.
