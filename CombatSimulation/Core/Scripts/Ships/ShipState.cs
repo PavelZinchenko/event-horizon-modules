@@ -22,7 +22,7 @@ namespace CombatSimulation.Core
     public readonly struct ShipState
     {
         public readonly EntityId Id;
-        public readonly RosterId RosterId;
+        public readonly UnitId UnitId;
         // Drones have no roster slot. BayKey identifies their persistent owner instead.
         public readonly DroneBayKey? BayKey;
         public readonly EntityId MothershipId;
@@ -82,7 +82,7 @@ namespace CombatSimulation.Core
             long tick = 0)
         {
             Id = ship.Id;
-            RosterId = ship.Slot?.RosterId ?? default;
+            UnitId = ship.Slot?.UnitId ?? default;
             BayKey = ship.Bay?.Key;
             IsDecoy = ship.IsDecoy;
             Life = ship.IsDecoy ? ship.Decoy.Life(tick) : 1f;
@@ -182,12 +182,12 @@ namespace CombatSimulation.Core
     }
 
     // One roster slot at the end of a completed tick.
-    public readonly struct RosterSlotState
+    public readonly struct UnitState
     {
-        public readonly RosterId RosterId;
+        public readonly UnitId UnitId;
         public readonly int Side;
         public readonly int Owner;
-        public readonly RosterStatus Status;
+        public readonly UnitStatus Status;
         public readonly uint DeploymentCount;
 
         // Battle-wide order of the last deployment. Zero: never deployed.
@@ -207,9 +207,9 @@ namespace CombatSimulation.Core
         // snapshot of a Retreated or Killed transition and of the result; the tick's roster updates are applied.
         public readonly float DamageFraction;
 
-        internal RosterSlotState(RosterSlot slot)
+        internal UnitState(Unit slot)
         {
-            RosterId = slot.RosterId;
+            UnitId = slot.UnitId;
             Side = slot.Side;
             Owner = slot.Owner;
             Status = slot.Status;
@@ -222,9 +222,9 @@ namespace CombatSimulation.Core
             DamageFraction = slot.OwnerDamageFraction ?? GetDamageFraction(slot);
         }
 
-        private static float GetDamageFraction(RosterSlot slot)
+        private static float GetDamageFraction(Unit slot)
         {
-            if (slot.Status == RosterStatus.Destroyed) return 1f;
+            if (slot.Status == UnitStatus.Destroyed) return 1f;
 
             var ship = slot.ActiveShip;
             if (ship != null) return ship.Armor.Deficit / ship.Armor.Max;

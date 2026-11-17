@@ -53,7 +53,7 @@ namespace CombatSimulation.Ai.Tests
             for (var i = 0; i < 5; ++i) runner.Step();
 
             Assert.IsFalse(runner.Snapshot.TryGetShip(ship, out _));
-            Assert.AreEqual(RosterStatus.Ready, runner.Snapshot.Roster[0].Status);
+            Assert.AreEqual(UnitStatus.Ready, runner.Snapshot.Units[0].Status);
 
             var pilot = VanishPilots.Create();
             Assert.IsTrue(pilot.Think(runner.Snapshot, runner.Snapshot.Ships[0], out var controls));

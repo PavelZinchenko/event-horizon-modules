@@ -41,13 +41,13 @@ namespace CombatSimulation.Ai.Tests
         {
             var roster = new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Ship),
-                new RosterSlotSetup(new RosterId(2), 0, Ship),
-                new RosterSlotSetup(new RosterId(101), 1, Ship),
+                new UnitSetup(new UnitId(1), 0, Ship),
+                new UnitSetup(new UnitId(2), 0, Ship),
+                new UnitSetup(new UnitId(101), 1, Ship),
             };
             var runner = new BattleRunner(new BattleSetup(new BattleId(55), 7, roster, timeLimitTicks: 1,
                 maxActiveShipsPerSide: 2, timerMode: TimerMode.DrainPlayerHp), new NoPilots());
-            foreach (var slot in roster) runner.Deploy(slot.RosterId, 0);
+            foreach (var slot in roster) runner.Deploy(slot.UnitId, 0);
             runner.Step();
             var context = ContextOf(runner, 0, WithWeaponRange(1000f));
             var node = new FindDamagedAllyNode(0.02f, 0.02f, 0f);
@@ -352,11 +352,11 @@ namespace CombatSimulation.Ai.Tests
         private static BattleRunner ObstacleBattle(ShipDefinition self, ShipDefinition ally, ShipDefinition enemy,
             params AsteroidSetup[] asteroids)
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, self),
-                new RosterSlotSetup(new RosterId(101), 1, enemy),
-                new RosterSlotSetup(new RosterId(2), 0, ally),
+                new UnitSetup(new UnitId(1), 0, self),
+                new UnitSetup(new UnitId(101), 1, enemy),
+                new UnitSetup(new UnitId(2), 0, ally),
             };
             var runner = Start(roster, 2, new NoPilots(), asteroids);
             var world = runner.Battle.World;
@@ -388,7 +388,7 @@ namespace CombatSimulation.Ai.Tests
         private static ShipState ShipOf(BattleRunner runner, uint rosterId)
         {
             foreach (var ship in runner.Snapshot.Ships)
-                if (ship.RosterId.Equals(new RosterId(rosterId))) return ship;
+                if (ship.UnitId.Equals(new UnitId(rosterId))) return ship;
             throw new AssertionException($"No ship in slot {rosterId}");
         }
 
@@ -411,13 +411,13 @@ namespace CombatSimulation.Ai.Tests
 
         private static AiContext AsteroidContext(params AsteroidSetup[] asteroids)
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Ship),
-                new RosterSlotSetup(new RosterId(101), 1, Ship),
+                new UnitSetup(new UnitId(1), 0, Ship),
+                new UnitSetup(new UnitId(101), 1, Ship),
             };
             var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster, asteroids: asteroids), new NoPilots());
-            foreach (var slot in roster) runner.Deploy(slot.RosterId, runner.Tick);
+            foreach (var slot in roster) runner.Deploy(slot.UnitId, runner.Tick);
             runner.Step();
 
             var world = runner.Battle.World;
@@ -518,7 +518,7 @@ namespace CombatSimulation.Ai.Tests
 
             // The fragile carrier rams the enemy and dies.
             StepUntilGone(runner, carrier);
-            Assert.AreEqual(RosterStatus.Destroyed, runner.Snapshot.Roster[0].Status);
+            Assert.AreEqual(UnitStatus.Destroyed, runner.Snapshot.Units[0].Status);
             Think(runner, context, drone);
 
             Assert.AreEqual(S, new MothershipDestroyedNode().Evaluate(context));
@@ -541,10 +541,10 @@ namespace CombatSimulation.Ai.Tests
                 devices: new DeviceDefinition[] { new CannonDefinition(0, 10f, 0f, 0f, crazy),
                     new CannonDefinition(0, 10f, 0f, 0f, capture) });
             var pilots = new DroneControlPilots(controller);
-            var runner = Start(new List<RosterSlotSetup>
+            var runner = Start(new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Carrier),
-                new RosterSlotSetup(new RosterId(101), 1, controller),
+                new UnitSetup(new UnitId(1), 0, Carrier),
+                new UnitSetup(new UnitId(101), 1, controller),
             }, 1, pilots);
             for (var i = 0; i < 30; ++i) runner.Step();
             var drone = default(EntityId);
@@ -608,11 +608,11 @@ namespace CombatSimulation.Ai.Tests
             Assert.AreEqual(S, new MothershipRetreatedNode().Evaluate(context));
             Assert.AreEqual(F, new MothershipDestroyedNode().Evaluate(context));
 
-            Assert.IsTrue(runner.Deploy(new RosterId(1), runner.Tick));
+            Assert.IsTrue(runner.Deploy(new UnitId(1), runner.Tick));
             runner.Step();
             Think(runner, context, drone);
-            Assert.AreEqual(RosterStatus.Active, runner.Snapshot.Roster[0].Status);
-            Assert.AreNotEqual(carrier, runner.Snapshot.Roster[0].ActiveEntity);
+            Assert.AreEqual(UnitStatus.Active, runner.Snapshot.Units[0].Status);
+            Assert.AreNotEqual(carrier, runner.Snapshot.Units[0].ActiveEntity);
             Assert.AreEqual(S, new MothershipRetreatedNode().Evaluate(context));
             Assert.AreEqual(F, new TargetMothershipNode().Evaluate(context));
         }
@@ -798,10 +798,10 @@ namespace CombatSimulation.Ai.Tests
                 barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
                 devices: new DeviceDefinition[] { new CannonDefinition(0, 10f, 0f, 0f, crazy) });
             var pilots = new DroneControlPilots(controller);
-            var runner = Start(new List<RosterSlotSetup>
+            var runner = Start(new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Carrier),
-                new RosterSlotSetup(new RosterId(101), 1, controller),
+                new UnitSetup(new UnitId(1), 0, Carrier),
+                new UnitSetup(new UnitId(101), 1, controller),
             }, 1, pilots);
             for (var i = 0; i < 30; ++i) runner.Step();
             var drone = default(EntityId);
@@ -922,35 +922,35 @@ namespace CombatSimulation.Ai.Tests
         // Slots 1 and 2 on side 0, 101 and 102 on side 1; snapshot order 1, 101, 2, 102.
         private static BattleRunner Battle2V2(ShipDefinition secondEnemy = null)
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Ship),
-                new RosterSlotSetup(new RosterId(101), 1, Ship),
-                new RosterSlotSetup(new RosterId(2), 0, Ship),
-                new RosterSlotSetup(new RosterId(102), 1, secondEnemy ?? Ship),
+                new UnitSetup(new UnitId(1), 0, Ship),
+                new UnitSetup(new UnitId(101), 1, Ship),
+                new UnitSetup(new UnitId(2), 0, Ship),
+                new UnitSetup(new UnitId(102), 1, secondEnemy ?? Ship),
             };
             return Start(roster, 2, new NoPilots());
         }
 
         private static BattleRunner Battle16V16()
         {
-            var roster = new List<RosterSlotSetup>();
+            var roster = new List<UnitSetup>();
             for (var i = 0; i < 16; ++i)
             {
-                roster.Add(new RosterSlotSetup(new RosterId((uint)(1 + i)), 0, Ship));
-                roster.Add(new RosterSlotSetup(new RosterId((uint)(101 + i)), 1, Ship));
+                roster.Add(new UnitSetup(new UnitId((uint)(1 + i)), 0, Ship));
+                roster.Add(new UnitSetup(new UnitId((uint)(101 + i)), 1, Ship));
             }
 
             return Start(roster, 16, new NoPilots());
         }
 
-        private static BattleRunner Start(List<RosterSlotSetup> roster, int maxActive, IPilotProvider pilots,
+        private static BattleRunner Start(List<UnitSetup> roster, int maxActive, IPilotProvider pilots,
             IReadOnlyList<AsteroidSetup> asteroids = null)
         {
             var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: maxActive,
                 asteroids: asteroids), pilots);
             foreach (var slot in roster)
-                runner.Deploy(slot.RosterId, runner.Tick);
+                runner.Deploy(slot.UnitId, runner.Tick);
             runner.Step();
             return runner;
         }
@@ -997,11 +997,11 @@ namespace CombatSimulation.Ai.Tests
         internal static BattleRunner CarrierBattle(out EntityId carrier, out EntityId drone, ShipDefinition carrierShip = null,
             IReadOnlyList<AsteroidSetup> asteroids = null)
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, carrierShip ?? Carrier),
-                new RosterSlotSetup(new RosterId(101), 1, carrierShip == FragileCarrier ? HeavyShip : Ship),
-                new RosterSlotSetup(new RosterId(2), 0, Ship),
+                new UnitSetup(new UnitId(1), 0, carrierShip ?? Carrier),
+                new UnitSetup(new UnitId(101), 1, carrierShip == FragileCarrier ? HeavyShip : Ship),
+                new UnitSetup(new UnitId(2), 0, Ship),
             };
             var runner = Start(roster, 1, new LaunchPilots(), asteroids);
             carrier = runner.Snapshot.Ships[0].Id;

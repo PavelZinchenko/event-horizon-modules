@@ -222,9 +222,9 @@ namespace CombatSimulation.Core.Tests
             var target = Fixtures.ShipWith(shield: new ResourceDefinition(0f));
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Ship(beam)),
-                new RosterSlotSetup(new RosterId(101), 1, target),
-                new RosterSlotSetup(new RosterId(102), 1, target),
+                new UnitSetup(new UnitId(1), 0, Ship(beam)),
+                new UnitSetup(new UnitId(101), 1, target),
+                new UnitSetup(new UnitId(102), 1, target),
             }, maxActiveShipsPerSide: 2));
             driver.Deploy(1);
             driver.Deploy(101);

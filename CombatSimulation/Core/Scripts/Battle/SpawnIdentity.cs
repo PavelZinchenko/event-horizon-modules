@@ -12,7 +12,7 @@ namespace CombatSimulation.Core
 
         // Root: tag 1, battle u64, roster u32, deployment u32, tick u64.
         // A roster deployment creates one root, so its spawn slot is implicit.
-        internal static EntityId CreateRoot(BattleId battleId, RosterId rosterId, uint deploymentNumber, long spawnTick)
+        internal static EntityId CreateRoot(BattleId battleId, UnitId rosterId, uint deploymentNumber, long spawnTick)
         {
             if (spawnTick < 0) throw new ArgumentOutOfRangeException(nameof(spawnTick));
 

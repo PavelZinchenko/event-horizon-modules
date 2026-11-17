@@ -32,12 +32,12 @@ namespace CombatSimulation.Ai.Tests
                     devices: new[] { new CannonDefinition(0, 0f, 0f, 0f, hook, CannonMode.Continuous) });
                 var result = new BattleRunner(new BattleSetup(new BattleId(1), 7, new[]
                 {
-                    new RosterSlotSetup(new RosterId(1), 0, shooter),
-                    new RosterSlotSetup(new RosterId(101), 1, AiFixtures.Ship),
-                    new RosterSlotSetup(new RosterId(102), 1, AiFixtures.Ship),
+                    new UnitSetup(new UnitId(1), 0, shooter),
+                    new UnitSetup(new UnitId(101), 1, AiFixtures.Ship),
+                    new UnitSetup(new UnitId(102), 1, AiFixtures.Ship),
                 }), new FirePilots());
-                result.Deploy(new RosterId(1), result.Tick);
-                result.Deploy(new RosterId(101), result.Tick);
+                result.Deploy(new UnitId(1), result.Tick);
+                result.Deploy(new UnitId(101), result.Tick);
                 result.Step();
                 return result;
             }
@@ -341,13 +341,13 @@ namespace CombatSimulation.Ai.Tests
                 {
                     new CannonDefinition(0, 3f, 25f, 0f, new BulletDefinition(0.3f, 6f, 50f, 1f), CannonMode.Manageable),
                 });
-            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, bomber),
-                new RosterSlotSetup(new RosterId(101), 1, AiFixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, bomber),
+                new UnitSetup(new UnitId(101), 1, AiFixtures.Ship),
             }), new FirePilots());
-            runner.Deploy(new RosterId(1), runner.Tick);
-            runner.Deploy(new RosterId(101), runner.Tick);
+            runner.Deploy(new UnitId(1), runner.Tick);
+            runner.Deploy(new UnitId(101), runner.Tick);
             for (var i = 0; i < 5; ++i) runner.Step();
 
             var context = new AiContext(WithWeapon(new AiWeapon(0, AiWeaponClass.Manageable, AiBulletBehavior.Projectile,
@@ -384,13 +384,13 @@ namespace CombatSimulation.Ai.Tests
             var laser = new ShipDefinition(1f, 1f, AiFixtures.Engine, 1000f, new ResourceDefinition(0f), new ResourceDefinition(300f),
                 barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
                 devices: new DeviceDefinition[] { BeamDefinition.Charged(0, 0.2f, 50f, 25f, 200f, 1f) });
-            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, laser),
-                new RosterSlotSetup(new RosterId(101), 1, AiFixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, laser),
+                new UnitSetup(new UnitId(101), 1, AiFixtures.Ship),
             }), new FirePilots());
-            runner.Deploy(new RosterId(1), runner.Tick);
-            runner.Deploy(new RosterId(101), runner.Tick);
+            runner.Deploy(new UnitId(1), runner.Tick);
+            runner.Deploy(new UnitId(101), runner.Tick);
             for (var i = 0; i < 6; ++i) runner.Step();
 
             var weapon = new AiWeapon(0, AiWeaponClass.RequiredCharging, AiBulletBehavior.Beam, AiWeaponCapability.DamageEnemy,

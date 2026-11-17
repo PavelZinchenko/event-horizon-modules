@@ -2,7 +2,7 @@ using NUnit.Framework;
 
 namespace CombatSimulation.Core.Tests
 {
-    public class RosterTests
+    public class UnitTests
     {
         [Test]
         public void SlotsStartReadyAndNeverDeployed()
@@ -11,7 +11,7 @@ namespace CombatSimulation.Core.Tests
 
             foreach (var id in new uint[] { 1, 2, 101 })
             {
-                Assert.AreEqual(RosterStatus.Ready, driver.Status(id));
+                Assert.AreEqual(UnitStatus.Ready, driver.Status(id));
                 Assert.AreEqual(0u, driver.Slot(id).DeploymentCount);
                 Assert.AreEqual(0L, driver.Slot(id).DeploymentOrder);
                 Assert.IsNull(driver.Slot(id).ActiveShip);
@@ -24,15 +24,15 @@ namespace CombatSimulation.Core.Tests
             var driver = new Driver(Fixtures.Setup(1, 1));
 
             Assert.IsTrue(driver.Deploy(1));
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1), "A pending request does not change readiness.");
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1), "A pending request does not change readiness.");
             driver.Step();
 
             var slot = driver.Slot(1);
-            Assert.AreEqual(RosterStatus.Active, slot.Status);
+            Assert.AreEqual(UnitStatus.Active, slot.Status);
             Assert.AreEqual(1u, slot.DeploymentCount);
             Assert.AreEqual(1L, slot.DeploymentOrder);
             Assert.AreEqual(1, slot.Revision);
-            Assert.AreEqual(SpawnIdentity.CreateRoot(driver.BattleId, new RosterId(1), 1, 0), slot.ActiveShip.Id);
+            Assert.AreEqual(SpawnIdentity.CreateRoot(driver.BattleId, new UnitId(1), 1, 0), slot.ActiveShip.Id);
             Assert.AreSame(slot.ActiveShip, driver.Battle.FindShip(slot.ActiveShip.Id));
             Assert.IsTrue(driver.Battle.World.IsAlive(slot.ActiveShip.Body));
             Assert.AreEqual(0, slot.ActiveShip.Side);
@@ -67,11 +67,11 @@ namespace CombatSimulation.Core.Tests
 
             Assert.IsTrue(driver.Retreat(entity));
             driver.StepUntil(5 + Battle.RetreatTicks);
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1), "Tick 354 has run; the ship is still present.");
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1), "Tick 354 has run; the ship is still present.");
             Assert.IsNotNull(driver.Battle.FindShip(entity));
 
             driver.Step();
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1), "The ship leaves in tick 355.");
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1), "The ship leaves in tick 355.");
             Assert.IsNull(driver.Slot(1).ActiveShip);
             Assert.IsNull(driver.Battle.FindShip(entity));
             Assert.IsFalse(driver.Battle.World.IsAlive(body));
@@ -99,7 +99,7 @@ namespace CombatSimulation.Core.Tests
             driver.Step();
 
             var slot = driver.Slot(1);
-            Assert.AreEqual(RosterStatus.Ready, slot.Status);
+            Assert.AreEqual(UnitStatus.Ready, slot.Status);
             Assert.AreEqual(400f, slot.ArmorDeficit);
             Assert.AreEqual(500f, slot.ShieldDeficit);
 
@@ -130,7 +130,7 @@ namespace CombatSimulation.Core.Tests
 
             var second = driver.Entity(1);
             Assert.AreNotEqual(first, second);
-            Assert.AreEqual(SpawnIdentity.CreateRoot(driver.BattleId, new RosterId(1), 2, redeployTick), second);
+            Assert.AreEqual(SpawnIdentity.CreateRoot(driver.BattleId, new UnitId(1), 2, redeployTick), second);
             Assert.AreEqual(2u, driver.Slot(1).DeploymentCount);
             Assert.IsNull(driver.Battle.FindShip(first), "A removed ID never returns to life.");
         }
@@ -148,10 +148,10 @@ namespace CombatSimulation.Core.Tests
             driver.Kill(1);
             driver.Step();
 
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
             Assert.IsNull(driver.Battle.FindShip(entity));
             Assert.IsFalse(driver.Battle.World.IsAlive(body));
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(2));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(2));
             Assert.IsFalse(driver.Battle.IsCompleted);
         }
 
@@ -169,7 +169,7 @@ namespace CombatSimulation.Core.Tests
             Assert.IsTrue(driver.Deploy(1), "Submit accepts it; stage 1 validates it.");
             driver.Step();
 
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
             Assert.AreEqual(revision, driver.Slot(1).Revision);
             Assert.AreEqual(1, driver.Battle.RejectedCommandCount);
         }
@@ -186,7 +186,7 @@ namespace CombatSimulation.Core.Tests
             driver.Kill(1);
             driver.Step();
 
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
         }
 
         [Test]
@@ -201,7 +201,7 @@ namespace CombatSimulation.Core.Tests
             driver.Kill(1);
             driver.Step();
 
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
         }
 
         [Test]
@@ -219,12 +219,12 @@ namespace CombatSimulation.Core.Tests
 
             foreach (var id in new uint[] { 1, 2, 3 })
             {
-                Assert.AreEqual(RosterStatus.Destroyed, driver.Status(id));
+                Assert.AreEqual(UnitStatus.Destroyed, driver.Status(id));
                 Assert.AreEqual(id == 1 ? 2 : 1, driver.Slot(id).Revision, "One destruction per slot.");
             }
             Assert.IsNull(driver.Battle.FindShip(active));
             Assert.IsNotNull(driver.Battle.FindShip(enemy));
-            Assert.AreEqual(RosterStatus.Active, driver.Status(101));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(101));
             Assert.AreEqual(BattleOutcome.Victory, driver.Battle.Result.Outcome);
             Assert.AreEqual(1, driver.Battle.Result.WinningSide);
         }
@@ -243,9 +243,9 @@ namespace CombatSimulation.Core.Tests
             driver.Step();
 
             foreach (var id in new uint[] { 101, 102, 103 })
-                Assert.AreEqual(RosterStatus.Destroyed, driver.Status(id));
+                Assert.AreEqual(UnitStatus.Destroyed, driver.Status(id));
             Assert.IsNull(driver.Battle.FindShip(enemy));
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
             Assert.AreEqual(0u, driver.Slot(102).DeploymentCount, "No reserve receives a synthetic entity.");
             Assert.AreEqual(BattleOutcome.Victory, driver.Battle.Result.Outcome);
             Assert.AreEqual(0, driver.Battle.Result.WinningSide);
@@ -267,7 +267,7 @@ namespace CombatSimulation.Core.Tests
 
             Assert.AreEqual(2, driver.Slot(101).Revision, "Deploy, then one destruction.");
             Assert.AreEqual(1, driver.Slot(102).Revision, "One destruction.");
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(102));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(102));
         }
 
         [Test]
@@ -281,8 +281,8 @@ namespace CombatSimulation.Core.Tests
             driver.Surrender(0);
             driver.Step();
 
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(2));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(2));
             Assert.IsNull(driver.Slot(1).ActiveShip);
             Assert.AreEqual(1u, driver.Slot(1).DeploymentCount);
         }

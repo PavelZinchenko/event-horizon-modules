@@ -22,17 +22,17 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(0L, spawn.Tick);
             Assert.AreEqual(0, spawn.Sequence);
             Assert.AreEqual(entity, spawn.EntityId);
-            Assert.AreEqual(new RosterId(1), spawn.RosterId);
+            Assert.AreEqual(new UnitId(1), spawn.UnitId);
             Assert.AreEqual(0, spawn.Side);
             Assert.AreSame(Fixtures.Ship, spawn.Definition);
 
             var transition = events[1];
-            Assert.AreEqual(BattleEventKind.RosterTransition, transition.Kind);
+            Assert.AreEqual(BattleEventKind.UnitTransition, transition.Kind);
             Assert.AreEqual(1, transition.Sequence);
-            Assert.AreEqual(new RosterId(1), transition.RosterId);
-            Assert.AreEqual(RosterStatus.Ready, transition.PreviousStatus);
-            Assert.AreEqual(RosterStatus.Active, transition.Status);
-            Assert.AreEqual(RosterTransitionReason.Deployed, transition.TransitionReason);
+            Assert.AreEqual(new UnitId(1), transition.UnitId);
+            Assert.AreEqual(UnitStatus.Ready, transition.PreviousStatus);
+            Assert.AreEqual(UnitStatus.Active, transition.Status);
+            Assert.AreEqual(UnitTransitionReason.Deployed, transition.TransitionReason);
             Assert.AreEqual(1, transition.Revision);
             Assert.AreEqual(entity, transition.EntityId);
 
@@ -57,10 +57,10 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(RemovalReason.Death, events[0].RemovalReason);
             Assert.AreEqual(entity, events[0].EntityId);
             Assert.AreEqual(1L, events[0].Tick);
-            Assert.AreEqual(BattleEventKind.RosterTransition, events[1].Kind);
-            Assert.AreEqual(RosterStatus.Active, events[1].PreviousStatus);
-            Assert.AreEqual(RosterStatus.Destroyed, events[1].Status);
-            Assert.AreEqual(RosterTransitionReason.Killed, events[1].TransitionReason);
+            Assert.AreEqual(BattleEventKind.UnitTransition, events[1].Kind);
+            Assert.AreEqual(UnitStatus.Active, events[1].PreviousStatus);
+            Assert.AreEqual(UnitStatus.Destroyed, events[1].Status);
+            Assert.AreEqual(UnitTransitionReason.Killed, events[1].TransitionReason);
             Assert.AreEqual(entity, events[1].EntityId);
             Assert.AreEqual(2, events[1].Revision);
         }
@@ -83,8 +83,8 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(2, events.Length);
             Assert.AreEqual(RemovalReason.Retreat, events[0].RemovalReason);
             Assert.AreEqual(entity, events[0].EntityId);
-            Assert.AreEqual(RosterTransitionReason.Retreated, events[1].TransitionReason);
-            Assert.AreEqual(RosterStatus.Ready, events[1].Status);
+            Assert.AreEqual(UnitTransitionReason.Retreated, events[1].TransitionReason);
+            Assert.AreEqual(UnitStatus.Ready, events[1].Status);
             Assert.AreEqual(entity, events[1].EntityId);
             Assert.AreEqual(100f, events[1].ArmorDeficit);
             Assert.AreEqual(driver.Slot(1).ShieldDeficit, events[1].ShieldDeficit);
@@ -106,13 +106,13 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(4, events.Length);
             Assert.AreEqual(BattleEventKind.Removal, events[0].Kind);
             Assert.AreEqual(entity, events[0].EntityId);
-            Assert.AreEqual(RosterTransitionReason.ForcedDestruction, events[1].TransitionReason);
-            Assert.AreEqual(new RosterId(1), events[1].RosterId);
-            Assert.AreEqual(RosterStatus.Active, events[1].PreviousStatus);
+            Assert.AreEqual(UnitTransitionReason.ForcedDestruction, events[1].TransitionReason);
+            Assert.AreEqual(new UnitId(1), events[1].UnitId);
+            Assert.AreEqual(UnitStatus.Active, events[1].PreviousStatus);
             Assert.AreEqual(entity, events[1].EntityId);
-            Assert.AreEqual(RosterTransitionReason.ForcedDestruction, events[2].TransitionReason);
-            Assert.AreEqual(new RosterId(2), events[2].RosterId);
-            Assert.AreEqual(RosterStatus.Ready, events[2].PreviousStatus);
+            Assert.AreEqual(UnitTransitionReason.ForcedDestruction, events[2].TransitionReason);
+            Assert.AreEqual(new UnitId(2), events[2].UnitId);
+            Assert.AreEqual(UnitStatus.Ready, events[2].PreviousStatus);
             Assert.IsTrue(events[2].EntityId.IsNull, "A ready reserve has no entity.");
             Assert.AreEqual(BattleEventKind.Result, events[3].Kind);
             Assert.AreEqual(BattleOutcome.Victory, events[3].Result.Outcome);
@@ -133,13 +133,13 @@ namespace CombatSimulation.Core.Tests
 
             var transitions = new List<BattleEvent>();
             foreach (var item in driver.Battle.Snapshot.Events)
-                if (item.Kind == BattleEventKind.RosterTransition) transitions.Add(item);
+                if (item.Kind == BattleEventKind.UnitTransition) transitions.Add(item);
 
             Assert.AreEqual(2, transitions.Count);
-            Assert.AreEqual(new RosterId(1), transitions[0].RosterId);
-            Assert.AreEqual(RosterTransitionReason.Killed, transitions[0].TransitionReason);
-            Assert.AreEqual(new RosterId(2), transitions[1].RosterId);
-            Assert.AreEqual(RosterTransitionReason.ForcedDestruction, transitions[1].TransitionReason);
+            Assert.AreEqual(new UnitId(1), transitions[0].UnitId);
+            Assert.AreEqual(UnitTransitionReason.Killed, transitions[0].TransitionReason);
+            Assert.AreEqual(new UnitId(2), transitions[1].UnitId);
+            Assert.AreEqual(UnitTransitionReason.ForcedDestruction, transitions[1].TransitionReason);
         }
 
         [Test]
@@ -163,7 +163,7 @@ namespace CombatSimulation.Core.Tests
             driver.Kill(101);
             Collect(driver, log);
             driver.Deploy(102);
-            while (driver.Status(1) != RosterStatus.Ready) Collect(driver, log);
+            while (driver.Status(1) != UnitStatus.Ready) Collect(driver, log);
             driver.Deploy(1);
             Collect(driver, log);
             driver.KillAll(0);

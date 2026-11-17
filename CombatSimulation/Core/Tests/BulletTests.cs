@@ -86,11 +86,11 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void ABulletPassesItsAlliesAndHitsTheEnemyBehind()
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.CannonShip(cooldown: 10f)),
-                new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(cooldown: 10f)),
+                new UnitSetup(new UnitId(2), 0, Fixtures.Ship),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
             };
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: 2));
             driver.Deploy(1);
@@ -188,11 +188,11 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void BulletsOutliveTheShipThatFiredThem()
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.CannonShip(cooldown: 10f)),
-                new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(cooldown: 10f)),
+                new UnitSetup(new UnitId(2), 0, Fixtures.Ship),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
             };
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster));
             driver.Deploy(1);
@@ -206,7 +206,7 @@ namespace CombatSimulation.Core.Tests
             driver.Kill(1);
             driver.Step();
 
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
             Assert.IsTrue(driver.Battle.Snapshot.Bullets.ToArray().Any(b => b.Id == bullet));
 
             var removal = CannonTests.BulletRemovals(driver.StepCollecting(30)).Single();

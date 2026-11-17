@@ -72,21 +72,21 @@ namespace CombatSimulation.Ai.Tests
         // Slot 1 on side 0 and slot 101 on side 1 (2 ships per side with extraSlots), deployed at the first tick.
         public static BattleRunner Battle(IPilotProvider pilots, ulong matchSeed = 7, bool extraSlots = false)
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Ship),
-                new RosterSlotSetup(new RosterId(101), 1, Ship),
+                new UnitSetup(new UnitId(1), 0, Ship),
+                new UnitSetup(new UnitId(101), 1, Ship),
             };
             if (extraSlots)
             {
-                roster.Add(new RosterSlotSetup(new RosterId(2), 0, Ship));
-                roster.Add(new RosterSlotSetup(new RosterId(102), 1, Ship));
+                roster.Add(new UnitSetup(new UnitId(2), 0, Ship));
+                roster.Add(new UnitSetup(new UnitId(102), 1, Ship));
             }
 
             var setup = new BattleSetup(new BattleId(1), matchSeed, roster, maxActiveShipsPerSide: extraSlots ? 2 : 1);
             var runner = new BattleRunner(setup, pilots);
             foreach (var slot in roster)
-                runner.Deploy(slot.RosterId, runner.Tick);
+                runner.Deploy(slot.UnitId, runner.Tick);
             return runner;
         }
 

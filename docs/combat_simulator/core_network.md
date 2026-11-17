@@ -86,7 +86,7 @@ Migration phase 3b, step 3 is implemented. Step 2 is committed as `db162db` in t
    Any resulting death commits at that receipt tick. A late end stops further damage without refunding earlier extra ticks.
    Multiple completed intervals received after a blackout remain separate. Held contact needs no repeated records.
 4. `Battle.Submit(senderOwner, OwnerOperation)` consumes records from the reliable ordered event stream.
-   `RosterChange` includes the related entity spawn/removal in one atomic operation. `DroneLaunch` and `Remove` cover other entity changes.
+   `UnitChange` includes the related entity spawn/removal in one atomic operation. `DroneLaunch` and `Remove` cover other entity changes.
    Operations carry battle ID, owner, sequence, original tick, and entity identity. Sequence numbers start at one per owner.
    Hit and operation sequences are separate. Duplicate sequences are ignored; sparse sequence tracking retains gaps without retaining the whole history.
    Roster revisions add another guard: duplicates do nothing, and later revisions wait for missing revisions before changing entities or slots.

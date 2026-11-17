@@ -18,7 +18,7 @@ namespace CombatSimulation.Core.Tests
         {
             var effects = new ImpactEffects(repair: 20f, repairDamage: 4f, repairDamageType: 127);
             Assert.Throws<System.ArgumentException>(() => new BattleSetup(new BattleId(39), 7,
-                new[] { new RosterSlotSetup(new RosterId(1), 0, BeamShip(effects)) }));
+                new[] { new UnitSetup(new UnitId(1), 0, BeamShip(effects)) }));
         }
 
         private static ShipDefinition BeamShip(ImpactEffects effects, bool friendly = true) => Fixtures.ShipWith(
@@ -30,9 +30,9 @@ namespace CombatSimulation.Core.Tests
         {
             var driver = new Driver(new BattleSetup(new BattleId(37), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, BeamShip(effects, friendly)),
-                new RosterSlotSetup(new RosterId(2), 0, Hull),
-                new RosterSlotSetup(new RosterId(101), 1, Hull),
+                new UnitSetup(new UnitId(1), 0, BeamShip(effects, friendly)),
+                new UnitSetup(new UnitId(2), 0, Hull),
+                new UnitSetup(new UnitId(101), 1, Hull),
             }, maxActiveShipsPerSide: 2));
             driver.Deploy(1); driver.Deploy(2); driver.Deploy(101); driver.Step();
             driver.Place(1, new Vec2(50f, 50f), Vec2.Zero);
@@ -206,9 +206,9 @@ namespace CombatSimulation.Core.Tests
                 devices: new DeviceDefinition[] { new DroneBayDefinition(1, 0f, DroneBayTests.Drone()), beam });
             var driver = new Driver(new BattleSetup(new BattleId(38), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, own ? carrier : BeamShip(Repair)),
-                new RosterSlotSetup(new RosterId(2), 0, own ? Hull : DroneBayTests.Carrier()),
-                new RosterSlotSetup(new RosterId(101), 1, Hull),
+                new UnitSetup(new UnitId(1), 0, own ? carrier : BeamShip(Repair)),
+                new UnitSetup(new UnitId(2), 0, own ? Hull : DroneBayTests.Carrier()),
+                new UnitSetup(new UnitId(101), 1, Hull),
             }, maxActiveShipsPerSide: 2));
             driver.Deploy(1); driver.Deploy(2); driver.Deploy(101); driver.Step();
             var drone = DroneBayTests.Launch(driver, own ? 1U : 2U);

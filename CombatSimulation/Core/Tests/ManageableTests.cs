@@ -75,11 +75,11 @@ namespace CombatSimulation.Core.Tests
         // CannonTests.Duel with a reserve slot that stays in the hangar.
         private static Driver Duel(ShipDefinition shooter, uint reserve)
         {
-            var driver = new Driver(new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, shooter),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
-                new RosterSlotSetup(new RosterId(reserve), reserve < 100 ? 0 : 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, shooter),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(reserve), reserve < 100 ? 0 : 1, Fixtures.Ship),
             }));
             driver.Deploy(1);
             driver.Deploy(101);
@@ -470,9 +470,9 @@ namespace CombatSimulation.Core.Tests
             private static BattleSetup Setup(int localOwner, bool both, ShipDefinition shooter, ShipDefinition enemy) =>
                 new BattleSetup(new BattleId(77), 13, new[]
                 {
-                    new RosterSlotSetup(new RosterId(1), 0, shooter, Owner20),
-                    new RosterSlotSetup(new RosterId(101), 1, enemy, both ? Owner20 : Receiver),
-                    new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship, Receiver),
+                    new UnitSetup(new UnitId(1), 0, shooter, Owner20),
+                    new UnitSetup(new UnitId(101), 1, enemy, both ? Owner20 : Receiver),
+                    new UnitSetup(new UnitId(102), 1, Fixtures.Ship, Receiver),
                 }, localOwners: new[] { localOwner });
 
             private readonly List<OwnerOperation> _held = new List<OwnerOperation>(64);

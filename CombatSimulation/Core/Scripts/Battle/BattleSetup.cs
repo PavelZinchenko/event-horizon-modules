@@ -28,7 +28,7 @@ namespace CombatSimulation.Core
         public BattleSetup(
             BattleId battleId,
             ulong matchSeed,
-            IReadOnlyList<RosterSlotSetup> roster,
+            IReadOnlyList<UnitSetup> roster,
             float width = 200f,
             float height = 200f,
             long timeLimitTicks = 0,
@@ -70,14 +70,14 @@ namespace CombatSimulation.Core
                 }
             }
 
-            var slots = new RosterSlotSetup[roster.Count];
-            var rosterIds = new HashSet<RosterId>();
+            var slots = new UnitSetup[roster.Count];
+            var rosterIds = new HashSet<UnitId>();
             var slotsPerSide = new int[SideCount];
             for (var i = 0; i < slots.Length; ++i)
             {
                 var slot = roster[i] ?? throw new ArgumentException("Roster contains a null slot.", nameof(roster));
-                if (!rosterIds.Add(slot.RosterId))
-                    throw new ArgumentException($"Duplicate roster ID {slot.RosterId}.", nameof(roster));
+                if (!rosterIds.Add(slot.UnitId))
+                    throw new ArgumentException($"Duplicate roster ID {slot.UnitId}.", nameof(roster));
                 slotsPerSide[slot.Side]++;
                 slots[i] = slot;
             }
@@ -92,7 +92,7 @@ namespace CombatSimulation.Core
 
             BattleId = battleId;
             MatchSeed = matchSeed;
-            Roster = Array.AsReadOnly(slots);
+            Units = Array.AsReadOnly(slots);
             Width = width;
             Height = height;
             TimeLimitTicks = timeLimitTicks;
@@ -140,7 +140,7 @@ namespace CombatSimulation.Core
         public ulong MatchSeed { get; }
 
         // Slots in setup order, as a read-only copy; the caller's list can change without effect.
-        public IReadOnlyList<RosterSlotSetup> Roster { get; }
+        public IReadOnlyList<UnitSetup> Units { get; }
 
         public float Width { get; }
         public float Height { get; }

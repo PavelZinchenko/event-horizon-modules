@@ -153,11 +153,11 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void ARemovedShipEndsItsTouchAndItsLateEndEventsAreIgnored()
         {
-            var setup = new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+            var setup = new BattleSetup(new BattleId(1), 7, new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.Ship),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
-                new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, Fixtures.Ship),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(102), 1, Fixtures.Ship),
             });
             var driver = new Driver(setup);
             driver.Deploy(1);

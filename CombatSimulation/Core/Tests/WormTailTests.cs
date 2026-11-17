@@ -28,9 +28,9 @@ namespace CombatSimulation.Core.Tests
         {
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, worm ?? Worm()),
-                new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship),
-                new RosterSlotSetup(new RosterId(101), 1, enemy ?? Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, worm ?? Worm()),
+                new UnitSetup(new UnitId(2), 0, Fixtures.Ship),
+                new UnitSetup(new UnitId(101), 1, enemy ?? Fixtures.Ship),
             }));
             driver.Deploy(1);
             driver.Deploy(101);
@@ -420,9 +420,9 @@ namespace CombatSimulation.Core.Tests
         private static BattleSetup NetworkSetup(int localOwner) => new BattleSetup(new BattleId(77), 13,
             new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.CannonShip(), 10),
-                new RosterSlotSetup(new RosterId(101), 1, Worm(), RemoteOwner),
-                new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship, RemoteOwner),
+                new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(), 10),
+                new UnitSetup(new UnitId(101), 1, Worm(), RemoteOwner),
+                new UnitSetup(new UnitId(102), 1, Fixtures.Ship, RemoteOwner),
             }, localOwners: new[] { localOwner });
 
         private static (Driver owner, Driver remote, Link link) Pair()

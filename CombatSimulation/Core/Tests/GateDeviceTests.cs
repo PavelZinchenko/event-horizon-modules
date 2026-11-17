@@ -47,12 +47,12 @@ namespace CombatSimulation.Core.Tests
         // With reserve, side 0 has a second slot that stays ready, so the battle goes on after the detonator ship dies.
         private static Driver DetonatorDuel(ShipDefinition ship, bool reserve = false)
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, ship),
-                new RosterSlotSetup(new RosterId(101), 1, DetonatorTarget),
+                new UnitSetup(new UnitId(1), 0, ship),
+                new UnitSetup(new UnitId(101), 1, DetonatorTarget),
             };
-            if (reserve) roster.Add(new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship));
+            if (reserve) roster.Add(new UnitSetup(new UnitId(2), 0, Fixtures.Ship));
 
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster));
             driver.Deploy(1);
@@ -88,7 +88,7 @@ namespace CombatSimulation.Core.Tests
             ship.AddPendingDamage(0, 180f);
             driver.Step();
 
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
             Assert.AreEqual(100f, ship.Armor.Value, Tolerance);
             Assert.AreEqual(50f, ship.Shield.Value, Tolerance);
             Assert.AreEqual(100f, ship.Energy.Value, Tolerance);
@@ -138,7 +138,7 @@ namespace CombatSimulation.Core.Tests
             driver.Step(120);
             ship.AddPendingDamage(0, 1000f);
             driver.Step();
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
         }
 
         // Row 5: lethal damage without a contact during NoContacts restores again; the cooldown does not restart.
@@ -156,7 +156,7 @@ namespace CombatSimulation.Core.Tests
             ship.AddPendingDamage(0, 1000f);
             driver.Step();
 
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
             Assert.AreEqual(100f, ship.Armor.Value, Tolerance);
             Assert.AreEqual(cooldown - 50f / 3000f, Device(driver, 1, 0).Cooldown, 1e-5f);
         }
@@ -177,7 +177,7 @@ namespace CombatSimulation.Core.Tests
             Assert.IsTrue(Device(driver, 1, 0).Ready, "Ready from tick + 3000 on.");
             ship.AddPendingDamage(0, 1000f);
             driver.Step();
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
         }
 
         // NoContacts: bullets pass through the ship; hits come back at its end.
@@ -354,12 +354,12 @@ namespace CombatSimulation.Core.Tests
             var tick = driver.Tick;
             driver.Control(1, systems: 1);
             driver.StepUntil(tick + 50);
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
 
             var events = driver.StepCollecting(1);
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
-            Assert.IsTrue(events.Any(e => e.Kind == BattleEventKind.RosterTransition &&
-                e.TransitionReason == RosterTransitionReason.Killed));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
+            Assert.IsTrue(events.Any(e => e.Kind == BattleEventKind.UnitTransition &&
+                e.TransitionReason == UnitTransitionReason.Killed));
             var explosion = driver.Battle.Snapshot.Bullets.ToArray().Single();
             Assert.AreSame(Detonator.Explosion, explosion.Definition);
             Assert.AreEqual(50f, explosion.Position.X, Tolerance);
@@ -382,7 +382,7 @@ namespace CombatSimulation.Core.Tests
             driver.Kill(1);
 
             var events = driver.StepCollecting(60);
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
             Assert.IsEmpty(CannonTests.BulletSpawns(events));
         }
 
@@ -395,9 +395,9 @@ namespace CombatSimulation.Core.Tests
             var tick = driver.Tick;
             driver.Control(1, systems: 1);
             driver.StepUntil(tick + 50);
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
             driver.Step();
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
         }
 
         [Test]
@@ -409,7 +409,7 @@ namespace CombatSimulation.Core.Tests
             driver.StepUntil(tick + 50);
             driver.Ship(1).AddPendingRepair(1000f);
             driver.Step();
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
         }
 
         // Row 6: a retreat does not stop the lock.
@@ -423,9 +423,9 @@ namespace CombatSimulation.Core.Tests
             driver.Retreat(driver.Entity(1));
 
             driver.StepUntil(tick + 50);
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
             driver.Step();
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
         }
 
         [Test]
@@ -507,7 +507,7 @@ namespace CombatSimulation.Core.Tests
             var mothership = driver.Ship(1);
             var world = driver.Battle.World;
             Assert.AreSame(Clone, clone.Definition);
-            Assert.AreEqual(new DroneBayKey(new RosterId(1), 0), state.BayKey);
+            Assert.AreEqual(new DroneBayKey(new UnitId(1), 0), state.BayKey);
             Assert.AreEqual(mothership.Id, state.MothershipId);
             Assert.AreEqual(0, state.Side);
             Assert.AreEqual(900f, clone.Armor.Value, Tolerance);
@@ -594,7 +594,7 @@ namespace CombatSimulation.Core.Tests
             var clone = CloneOf(driver).Id;
             Assert.IsTrue(driver.Retreat(driver.Entity(1)));
             driver.StepUntil(driver.Tick + Battle.RetreatTicks + 1);
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1));
             Assert.IsNotNull(driver.Battle.FindShip(clone));
 
             var redeployed = driver.Tick;
@@ -620,8 +620,8 @@ namespace CombatSimulation.Core.Tests
         internal static BattleSetup NetworkSetup(int localOwner, ShipDefinition ship) => new BattleSetup(new BattleId(77), 13,
             new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.Ship, 10),
-                new RosterSlotSetup(new RosterId(101), 1, ship, RemoteOwner),
+                new UnitSetup(new UnitId(1), 0, Fixtures.Ship, 10),
+                new UnitSetup(new UnitId(101), 1, ship, RemoteOwner),
             }, localOwners: new[] { localOwner });
 
         internal static (Driver owner, Driver remote, Link link) Pair(ShipDefinition ship)
@@ -695,7 +695,7 @@ namespace CombatSimulation.Core.Tests
             Tick(owner, remote, link);
 
             // The record names tick + 1, the first tick of NoContacts.
-            Assert.AreEqual(RosterStatus.Active, owner.Status(101));
+            Assert.AreEqual(UnitStatus.Active, owner.Status(101));
             Assert.AreEqual(30f, remote.Ship(101).Armor.Value, Tolerance);
             Tick(owner, remote, link);
             Assert.AreEqual(100f, remote.Ship(101).Armor.Value, Tolerance);
@@ -715,7 +715,7 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(1UL << 1, remote.Ship(101).BlockedDevices);
 
             while (owner.Tick < tick + 50) Tick(owner, remote, link);
-            Assert.AreEqual(RosterStatus.Active, remote.Status(101));
+            Assert.AreEqual(UnitStatus.Active, remote.Status(101));
             Tick(owner, remote, link);
 
             var ownerExplosion = owner.Battle.Snapshot.Bullets.ToArray().Single();
@@ -724,7 +724,7 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(ownerExplosion.ExpiryTick, copy.ExpiryTick);
             Assert.AreEqual(ownerExplosion.Position.X, copy.Position.X, Tolerance);
             Assert.AreEqual(ownerExplosion.Position.Y, copy.Position.Y, Tolerance);
-            Assert.AreEqual(RosterStatus.Destroyed, remote.Status(101));
+            Assert.AreEqual(UnitStatus.Destroyed, remote.Status(101));
         }
 
         // A late spawn record still adds the explosion while it lives.
@@ -747,7 +747,7 @@ namespace CombatSimulation.Core.Tests
 
             var copy = remote.Battle.Snapshot.Bullets.ToArray().Single();
             Assert.AreEqual(owner.Battle.Snapshot.Bullets.ToArray().Single().Id, copy.Id);
-            Assert.AreEqual(RosterStatus.Destroyed, remote.Status(101));
+            Assert.AreEqual(UnitStatus.Destroyed, remote.Status(101));
         }
 
         [Test]
@@ -759,7 +759,7 @@ namespace CombatSimulation.Core.Tests
 
             Assert.AreEqual(ShipStatusFlags.None, remote.Ship(101).Status);
             Assert.AreEqual(10f, remote.Ship(101).Energy.Value, Tolerance);
-            Assert.AreEqual(RosterStatus.Active, remote.Status(101));
+            Assert.AreEqual(UnitStatus.Active, remote.Status(101));
             Assert.AreEqual(0, remote.Battle.Snapshot.Bullets.Length);
         }
 

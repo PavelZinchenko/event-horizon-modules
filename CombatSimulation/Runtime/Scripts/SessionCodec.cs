@@ -27,7 +27,7 @@ namespace CombatSimulation.Runtime
 
         // Ships and drones get control indices in spawn-record order.
         internal static bool Spawns(in OwnerOperation operation) => operation.Kind == OwnerOperationKind.DroneSpawn ||
-            (operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed);
+            (operation.Kind == OwnerOperationKind.Unit && operation.Unit.Reason == UnitTransitionReason.Deployed);
 
         internal bool TryGetBody(EntityId entity, out uint index) => _bodyIndices.TryGetValue(entity, out index);
 
@@ -124,7 +124,7 @@ namespace CombatSimulation.Runtime
     // so a hit names only bullets already counted.
     internal static class SessionCodec
     {
-        internal enum RecordKind : byte { Hit = 1, Roster, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse, TurretTarget }
+        internal enum RecordKind : byte { Hit = 1, Unit, DroneLaunch, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse, TurretTarget }
 
         // Do not bump before the first release (owner, 2026-11-06; docs/combat_simulator/runtime_session.md, "Tick batch").
         internal const byte Version = 13;
@@ -160,10 +160,10 @@ namespace CombatSimulation.Runtime
             own.LastOperation = op.Sequence;
             switch (op.Kind)
             {
-                case OwnerOperationKind.Roster:
-                    Header(ref w, RecordKind.Roster, batchTick, op.Tick);
-                    var roster = op.Roster;
-                    w.WriteBits(op.EntityId.Value, 64); w.WriteBits(roster.RosterId.Value, 32);
+                case OwnerOperationKind.Unit:
+                    Header(ref w, RecordKind.Unit, batchTick, op.Tick);
+                    var roster = op.Unit;
+                    w.WriteBits(op.EntityId.Value, 64); w.WriteBits(roster.UnitId.Value, 32);
                     w.WriteVarUInt((ulong)roster.Revision);
                     w.WriteBits((ulong)roster.PreviousStatus, StatusBits); w.WriteBits((ulong)roster.Status, StatusBits);
                     w.WriteBits((ulong)roster.Reason, ReasonBits);
@@ -175,7 +175,7 @@ namespace CombatSimulation.Runtime
                 case OwnerOperationKind.DroneSpawn:
                     Header(ref w, RecordKind.DroneLaunch, batchTick, op.Tick);
                     var bay = op.BayKey.Value;
-                    w.WriteBits(op.EntityId.Value, 64); w.WriteBits(bay.RosterId.Value, 32); w.WriteVarUInt((ulong)bay.DeviceIndex);
+                    w.WriteBits(op.EntityId.Value, 64); w.WriteBits(bay.UnitId.Value, 32); w.WriteVarUInt((ulong)bay.DeviceIndex);
                     w.WriteBits(op.ParentId.Value, 64); Pose(ref w, op.Pose);
                     own.AddBody(op);
                     break;
@@ -348,23 +348,23 @@ namespace CombatSimulation.Runtime
                             (HitContactState)contact, (HitImpactKind)impact, amount, ++peer.Hits, targetBullet,
                             (byte)damageType, impulse, (HitEffect)effect, rampTime));
                         break;
-                    case RecordKind.Roster:
-                        var entity = r.Entity(); var id = new RosterId((uint)r.Bits(32)); var revision = r.Int();
+                    case RecordKind.Unit:
+                        var entity = r.Entity(); var id = new UnitId((uint)r.Bits(32)); var revision = r.Int();
                         var before = r.Bits(StatusBits); var after = r.Bits(StatusBits); var transition = r.Bits(ReasonBits);
                         var count = r.VarUInt(); var order = r.VarUInt();
                         var armor = r.Float(); var shield = r.Float(); var damage = r.Float(); var pose = r.Pose();
-                        Require(revision > 0 && before <= (ulong)RosterStatus.Destroyed && after <= (ulong)RosterStatus.Destroyed &&
-                            transition <= (ulong)RosterTransitionReason.ForcedDestruction && count <= uint.MaxValue &&
+                        Require(revision > 0 && before <= (ulong)UnitStatus.Destroyed && after <= (ulong)UnitStatus.Destroyed &&
+                            transition <= (ulong)UnitTransitionReason.ForcedDestruction && count <= uint.MaxValue &&
                             order <= long.MaxValue && armor >= 0 && shield >= 0 && damage >= 0 && damage <= 1);
                         if (!resolve) break;
-                        var record = new RosterRecord(id, revision, (RosterStatus)before, (RosterStatus)after,
-                            (RosterTransitionReason)transition, (uint)count, (long)order, armor, shield, damage);
-                        var roster = OwnerOperation.RosterChange(battle, sender, ++peer.LastOperation, r.Tick, entity, record, pose);
+                        var record = new UnitRecord(id, revision, (UnitStatus)before, (UnitStatus)after,
+                            (UnitTransitionReason)transition, (uint)count, (long)order, armor, shield, damage);
+                        var roster = OwnerOperation.UnitChange(battle, sender, ++peer.LastOperation, r.Tick, entity, record, pose);
                         if (StreamNames.Spawns(roster)) peer.AddBody(roster);
                         operations.Add(roster);
                         break;
                     case RecordKind.DroneLaunch:
-                        entity = r.Entity(); var bay = new DroneBayKey(new RosterId((uint)r.Bits(32)), r.Int());
+                        entity = r.Entity(); var bay = new DroneBayKey(new UnitId((uint)r.Bits(32)), r.Int());
                         var parent = r.Entity(); pose = r.Pose();
                         Require(!entity.IsNull && !parent.IsNull);
                         if (!resolve) break;

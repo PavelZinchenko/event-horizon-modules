@@ -248,9 +248,9 @@ namespace CombatSimulation.Core.Tests
             private static BattleSetup Setup(int localOwner, ShipDefinition shooter) =>
                 new BattleSetup(new BattleId(77), 13, new[]
                 {
-                    new RosterSlotSetup(new RosterId(1), 0, shooter, Owner20),
-                    new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship, Receiver),
-                    new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship, Receiver),
+                    new UnitSetup(new UnitId(1), 0, shooter, Owner20),
+                    new UnitSetup(new UnitId(101), 1, Fixtures.Ship, Receiver),
+                    new UnitSetup(new UnitId(102), 1, Fixtures.Ship, Receiver),
                 }, localOwners: new[] { localOwner });
 
             private readonly List<OwnerOperation> _held = new List<OwnerOperation>(64);

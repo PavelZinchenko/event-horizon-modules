@@ -10,7 +10,7 @@ namespace CombatSimulation.Core.Tests
 
         private static BattleSetup Setup(TimerMode mode, int playerSlots, int enemySlots, long limit = Limit,
             int maxEnemies = 1) =>
-            new BattleSetup(new BattleId(1), 7, Fixtures.Roster(playerSlots, enemySlots), timeLimitTicks: limit,
+            new BattleSetup(new BattleId(1), 7, Fixtures.Units(playerSlots, enemySlots), timeLimitTicks: limit,
                 timerMode: mode, maxActiveShipsBySide: new[] { 1, maxEnemies });
 
         private static Driver Started(TimerMode mode, int playerSlots, int enemySlots, long limit = Limit,
@@ -60,7 +60,7 @@ namespace CombatSimulation.Core.Tests
             driver.Retreat(driver.Entity(1));
             driver.Step(Battle.RetreatTicks + 1);
 
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1));
             Assert.AreEqual(20 + Battle.RetreatTicks, driver.Battle.TimerElapsedTicks);
         }
 
@@ -217,17 +217,17 @@ namespace CombatSimulation.Core.Tests
             driver.Deploy(103);
             driver.Step();
 
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(2), "The player side allows one ship.");
-            Assert.AreEqual(RosterStatus.Active, driver.Status(101));
-            Assert.AreEqual(RosterStatus.Active, driver.Status(102));
-            Assert.AreEqual(RosterStatus.Active, driver.Status(103));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(2), "The player side allows one ship.");
+            Assert.AreEqual(UnitStatus.Active, driver.Status(101));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(102));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(103));
         }
 
         [Test]
         public void SetupRejectsInvalidTimerValues()
         {
-            var roster = Fixtures.Roster(1, 1);
+            var roster = Fixtures.Units(1, 1);
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new BattleSetup(new BattleId(1), 7, roster, playerSide: 2));
             Assert.Throws<ArgumentOutOfRangeException>(() =>

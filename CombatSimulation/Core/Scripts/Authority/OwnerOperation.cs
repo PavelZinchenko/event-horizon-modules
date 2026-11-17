@@ -19,24 +19,24 @@ namespace CombatSimulation.Core
         }
     }
 
-    public readonly struct RosterRecord
+    public readonly struct UnitRecord
     {
-        public readonly RosterId RosterId;
+        public readonly UnitId UnitId;
         public readonly int Revision;
-        public readonly RosterStatus PreviousStatus;
-        public readonly RosterStatus Status;
-        public readonly RosterTransitionReason Reason;
+        public readonly UnitStatus PreviousStatus;
+        public readonly UnitStatus Status;
+        public readonly UnitTransitionReason Reason;
         public readonly uint DeploymentCount;
         public readonly long DeploymentOrder;
         public readonly float ArmorDeficit;
         public readonly float ShieldDeficit;
         public readonly float DamageFraction;
 
-        public RosterRecord(RosterId rosterId, int revision, RosterStatus previousStatus, RosterStatus status,
-            RosterTransitionReason reason, uint deploymentCount, long deploymentOrder,
+        public UnitRecord(UnitId rosterId, int revision, UnitStatus previousStatus, UnitStatus status,
+            UnitTransitionReason reason, uint deploymentCount, long deploymentOrder,
             float armorDeficit, float shieldDeficit, float damageFraction)
         {
-            RosterId = rosterId;
+            UnitId = rosterId;
             Revision = revision;
             PreviousStatus = previousStatus;
             Status = status;
@@ -49,7 +49,7 @@ namespace CombatSimulation.Core
         }
     }
 
-    public enum OwnerOperationKind : byte { Roster, DroneSpawn, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse, TurretTarget }
+    public enum OwnerOperationKind : byte { Unit, DroneSpawn, Removal, BulletSpawn, Retreat, MissileTarget, Allegiance, DeviceUse, TurretTarget }
 
     // One logical commit. A roster operation includes its entity spawn/removal, never a second message.
     // Sequence starts at 1 per owner and covers this batch only (hits have their own sequence).
@@ -62,7 +62,7 @@ namespace CombatSimulation.Core
         public readonly long Tick;
         public readonly OwnerOperationKind Kind;
         public readonly EntityId EntityId;
-        public readonly RosterRecord Roster;
+        public readonly UnitRecord Unit;
         public readonly DroneBayKey? BayKey;
         public readonly EntityId ParentId;
         public readonly SpawnPose Pose;
@@ -91,7 +91,7 @@ namespace CombatSimulation.Core
         public readonly int ChargeTicks;
 
         private OwnerOperation(BattleId battleId, int owner, ulong sequence, long tick, OwnerOperationKind kind,
-            EntityId entityId, RosterRecord roster = default, DroneBayKey? bayKey = null, EntityId parentId = default,
+            EntityId entityId, UnitRecord roster = default, DroneBayKey? bayKey = null, EntityId parentId = default,
             SpawnPose pose = default, RemovalReason removalReason = RemovalReason.None,
             int deviceIndex = 0, int barrelIndex = 0, uint spawnSequence = 0, bool hasLaunchPose = false,
             EntityId targetId = default, Allegiance allegiance = default, bool useStarted = false, int chargeTicks = 0,
@@ -112,23 +112,23 @@ namespace CombatSimulation.Core
             Tick = tick;
             Kind = kind;
             EntityId = entityId;
-            Roster = roster;
+            Unit = roster;
             BayKey = bayKey;
             ParentId = parentId;
             Pose = pose;
             RemovalReason = removalReason;
         }
 
-        public static OwnerOperation RosterChange(BattleId battleId, int owner, ulong sequence, long tick,
-            EntityId entityId, RosterRecord roster, SpawnPose pose = default) =>
-            new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.Roster, entityId, roster, pose: pose);
+        public static OwnerOperation UnitChange(BattleId battleId, int owner, ulong sequence, long tick,
+            EntityId entityId, UnitRecord roster, SpawnPose pose = default) =>
+            new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.Unit, entityId, roster, pose: pose);
 
         public static OwnerOperation DroneLaunch(BattleId battleId, int owner, ulong sequence, long tick,
             EntityId entityId, DroneBayKey bayKey, EntityId parentId, SpawnPose pose) =>
             new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.DroneSpawn, entityId,
                 bayKey: bayKey, parentId: parentId, pose: pose);
 
-        // A drone includes its bay; a projectile or beam has no bay. Roster ships use RosterChange.
+        // A drone includes its bay; a projectile or beam has no bay. Unit ships use UnitChange.
         public static OwnerOperation Remove(BattleId battleId, int owner, ulong sequence, long tick,
             EntityId entityId, RemovalReason reason, DroneBayKey? bayKey = null) =>
             new OwnerOperation(battleId, owner, sequence, tick, OwnerOperationKind.Removal, entityId,

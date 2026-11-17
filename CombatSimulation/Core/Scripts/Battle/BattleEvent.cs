@@ -8,7 +8,7 @@ namespace CombatSimulation.Core
     {
         Spawn = 1,
         Removal = 2,
-        RosterTransition = 3,
+        UnitTransition = 3,
         Result = 4,
 
         // For presentation: one accepted hit. The damage is applied at stage 10, shield first.
@@ -63,7 +63,7 @@ namespace CombatSimulation.Core
     }
 
     // The same set as the application's roster change reasons (phase 3a).
-    public enum RosterTransitionReason : byte
+    public enum UnitTransitionReason : byte
     {
         None,
         Deployed,
@@ -91,7 +91,7 @@ namespace CombatSimulation.Core
         public readonly EntityId EntityId;
 
         // Spawn and removal of a roster ship, and roster transitions. Side and owner also for a bullet.
-        public readonly RosterId RosterId;
+        public readonly UnitId UnitId;
         public readonly DroneBayKey? BayKey;
         public bool IsDrone => BayKey.HasValue;
 
@@ -111,9 +111,9 @@ namespace CombatSimulation.Core
         // derives them from the reason and the definition (BulletTriggers.RemovalConditions).
         public readonly BulletTriggerConditions RemovalConditions;
 
-        public readonly RosterStatus PreviousStatus;
-        public readonly RosterStatus Status;
-        public readonly RosterTransitionReason TransitionReason;
+        public readonly UnitStatus PreviousStatus;
+        public readonly UnitStatus Status;
+        public readonly UnitTransitionReason TransitionReason;
         public readonly int Revision;
 
         // Roster transition: the deficits the slot retains after it (B4).
@@ -145,8 +145,8 @@ namespace CombatSimulation.Core
         public bool IsBeam => BeamDefinition != null;
 
         private BattleEvent(BattleId battleId, long tick, int sequence, BattleEventKind kind, EntityId entityId,
-            RosterId rosterId, int side, int owner, ShipDefinition definition, RemovalReason removalReason,
-            RosterStatus previousStatus, RosterStatus status, RosterTransitionReason transitionReason, int revision,
+            UnitId rosterId, int side, int owner, ShipDefinition definition, RemovalReason removalReason,
+            UnitStatus previousStatus, UnitStatus status, UnitTransitionReason transitionReason, int revision,
             float armorDeficit, float shieldDeficit, BattleResult result, EntityId attackerId = default,
             float damage = 0f, Vec2 point = default, BulletDefinition bulletDefinition = null, EntityId parentId = default,
             BeamDefinition beamDefinition = null, int deviceIndex = -1, DroneBayKey? bayKey = null,
@@ -160,7 +160,7 @@ namespace CombatSimulation.Core
             Kind = kind;
             Authority = authority;
             EntityId = entityId;
-            RosterId = rosterId;
+            UnitId = rosterId;
             BayKey = bayKey;
             IsDecoy = isDecoy;
             Side = side;
@@ -188,101 +188,101 @@ namespace CombatSimulation.Core
 
         internal static BattleEvent Spawn(BattleId battleId, long tick, int sequence, ShipEntity ship,
             BattleEventAuthority authority = BattleEventAuthority.Committed) =>
-            new BattleEvent(battleId, tick, sequence, BattleEventKind.Spawn, ship.Id, ship.Slot?.RosterId ?? default, ship.Side,
-                ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f,
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Spawn, ship.Id, ship.Slot?.UnitId ?? default, ship.Side,
+                ship.Owner, ship.Definition, RemovalReason.None, default, default, UnitTransitionReason.None, 0, 0f, 0f,
                 default, parentId: ship.MothershipId, bayKey: ship.Bay?.Key, authority: authority, isDecoy: ship.IsDecoy);
 
         internal static BattleEvent Removal(BattleId battleId, long tick, int sequence, ShipEntity ship, RemovalReason reason) =>
-            new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, ship.Id, ship.Slot?.RosterId ?? default, ship.Side,
-                ship.Owner, ship.Definition, reason, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, ship.Id, ship.Slot?.UnitId ?? default, ship.Side,
+                ship.Owner, ship.Definition, reason, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
                 parentId: ship.MothershipId, bayKey: ship.Bay?.Key, isDecoy: ship.IsDecoy);
 
         internal static BattleEvent BulletSpawn(BattleId battleId, long tick, int sequence, in BulletEntity bullet,
             BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Spawn, bullet.Id, default, bullet.Side, bullet.Owner,
-                null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                null, RemovalReason.None, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
                 bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition, authority: authority);
 
         internal static BattleEvent BulletRemoval(BattleId battleId, long tick, int sequence, in BulletEntity bullet,
             BulletTriggerConditions conditions, BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, bullet.Id, default, bullet.Side, bullet.Owner,
-                null, bullet.PendingRemoval, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                null, bullet.PendingRemoval, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
                 bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition, authority: authority,
                 removalConditions: conditions);
 
         internal static BattleEvent BulletRename(BattleId battleId, long tick, int sequence, in BulletEntity bullet,
             EntityId previousId) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Rename, bullet.Id, default, bullet.Side, bullet.Owner,
-                null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                null, RemovalReason.None, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
                 bulletDefinition: bullet.Definition, parentId: bullet.ParentId, beamDefinition: bullet.BeamDefinition,
                 previousId: previousId);
 
-        internal static BattleEvent Transition(BattleId battleId, long tick, int sequence, RosterSlot slot,
-            RosterStatus previousStatus, RosterTransitionReason reason, EntityId entityId,
+        internal static BattleEvent Transition(BattleId battleId, long tick, int sequence, Unit slot,
+            UnitStatus previousStatus, UnitTransitionReason reason, EntityId entityId,
             BattleEventAuthority authority = BattleEventAuthority.Committed) =>
-            new BattleEvent(battleId, tick, sequence, BattleEventKind.RosterTransition, entityId, slot.RosterId, slot.Side,
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.UnitTransition, entityId, slot.UnitId, slot.Side,
                 slot.Owner, null, RemovalReason.None, previousStatus, slot.Status, reason, slot.Revision,
                 slot.ArmorDeficit, slot.ShieldDeficit, default, authority: authority);
 
         internal static BattleEvent ResultEvent(BattleId battleId, long tick, int sequence, BattleResult result) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Result, default, default, 0, 0,
-                null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, result);
+                null, RemovalReason.None, default, default, UnitTransitionReason.None, 0, 0f, 0f, result);
 
         internal static BattleEvent HitEvent(BattleId battleId, long tick, int sequence, in ContactCandidate hit,
             BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Hit, hit.Target, default, 0, 0, null,
-                RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default, hit.Attacker,
+                RemovalReason.None, default, default, UnitTransitionReason.None, 0, 0f, 0f, default, hit.Attacker,
                 hit.Damage, hit.Point, deviceIndex: hit.AttackerDeviceIndex, authority: authority);
 
         internal static BattleEvent DisarmEvent(BattleId battleId, long tick, int sequence, in ContactCandidate hit,
             BattleEventAuthority authority = BattleEventAuthority.Committed) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Disarm, hit.Target, default, 0, 0, null,
-                RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                RemovalReason.None, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
                 attackerId: hit.Attacker, point: hit.Point, deviceIndex: hit.AttackerDeviceIndex, authority: authority);
 
         internal static BattleEvent RemoteDisarm(BattleId battleId, long tick, int sequence, in ResolvedHit hit) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Disarm, hit.TargetId, default, 0, hit.TargetOwner, null,
-                RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                RemovalReason.None, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
                 attackerId: hit.AttackerId, deviceIndex: hit.DeviceIndex);
 
         internal static BattleEvent RemoteHit(BattleId battleId, long tick, int sequence, in ResolvedHit hit, float damage) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Hit, hit.TargetId, default, 0,
-                hit.TargetOwner, null, RemovalReason.None, default, default, RosterTransitionReason.None, 0, 0f, 0f,
+                hit.TargetOwner, null, RemovalReason.None, default, default, UnitTransitionReason.None, 0, 0f, 0f,
                 default, hit.AttackerId, damage, deviceIndex: hit.DeviceIndex);
 
         internal static BattleEvent Teleport(BattleId battleId, long tick, int sequence, ShipEntity ship, int deviceIndex,
             Vec2 from, Vec2 to, BattleEventAuthority authority) =>
-            new BattleEvent(battleId, tick, sequence, BattleEventKind.Teleport, ship.Id, ship.Slot?.RosterId ?? default,
-                ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0,
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Teleport, ship.Id, ship.Slot?.UnitId ?? default,
+                ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, UnitTransitionReason.None, 0,
                 0f, 0f, default, point: from, deviceIndex: deviceIndex, authority: authority, destination: to);
 
         internal static BattleEvent GravityWave(BattleId battleId, long tick, int sequence, ShipEntity ship, int deviceIndex,
             Vec2 origin, BattleEventAuthority authority) =>
-            new BattleEvent(battleId, tick, sequence, BattleEventKind.GravityWave, ship.Id, ship.Slot?.RosterId ?? default,
-                ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0,
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.GravityWave, ship.Id, ship.Slot?.UnitId ?? default,
+                ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, UnitTransitionReason.None, 0,
                 0f, 0f, default, point: origin, deviceIndex: deviceIndex, authority: authority);
 
         internal static BattleEvent AsteroidRemoval(BattleId battleId, long tick, int sequence, Asteroid asteroid,
             Vec2 position) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.AsteroidRemoval, asteroid.Id, default, -1,
-                asteroid.Owner, null, RemovalReason.Death, default, default, RosterTransitionReason.None, 0, 0f, 0f, default,
+                asteroid.Owner, null, RemovalReason.Death, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
                 point: position);
 
         internal static BattleEvent AuxiliaryRemoval(BattleId battleId, long tick, int sequence, EntityId id, int owner,
             EntityId shipId, Vec2 position, RemovalReason reason) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.AuxiliaryRemoval, id, default, -1, owner, null, reason,
-                default, default, RosterTransitionReason.None, 0, 0f, 0f, default, point: position, parentId: shipId);
+                default, default, UnitTransitionReason.None, 0, 0f, 0f, default, point: position, parentId: shipId);
 
         internal static BattleEvent SatelliteChange(BattleId battleId, long tick, int sequence, ShipEntity ship, int satellite,
             Vec2 position, bool destroyed, BattleEventAuthority authority) =>
-            new BattleEvent(battleId, tick, sequence, BattleEventKind.SatelliteChange, ship.Id, ship.Slot?.RosterId ?? default,
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.SatelliteChange, ship.Id, ship.Slot?.UnitId ?? default,
                 ship.Side, ship.Owner, ship.Definition, destroyed ? RemovalReason.Death : RemovalReason.None, default, default,
-                RosterTransitionReason.None, 0, 0f, 0f, default, point: position, deviceIndex: satellite, authority: authority);
+                UnitTransitionReason.None, 0, 0f, 0f, default, point: position, deviceIndex: satellite, authority: authority);
 
         internal static BattleEvent DamageTaken(BattleId battleId, long tick, int sequence, ShipEntity ship, int damageType,
             float amount, BattleEventAuthority authority) =>
-            new BattleEvent(battleId, tick, sequence, BattleEventKind.Damage, ship.Id, ship.Slot?.RosterId ?? default,
-                ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, RosterTransitionReason.None, 0,
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Damage, ship.Id, ship.Slot?.UnitId ?? default,
+                ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, UnitTransitionReason.None, 0,
                 0f, 0f, default, damage: amount, deviceIndex: damageType, authority: authority);
 
         public override string ToString()
@@ -292,11 +292,11 @@ namespace CombatSimulation.Core
                 case BattleEventKind.Spawn:
                     return IsBullet
                         ? $"{Tick}.{Sequence} Spawn bullet {EntityId} (parent {ParentId}, side {Side})"
-                        : $"{Tick}.{Sequence} Spawn {EntityId} (roster {RosterId}, side {Side})";
+                        : $"{Tick}.{Sequence} Spawn {EntityId} (roster {UnitId}, side {Side})";
                 case BattleEventKind.Removal:
                     return $"{Tick}.{Sequence} Removal {(IsBullet ? "bullet " : "")}{EntityId} ({RemovalReason})";
-                case BattleEventKind.RosterTransition:
-                    return $"{Tick}.{Sequence} Roster {RosterId}: {PreviousStatus} -> {Status} ({TransitionReason}, revision {Revision}, entity {EntityId})";
+                case BattleEventKind.UnitTransition:
+                    return $"{Tick}.{Sequence} Roster {UnitId}: {PreviousStatus} -> {Status} ({TransitionReason}, revision {Revision}, entity {EntityId})";
                 case BattleEventKind.Result:
                     return $"{Tick}.{Sequence} {Result}";
                 case BattleEventKind.Hit:

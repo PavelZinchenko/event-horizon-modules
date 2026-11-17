@@ -60,13 +60,13 @@ namespace CombatSimulation.Core.Tests
             var gunship = Gunship(armor, energy);
             var striker = Striker(armor, energy);
             var carrier = Carrier(armor, energy);
-            var roster = new List<RosterSlotSetup>();
+            var roster = new List<UnitSetup>();
             for (var side = 0; side < BattleSetup.SideCount; ++side)
             {
                 var first = (uint)(1 + 100 * side);
-                roster.Add(new RosterSlotSetup(new RosterId(first), side, gunship));
-                roster.Add(new RosterSlotSetup(new RosterId(first + 1), side, striker));
-                roster.Add(new RosterSlotSetup(new RosterId(first + 2), side, carrier));
+                roster.Add(new UnitSetup(new UnitId(first), side, gunship));
+                roster.Add(new UnitSetup(new UnitId(first + 1), side, striker));
+                roster.Add(new UnitSetup(new UnitId(first + 2), side, carrier));
             }
 
             return new BattleSetup(new BattleId(1), matchSeed, roster, ArenaSize, ArenaSize, TimeLimitTicks,
@@ -170,10 +170,10 @@ namespace CombatSimulation.Core.Tests
         public static BattleSetup Phase5Setup(int owner0 = 0, int owner1 = 0, IReadOnlyCollection<int> localOwners = null)
         {
             var ships = new[] { Bomber(), Worm(), Mothership(), Skirmisher(), Sapper() };
-            var roster = new List<RosterSlotSetup>();
+            var roster = new List<UnitSetup>();
             for (var side = 0; side < BattleSetup.SideCount; ++side)
                 for (var i = 0; i < ships.Length; ++i)
-                    roster.Add(new RosterSlotSetup(new RosterId((uint)(1 + i + 100 * side)), side, ships[i],
+                    roster.Add(new UnitSetup(new UnitId((uint)(1 + i + 100 * side)), side, ships[i],
                         side == 0 ? owner0 : owner1));
 
             return new BattleSetup(new BattleId(5), 11, roster, ArenaSize, ArenaSize, TimeLimitTicks, ships.Length, localOwners);
@@ -209,10 +209,10 @@ namespace CombatSimulation.Core.Tests
         public static BattleSetup TurretSetup(int owner0 = 0, int owner1 = 0, IReadOnlyCollection<int> localOwners = null)
         {
             var ships = new[] { Battery(), Picket(), Striker(600f) };
-            var roster = new List<RosterSlotSetup>();
+            var roster = new List<UnitSetup>();
             for (var side = 0; side < BattleSetup.SideCount; ++side)
                 for (var i = 0; i < ships.Length; ++i)
-                    roster.Add(new RosterSlotSetup(new RosterId((uint)(1 + i + 100 * side)), side, ships[i],
+                    roster.Add(new UnitSetup(new UnitId((uint)(1 + i + 100 * side)), side, ships[i],
                         side == 0 ? owner0 : owner1));
 
             return new BattleSetup(new BattleId(12), 13, roster, ArenaSize, ArenaSize, TimeLimitTicks, ships.Length, localOwners);
@@ -290,17 +290,17 @@ namespace CombatSimulation.Core.Tests
         // Deploys Ready slots in roster order while a side is below its limit. Orders one retreat per gunship slot.
         private void Command(BattleSnapshot snapshot)
         {
-            var roster = snapshot.Roster;
+            var roster = snapshot.Units;
             for (var side = 0; side < BattleSetup.SideCount; ++side)
             {
                 var active = 0;
                 for (var i = 0; i < roster.Length; ++i)
-                    if (roster[i].Side == side && roster[i].Status == RosterStatus.Active) ++active;
+                    if (roster[i].Side == side && roster[i].Status == UnitStatus.Active) ++active;
 
                 for (var i = 0; i < roster.Length && active < _maxActive; ++i)
                 {
-                    if (roster[i].Side != side || roster[i].Status != RosterStatus.Ready) continue;
-                    Runner.Deploy(roster[i].RosterId, Runner.Tick);
+                    if (roster[i].Side != side || roster[i].Status != UnitStatus.Ready) continue;
+                    Runner.Deploy(roster[i].UnitId, Runner.Tick);
                     ++active;
                 }
             }
@@ -309,7 +309,7 @@ namespace CombatSimulation.Core.Tests
             for (var i = 0; i < roster.Length; ++i)
             {
                 var slot = roster[i];
-                if (slot.RosterId.Value % 100 != 1 || slot.Status != RosterStatus.Active || slot.DeploymentCount != 1) continue;
+                if (slot.UnitId.Value % 100 != 1 || slot.Status != UnitStatus.Active || slot.DeploymentCount != 1) continue;
                 if (!snapshot.TryGetShip(slot.ActiveEntity, out var ship) || ship.IsRetreating) continue;
                 if (ship.Armor.Value < RetreatArmorFraction * ship.Armor.Max) Runner.Retreat(ship.Id, Runner.Tick);
             }
@@ -350,9 +350,9 @@ namespace CombatSimulation.Core.Tests
                         if (item.IsDrone) ++DroneDeaths;
                         else ++RosterDeaths;
                         break;
-                    case BattleEventKind.RosterTransition:
-                        if (item.TransitionReason == RosterTransitionReason.Retreated) ++Retreats;
-                        if (item.TransitionReason == RosterTransitionReason.Deployed && !_deployed.Add(item.RosterId))
+                    case BattleEventKind.UnitTransition:
+                        if (item.TransitionReason == UnitTransitionReason.Retreated) ++Retreats;
+                        if (item.TransitionReason == UnitTransitionReason.Deployed && !_deployed.Add(item.UnitId))
                             ++Redeployments;
                         break;
                     case BattleEventKind.Hit:
@@ -473,7 +473,7 @@ namespace CombatSimulation.Core.Tests
         private readonly bool _barrelDigest;
         private readonly HashSet<EntityId> _ships = new HashSet<EntityId>();
         private readonly HashSet<EntityId> _beams = new HashSet<EntityId>();
-        private readonly HashSet<RosterId> _deployed = new HashSet<RosterId>();
+        private readonly HashSet<UnitId> _deployed = new HashSet<UnitId>();
 
         internal sealed class PilotProvider : IPilotProvider
         {
@@ -535,7 +535,7 @@ namespace CombatSimulation.Core.Tests
 
             public bool Think(BattleSnapshot snapshot, in ShipState self, out PilotControls controls)
             {
-                if (self.IsDrone && self.MothershipId.IsNull && IsDestroyed(snapshot, self.BayKey.Value.RosterId))
+                if (self.IsDrone && self.MothershipId.IsNull && IsDestroyed(snapshot, self.BayKey.Value.UnitId))
                 {
                     controls = PilotControls.Create(null, 0f, 0, selfDestruct: true);
                     return true;
@@ -587,10 +587,10 @@ namespace CombatSimulation.Core.Tests
                 return true;
             }
 
-            private static bool IsDestroyed(BattleSnapshot snapshot, RosterId rosterId)
+            private static bool IsDestroyed(BattleSnapshot snapshot, UnitId rosterId)
             {
-                foreach (var slot in snapshot.Roster)
-                    if (slot.RosterId == rosterId) return slot.Status == RosterStatus.Destroyed;
+                foreach (var slot in snapshot.Units)
+                    if (slot.UnitId == rosterId) return slot.Status == UnitStatus.Destroyed;
                 return false;
             }
 
@@ -624,7 +624,7 @@ namespace CombatSimulation.Core.Tests
     {
         public static readonly int Ship = ElementSize<ShipState>();
         public static readonly int Bullet = ElementSize<BulletState>();
-        public static readonly int RosterSlot = ElementSize<RosterSlotState>();
+        public static readonly int Unit = ElementSize<UnitState>();
         public static readonly int Event = ElementSize<BattleEvent>();
         public static readonly int Hit = ElementSize<ResolvedHit>();
         public static readonly int Operation = ElementSize<OwnerOperation>();
@@ -632,7 +632,7 @@ namespace CombatSimulation.Core.Tests
 
         public static long Of(BattleSnapshot snapshot) =>
             (long)snapshot.Ships.Length * Ship + (long)snapshot.Bullets.Length * Bullet +
-            (long)snapshot.Roster.Length * RosterSlot + (long)snapshot.Events.Length * Event +
+            (long)snapshot.Units.Length * Unit + (long)snapshot.Events.Length * Event +
             (long)snapshot.OutgoingHits.Length * Hit +
             ((long)snapshot.OutgoingOperations.Length + snapshot.AppliedOperations.Length) * Operation +
             Devices(snapshot) * Device;

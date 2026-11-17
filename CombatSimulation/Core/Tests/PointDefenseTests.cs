@@ -261,9 +261,9 @@ namespace CombatSimulation.Core.Tests
         {
             var setup = new BattleSetup(new BattleId(1), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, DefenseShip()),
-                new RosterSlotSetup(new RosterId(2), 0, DefenseShip()),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, DefenseShip()),
+                new UnitSetup(new UnitId(2), 0, DefenseShip()),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
             }, maxActiveShipsPerSide: 2);
             var driver = new Driver(setup);
             driver.Deploy(reverse ? 2u : 1u);
@@ -443,7 +443,7 @@ namespace CombatSimulation.Core.Tests
             Assert.IsNull(driver.Battle.FindShip(id));
             Assert.AreEqual(2, driver.Battle.Snapshot.Events.ToArray().Count(e => e.Kind == BattleEventKind.Hit));
             Assert.AreEqual(1, driver.Battle.Snapshot.Events.ToArray().Count(e => e.IsDrone && e.Kind == BattleEventKind.Removal));
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
         }
 
         [Test]

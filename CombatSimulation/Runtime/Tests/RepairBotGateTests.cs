@@ -17,8 +17,8 @@ namespace CombatSimulation.Runtime.Tests
             var pair = new SessionFixtures.Pair(delay, delay, ship: definition);
             var sent = new HashSet<(int, ulong)>();
             var received = new HashSet<(int, ulong)>();
-            pair.A.Deploy(new RosterId(1), 0);
-            pair.B.Deploy(new RosterId(101), 0);
+            pair.A.Deploy(new UnitId(1), 0);
+            pair.B.Deploy(new UnitId(101), 0);
             pair.Step(); pair.Step();
             var a = SessionFixtures.Owned(pair.A, 10).Id;
             var b = SessionFixtures.Owned(pair.B, 20).Id;
@@ -48,10 +48,10 @@ namespace CombatSimulation.Runtime.Tests
             void Record(NetworkSession session)
             {
                 foreach (var op in session.Snapshot.OutgoingOperations)
-                    if (op.Kind != OwnerOperationKind.Roster)
+                    if (op.Kind != OwnerOperationKind.Unit)
                         Assert.IsTrue(sent.Add((op.Owner, op.Sequence)), "Duplicate sent record.");
                 foreach (var op in session.Snapshot.AppliedOperations)
-                    if (op.Kind != OwnerOperationKind.Roster)
+                    if (op.Kind != OwnerOperationKind.Unit)
                         Assert.IsTrue(received.Add((op.Owner, op.Sequence)), "Duplicate received record.");
             }
         }

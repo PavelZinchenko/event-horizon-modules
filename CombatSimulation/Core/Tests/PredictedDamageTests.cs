@@ -29,8 +29,8 @@ namespace CombatSimulation.Core.Tests
             p.Step(30);
             Assert.AreEqual(0f, copy.Armor.Value);
             Assert.AreSame(copy, p.B.Ship(101));
-            Assert.AreEqual(RosterStatus.Active, p.B.Status(101));
-            Assert.AreEqual(0f, p.B.Battle.Snapshot.Roster.ToArray().Single(s => s.RosterId == new RosterId(101)).DamageFraction);
+            Assert.AreEqual(UnitStatus.Active, p.B.Status(101));
+            Assert.AreEqual(0f, p.B.Battle.Snapshot.Units.ToArray().Single(s => s.UnitId == new UnitId(101)).DamageFraction);
             Assert.IsFalse(p.B.Battle.Snapshot.Events.ToArray().Any(e => e.Kind == BattleEventKind.Removal && e.EntityId == copy.Id));
         }
 

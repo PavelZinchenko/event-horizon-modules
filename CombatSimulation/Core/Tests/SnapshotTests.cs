@@ -16,13 +16,13 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(0, snapshot.Ships.Length);
             Assert.AreEqual(0, snapshot.Events.Length);
             Assert.IsFalse(snapshot.IsCompleted);
-            Assert.AreEqual(3, snapshot.Roster.Length);
-            Assert.AreEqual(new RosterId(1), snapshot.Roster[0].RosterId);
-            Assert.AreEqual(new RosterId(2), snapshot.Roster[1].RosterId);
-            Assert.AreEqual(new RosterId(101), snapshot.Roster[2].RosterId);
-            foreach (var slot in snapshot.Roster)
+            Assert.AreEqual(3, snapshot.Units.Length);
+            Assert.AreEqual(new UnitId(1), snapshot.Units[0].UnitId);
+            Assert.AreEqual(new UnitId(2), snapshot.Units[1].UnitId);
+            Assert.AreEqual(new UnitId(101), snapshot.Units[2].UnitId);
+            foreach (var slot in snapshot.Units)
             {
-                Assert.AreEqual(RosterStatus.Ready, slot.Status);
+                Assert.AreEqual(UnitStatus.Ready, slot.Status);
                 Assert.IsTrue(slot.ActiveEntity.IsNull);
             }
         }
@@ -42,7 +42,7 @@ namespace CombatSimulation.Core.Tests
 
             var ship = snapshot.Ships[0];
             Assert.AreEqual(entity.Id, ship.Id);
-            Assert.AreEqual(new RosterId(1), ship.RosterId);
+            Assert.AreEqual(new UnitId(1), ship.UnitId);
             Assert.AreEqual(0, ship.Side);
             Assert.AreEqual(0, ship.Owner);
             Assert.AreSame(Fixtures.Ship, ship.Definition);
@@ -60,14 +60,14 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(entity.Id, found.Id);
             Assert.IsFalse(snapshot.TryGetShip(new EntityId(12345), out _));
 
-            var slot = snapshot.Roster[0];
-            Assert.AreEqual(RosterStatus.Active, slot.Status);
+            var slot = snapshot.Units[0];
+            Assert.AreEqual(UnitStatus.Active, slot.Status);
             Assert.AreEqual(1u, slot.DeploymentCount);
             Assert.AreEqual(1L, slot.DeploymentOrder);
             Assert.AreEqual(1, slot.Revision);
             Assert.AreEqual(entity.Id, slot.ActiveEntity);
-            Assert.AreEqual(RosterStatus.Ready, snapshot.Roster[1].Status);
-            Assert.IsTrue(snapshot.Roster[1].ActiveEntity.IsNull);
+            Assert.AreEqual(UnitStatus.Ready, snapshot.Units[1].Status);
+            Assert.IsTrue(snapshot.Units[1].ActiveEntity.IsNull);
         }
 
         [Test]
@@ -131,7 +131,7 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(0, snapshot.Result.WinningSide);
             Assert.AreEqual(3L, snapshot.Result.Tick);
             Assert.AreEqual(1, snapshot.Ships.Length);
-            Assert.AreEqual(RosterStatus.Destroyed, snapshot.Roster[1].Status);
+            Assert.AreEqual(UnitStatus.Destroyed, snapshot.Units[1].Status);
         }
 
         [Test]

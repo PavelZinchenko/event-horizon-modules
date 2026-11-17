@@ -51,11 +51,11 @@ namespace CombatSimulation.Core.Tests
         // A Pixie (cone 30°, search 104 u) fired along +X at enemies 101 (20 u ahead) and 102 (40 u ahead).
         private static Driver Battle(ShipDefinition near, ShipDefinition far)
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.CannonShip(Fixtures.Pixie, cooldown: 10f)),
-                new RosterSlotSetup(new RosterId(101), 1, near),
-                new RosterSlotSetup(new RosterId(102), 1, far),
+                new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(Fixtures.Pixie, cooldown: 10f)),
+                new UnitSetup(new UnitId(101), 1, near),
+                new UnitSetup(new UnitId(102), 1, far),
             };
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: 2));
             driver.Deploy(1);

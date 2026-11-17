@@ -130,10 +130,10 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void TheTimerDrainHoldsTheRepair()
         {
-            var driver = new Driver(new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Bionic()),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, Bionic()),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
             }, timeLimitTicks: 10, timerMode: TimerMode.DrainPlayerHp));
             driver.Deploy(1);
             driver.Deploy(101);
@@ -180,7 +180,7 @@ namespace CombatSimulation.Core.Tests
             driver.StepUntil(driver.Tick + Battle.RetreatTicks + 1);
 
             // 350 ticks of retreat, 50 of them in the delay: 300 x 0.2 = 60 repaired.
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1));
             var deficit = driver.Slot(1).ArmorDeficit;
             Assert.AreEqual(340f, deficit, 0.5f);
 

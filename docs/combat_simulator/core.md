@@ -3,12 +3,12 @@
 Part of [Combat simulator](index.md).
 
 `BattleSetup` holds immutable battle ID, match seed, roster, arena dimensions, time limit and the active-ship limit per side. Dimensions default to 200 × 200 and must be finite and positive.
-The roster is a read-only copy of the caller's slot list. Each `RosterSlotSetup` has a unique roster ID, a side (0 or 1), an owner (player index, 0 in phase 2) and a `ShipDefinition`. Each side needs at least one slot.
+The roster is a read-only copy of the caller's slot list. Each `UnitSetup` has a unique roster ID, a side (0 or 1), an owner (player index, 0 in phase 2) and a `ShipDefinition`. Each side needs at least one slot.
 `ShipDefinition` holds the hull, mass, the engine, an optional engine without energy, maximum armor, the shield and energy `ResourceDefinition` (maximum, recharge rate, recharge delay), barrels and devices.
 
 The hull is a list of `HullShape` (phase 4, D5): 1 point is a circle, 2 points a capsule, 3 or more an outline. Only circles and capsules have a radius. The `HullShape` constructor validates the shape and splits an outline with `ConvexDecomposition`, so an invalid shape throws at setup. `HullParts` lists the physics parts (`HullPart`: circle, capsule or convex polygon) in shape order, each shape's parts in decomposition order. Mass is set by the definition; the centre of mass and the inertia come from the parts. `HullRadius` is the farthest hull point from the body origin. `HullHash` hashes every part's geometry bit by bit, in order; the phase 7 handshake compares it so both duel peers build the same hull. A second constructor takes a radius and extra circles, for code fixtures.
 `EngineDefinition` holds derived stats in core units: propulsion (u/s²), maximum velocity (u/s), turn rate (rad/s²) and maximum angular velocity (rad/s). Phase 4 derives them from engine power and weight.
-Each `Battle` owns a separate `PhysicsWorld`. Physics state is internal; the public surface exposes setup, battle ID, tick, `IsCompleted`, `Snapshot`, `Submit(RosterCommand)`, `Submit(ControlFrame)` and `Step()`.
+Each `Battle` owns a separate `PhysicsWorld`. Physics state is internal; the public surface exposes setup, battle ID, tick, `IsCompleted`, `Snapshot`, `Submit(UnitCommand)`, `Submit(ControlFrame)` and `Step()`.
 
 `Tick` identifies the next tick to execute. It starts at zero. The first `Step()` processes tick zero and leaves `Tick` at one.
 The stage order is commands, systems, modifiers, motion, spawn requests, queries, physics, contacts, response, damage, deaths, structure, battle flow, publish.
@@ -18,7 +18,7 @@ Runtime owns pilot scheduling and network pacing through `TickClock`.
 
 ## Identity
 
-`BattleId` and `EntityId` wrap unsigned 64-bit values. `RosterId` wraps an unsigned 32-bit value.
+`BattleId` and `EntityId` wrap unsigned 64-bit values. `UnitId` wraps an unsigned 32-bit value.
 They provide value equality, unsigned comparison and allocation-free hash codes. Entity ID zero means no entity.
 Battle and roster ID zero remain valid. The caller supplies battle IDs; the core does not generate them from a clock.
 
@@ -50,7 +50,9 @@ A removed entity's ID leaves the registry and never returns to life. Stages visi
 `CounterRandom.Create(matchSeed, entityId, tick, purpose)` returns a `Utilites.RandomState` seeded with `PcgRandomAlgorithm.InitializeState` of a `StableHash` over tag byte 3, seed (64 bits), entity ID (64 bits), tick (64 bits) and purpose (32 bits).
 The caller draws a fixed sequence from that state. A draw never depends on how many draws other entities made. Purposes are appended to `RandomPurpose`; existing values never change.
 
-## Roster
+## Units
+
+A unit (code: `Unit`, `UnitId`, `UnitStatus`; "roster slot" before the 2026-11-17 rename) is one fleet slot: a ship that can deploy, retreat and deploy again. The text below still says "slot" and "roster" for it.
 
 A slot is `Ready`, `Active` or `Destroyed`. Its status is stored; it is never inferred from whether an entity exists. A pending deployment is a command, not a status.
 Each slot counts its deployments, records its battle-wide deployment order (the last activated ship has the highest) and increments a revision on every transition.
@@ -71,9 +73,9 @@ Spawn placement follows legacy `Scene.FindFreePlace` and `ShipInfo.Create`, with
 2. Up to 100 uniform candidates over the torus. The first candidate at 40 units or more from every ship of the other side wins; otherwise the candidate farthest from them.
 3. `TryFindFreePosition` moves the body up to 40 units to clear any overlap, allies included.
 
-## Roster commands
+## Unit commands
 
-`RosterCommand` carries battle ID, command ID, target tick and kind: `Deploy(rosterId)`, `Retreat(entityId)`, `Surrender(side)` or `KillAll(requestingSide)`.
+`UnitCommand` carries battle ID, command ID, target tick and kind: `Deploy(rosterId)`, `Retreat(entityId)`, `Surrender(side)` or `KillAll(requestingSide)`.
 `Submit` rejects a wrong battle ID, a past tick, an unknown kind, an invalid side and a command ID that is already pending. It returns `false` and logs. It throws after the result.
 The buffer stays sorted by target tick and command ID. Stage 1 applies the commands of its tick in command ID order and validates them against committed state:
 
@@ -187,10 +189,10 @@ Phase 4, step 7e (D12, D13). The side stays the team: result, timer, surrender, 
 
 Stage 14 writes a `BattleSnapshot` of the tick it completed, then increments `Battle.Tick`. `Battle.Snapshot` returns the published one. The constructor publishes tick −1: every slot `Ready`, no ships, no events.
 
-1. Contents: battle ID, tick, timer, result, `Ships` (active roster ships in roster order, then drones by entity ID), `Bullets` (live bullets in storage order; the order has no meaning), `Segments` (live worm tail segments in storage order: entity, ship, side, allegiance, owner, definition, number, detached, scale, mass and pose), `Asteroids` (live asteroids in setup order: entity, size, mass, hit points and maximum, pose and velocity), `Roster` (every slot in setup order) and `Events` (the tick's presentation batch), plus `OutgoingHits` (resolved contacts for remote ship and drone owners, and contacts on remote bullets for their owners). The lists are `ReadOnlySpan` views over arrays the battle reuses.
+1. Contents: battle ID, tick, timer, result, `Ships` (active roster ships in roster order, then drones by entity ID), `Bullets` (live bullets in storage order; the order has no meaning), `Segments` (live worm tail segments in storage order: entity, ship, side, allegiance, owner, definition, number, detached, scale, mass and pose), `Asteroids` (live asteroids in setup order: entity, size, mass, hit points and maximum, pose and velocity), `Units` (every unit in setup order) and `Events` (the tick's presentation batch), plus `OutgoingHits` (resolved contacts for remote ship and drone owners, and contacts on remote bullets for their owners). The lists are `ReadOnlySpan` views over arrays the battle reuses.
 2. `ShipState`: entity, roster ID, side, allegiance, owner, definition, pose and velocities from the physics body, armor, shield and energy (value and maximum), the controls in force and the retreat completion tick.
 3. `BulletState`: entity, parent entity, side, owner, definition, pose, velocity and expiry tick. Projectiles retain `Definition` (`BulletDefinition`). Beams set `BeamDefinition` and `IsBeam`, with `Definition` null. Their pose is the sampled ray origin and angle; `BeamEndPoint` and `BeamTargetId` describe the accepted hit or full range. Beam velocity is zero and expiry is `long.MaxValue` because the device owns lifetime.
-4. `RosterSlotState`: roster ID, side, owner, status, deployment count and order, revision, active entity (null unless active), the retained B4 deficits and `DamageFraction` (B2).
+4. `UnitState`: roster ID, side, owner, status, deployment count and order, revision, active entity (null unless active), the retained B4 deficits and `DamageFraction` (B2).
 5. `DeviceState` (phase 4, step 3b): `GetDevices(ship)` returns one entry per device of a `ShipState` from the same snapshot, in control-bit order. `Ready` is legacy `CanBeActivated` for the next tick with the end-of-tick resources; the bit does not count. `Active` is legacy `SystemBase.Active`: the bit was held and the device's checks passed before it spent energy. `Cooldown` is the HUD fraction (0 ready, 1 blocked). Drone bays add `InHangar` and `ActiveDrones`; beams, manageable cannons and charging weapons add `ActiveBullet` (the attached beam, the bullet in flight, or the last shot's live bullet; phase 5, steps 4b and 4f); charging weapons add `Charge` (step 4f). Inert devices are never ready or active and show cooldown 1. No peer sends it: each derives it from its own simulation. The rules per device are in [the phase 4 plan](../../../../TODO/battle_simulator_phase4.md#device-state-3b).
 6. Two buffers: the battle writes one while readers use the other. A reader finishes with a snapshot before the next `Step()` returns; the snapshot of tick `t` stays intact while tick `t + 1` runs. A reader on another thread takes a copy (`CopyTo`, [Session thread](runtime_session.md#session-thread)).
 7. Publishing allocates nothing once the arrays fit the battle (unit tests: ships, cannon hits, missile salvos, sustained beam hits and repeated beam activations, and the full fleet of the scripted battle). The copy size is measured in [Scripted battle](#scripted-battle).
@@ -199,13 +201,13 @@ Stage 14 writes a `BattleSnapshot` of the tick it completed, then increments `Ba
 
 | Operation | Stage | Events |
 | --- | --- | --- |
-| Deploy | 1 | `Spawn` (with the `ShipDefinition`), then `RosterTransition` Ready → Active, `Deployed` |
+| Deploy | 1 | `Spawn` (with the `ShipDefinition`), then `UnitTransition` Ready → Active, `Deployed` |
 | Shot | 5 | `Spawn` of a bullet: `BulletDefinition`, `ParentId`, side and owner; `IsBullet` is true |
 | Hit | 9 | `Hit` per accepted hit on a ship or a missile, in contact order: attacker (a ship or a bullet), target, damage before the shield, point (zero for a ship touch) |
 | Point-defense zap | 9 | `Disarm`: attacking ship ID, device index, target bullet ID and query position |
-| Death | 12 | `Removal` (`Death`), then `RosterTransition` → Destroyed, `Killed` |
-| Retreat completion | 12 | `Removal` (`Retreat`), then `RosterTransition` → Ready, `Retreated`, with the retained deficits |
-| Surrender, kill-all | 12 | For an active slot `Removal` (`Death`); for every slot `RosterTransition` → Destroyed, `ForcedDestruction`. A reserve has no entity. |
+| Death | 12 | `Removal` (`Death`), then `UnitTransition` → Destroyed, `Killed` |
+| Retreat completion | 12 | `Removal` (`Retreat`), then `UnitTransition` → Ready, `Retreated`, with the retained deficits |
+| Surrender, kill-all | 12 | For an active slot `Removal` (`Death`); for every slot `UnitTransition` → Destroyed, `ForcedDestruction`. A reserve has no entity. |
 | Teleporter jump | 2 (a copy: 1) | `Teleport`: ship ID, `ShipDefinition`, device index, start point (`Point`) and landing point (`Destination`) |
 | Bullet adoption (network only) | 5 (an overdue record: 1) | `Rename`: a predicted copy of a remote bullet takes its owner's ID; `PreviousId` is the copy's ID (fire confirmations, P2) |
 | Missile target or correction (network only) | 4 or 1 | None: the copy's target and motion change without an event (P3) |
@@ -215,7 +217,7 @@ Stage 14 writes a `BattleSnapshot` of the tick it completed, then increments `Ba
 | Damage text | 10, published at 14 | `Damage` per ship and kind of loss: the shield loss (`DeviceIndex` −1), then each type's armor damage after the shield and its resistance (`DeviceIndex` the type). Presentation only (phase 5b, step 4); the network replay emits none. They come last in the batch, after the result, so the other events keep their sequence numbers |
 | Repair bot or tail segment removal | 12, published at 14 | `AuxiliaryRemoval`: the object's ID, its ship (`ParentId`), its last position (`Point`) and the reason (`Death`, `Vanish`, `Retreat`). Presentation only (phase 5b, step 7b): the views of these objects live by the snapshot, and the event tells a death from a vanish. Published before the `Damage` events, after the result, so the other events keep their sequence numbers |
 
-A repeated destruction emits nothing. `RosterTransitionReason` has the same values as the application's `RosterChangeReason`. Every single-player event is committed; mixed-ownership events carry explicit authority as described above.
+A repeated destruction emits nothing. `UnitTransitionReason` has the same values as the application's `RosterChangeReason`. Every single-player event is committed; mixed-ownership events carry explicit authority as described above.
 
 B2 participation facts: `DamageFraction` is the share of a slot's armor that is lost. It is 1 when the slot is destroyed (also without an entity), the armor deficit over the maximum while active or after a retreat, and 0 when never deployed. The core emits no separate checkpoint event. A `Retreated` or `Killed` transition and the `Result` event are the checkpoints. The consumer reads the fractions from the same snapshot, after the tick's roster updates. It credits the increase of the enemy sum, as legacy `CombatModel` does. A `ForcedDestruction` transition is not a checkpoint. At completion, the consumer credits the slot with the highest `DeploymentOrder` of its side.
 
@@ -243,4 +245,4 @@ Phase 2 step 11. `Core/Tests/ScriptedBattle.cs` is test code: the core knows not
 4. **Result (seed 7).** Side 0 wins by elimination at tick 3506 (70 s). The battle has 4 roster deaths, 3 drone deaths, 2 retreats and 2 redeployments. It spawns 8 ships, 8 drones, 1119 bolts, 34 missiles and 46 beams. It has 2053 hits (1222 beam, 8 ramming) and 54 disarms.
 5. **Determinism.** The log holds every event and a per-tick digest of ship and bullet poses, velocities and resources as raw float bits. One run alone and two runs stepped interleaved in one process give the same log.
 6. **Allocation.** The same fleet with huge armor and energy, all three slots active, steps 3000 ticks after a 1500-tick warm-up with zero bytes allocated, pilots included. The window has bolts, missiles, beam hits, point-defense zaps and eight live drones. Buffers grow until about tick 510, at the first salvo peak; afterwards nothing allocates.
-7. **Snapshot size.** Element sizes on .NET 8 x64, measured as the allocation of a 1024-element array: `ShipState` 128 B, `BulletState` 88 B, `RosterSlotState` 64 B, `BattleEvent` 160 B, `DeviceState` 24 B (2026-10-29; `ShipState` kept its size with the device offset). The scripted battle copies 1.8 KB per tick on average and 3.6 KB at most (peak 12 ships, 16 bullets). At R2 (2,000 bullets, 130 ships) the ship and bullet copy is 192,640 B per tick, about 9.6 MB/s at 50 Hz. That is 3.2 times the design estimate of 60 KB, which assumed 24-byte bullets. Timed on R1 (2026-10-28), `BattleSnapshot.Write` takes 0.24 ms per tick at R2 (0.27 ms with `DeviceState`, 2026-10-31); the byte copy is about a tenth of it ([core design](../../../../TODO/battle_simulator_core.md), risk 3).
+7. **Snapshot size.** Element sizes on .NET 8 x64, measured as the allocation of a 1024-element array: `ShipState` 128 B, `BulletState` 88 B, `UnitState` 64 B, `BattleEvent` 160 B, `DeviceState` 24 B (2026-10-29; `ShipState` kept its size with the device offset). The scripted battle copies 1.8 KB per tick on average and 3.6 KB at most (peak 12 ships, 16 bullets). At R2 (2,000 bullets, 130 ships) the ship and bullet copy is 192,640 B per tick, about 9.6 MB/s at 50 Hz. That is 3.2 times the design estimate of 60 KB, which assumed 24-byte bullets. Timed on R1 (2026-10-28), `BattleSnapshot.Write` takes 0.24 ms per tick at R2 (0.27 ms with `DeviceState`, 2026-10-31); the byte copy is about a tenth of it ([core design](../../../../TODO/battle_simulator_core.md), risk 3).

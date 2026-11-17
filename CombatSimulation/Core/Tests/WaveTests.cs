@@ -34,9 +34,9 @@ namespace CombatSimulation.Core.Tests
             var target = Fixtures.ShipWith(armor: 200f, shield: new ResourceDefinition(0f));
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.CannonShip(Wave(), cooldown: 10f, energyCost: 0f)),
-                new RosterSlotSetup(new RosterId(101), 1, target),
-                new RosterSlotSetup(new RosterId(102), 1, target),
+                new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(Wave(), cooldown: 10f, energyCost: 0f)),
+                new UnitSetup(new UnitId(101), 1, target),
+                new UnitSetup(new UnitId(102), 1, target),
             }, maxActiveShipsPerSide: 2));
             driver.Deploy(1); driver.Deploy(101); driver.Deploy(102); driver.Step();
             driver.Place(1, new Vec2(50f, 50f), Vec2.Zero);

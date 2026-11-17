@@ -23,7 +23,7 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void StepAdvancesOwnedPhysicsByOneFixedTick()
         {
-            var battle = new Battle(new BattleSetup(new BattleId(1), 0, Fixtures.Roster(1, 1), 300f, 400f));
+            var battle = new Battle(new BattleSetup(new BattleId(1), 0, Fixtures.Units(1, 1), 300f, 400f));
             var body = battle.World.CreateBody(new BodyDef
             {
                 Position = new Vec2(10f, 20f),
@@ -71,31 +71,31 @@ namespace CombatSimulation.Core.Tests
         [TestCase(float.NegativeInfinity)]
         public void SetupRejectsInvalidArenaDimensions(float size)
         {
-            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Roster(1, 1), size, 200f));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Roster(1, 1), 200f, size));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Units(1, 1), size, 200f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Units(1, 1), 200f, size));
         }
 
         [Test]
         public void SetupRejectsInvalidRosterAndLimits()
         {
             Assert.Throws<ArgumentNullException>(() => new BattleSetup(default, 0, null));
-            Assert.Throws<ArgumentException>(() => new BattleSetup(default, 0, Fixtures.Roster(1, 0)));
-            Assert.Throws<ArgumentException>(() => new BattleSetup(default, 0, Fixtures.Roster(0, 1)));
+            Assert.Throws<ArgumentException>(() => new BattleSetup(default, 0, Fixtures.Units(1, 0)));
+            Assert.Throws<ArgumentException>(() => new BattleSetup(default, 0, Fixtures.Units(0, 1)));
 
-            var duplicate = Fixtures.Roster(1, 1);
-            duplicate.Add(new RosterSlotSetup(new RosterId(1), 1, Fixtures.Ship));
+            var duplicate = Fixtures.Units(1, 1);
+            duplicate.Add(new UnitSetup(new UnitId(1), 1, Fixtures.Ship));
             Assert.Throws<ArgumentException>(() => new BattleSetup(default, 0, duplicate));
 
-            var withNull = Fixtures.Roster(1, 1);
+            var withNull = Fixtures.Units(1, 1);
             withNull.Add(null);
             Assert.Throws<ArgumentException>(() => new BattleSetup(default, 0, withNull));
 
-            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Roster(1, 1), timeLimitTicks: -1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Roster(1, 1), maxActiveShipsPerSide: 0));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new RosterSlotSetup(new RosterId(1), 2, Fixtures.Ship));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new RosterSlotSetup(new RosterId(1), -1, Fixtures.Ship));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new RosterSlotSetup(new RosterId(1), 0, Fixtures.Ship, -1));
-            Assert.Throws<ArgumentNullException>(() => new RosterSlotSetup(new RosterId(1), 0, null));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Units(1, 1), timeLimitTicks: -1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new BattleSetup(default, 0, Fixtures.Units(1, 1), maxActiveShipsPerSide: 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new UnitSetup(new UnitId(1), 2, Fixtures.Ship));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new UnitSetup(new UnitId(1), -1, Fixtures.Ship));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new UnitSetup(new UnitId(1), 0, Fixtures.Ship, -1));
+            Assert.Throws<ArgumentNullException>(() => new UnitSetup(new UnitId(1), 0, null));
             Assert.Throws<ArgumentOutOfRangeException>(() => Fixtures.ShipWith(hullRadius: 0f));
             Assert.Throws<ArgumentOutOfRangeException>(() => Fixtures.ShipWith(mass: float.NaN));
             Assert.Throws<ArgumentOutOfRangeException>(() => Fixtures.ShipWith(armor: 0f));
@@ -110,12 +110,12 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void SetupCopiesTheRoster()
         {
-            var roster = Fixtures.Roster(1, 1);
+            var roster = Fixtures.Units(1, 1);
             var setup = new BattleSetup(default, 0, roster);
             roster.Clear();
 
-            Assert.AreEqual(2, setup.Roster.Count);
-            Assert.AreEqual(new RosterId(101), setup.Roster[1].RosterId);
+            Assert.AreEqual(2, setup.Units.Count);
+            Assert.AreEqual(new UnitId(101), setup.Units[1].UnitId);
         }
 
         [Test]

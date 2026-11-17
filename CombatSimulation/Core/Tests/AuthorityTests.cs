@@ -385,7 +385,7 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(revision, slot.Revision);
             Assert.AreEqual(0f, slot.ArmorDeficit);
             Assert.AreEqual(0f, slot.ShieldDeficit);
-            Assert.AreEqual(RosterStatus.Ready, d.Status(102));
+            Assert.AreEqual(UnitStatus.Ready, d.Status(102));
             Assert.IsFalse(d.Battle.IsCompleted);
             Assert.IsEmpty(d.Battle.Snapshot.Events.ToArray());
         }
@@ -465,13 +465,13 @@ namespace CombatSimulation.Core.Tests
             var provider = new CountingPilot();
             var runner = new BattleRunner(Setup(new[] { 10 }, DroneBayTests.Carrier(), DroneBayTests.Carrier()), provider);
             var battle = Field<Battle>(runner, "_battle");
-            battle.DeploySlot(battle.Roster.Find(new RosterId(1)));
-            battle.DeploySlot(battle.Roster.Find(new RosterId(101)));
+            battle.DeploySlot(battle.Units.Find(new UnitId(1)));
+            battle.DeploySlot(battle.Units.Find(new UnitId(101)));
             var localDrone = SeedDrone(battle, 1);
             SeedDrone(battle, 101);
             runner.Step();
             runner.Step();
-            CollectionAssert.AreEquivalent(new[] { battle.Roster.Find(new RosterId(1)).ActiveShip.Id, localDrone.Id }, provider.Created);
+            CollectionAssert.AreEquivalent(new[] { battle.Units.Find(new UnitId(1)).ActiveShip.Id, localDrone.Id }, provider.Created);
             Assert.AreEqual(4, provider.Thoughts);
         }
 
@@ -515,10 +515,10 @@ namespace CombatSimulation.Core.Tests
         private static BattleSetup Setup(IReadOnlyCollection<int> owners, ShipDefinition side0 = null, ShipDefinition side1 = null) =>
             new BattleSetup(new BattleId(1), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, side0 ?? Fixtures.Ship, 10),
-                new RosterSlotSetup(new RosterId(101), 1, side1 ?? Fixtures.Ship, 20),
-                new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship, 10),
-                new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship, 20),
+                new UnitSetup(new UnitId(1), 0, side0 ?? Fixtures.Ship, 10),
+                new UnitSetup(new UnitId(101), 1, side1 ?? Fixtures.Ship, 20),
+                new UnitSetup(new UnitId(2), 0, Fixtures.Ship, 10),
+                new UnitSetup(new UnitId(102), 1, Fixtures.Ship, 20),
             }, localOwners: owners);
 
         // Seed remote entities through trusted internals until the inbound deployment interface arrives in step 3.
@@ -559,7 +559,7 @@ namespace CombatSimulation.Core.Tests
 
         private static ShipEntity SeedDrone(Battle battle, uint rosterId)
         {
-            var bay = battle.Roster.Find(new RosterId(rosterId)).GetBay(0);
+            var bay = battle.Units.Find(new UnitId(rosterId)).GetBay(0);
             var ship = Field<BattleWorld>(battle, "_world").Ships.Allocate();
             var id = new EntityId(9000UL + rosterId);
             var body = battle.World.CreateBody(new BodyDef { Mass = bay.Drone.Mass });

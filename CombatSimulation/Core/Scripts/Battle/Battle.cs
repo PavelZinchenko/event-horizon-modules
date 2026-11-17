@@ -36,9 +36,9 @@ namespace CombatSimulation.Core
             _damage = new DamageSystem(_world, this, _tails);
             _world.Asteroids.Create();
 
-            _published = new BattleSnapshot(BattleId, Roster.Slots.Count);
-            _writing = new BattleSnapshot(BattleId, Roster.Slots.Count);
-            _published.Write(this, -1, World, Roster, _world.Events);
+            _published = new BattleSnapshot(BattleId, Units.All.Count);
+            _writing = new BattleSnapshot(BattleId, Units.All.Count);
+            _published.Write(this, -1, World, Units, _world.Events);
         }
 
         public BattleSetup Setup => _world.Setup;
@@ -57,7 +57,7 @@ namespace CombatSimulation.Core
         // Physics handles and mutable state never leave Core's trusted assembly boundary.
         internal PhysicsWorld World => _world.Physics;
         internal DeviceContext DeviceContext { get; }
-        internal Roster Roster => _world.Roster;
+        internal UnitTable Units => _world.Units;
         internal BattleResult Result { get; private set; }
         internal BattleResult CandidateResult { get; private set; }
         private readonly CommittedBattleFlow _flow;
@@ -74,7 +74,7 @@ namespace CombatSimulation.Core
             set => _world.ThrowOnDefect = value;
         }
 
-        public bool Submit(in RosterCommand command)
+        public bool Submit(in UnitCommand command)
         {
             if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
             var reason = _commands.Add(command, Tick);
@@ -293,9 +293,9 @@ namespace CombatSimulation.Core
         // ID order.
         private void ApplyCommands()
         {
-            _commands.TakeDue(Tick, _dueRosterCommands);
-            foreach (var command in _dueRosterCommands)
-                ApplyRosterCommand(command);
+            _commands.TakeDue(Tick, _dueUnitCommands);
+            foreach (var command in _dueUnitCommands)
+                ApplyUnitCommand(command);
 
             _commands.TakeDue(Tick, _dueSelfDestructs);
             foreach (var command in _dueSelfDestructs)
@@ -470,7 +470,7 @@ namespace CombatSimulation.Core
         private void ApplyStructureChanges()
         {
             _network?.ApplyRemoteOperations(12);
-            var slots = Roster.Slots;
+            var slots = Units.All;
             for (var i = 0; i < slots.Count; ++i)
             {
                 var slot = slots[i];
@@ -483,7 +483,7 @@ namespace CombatSimulation.Core
                 {
                     RemoveShip(ship, RemovalReason.Death);
                     slot.Destroy();
-                    AddTransition(slot, RosterStatus.Active, RosterTransitionReason.Killed, id);
+                    AddTransition(slot, UnitStatus.Active, UnitTransitionReason.Killed, id);
                 }
                 // A vanished ship retreats at once (D12) and keeps its damage for a redeployment.
                 else if (ship.PendingVanish || ship.RetreatCompletionTick == Tick)
@@ -492,7 +492,7 @@ namespace CombatSimulation.Core
                     var shieldDeficit = ship.Shield.Deficit;
                     RemoveShip(ship, ship.PendingVanish ? RemovalReason.Vanish : RemovalReason.Retreat);
                     slot.CompleteRetreat(armorDeficit, shieldDeficit);
-                    AddTransition(slot, RosterStatus.Active, RosterTransitionReason.Retreated, id);
+                    AddTransition(slot, UnitStatus.Active, UnitTransitionReason.Retreated, id);
                 }
             }
 
@@ -504,7 +504,7 @@ namespace CombatSimulation.Core
                 for (var i = 0; i < slots.Count; ++i)
                 {
                     var slot = slots[i];
-                    if (slot.Side != side || slot.Status == RosterStatus.Destroyed || !Setup.IsLocalOwner(slot.Owner)) continue;
+                    if (slot.Side != side || slot.Status == UnitStatus.Destroyed || !Setup.IsLocalOwner(slot.Owner)) continue;
 
                     var previousStatus = slot.Status;
                     var id = default(EntityId);
@@ -514,7 +514,7 @@ namespace CombatSimulation.Core
                         RemoveShip(slot.ActiveShip, RemovalReason.Death);
                     }
                     slot.Destroy();
-                    AddTransition(slot, previousStatus, RosterTransitionReason.ForcedDestruction, id);
+                    AddTransition(slot, previousStatus, UnitTransitionReason.ForcedDestruction, id);
                 }
             }
 
@@ -588,7 +588,7 @@ namespace CombatSimulation.Core
             _network?.RecordPredictedHits();
             _world.PublishAuxiliaryRemovals();
             _damage.PublishDamageEvents();
-            _writing.Write(this, Tick, World, Roster, _world.Events);
+            _writing.Write(this, Tick, World, Units, _world.Events);
             _world.Events.Clear();
             _network?.ClearTickRecords();
 
@@ -598,42 +598,42 @@ namespace CombatSimulation.Core
             _world.AdvanceTick();
         }
 
-        private void ApplyRosterCommand(in RosterCommand command)
+        private void ApplyUnitCommand(in UnitCommand command)
         {
             switch (command.Kind)
             {
-                case RosterCommandKind.Deploy:
+                case UnitCommandKind.Deploy:
                     Deploy(command);
                     break;
-                case RosterCommandKind.Retreat:
+                case UnitCommandKind.Retreat:
                     StartRetreat(command);
                     break;
-                case RosterCommandKind.Surrender:
+                case UnitCommandKind.Surrender:
                     _destroySide[command.Side] = true;
                     break;
-                case RosterCommandKind.KillAll:
+                case UnitCommandKind.KillAll:
                     _destroySide[1 - command.Side] = true;
                     break;
             }
         }
 
-        private void Deploy(in RosterCommand command)
+        private void Deploy(in UnitCommand command)
         {
-            var slot = Roster.Find(command.RosterId);
+            var slot = Units.Find(command.UnitId);
             if (slot == null) { Reject(command, "unknown roster ID"); return; }
             if (!Setup.IsLocalOwner(slot.Owner)) { Reject(command, "remote owner"); return; }
-            if (slot.Status != RosterStatus.Ready) { Reject(command, $"slot is {slot.Status}"); return; }
-            if (Roster.CountActive(slot.Side) >= Setup.MaxActiveShips(slot.Side)) { Reject(command, "side limit"); return; }
-            if (Setup.OnlyOneShip && Setup.HasPlayerRules(slot.Side) && Roster.HasDestroyed(slot.Side))
+            if (slot.Status != UnitStatus.Ready) { Reject(command, $"slot is {slot.Status}"); return; }
+            if (Units.CountActive(slot.Side) >= Setup.MaxActiveShips(slot.Side)) { Reject(command, "side limit"); return; }
+            if (Setup.OnlyOneShip && Setup.HasPlayerRules(slot.Side) && Units.HasDestroyed(slot.Side))
             { Reject(command, "only one ship"); return; }
 
             if (!DeploySlot(slot)) Reject(command, "entity ID collision");
         }
 
         // Local deployment uses spawn placement. Received deployments use the owner's recorded pose.
-        internal bool DeploySlot(RosterSlot slot)
+        internal bool DeploySlot(Unit slot)
         {
-            var id = SpawnIdentity.CreateRoot(BattleId, slot.RosterId, slot.DeploymentCount + 1, Tick);
+            var id = SpawnIdentity.CreateRoot(BattleId, slot.UnitId, slot.DeploymentCount + 1, Tick);
             var ship = _world.Ships.Allocate();
             if (!_world.TryRegister(id, ship.Handle))
             {
@@ -647,16 +647,16 @@ namespace CombatSimulation.Core
 
             _world.AddShipShapes(ship, CollisionFilters.Ship(ship.Allegiance));
 
-            _spawns.PlaceRosterShip(body, id, slot.Side);
+            _spawns.PlaceUnitShip(body, id, slot.Side);
             Satellites.Add(_world, ship);
             slot.Activate(ship, ++_world.DeploymentOrder);
 
             _world.Events.Add(BattleEvent.Spawn(BattleId, Tick, _world.Events.Count, ship, _world.Authority(ship.Owner)));
-            AddTransition(slot, RosterStatus.Ready, RosterTransitionReason.Deployed, id);
+            AddTransition(slot, UnitStatus.Ready, UnitTransitionReason.Deployed, id);
             return true;
         }
 
-        private void StartRetreat(in RosterCommand command)
+        private void StartRetreat(in UnitCommand command)
         {
             var ship = _world.FindShip(command.EntityId);
             if (ship == null) { Reject(command, "unknown entity"); return; }
@@ -724,15 +724,15 @@ namespace CombatSimulation.Core
             _network?.CaptureAllegiance(ship, allegiance);
         }
 
-        internal void AddTransition(RosterSlot slot, RosterStatus previousStatus, RosterTransitionReason reason, EntityId id)
+        internal void AddTransition(Unit slot, UnitStatus previousStatus, UnitTransitionReason reason, EntityId id)
         {
             _world.Events.Add(BattleEvent.Transition(BattleId, Tick, _world.Events.Count, slot, previousStatus, reason, id,
                 ApplyingRemoteOperation ? BattleEventAuthority.Committed : _world.Authority(slot.Owner)));
             if (!ApplyingRemoteOperation) _flow.Add(Tick, slot.Side, previousStatus, slot.Status);
-            _network?.CaptureRoster(slot, previousStatus, reason, id);
+            _network?.CaptureUnit(slot, previousStatus, reason, id);
         }
 
-        private bool Reject(in RosterCommand command, string reason)
+        private bool Reject(in UnitCommand command, string reason)
         {
             ++RejectedCommandCount;
             Trace.LogWarning($"Battle {BattleId}, tick {Tick}: rejected {command}: {reason}.");
@@ -762,7 +762,7 @@ namespace CombatSimulation.Core
 
         private readonly BattleWorld _world;
         private readonly CommandQueue _commands;
-        private readonly List<RosterCommand> _dueRosterCommands = new List<RosterCommand>();
+        private readonly List<UnitCommand> _dueUnitCommands = new List<UnitCommand>();
         private readonly List<SelfDestructCommand> _dueSelfDestructs = new List<SelfDestructCommand>();
         private readonly List<ShipCommand> _dueShipCommands = new List<ShipCommand>();
         private readonly List<ControlFrame> _dueFrames = new List<ControlFrame>();

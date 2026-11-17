@@ -196,10 +196,10 @@ namespace CombatSimulation.Core.Tests
         {
             var setup = new BattleSetup(new BattleId(1), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, BeamShip()),
-                new RosterSlotSetup(new RosterId(2), 0, TargetShip()),
-                new RosterSlotSetup(new RosterId(101), 1, TargetShip()),
-                new RosterSlotSetup(new RosterId(102), 1, TargetShip()),
+                new UnitSetup(new UnitId(1), 0, BeamShip()),
+                new UnitSetup(new UnitId(2), 0, TargetShip()),
+                new UnitSetup(new UnitId(101), 1, TargetShip()),
+                new UnitSetup(new UnitId(102), 1, TargetShip()),
             }, maxActiveShipsPerSide: 2);
             var driver = new Driver(setup);
             driver.Deploy(reverseAllocation ? 102u : 101u);

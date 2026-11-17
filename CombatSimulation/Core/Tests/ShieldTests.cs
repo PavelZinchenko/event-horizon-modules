@@ -264,8 +264,8 @@ namespace CombatSimulation.Core.Tests
             var shielded = Ship(EnergyShield());
             BattleSetup Setup(int local) => new BattleSetup(new BattleId(77), 13, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Gun(new BulletDefinition(0.25f, 20f, 10f, 5f, push: 1f)), 10),
-                new RosterSlotSetup(new RosterId(101), 1, shielded, GateDeviceTests.RemoteOwner),
+                new UnitSetup(new UnitId(1), 0, Gun(new BulletDefinition(0.25f, 20f, 10f, 5f, push: 1f)), 10),
+                new UnitSetup(new UnitId(101), 1, shielded, GateDeviceTests.RemoteOwner),
             }, localOwners: new[] { local });
             var owner = new Driver(Setup(GateDeviceTests.RemoteOwner));
             var attacker = new Driver(Setup(10));

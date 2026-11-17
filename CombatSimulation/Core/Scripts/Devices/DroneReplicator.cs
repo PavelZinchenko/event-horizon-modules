@@ -82,13 +82,13 @@ namespace CombatSimulation.Core
             _running ? DeviceState.Remaining(tick + 1 - _startTick, Definition.BuildTicks) : 0f;
 
         // Legacy Systems.OfType<IDroneBay>().Any(TryRestoreDrone): bays in device order, clonning centers excluded.
-        private static void Restore(RosterSlot slot)
+        private static void Restore(Unit slot)
         {
             for (var i = 0; i < slot.Setup.Ship.Devices.Count; ++i)
                 if (DroneBayOf(slot, i)?.TryRestore() == true) return;
         }
 
-        private static DroneBayInventory DroneBayOf(RosterSlot slot, int index) =>
+        private static DroneBayInventory DroneBayOf(Unit slot, int index) =>
             slot.Setup.Ship.Devices[index] is DroneBayDefinition ? slot.GetBay(index) : null;
 
         private long _deploymentTick;

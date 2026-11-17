@@ -8,17 +8,17 @@ namespace CombatSimulation.Core
     {
         public const int NoCapacity = int.MaxValue;
 
-        public DroneBayInventory(RosterSlot slot, int index, ShipDefinition drone, int capacity, int buildExtraCycles = 0)
+        public DroneBayInventory(Unit slot, int index, ShipDefinition drone, int capacity, int buildExtraCycles = 0)
         {
             Slot = slot;
-            Key = new DroneBayKey(slot.RosterId, index);
+            Key = new DroneBayKey(slot.UnitId, index);
             Drone = drone;
             Capacity = capacity;
             BuildExtraCycles = buildExtraCycles;
             BuildCyclesLeft = buildExtraCycles;
         }
 
-        public RosterSlot Slot { get; }
+        public Unit Slot { get; }
         public DroneBayKey Key { get; }
         public ShipDefinition Drone { get; }
         public int Capacity { get; }

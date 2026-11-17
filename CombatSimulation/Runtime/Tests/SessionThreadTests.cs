@@ -36,7 +36,7 @@ namespace CombatSimulation.Runtime.Tests
             });
             foreach (var reader in readers)
             {
-                CollectionAssert.IsSubsetOf(new[] { new RosterId(1), new RosterId(101) }, reader.Deployed);
+                CollectionAssert.IsSubsetOf(new[] { new UnitId(1), new UnitId(101) }, reader.Deployed);
                 Assert.IsNull(reader.Thread.Error);
                 Assert.IsTrue(reader.Thread.Status.IsRunning);
                 var status = reader.Thread.Status;
@@ -234,8 +234,8 @@ namespace CombatSimulation.Runtime.Tests
             var threadB = new SessionThread(b, linkB, Now, maxQueued, linkTimeoutSeconds: linkTimeout,
                 maxReliableBacklogBytes: maxBacklog);
             _threads.Add(threadA); _threads.Add(threadB);
-            threadA.Post(SessionCommand.Deploy(new RosterId(1)));
-            threadB.Post(SessionCommand.Deploy(new RosterId(101)));
+            threadA.Post(SessionCommand.Deploy(new UnitId(1)));
+            threadB.Post(SessionCommand.Deploy(new UnitId(101)));
             threadA.Start();
             threadB.Start();
             return (threadA, threadB);
@@ -261,7 +261,7 @@ namespace CombatSimulation.Runtime.Tests
                 foreach (var ship in snapshot.Ships)
                     hash = hash * 31 + (long)ship.Id.GetHashCode() * 17 + BitConverter.DoubleToInt64Bits(
                         ship.Position.X * 3.0 + ship.Position.Y * 7.0 + ship.Angle + ship.Armor.Value + ship.Energy.Value);
-                foreach (var slot in snapshot.Roster) hash = hash * 31 + (long)slot.Status;
+                foreach (var slot in snapshot.Units) hash = hash * 31 + (long)slot.Status;
                 foreach (var item in snapshot.Events) hash = hash * 31 + (long)item.Kind * 7 + item.Tick;
                 return hash;
             }
@@ -270,7 +270,7 @@ namespace CombatSimulation.Runtime.Tests
         private sealed class Reader
         {
             internal readonly SessionThread Thread;
-            internal readonly List<RosterId> Deployed = new List<RosterId>();
+            internal readonly List<UnitId> Deployed = new List<UnitId>();
             internal long NextTick;
             internal int Reused;
             private readonly HashSet<BattleSnapshot> _seen = new HashSet<BattleSnapshot>();
@@ -294,8 +294,8 @@ namespace CombatSimulation.Runtime.Tests
                 foreach (var item in snapshot.Events)
                 {
                     Assert.AreEqual(snapshot.Tick, item.Tick, "Event of another tick");
-                    if (item.Kind == BattleEventKind.Spawn && !item.IsBullet && !item.RosterId.Equals(default(RosterId)))
-                        Deployed.Add(item.RosterId);
+                    if (item.Kind == BattleEventKind.Spawn && !item.IsBullet && !item.UnitId.Equals(default(UnitId)))
+                        Deployed.Add(item.UnitId);
                 }
             }
         }

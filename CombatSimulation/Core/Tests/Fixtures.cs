@@ -53,33 +53,33 @@ namespace CombatSimulation.Core.Tests
                 barrels: new[] { new BarrelDefinition(muzzle ?? new Vec2(1f, 0f)) },
                 devices: new[] { new CannonDefinition(0, cooldown, energyCost, spread, bullet ?? Bolt) });
 
-        public static List<RosterSlotSetup> Roster(int side0Slots, int side1Slots)
+        public static List<UnitSetup> Units(int side0Slots, int side1Slots)
         {
-            var roster = new List<RosterSlotSetup>();
-            for (var i = 0; i < side0Slots; ++i) roster.Add(new RosterSlotSetup(new RosterId((uint)(1 + i)), 0, Ship));
-            for (var i = 0; i < side1Slots; ++i) roster.Add(new RosterSlotSetup(new RosterId((uint)(101 + i)), 1, Ship));
+            var roster = new List<UnitSetup>();
+            for (var i = 0; i < side0Slots; ++i) roster.Add(new UnitSetup(new UnitId((uint)(1 + i)), 0, Ship));
+            for (var i = 0; i < side1Slots; ++i) roster.Add(new UnitSetup(new UnitId((uint)(101 + i)), 1, Ship));
             return roster;
         }
 
         public static BattleSetup Setup(int side0Slots = 1, int side1Slots = 1, long timeLimitTicks = 0,
             int maxActiveShipsPerSide = 1, ulong battleId = 1, ulong matchSeed = 7) =>
-            new BattleSetup(new BattleId(battleId), matchSeed, Roster(side0Slots, side1Slots),
+            new BattleSetup(new BattleId(battleId), matchSeed, Units(side0Slots, side1Slots),
                 timeLimitTicks: timeLimitTicks, maxActiveShipsPerSide: maxActiveShipsPerSide);
 
         // One slot per side; slot 1 flies the given ship, slot 101 the default one.
         public static BattleSetup Setup(ShipDefinition ship) =>
-            new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+            new BattleSetup(new BattleId(1), 7, new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, ship),
-                new RosterSlotSetup(new RosterId(101), 1, Ship),
+                new UnitSetup(new UnitId(1), 0, ship),
+                new UnitSetup(new UnitId(101), 1, Ship),
             });
 
         // One slot per side with the given ships: slot 1 on side 0, slot 101 on side 1.
         public static BattleSetup Setup(ShipDefinition side0, ShipDefinition side1, ulong matchSeed = 7) =>
-            new BattleSetup(new BattleId(1), matchSeed, new List<RosterSlotSetup>
+            new BattleSetup(new BattleId(1), matchSeed, new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, side0),
-                new RosterSlotSetup(new RosterId(101), 1, side1),
+                new UnitSetup(new UnitId(1), 0, side0),
+                new UnitSetup(new UnitId(101), 1, side1),
             });
     }
 
@@ -95,16 +95,16 @@ namespace CombatSimulation.Core.Tests
         public BattleId BattleId => Battle.BattleId;
 
         public bool Deploy(uint rosterId, long? tick = null) =>
-            Battle.Submit(RosterCommand.Deploy(BattleId, _nextCommandId++, tick ?? Tick, new RosterId(rosterId)));
+            Battle.Submit(UnitCommand.Deploy(BattleId, _nextCommandId++, tick ?? Tick, new UnitId(rosterId)));
 
         public bool Retreat(EntityId id, long? tick = null) =>
-            Battle.Submit(RosterCommand.Retreat(BattleId, _nextCommandId++, tick ?? Tick, id));
+            Battle.Submit(UnitCommand.Retreat(BattleId, _nextCommandId++, tick ?? Tick, id));
 
         public bool Surrender(int side, long? tick = null) =>
-            Battle.Submit(RosterCommand.Surrender(BattleId, _nextCommandId++, tick ?? Tick, side));
+            Battle.Submit(UnitCommand.Surrender(BattleId, _nextCommandId++, tick ?? Tick, side));
 
         public bool KillAll(int requestingSide, long? tick = null) =>
-            Battle.Submit(RosterCommand.KillAll(BattleId, _nextCommandId++, tick ?? Tick, requestingSide));
+            Battle.Submit(UnitCommand.KillAll(BattleId, _nextCommandId++, tick ?? Tick, requestingSide));
 
         // Controls for the active ship of a slot.
         public bool Control(uint rosterId, float? course = null, float throttle = 0f, ulong systems = 0, long? tick = null) =>
@@ -125,8 +125,8 @@ namespace CombatSimulation.Core.Tests
             while (Battle.Tick < tick) Battle.Step();
         }
 
-        public RosterSlot Slot(uint rosterId) => Battle.Roster.Find(new RosterId(rosterId));
-        public RosterStatus Status(uint rosterId) => Slot(rosterId).Status;
+        public Unit Slot(uint rosterId) => Battle.Units.Find(new UnitId(rosterId));
+        public UnitStatus Status(uint rosterId) => Slot(rosterId).Status;
         public EntityId Entity(uint rosterId) => Slot(rosterId).ActiveShip?.Id ?? default;
         public ShipEntity Ship(uint rosterId) => Slot(rosterId).ActiveShip;
 

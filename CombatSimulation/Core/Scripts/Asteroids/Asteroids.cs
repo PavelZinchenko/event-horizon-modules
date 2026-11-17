@@ -151,7 +151,7 @@ namespace CombatSimulation.Core
                     Setup = definition,
                     Body = body,
                     Shape = shape,
-                    Owner = setup.Roster[0].Owner,
+                    Owner = setup.Units[0].Owner,
                     HitPoints = definition.HitPoints,
                 });
                 ++AliveCount;

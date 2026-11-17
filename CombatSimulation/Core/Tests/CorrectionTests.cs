@@ -750,15 +750,15 @@ namespace CombatSimulation.Core.Tests
         private static BattleSetup Setup(int localOwner, ShipDefinition ship1, ShipDefinition ship101, int delayB,
             int delayA, Rules rules)
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, ship1 ?? Fixtures.Ship, OwnerB),
-                new RosterSlotSetup(new RosterId(101), 1, ship101 ?? Fixtures.Ship, OwnerA),
+                new UnitSetup(new UnitId(1), 0, ship1 ?? Fixtures.Ship, OwnerB),
+                new UnitSetup(new UnitId(101), 1, ship101 ?? Fixtures.Ship, OwnerA),
             };
             if (rules.Reserves)
             {
-                roster.Add(new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship, OwnerB));
-                roster.Add(new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship, OwnerA));
+                roster.Add(new UnitSetup(new UnitId(2), 0, Fixtures.Ship, OwnerB));
+                roster.Add(new UnitSetup(new UnitId(102), 1, Fixtures.Ship, OwnerA));
             }
             return new BattleSetup(new BattleId(77), 13, roster, localOwners: new[] { localOwner },
                 ownerDelays: new Dictionary<int, int> { [OwnerB] = delayB, [OwnerA] = delayA },

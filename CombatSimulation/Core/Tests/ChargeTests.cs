@@ -391,8 +391,8 @@ namespace CombatSimulation.Core.Tests
             private static BattleSetup Setup(int localOwner, ShipDefinition shooter) =>
                 new BattleSetup(new BattleId(78), 13, new[]
                 {
-                    new RosterSlotSetup(new RosterId(1), 0, shooter, ChargeTests.Owner),
-                    new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship, Receiver),
+                    new UnitSetup(new UnitId(1), 0, shooter, ChargeTests.Owner),
+                    new UnitSetup(new UnitId(101), 1, Fixtures.Ship, Receiver),
                 }, localOwners: new[] { localOwner });
 
             private ulong _lastSequence;

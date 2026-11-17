@@ -1,7 +1,7 @@
 namespace CombatSimulation.Core
 {
     // Campaign consumers read Ready, Active and Destroyed. A pending deployment is a command, not a status.
-    public enum RosterStatus : byte
+    public enum UnitStatus : byte
     {
         Ready,
         Active,
@@ -9,9 +9,9 @@ namespace CombatSimulation.Core
     }
 
     // One fleet slot. Its status is stored, never inferred from whether an entity exists.
-    internal sealed class RosterSlot
+    internal sealed class Unit
     {
-        public RosterSlot(RosterSlotSetup setup)
+        public Unit(UnitSetup setup)
         {
             Setup = setup;
             _bays = new DroneBayInventory[setup.Ship.Devices.Count];
@@ -34,12 +34,12 @@ namespace CombatSimulation.Core
         // The first drone replicator of the ship (phase 5, step 10a), or -1.
         internal int ReplicatorIndex { get; }
 
-        public RosterSlotSetup Setup { get; }
-        public RosterId RosterId => Setup.RosterId;
+        public UnitSetup Setup { get; }
+        public UnitId UnitId => Setup.UnitId;
         public int Side => Setup.Side;
         public int Owner => Setup.Owner;
 
-        public RosterStatus Status { get; private set; }
+        public UnitStatus Status { get; private set; }
 
         // Number of deployments so far. The next root ID uses DeploymentCount + 1.
         public uint DeploymentCount { get; private set; }
@@ -57,7 +57,7 @@ namespace CombatSimulation.Core
         public int Revision { get; private set; }
         internal float? OwnerDamageFraction { get; private set; }
 
-        internal void Import(in RosterRecord record, ShipEntity ship)
+        internal void Import(in UnitRecord record, ShipEntity ship)
         {
             Status = record.Status;
             ActiveShip = ship;
@@ -71,7 +71,7 @@ namespace CombatSimulation.Core
 
         internal void Activate(ShipEntity ship, long deploymentOrder)
         {
-            Status = RosterStatus.Active;
+            Status = UnitStatus.Active;
             ActiveShip = ship;
             ++DeploymentCount;
             DeploymentOrder = deploymentOrder;
@@ -82,14 +82,14 @@ namespace CombatSimulation.Core
         {
             ArmorDeficit = armorDeficit;
             ShieldDeficit = shieldDeficit;
-            Status = RosterStatus.Ready;
+            Status = UnitStatus.Ready;
             ActiveShip = null;
             ++Revision;
         }
 
         internal void Destroy()
         {
-            Status = RosterStatus.Destroyed;
+            Status = UnitStatus.Destroyed;
             ActiveShip = null;
             ++Revision;
         }

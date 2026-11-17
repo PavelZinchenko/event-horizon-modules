@@ -8,7 +8,7 @@ namespace CombatSimulation.Core.Tests
         private static Driver Started(int playerSlots, int enemySlots, bool onlyOneShip = true,
             TimerMode mode = TimerMode.CallNextEnemy, long limit = 0)
         {
-            var setup = new BattleSetup(new BattleId(1), 7, Fixtures.Roster(playerSlots, enemySlots), timeLimitTicks: limit,
+            var setup = new BattleSetup(new BattleId(1), 7, Fixtures.Units(playerSlots, enemySlots), timeLimitTicks: limit,
                 timerMode: mode, onlyOneShip: onlyOneShip);
             var driver = new Driver(setup);
             driver.Deploy(1);
@@ -32,9 +32,9 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(1, result.WinningSide);
             Assert.AreEqual(BattleEndReason.ShipLost, result.Reason);
             Assert.AreEqual(deathTick + Battle.ShipLostTicks, result.Tick);
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(2), "No synthetic reserve death.");
-            Assert.AreEqual(RosterStatus.Active, driver.Status(101));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(2), "No synthetic reserve death.");
+            Assert.AreEqual(UnitStatus.Active, driver.Status(101));
         }
 
         [Test]
@@ -86,7 +86,7 @@ namespace CombatSimulation.Core.Tests
 
             driver.Deploy(2);
             driver.Step();
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(2));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(2));
             Assert.AreEqual(1, driver.Battle.RejectedCommandCount);
         }
 
@@ -100,7 +100,7 @@ namespace CombatSimulation.Core.Tests
 
             driver.Deploy(102);
             driver.Step();
-            Assert.AreEqual(RosterStatus.Active, driver.Status(102));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(102));
             Assert.IsFalse(driver.Battle.IsCompleted);
         }
 
@@ -110,12 +110,12 @@ namespace CombatSimulation.Core.Tests
             var driver = Started(2, 1);
             driver.Retreat(driver.Entity(1));
             driver.Step(Battle.RetreatTicks + Battle.ShipLostTicks + 10);
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1));
             Assert.IsFalse(driver.Battle.IsCompleted);
 
             driver.Deploy(2);
             driver.Step();
-            Assert.AreEqual(RosterStatus.Active, driver.Status(2));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(2));
         }
 
         [Test]
@@ -125,7 +125,7 @@ namespace CombatSimulation.Core.Tests
             while (!driver.Battle.IsCompleted && driver.Tick < 10000) driver.Step();
 
             Assert.AreEqual(BattleEndReason.ShipLost, driver.Battle.Result.Reason);
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(2));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(2));
         }
 
         [Test]
@@ -138,7 +138,7 @@ namespace CombatSimulation.Core.Tests
 
             driver.Deploy(2);
             driver.Step();
-            Assert.AreEqual(RosterStatus.Active, driver.Status(2));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(2));
         }
     }
 }

@@ -152,7 +152,7 @@ namespace CombatSimulation.Core
         public EntityHandle Handle => new EntityHandle(EntityKind.Ship, Index, Generation);
 
         public EntityId Id { get; private set; }
-        public RosterSlot Slot { get; private set; }
+        public Unit Slot { get; private set; }
         public DroneBayInventory Bay { get; private set; }
         public bool IsDrone => Bay != null;
 
@@ -307,7 +307,7 @@ namespace CombatSimulation.Core
         }
 
         // A deployment starts with empty controls and full resources, minus the deficits the slot retained (B4).
-        internal void Initialize(EntityId id, RosterSlot slot, BodyId body, long tick, int damageTypes)
+        internal void Initialize(EntityId id, Unit slot, BodyId body, long tick, int damageTypes)
             => Initialize(id, slot, null, slot.Setup.Ship, slot.Side, slot.Owner, body, tick, damageTypes);
 
         internal void InitializeDrone(EntityId id, DroneBayInventory bay, BodyId body, long tick, int damageTypes)
@@ -328,7 +328,7 @@ namespace CombatSimulation.Core
             Decoy = _decoy;
         }
 
-        private void Initialize(EntityId id, RosterSlot slot, DroneBayInventory bay, ShipDefinition definition,
+        private void Initialize(EntityId id, Unit slot, DroneBayInventory bay, ShipDefinition definition,
             int side, int owner, BodyId body, long tick, int damageTypes)
         {
             Id = id;

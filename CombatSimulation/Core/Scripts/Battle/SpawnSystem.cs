@@ -155,7 +155,7 @@ namespace CombatSimulation.Core
         }
 
         // Legacy Scene.FindFreePlace and ShipInfo.Create, with counter-based random.
-        public void PlaceRosterShip(BodyId body, EntityId id, int side)
+        public void PlaceUnitShip(BodyId body, EntityId id, int side)
         {
             var random = CounterRandom.Create(Setup.MatchSeed, id, Tick, RandomPurpose.SpawnPlacement);
             var angle = random.NextUint() % 360 * (float)(Math.PI / 180.0);
@@ -182,7 +182,7 @@ namespace CombatSimulation.Core
         private float DistanceToNearestShip(Vec2 position, int side)
         {
             var nearest = float.MaxValue;
-            var slots = _world.Roster.Slots;
+            var slots = _world.Units.All;
             for (var i = 0; i < slots.Count; ++i)
             {
                 var ship = slots[i].ActiveShip;

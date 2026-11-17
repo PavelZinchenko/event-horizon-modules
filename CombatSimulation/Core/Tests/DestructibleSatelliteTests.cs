@@ -274,8 +274,8 @@ namespace CombatSimulation.Core.Tests
         {
             var driver = new Driver(new BattleSetup(new BattleId(77), 13, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Carrier(Satellite()), GateDeviceTests.RemoteOwner),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.CannonShip(new BulletDefinition(0.25f, 100f, 100f, 4f)), 10),
+                new UnitSetup(new UnitId(1), 0, Carrier(Satellite()), GateDeviceTests.RemoteOwner),
+                new UnitSetup(new UnitId(101), 1, Fixtures.CannonShip(new BulletDefinition(0.25f, 100f, 100f, 4f)), 10),
             }, localOwners: new[] { 10 }));
             driver.Battle.DeploySlot(driver.Slot(1));
             driver.Battle.DeploySlot(driver.Slot(101));

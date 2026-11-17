@@ -90,9 +90,9 @@ namespace CombatSimulation.Core.Tests
         {
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, BeamShip(HeavyLaser)),
-                new RosterSlotSetup(new RosterId(101), 1, Hull),
-                new RosterSlotSetup(new RosterId(102), 1, Hull),
+                new UnitSetup(new UnitId(1), 0, BeamShip(HeavyLaser)),
+                new UnitSetup(new UnitId(101), 1, Hull),
+                new UnitSetup(new UnitId(102), 1, Hull),
             }, maxActiveShipsPerSide: 2));
             driver.Deploy(1);
             driver.Deploy(101);

@@ -93,7 +93,7 @@ namespace CombatSimulation.Core.Tests
 
             owner.Deploy(reserve);
             p.Step(2);
-            Assert.AreEqual(RosterStatus.Ready, owner.Status(reserve));
+            Assert.AreEqual(UnitStatus.Ready, owner.Status(reserve));
             Assert.AreEqual(1, owner.Battle.RejectedCommandCount);
         }
 

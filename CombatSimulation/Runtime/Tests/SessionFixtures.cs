@@ -15,11 +15,11 @@ namespace CombatSimulation.Runtime.Tests
         internal static BattleSetup Setup(int owner, int delay0 = 0, int delay1 = 0, long timeout = 0,
             ShipDefinition ship = null, int slots = 1, int maxActive = 1)
         {
-            var roster = new List<RosterSlotSetup>();
+            var roster = new List<UnitSetup>();
             for (var i = 0; i < slots; ++i)
             {
-                roster.Add(new RosterSlotSetup(new RosterId((uint)(1 + i)), 0, ship ?? Ship, 10));
-                roster.Add(new RosterSlotSetup(new RosterId((uint)(101 + i)), 1, ship ?? Ship, 20));
+                roster.Add(new UnitSetup(new UnitId((uint)(1 + i)), 0, ship ?? Ship, 10));
+                roster.Add(new UnitSetup(new UnitId((uint)(101 + i)), 1, ship ?? Ship, 20));
             }
             return new BattleSetup(new BattleId(123), 7, roster, timeLimitTicks: timeout, maxActiveShipsPerSide: maxActive, localOwners: new[] { owner },
                 ownerDelays: new Dictionary<int, int> { { 10, delay0 }, { 20, delay1 } });
@@ -126,7 +126,7 @@ namespace CombatSimulation.Runtime.Tests
                 A.Pump(Now); B.Pump(Now);
             }
             internal void Start()
-            { A.Deploy(new RosterId(1), 0); B.Deploy(new RosterId(101), 0); Step(); Step(); }
+            { A.Deploy(new UnitId(1), 0); B.Deploy(new UnitId(101), 0); Step(); Step(); }
             internal void Run(int ticks) { for (var i = 0; i < ticks; ++i) Step(); }
         }
 

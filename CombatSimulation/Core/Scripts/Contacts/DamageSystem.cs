@@ -192,7 +192,7 @@ namespace CombatSimulation.Core
             if (overtime < DrainTicksPerSecond) return;
 
             var fraction = overtime / DrainTicksPerSecond * 0.01f * Battle.TickDuration;
-            foreach (var slot in _world.Roster.Slots)
+            foreach (var slot in _world.Units.All)
             {
                 var ship = slot.ActiveShip;
                 if (!Setup.HasPlayerRules(slot.Side) || ship == null || !Setup.IsLocalOwner(ship.Owner)) continue;

@@ -10,7 +10,7 @@ namespace CombatSimulation.Core.Tests
         public void SpawnDerivationMatchesFixedVectors()
         {
             // Independent vectors from FNV-1a over packed little-endian fields, then fmix64.
-            var root = SpawnIdentity.CreateRoot(new BattleId(0xFEDCBA9876543210UL), new RosterId(0x89ABCDEF), 3, 0x123456789L);
+            var root = SpawnIdentity.CreateRoot(new BattleId(0xFEDCBA9876543210UL), new UnitId(0x89ABCDEF), 3, 0x123456789L);
             Assert.AreEqual(0x5EEBFAA8607B26A4UL, root.Value);
             var child = SpawnIdentity.CreateChild(root, 0x23456789AL, 0x76543210, 5, 0x01020304);
             Assert.AreEqual(0x9311B0996506BCB3UL, child.Value);
@@ -21,13 +21,13 @@ namespace CombatSimulation.Core.Tests
         {
             var ids = new HashSet<EntityId>
             {
-                SpawnIdentity.CreateRoot(new BattleId(1), new RosterId(2), 0, 0),
-                SpawnIdentity.CreateRoot(new BattleId(2), new RosterId(2), 0, 0),
-                SpawnIdentity.CreateRoot(new BattleId(1), new RosterId(3), 0, 0),
-                SpawnIdentity.CreateRoot(new BattleId(1), new RosterId(2), 1, 0),
-                SpawnIdentity.CreateRoot(new BattleId(1), new RosterId(2), 0, 1),
-                SpawnIdentity.CreateRoot(new BattleId(0x100000001UL), new RosterId(2), 0, 0),
-                SpawnIdentity.CreateRoot(new BattleId(1), new RosterId(2), 0, 0x100000000L),
+                SpawnIdentity.CreateRoot(new BattleId(1), new UnitId(2), 0, 0),
+                SpawnIdentity.CreateRoot(new BattleId(2), new UnitId(2), 0, 0),
+                SpawnIdentity.CreateRoot(new BattleId(1), new UnitId(3), 0, 0),
+                SpawnIdentity.CreateRoot(new BattleId(1), new UnitId(2), 1, 0),
+                SpawnIdentity.CreateRoot(new BattleId(1), new UnitId(2), 0, 1),
+                SpawnIdentity.CreateRoot(new BattleId(0x100000001UL), new UnitId(2), 0, 0),
+                SpawnIdentity.CreateRoot(new BattleId(1), new UnitId(2), 0, 0x100000000L),
             };
             Assert.AreEqual(7, ids.Count);
             foreach (var id in ids) Assert.IsFalse(id.IsNull);
@@ -76,7 +76,7 @@ namespace CombatSimulation.Core.Tests
         {
             // The leading payload bytes match; the domain tags differ.
             Assert.AreNotEqual(
-                SpawnIdentity.CreateRoot(new BattleId(1), new RosterId(0), 0, 0),
+                SpawnIdentity.CreateRoot(new BattleId(1), new UnitId(0), 0, 0),
                 SpawnIdentity.CreateChild(new EntityId(1), 0, 0, 0, 0));
         }
 
@@ -101,13 +101,13 @@ namespace CombatSimulation.Core.Tests
         {
             AssertValueType(new BattleId(ulong.MaxValue), new BattleId(ulong.MaxValue), new BattleId(1));
             AssertValueType(new EntityId(ulong.MaxValue), new EntityId(ulong.MaxValue), new EntityId(1));
-            AssertValueType(new RosterId(uint.MaxValue), new RosterId(uint.MaxValue), new RosterId(1));
+            AssertValueType(new UnitId(uint.MaxValue), new UnitId(uint.MaxValue), new UnitId(1));
             Assert.IsTrue(new BattleId(42) == new BattleId(42));
             Assert.IsTrue(new BattleId(42) != new BattleId(43));
             Assert.IsTrue(new EntityId(42) == new EntityId(42));
             Assert.IsTrue(new EntityId(42) != new EntityId(43));
-            Assert.IsTrue(new RosterId(42) == new RosterId(42));
-            Assert.IsTrue(new RosterId(42) != new RosterId(43));
+            Assert.IsTrue(new UnitId(42) == new UnitId(42));
+            Assert.IsTrue(new UnitId(42) != new UnitId(43));
             Assert.IsFalse(new BattleId(42).Equals((object)new EntityId(42)));
         }
 
@@ -134,7 +134,7 @@ namespace CombatSimulation.Core.Tests
             var shipA = a.Slot(1).ActiveShip;
             var shipB = b.Slot(1).ActiveShip;
             Assert.AreEqual(shipA.Id, shipB.Id);
-            Assert.AreEqual(SpawnIdentity.CreateRoot(new BattleId(1), new RosterId(1), 1, 10), shipA.Id);
+            Assert.AreEqual(SpawnIdentity.CreateRoot(new BattleId(1), new UnitId(1), 1, 10), shipA.Id);
             Assert.AreNotEqual(shipA.Index, shipB.Index, "The storage handles differ; the public IDs do not.");
         }
 

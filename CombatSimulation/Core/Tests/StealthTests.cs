@@ -205,11 +205,11 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void ATouchWithAnAllyEndsStealth()
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, StealthShip()),
-                new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, StealthShip()),
+                new UnitSetup(new UnitId(2), 0, Fixtures.Ship),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
             };
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: 2));
             driver.Deploy(1);
@@ -247,11 +247,11 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void AMissileIgnoresAStealthShip()
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.CannonShip(Fixtures.Pixie, cooldown: 10f)),
-                new RosterSlotSetup(new RosterId(101), 1, StealthShip(TargetPriority.High)),
-                new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(Fixtures.Pixie, cooldown: 10f)),
+                new UnitSetup(new UnitId(101), 1, StealthShip(TargetPriority.High)),
+                new UnitSetup(new UnitId(102), 1, Fixtures.Ship),
             };
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: 2));
             driver.Deploy(1);
@@ -342,8 +342,8 @@ namespace CombatSimulation.Core.Tests
         {
             var setup = new BattleSetup(new BattleId(1), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, StealthShip(), 10),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship, 20),
+                new UnitSetup(new UnitId(1), 0, StealthShip(), 10),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship, 20),
             }, localOwners: new[] { 10 });
             var driver = new Driver(setup);
             driver.Deploy(1);

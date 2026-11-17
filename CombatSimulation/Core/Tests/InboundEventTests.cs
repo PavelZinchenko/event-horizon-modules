@@ -12,10 +12,10 @@ namespace CombatSimulation.Core.Tests
             IReadOnlyDictionary<int, int> delays = null) => new BattleSetup(new BattleId(77), 13,
             new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.Ship, 10),
-                new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship, 10),
-                new RosterSlotSetup(new RosterId(101), 1, remoteShip ?? Fixtures.Ship, 20),
-                new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship, 20),
+                new UnitSetup(new UnitId(1), 0, Fixtures.Ship, 10),
+                new UnitSetup(new UnitId(2), 0, Fixtures.Ship, 10),
+                new UnitSetup(new UnitId(101), 1, remoteShip ?? Fixtures.Ship, 20),
+                new UnitSetup(new UnitId(102), 1, Fixtures.Ship, 20),
             }, localOwners: new[] { localOwner }, ownerDelays: delays ?? new Dictionary<int, int> { [20] = delay });
 
         private static Driver Target(int delay = 0)
@@ -42,15 +42,15 @@ namespace CombatSimulation.Core.Tests
         private static OwnerOperation DeployRecord(Driver target, int revision = 1, ulong sequence = 1,
             long tick = 0, uint deployment = 1, long order = 1, SpawnPose pose = default,
             float armorDeficit = 0f, float shieldDeficit = 0f) =>
-            OwnerOperation.RosterChange(target.BattleId, 20, sequence, tick,
-                SpawnIdentity.CreateRoot(target.BattleId, new RosterId(101), deployment, tick),
-                new RosterRecord(new RosterId(101), revision, RosterStatus.Ready, RosterStatus.Active,
-                    RosterTransitionReason.Deployed, deployment, order, armorDeficit, shieldDeficit, armorDeficit / 1000f), pose);
+            OwnerOperation.UnitChange(target.BattleId, 20, sequence, tick,
+                SpawnIdentity.CreateRoot(target.BattleId, new UnitId(101), deployment, tick),
+                new UnitRecord(new UnitId(101), revision, UnitStatus.Ready, UnitStatus.Active,
+                    UnitTransitionReason.Deployed, deployment, order, armorDeficit, shieldDeficit, armorDeficit / 1000f), pose);
 
         private static OwnerOperation RetreatRecord(Driver target, EntityId entity, ulong sequence = 2, long tick = 1) =>
-            OwnerOperation.RosterChange(target.BattleId, 20, sequence, tick, entity,
-                new RosterRecord(new RosterId(101), 2, RosterStatus.Active, RosterStatus.Ready,
-                    RosterTransitionReason.Retreated, 1, 1, 125f, 50f, 0.125f));
+            OwnerOperation.UnitChange(target.BattleId, 20, sequence, tick, entity,
+                new UnitRecord(new UnitId(101), 2, UnitStatus.Active, UnitStatus.Ready,
+                    UnitTransitionReason.Retreated, 1, 1, 125f, 50f, 0.125f));
 
         [Test]
         public void DelaySetupCopiesAndValidatesPerOwnerValues()
@@ -102,7 +102,7 @@ namespace CombatSimulation.Core.Tests
             var id = d.Entity(1);
             Deliver(d, Hit(d, 0, 2000f));
             d.Step();
-            Assert.AreEqual(RosterStatus.Destroyed, d.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, d.Status(1));
             Assert.AreEqual(1, d.Battle.Snapshot.OutgoingOperations[0].Tick);
             Deliver(d, Hit(d, 0, targetId: id), 2);
             d.Step();
@@ -189,7 +189,7 @@ namespace CombatSimulation.Core.Tests
             d.StepUntil(8);
             Deliver(d, Hit(d, 1, 20000f, HitImpactKind.DamageOverTime));
             d.Step();
-            Assert.AreEqual(RosterStatus.Destroyed, d.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, d.Status(1));
             Assert.AreEqual(8, d.Battle.Snapshot.OutgoingOperations[0].Tick);
             d.Step();
             Assert.IsEmpty(d.Battle.Snapshot.Events.ToArray());
@@ -284,7 +284,7 @@ namespace CombatSimulation.Core.Tests
             Assert.IsTrue(d.Battle.Submit(20, deploy));
             d.Step();
             Assert.AreEqual(2, d.Slot(101).Revision);
-            Assert.AreEqual(RosterStatus.Ready, d.Status(101));
+            Assert.AreEqual(UnitStatus.Ready, d.Status(101));
             Assert.AreEqual(125f, d.Slot(101).ArmorDeficit);
             Assert.AreEqual(50f, d.Slot(101).ShieldDeficit);
             Assert.AreEqual(2, d.Battle.Snapshot.AppliedOperations.Length);
@@ -296,7 +296,7 @@ namespace CombatSimulation.Core.Tests
             Assert.AreNotEqual(deploy.EntityId, d.Entity(101));
             d.Ship(101).Armor.Value = 1f;
             d.Step();
-            Assert.AreEqual(0.125f, d.Battle.Snapshot.Roster[2].DamageFraction);
+            Assert.AreEqual(0.125f, d.Battle.Snapshot.Units[2].DamageFraction);
         }
 
         [Test]
@@ -315,16 +315,16 @@ namespace CombatSimulation.Core.Tests
         public void ReserveDestructionNeedsNoEntityAndBlocksDeployment()
         {
             var d = new Driver(Setup());
-            var destroyed = OwnerOperation.RosterChange(d.BattleId, 20, 1, 0, default,
-                new RosterRecord(new RosterId(101), 1, RosterStatus.Ready, RosterStatus.Destroyed,
-                    RosterTransitionReason.ForcedDestruction, 0, 0, 0f, 0f, 1f));
+            var destroyed = OwnerOperation.UnitChange(d.BattleId, 20, 1, 0, default,
+                new UnitRecord(new UnitId(101), 1, UnitStatus.Ready, UnitStatus.Destroyed,
+                    UnitTransitionReason.ForcedDestruction, 0, 0, 0f, 0f, 1f));
             Assert.IsTrue(d.Battle.Submit(20, destroyed));
             d.Step();
             Assert.AreEqual(1, d.Battle.Snapshot.Events.Length);
-            Assert.AreEqual(BattleEventKind.RosterTransition, d.Battle.Snapshot.Events[0].Kind);
+            Assert.AreEqual(BattleEventKind.UnitTransition, d.Battle.Snapshot.Events[0].Kind);
             Assert.IsTrue(d.Battle.Submit(20, DeployRecord(d, revision: 2, sequence: 2, tick: 1)));
             d.Step();
-            Assert.AreEqual(RosterStatus.Destroyed, d.Status(101));
+            Assert.AreEqual(UnitStatus.Destroyed, d.Status(101));
             Assert.IsEmpty(d.Battle.Snapshot.Ships.ToArray());
         }
 
@@ -337,7 +337,7 @@ namespace CombatSimulation.Core.Tests
             owner.Step();
             var operations = owner.Battle.Snapshot.OutgoingOperations.ToArray();
             Assert.AreEqual(3, operations.Length); // deploy, active destruction, reserve destruction
-            Assert.AreEqual(RosterTransitionReason.Deployed, operations[0].Roster.Reason);
+            Assert.AreEqual(UnitTransitionReason.Deployed, operations[0].Unit.Reason);
             Assert.AreEqual(operations[0].EntityId, operations[1].EntityId);
             var remote = new Driver(Setup());
             foreach (var operation in operations) Assert.IsTrue(remote.Battle.Submit(20, operation));
@@ -390,7 +390,7 @@ namespace CombatSimulation.Core.Tests
             var root = DeployRecord(d, pose: new SpawnPose(new Vec2(10f, 10f), 0f, Vec2.Zero));
             Assert.IsTrue(d.Battle.Submit(20, root));
             d.Step();
-            var bay = new DroneBayKey(new RosterId(101), 0);
+            var bay = new DroneBayKey(new UnitId(101), 0);
             var droneId = SpawnIdentity.CreateChild(root.EntityId, 1, 0, 0, 0);
             var spawn = OwnerOperation.DroneLaunch(d.BattleId, 20, 2, 1, droneId, bay, root.EntityId,
                 new SpawnPose(new Vec2(50f, 50f), 0f, Vec2.Zero));

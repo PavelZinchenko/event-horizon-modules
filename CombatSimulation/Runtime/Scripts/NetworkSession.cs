@@ -58,8 +58,8 @@ namespace CombatSimulation.Runtime
             if (!setup.HasOwner(options.LocalOwner) || !setup.IsLocalOwner(options.LocalOwner) ||
                 !setup.HasOwner(options.RemoteOwner) || setup.IsLocalOwner(options.RemoteOwner))
                 throw new ArgumentException("Session owners must match the battle's authority configuration.", nameof(setup));
-            for (var i = 0; i < setup.Roster.Count; ++i)
-                if (setup.Roster[i].Owner != options.LocalOwner && setup.Roster[i].Owner != options.RemoteOwner)
+            for (var i = 0; i < setup.Units.Count; ++i)
+                if (setup.Units[i].Owner != options.LocalOwner && setup.Units[i].Owner != options.RemoteOwner)
                     throw new ArgumentException("A session supports exactly two owners.", nameof(setup));
             _runner = new BattleRunner(setup, pilots, QueueControls);
             _peer = peer ?? new PeerConnection(transport, this, options.IsClockReference, options.MaxDatagramSize);
@@ -84,7 +84,7 @@ namespace CombatSimulation.Runtime
         public long ReceivedCorrectionBatches { get; private set; }
         public bool IsFaulted => _peer.IsFaulted;
 
-        public bool Deploy(RosterId roster, long tick) => _runner.Deploy(roster, tick);
+        public bool Deploy(UnitId roster, long tick) => _runner.Deploy(roster, tick);
         public bool Retreat(EntityId entity, long tick) => _runner.Retreat(entity, tick);
         public bool SelfDestruct(EntityId entity, long tick) => _runner.SelfDestruct(entity, tick);
         public bool Vanish(EntityId entity, long tick) => _runner.Vanish(entity, tick);
@@ -202,10 +202,10 @@ namespace CombatSimulation.Runtime
         // The definition a spawn record names; both peers derive it from the same setup.
         private ShipDefinition SpawnDefinition(in OwnerOperation operation)
         {
-            if (operation.Kind == OwnerOperationKind.Roster)
-                return _runner.Battle.Roster.Find(operation.Roster.RosterId)?.Setup.Ship;
+            if (operation.Kind == OwnerOperationKind.Unit)
+                return _runner.Battle.Units.Find(operation.Unit.UnitId)?.Setup.Ship;
             var bay = operation.BayKey.Value;
-            var devices = _runner.Battle.Roster.Find(bay.RosterId)?.Setup.Ship.Devices;
+            var devices = _runner.Battle.Units.Find(bay.UnitId)?.Setup.Ship.Devices;
             return devices != null && bay.DeviceIndex < devices.Count ? devices[bay.DeviceIndex].ChildShip : null;
         }
 

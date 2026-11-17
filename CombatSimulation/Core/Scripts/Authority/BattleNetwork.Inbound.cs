@@ -87,7 +87,7 @@ namespace CombatSimulation.Core
             }
             foreach (var operation in _remoteOperations)
                 if (operation.EntityId == entity && operation.Owner == owner && operation.Tick <= Tick &&
-                    operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed)
+                    operation.Kind == OwnerOperationKind.Unit && operation.Unit.Reason == UnitTransitionReason.Deployed)
                     return true;
             return false;
         }
@@ -113,7 +113,7 @@ namespace CombatSimulation.Core
 
         private DroneBayInventory FindBay(DroneBayKey key)
         {
-            var slot = Roster.Find(key.RosterId);
+            var slot = Units.Find(key.UnitId);
             return slot != null && key.DeviceIndex >= 0 && key.DeviceIndex < slot.Setup.Ship.Devices.Count
                 ? slot.GetBay(key.DeviceIndex) : null;
         }
@@ -122,9 +122,9 @@ namespace CombatSimulation.Core
         {
             switch (operation.Kind)
             {
-                case OwnerOperationKind.Roster:
-                    var record = operation.Roster;
-                    var slot = Roster.Find(record.RosterId);
+                case OwnerOperationKind.Unit:
+                    var record = operation.Unit;
+                    var slot = Units.Find(record.UnitId);
                     if (slot == null || slot.Owner != operation.Owner || record.Revision < 1 ||
                         !Finite(record.ArmorDeficit) || record.ArmorDeficit < 0f || record.ArmorDeficit > slot.Setup.Ship.Armor ||
                         !Finite(record.ShieldDeficit) || record.ShieldDeficit < 0f || record.ShieldDeficit > slot.Setup.Ship.Shield.Max ||
@@ -132,17 +132,17 @@ namespace CombatSimulation.Core
                         record.DeploymentOrder < 0) return false;
                     switch (record.Reason)
                     {
-                        case RosterTransitionReason.Deployed:
-                            return record.PreviousStatus == RosterStatus.Ready && record.Status == RosterStatus.Active &&
+                        case UnitTransitionReason.Deployed:
+                            return record.PreviousStatus == UnitStatus.Ready && record.Status == UnitStatus.Active &&
                                 record.DeploymentCount > 0 && record.DeploymentOrder > 0 && ValidPose(operation.Pose) &&
-                                operation.EntityId == SpawnIdentity.CreateRoot(BattleId, record.RosterId, record.DeploymentCount, operation.Tick);
-                        case RosterTransitionReason.Retreated:
-                            return record.PreviousStatus == RosterStatus.Active && record.Status == RosterStatus.Ready && !operation.EntityId.IsNull;
-                        case RosterTransitionReason.Killed:
-                            return record.PreviousStatus == RosterStatus.Active && record.Status == RosterStatus.Destroyed && !operation.EntityId.IsNull;
-                        case RosterTransitionReason.ForcedDestruction:
-                            return (record.PreviousStatus == RosterStatus.Ready || record.PreviousStatus == RosterStatus.Active) &&
-                                record.Status == RosterStatus.Destroyed && (record.PreviousStatus == RosterStatus.Ready) == operation.EntityId.IsNull;
+                                operation.EntityId == SpawnIdentity.CreateRoot(BattleId, record.UnitId, record.DeploymentCount, operation.Tick);
+                        case UnitTransitionReason.Retreated:
+                            return record.PreviousStatus == UnitStatus.Active && record.Status == UnitStatus.Ready && !operation.EntityId.IsNull;
+                        case UnitTransitionReason.Killed:
+                            return record.PreviousStatus == UnitStatus.Active && record.Status == UnitStatus.Destroyed && !operation.EntityId.IsNull;
+                        case UnitTransitionReason.ForcedDestruction:
+                            return (record.PreviousStatus == UnitStatus.Ready || record.PreviousStatus == UnitStatus.Active) &&
+                                record.Status == UnitStatus.Destroyed && (record.PreviousStatus == UnitStatus.Ready) == operation.EntityId.IsNull;
                         default: return false;
                     }
                 case OwnerOperationKind.DroneSpawn:
@@ -227,11 +227,11 @@ namespace CombatSimulation.Core
                         var operation = _remoteOperations[i];
                         if (operation.Tick > Tick || (operation.Tick == Tick && OperationStage(operation) > stage))
                         { ++i; continue; }
-                        if (operation.Kind == OwnerOperationKind.Roster)
+                        if (operation.Kind == OwnerOperationKind.Unit)
                         {
-                            var slot = Roster.Find(operation.Roster.RosterId);
-                            if (operation.Roster.Revision > slot.Revision + 1) { ++i; continue; }
-                            if (operation.Roster.Revision == slot.Revision + 1 && ApplyRemoteRoster(operation, slot))
+                            var slot = Units.Find(operation.Unit.UnitId);
+                            if (operation.Unit.Revision > slot.Revision + 1) { ++i; continue; }
+                            if (operation.Unit.Revision == slot.Revision + 1 && ApplyRemoteUnit(operation, slot))
                                 _appliedOperations.Add(operation);
                         }
                         else if (operation.Kind == OwnerOperationKind.DroneSpawn)
@@ -275,12 +275,12 @@ namespace CombatSimulation.Core
             finally { _applyingRemoteOperation = false; }
         }
 
-        private bool ApplyRemoteRoster(in OwnerOperation operation, RosterSlot slot)
+        private bool ApplyRemoteUnit(in OwnerOperation operation, Unit slot)
         {
-            var record = operation.Roster;
-            if (slot.Status != record.PreviousStatus || slot.Status == RosterStatus.Destroyed) return false;
+            var record = operation.Unit;
+            if (slot.Status != record.PreviousStatus || slot.Status == UnitStatus.Destroyed) return false;
             ShipEntity ship = null;
-            if (record.Reason == RosterTransitionReason.Deployed)
+            if (record.Reason == UnitTransitionReason.Deployed)
             {
                 if (slot.DeploymentCount == uint.MaxValue || record.DeploymentCount != slot.DeploymentCount + 1 ||
                     _world.Entities.TryGet(operation.EntityId, out _)) return false;
@@ -301,7 +301,7 @@ namespace CombatSimulation.Core
                     (slot.ActiveShip?.Id ?? default) != operation.EntityId) return false;
                 if (slot.ActiveShip != null)
                 {
-                    _battle.RemoveShip(slot.ActiveShip, record.Reason == RosterTransitionReason.Retreated ? RemovalReason.Retreat : RemovalReason.Death);
+                    _battle.RemoveShip(slot.ActiveShip, record.Reason == UnitTransitionReason.Retreated ? RemovalReason.Retreat : RemovalReason.Death);
                 }
             }
             slot.Import(record, ship);
@@ -476,13 +476,13 @@ namespace CombatSimulation.Core
 
         private bool ShouldCapture(int owner) => Setup.HasRemoteOwners && !_applyingRemoteOperation && Setup.IsLocalOwner(owner);
 
-        internal void CaptureRoster(RosterSlot slot, RosterStatus previous, RosterTransitionReason reason, EntityId id)
+        internal void CaptureUnit(Unit slot, UnitStatus previous, UnitTransitionReason reason, EntityId id)
         {
             if (!ShouldCapture(slot.Owner)) return;
-            var state = new RosterSlotState(slot);
-            var record = new RosterRecord(slot.RosterId, slot.Revision, previous, slot.Status, reason,
+            var state = new UnitState(slot);
+            var record = new UnitRecord(slot.UnitId, slot.Revision, previous, slot.Status, reason,
                 slot.DeploymentCount, slot.DeploymentOrder, slot.ArmorDeficit, slot.ShieldDeficit, state.DamageFraction);
-            _outgoingOperations.Add(OwnerOperation.RosterChange(BattleId, slot.Owner, NextOperationSequence(slot.Owner),
+            _outgoingOperations.Add(OwnerOperation.UnitChange(BattleId, slot.Owner, NextOperationSequence(slot.Owner),
                 Tick, id, record, slot.ActiveShip == null ? default : _world.ReadSpawnPose(slot.ActiveShip)));
         }
 
@@ -579,7 +579,7 @@ namespace CombatSimulation.Core
             operation.Kind == OwnerOperationKind.BulletSpawn ? 6 :
             operation.Kind == OwnerOperationKind.Retreat || operation.Kind == OwnerOperationKind.Allegiance ||
             operation.Kind == OwnerOperationKind.DeviceUse || operation.Kind == OwnerOperationKind.TurretTarget ? 1 :
-            operation.Kind == OwnerOperationKind.Roster && operation.Roster.Reason == RosterTransitionReason.Deployed ? 1 : 12;
+            operation.Kind == OwnerOperationKind.Unit && operation.Unit.Reason == UnitTransitionReason.Deployed ? 1 : 12;
 
         private static int CompareHits(in InboundHit a, in InboundHit b)
         {

@@ -36,9 +36,9 @@ namespace CombatSimulation.Core.Tests
         {
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, ship),
-                new RosterSlotSetup(new RosterId(101), 1, Target),
-                new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, ship),
+                new UnitSetup(new UnitId(101), 1, Target),
+                new UnitSetup(new UnitId(2), 0, Fixtures.Ship),
             }));
             driver.Deploy(1);
             driver.Deploy(101);
@@ -72,7 +72,7 @@ namespace CombatSimulation.Core.Tests
             var tick = driver.Tick;
 
             var events = driver.StepCollecting();
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
             var spawn = events.FindIndex(e => e.Kind == BattleEventKind.Spawn && e.IsBullet);
             var removal = events.FindIndex(e => e.Kind == BattleEventKind.Removal && e.EntityId == ship);
             Assert.That(spawn, Is.GreaterThanOrEqualTo(0).And.LessThan(removal));
@@ -148,7 +148,7 @@ namespace CombatSimulation.Core.Tests
             driver.Retreat(driver.Entity(1));
             var events = driver.StepCollecting(Battle.RetreatTicks + 2);
 
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1));
             Assert.IsEmpty(CannonTests.BulletSpawns(events));
         }
 
@@ -159,7 +159,7 @@ namespace CombatSimulation.Core.Tests
             driver.Ship(1).PendingVanish = true;
             var events = driver.StepCollecting();
 
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1));
             Assert.IsEmpty(CannonTests.BulletSpawns(events));
         }
 
@@ -170,7 +170,7 @@ namespace CombatSimulation.Core.Tests
             driver.Ship(1).AddPendingDamage(0, 1000f);
             var events = driver.StepCollecting(3);
 
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
             Assert.IsEmpty(CannonTests.BulletSpawns(events));
         }
 
@@ -182,7 +182,7 @@ namespace CombatSimulation.Core.Tests
             driver.Surrender(0);
             var events = driver.StepCollecting();
 
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
             Assert.AreSame(Cloud, CannonTests.BulletSpawns(events).Single().BulletDefinition);
         }
 
@@ -213,7 +213,7 @@ namespace CombatSimulation.Core.Tests
             owner.Kill(101);
             GateDeviceTests.Tick(owner, remote, link);
 
-            Assert.AreEqual(RosterStatus.Destroyed, remote.Status(101));
+            Assert.AreEqual(UnitStatus.Destroyed, remote.Status(101));
             var original = Bullets(owner).Single();
             var copy = Bullets(remote).Single();
             Assert.AreEqual(original.Id, copy.Id);
@@ -230,7 +230,7 @@ namespace CombatSimulation.Core.Tests
             remote.Ship(101).AddPendingDamage(0, 1000f);
             remote.Step(3);
 
-            Assert.AreEqual(RosterStatus.Active, remote.Status(101));
+            Assert.AreEqual(UnitStatus.Active, remote.Status(101));
             Assert.IsEmpty(Bullets(remote));
         }
 
@@ -249,7 +249,7 @@ namespace CombatSimulation.Core.Tests
             link.Deliver(remote);
             remote.Step();
 
-            Assert.AreEqual(RosterStatus.Destroyed, remote.Status(101));
+            Assert.AreEqual(UnitStatus.Destroyed, remote.Status(101));
             Assert.AreEqual(Bullets(owner).Single().Id, Bullets(remote).Single().Id);
         }
 
@@ -271,7 +271,7 @@ namespace CombatSimulation.Core.Tests
             var missiles = Bullets(owner);
             Assert.AreEqual(3, missiles.Length);
             CollectionAssert.AreEquivalent(missiles.Select(m => m.Id), Bullets(remote).Select(m => m.Id));
-            Assert.AreEqual(RosterStatus.Destroyed, remote.Status(101));
+            Assert.AreEqual(UnitStatus.Destroyed, remote.Status(101));
         }
     }
 }

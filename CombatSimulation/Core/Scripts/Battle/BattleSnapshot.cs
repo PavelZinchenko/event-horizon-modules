@@ -11,7 +11,7 @@ namespace CombatSimulation.Core
         internal BattleSnapshot(BattleId battleId, int rosterSize)
         {
             BattleId = battleId;
-            _roster = new RosterSlotState[rosterSize];
+            _roster = new UnitState[rosterSize];
             _ships = new ShipState[rosterSize];
         }
 
@@ -44,7 +44,7 @@ namespace CombatSimulation.Core
         public ReadOnlySpan<AsteroidState> Asteroids => new ReadOnlySpan<AsteroidState>(_asteroids, 0, _asteroidCount);
 
         // Every slot in setup order.
-        public ReadOnlySpan<RosterSlotState> Roster => new ReadOnlySpan<RosterSlotState>(_roster, 0, _roster.Length);
+        public ReadOnlySpan<UnitState> Units => new ReadOnlySpan<UnitState>(_roster, 0, _roster.Length);
 
         // Presentation events of this tick, in order. Authority distinguishes predictions from commits.
         public ReadOnlySpan<BattleEvent> Events => new ReadOnlySpan<BattleEvent>(_events, 0, _eventCount);
@@ -116,19 +116,19 @@ namespace CombatSimulation.Core
             return count;
         }
 
-        internal void Write(Battle battle, long tick, PhysicsWorld world, Roster roster, BattleEventBuffer events)
+        internal void Write(Battle battle, long tick, PhysicsWorld world, UnitTable units, BattleEventBuffer events)
         {
             Tick = tick;
             TimerElapsedTicks = battle.TimerElapsedTicks;
             Result = battle.Result;
             CandidateResult = battle.CandidateResult;
 
-            var slots = roster.Slots;
+            var slots = units.All;
             _shipCount = 0;
             for (var i = 0; i < slots.Count; ++i)
             {
                 var slot = slots[i];
-                _roster[i] = new RosterSlotState(slot);
+                _roster[i] = new UnitState(slot);
             }
 
             if (_ships.Length < battle.ShipEntryCount)
@@ -218,7 +218,7 @@ namespace CombatSimulation.Core
             _appliedOperationCount = applied.Count;
         }
 
-        private readonly RosterSlotState[] _roster;
+        private readonly UnitState[] _roster;
         private ShipState[] _ships;
         private int _shipCount;
         private BarrelState[] _barrels = new BarrelState[16];

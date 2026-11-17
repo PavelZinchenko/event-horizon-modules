@@ -55,7 +55,7 @@ namespace CombatSimulation.Core.Tests
             }
             var states = driver.Battle.Snapshot.Ships.ToArray().Where(s => s.IsDecoy).ToArray();
             Assert.AreEqual(4, states.Length);
-            Assert.IsTrue(states.All(s => !s.IsDrone && s.RosterId.Value == 0 && s.Life == 1f));
+            Assert.IsTrue(states.All(s => !s.IsDrone && s.UnitId.Value == 0 && s.Life == 1f));
         }
 
         [Test]
@@ -110,7 +110,7 @@ namespace CombatSimulation.Core.Tests
             var removal = events.Single(e => e.Kind == BattleEventKind.Removal && e.EntityId == id);
             Assert.IsTrue(removal.IsDecoy);
             Assert.AreEqual(RemovalReason.Death, removal.RemovalReason);
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
         }
 
         [Test]
@@ -176,7 +176,7 @@ namespace CombatSimulation.Core.Tests
             driver.Control(101, systems: 1);
             driver.Step(4);
             Assert.IsNull(driver.Battle.FindShip(id));
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
         }
 
         [Test]
@@ -213,7 +213,7 @@ namespace CombatSimulation.Core.Tests
             var driver = Launch();
             driver.Kill(1);
             driver.Step();
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
             Assert.AreEqual(4, Decoys(driver).Length);
         }
 

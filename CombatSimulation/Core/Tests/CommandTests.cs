@@ -13,14 +13,14 @@ namespace CombatSimulation.Core.Tests
             var battle = driver.Battle;
             driver.Step(3);
 
-            Assert.IsFalse(battle.Submit(RosterCommand.Deploy(new BattleId(2), 1, 3, new RosterId(1))));
-            Assert.IsFalse(battle.Submit(RosterCommand.Deploy(battle.BattleId, 2, 2, new RosterId(1))));
-            Assert.IsFalse(battle.Submit(RosterCommand.Surrender(battle.BattleId, 3, 3, 2)));
-            Assert.IsFalse(battle.Submit(RosterCommand.KillAll(battle.BattleId, 4, 3, -1)));
-            Assert.IsFalse(battle.Submit(default(RosterCommand)));
+            Assert.IsFalse(battle.Submit(UnitCommand.Deploy(new BattleId(2), 1, 3, new UnitId(1))));
+            Assert.IsFalse(battle.Submit(UnitCommand.Deploy(battle.BattleId, 2, 2, new UnitId(1))));
+            Assert.IsFalse(battle.Submit(UnitCommand.Surrender(battle.BattleId, 3, 3, 2)));
+            Assert.IsFalse(battle.Submit(UnitCommand.KillAll(battle.BattleId, 4, 3, -1)));
+            Assert.IsFalse(battle.Submit(default(UnitCommand)));
             Assert.AreEqual(5, battle.RejectedCommandCount);
 
-            Assert.IsTrue(battle.Submit(RosterCommand.Deploy(battle.BattleId, 6, 3, new RosterId(1))));
+            Assert.IsTrue(battle.Submit(UnitCommand.Deploy(battle.BattleId, 6, 3, new UnitId(1))));
         }
 
         [Test]
@@ -29,12 +29,12 @@ namespace CombatSimulation.Core.Tests
             var driver = new Driver(Fixtures.Setup());
             var battle = driver.Battle;
 
-            Assert.IsTrue(battle.Submit(RosterCommand.Deploy(battle.BattleId, 9, 5, new RosterId(1))));
-            Assert.IsFalse(battle.Submit(RosterCommand.Deploy(battle.BattleId, 9, 7, new RosterId(101))));
+            Assert.IsTrue(battle.Submit(UnitCommand.Deploy(battle.BattleId, 9, 5, new UnitId(1))));
+            Assert.IsFalse(battle.Submit(UnitCommand.Deploy(battle.BattleId, 9, 7, new UnitId(101))));
             Assert.AreEqual(1, battle.RejectedCommandCount);
 
             driver.StepUntil(6);
-            Assert.IsTrue(battle.Submit(RosterCommand.Deploy(battle.BattleId, 9, 7, new RosterId(101))),
+            Assert.IsTrue(battle.Submit(UnitCommand.Deploy(battle.BattleId, 9, 7, new UnitId(101))),
                 "An applied command no longer reserves its ID.");
         }
 
@@ -45,10 +45,10 @@ namespace CombatSimulation.Core.Tests
             Assert.IsTrue(driver.Deploy(1, 10));
 
             driver.StepUntil(10);
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1));
             driver.Step();
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
-            Assert.AreEqual(SpawnIdentity.CreateRoot(driver.BattleId, new RosterId(1), 1, 10), driver.Entity(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
+            Assert.AreEqual(SpawnIdentity.CreateRoot(driver.BattleId, new UnitId(1), 1, 10), driver.Entity(1));
         }
 
         [Test]
@@ -58,12 +58,12 @@ namespace CombatSimulation.Core.Tests
             var battle = driver.Battle;
 
             // Submitted in the opposite order; the side allows one active ship.
-            Assert.IsTrue(battle.Submit(RosterCommand.Deploy(battle.BattleId, 5, 0, new RosterId(2))));
-            Assert.IsTrue(battle.Submit(RosterCommand.Deploy(battle.BattleId, 3, 0, new RosterId(1))));
+            Assert.IsTrue(battle.Submit(UnitCommand.Deploy(battle.BattleId, 5, 0, new UnitId(2))));
+            Assert.IsTrue(battle.Submit(UnitCommand.Deploy(battle.BattleId, 3, 0, new UnitId(1))));
             driver.Step();
 
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(2));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(2));
             Assert.AreEqual(1, battle.RejectedCommandCount);
         }
 
@@ -75,7 +75,7 @@ namespace CombatSimulation.Core.Tests
             driver.Deploy(1);
             driver.Step();
 
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
             Assert.AreEqual(1u, driver.Slot(1).DeploymentCount);
             Assert.AreEqual(1, driver.Battle.RejectedCommandCount);
         }
@@ -87,13 +87,13 @@ namespace CombatSimulation.Core.Tests
             limited.Deploy(1);
             limited.Deploy(2);
             limited.Step();
-            Assert.AreEqual(RosterStatus.Ready, limited.Status(2));
+            Assert.AreEqual(UnitStatus.Ready, limited.Status(2));
 
             var wide = new Driver(Fixtures.Setup(2, 1, maxActiveShipsPerSide: 2));
             wide.Deploy(1);
             wide.Deploy(2);
             wide.Step();
-            Assert.AreEqual(RosterStatus.Active, wide.Status(2));
+            Assert.AreEqual(UnitStatus.Active, wide.Status(2));
         }
 
         [Test]
@@ -166,15 +166,15 @@ namespace CombatSimulation.Core.Tests
         }
 
         [Test]
-        public void FramesAndRosterCommandsShareCommandIds()
+        public void FramesAndUnitCommandsShareCommandIds()
         {
             var driver = new Driver(Fixtures.Setup());
             var battle = driver.Battle;
 
-            Assert.IsTrue(battle.Submit(RosterCommand.Deploy(battle.BattleId, 9, 5, new RosterId(1))));
+            Assert.IsTrue(battle.Submit(UnitCommand.Deploy(battle.BattleId, 9, 5, new UnitId(1))));
             Assert.IsFalse(battle.Submit(ControlFrame.Create(battle.BattleId, 9, 5, new EntityId(42), null, 0f, 0)));
             Assert.IsTrue(battle.Submit(ControlFrame.Create(battle.BattleId, 10, 5, new EntityId(42), null, 0f, 0)));
-            Assert.IsFalse(battle.Submit(RosterCommand.Deploy(battle.BattleId, 10, 5, new RosterId(101))));
+            Assert.IsFalse(battle.Submit(UnitCommand.Deploy(battle.BattleId, 10, 5, new UnitId(101))));
             Assert.AreEqual(2, battle.RejectedCommandCount);
         }
 
@@ -207,7 +207,7 @@ namespace CombatSimulation.Core.Tests
         public void AFrameForAShipDeployedInTheSameTickApplies()
         {
             var driver = new Driver(Fixtures.Setup());
-            var id = SpawnIdentity.CreateRoot(driver.BattleId, new RosterId(1), 1, 0);
+            var id = SpawnIdentity.CreateRoot(driver.BattleId, new UnitId(1), 1, 0);
 
             driver.Control(id, throttle: 1f);
             driver.Deploy(1);
@@ -247,7 +247,7 @@ namespace CombatSimulation.Core.Tests
             driver.Control(1, course: 1f, throttle: 1f, systems: 1);
             driver.Retreat(driver.Entity(1));
             driver.StepUntil(driver.Tick + Battle.RetreatTicks + 1);
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1));
 
             driver.Deploy(1);
             driver.Step();

@@ -25,7 +25,7 @@ namespace CombatSimulation.Core.Tests
             driver.Ship(101).Armor.Consume(400f);
             driver.Retreat(driver.Entity(1));
             recorder.Step(Battle.RetreatTicks + 1);
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1));
             Assert.AreEqual(0.4f, recorder.Credit(1), Tolerance);
 
             // 2. B deploys, adds 30% and dies.
@@ -34,7 +34,7 @@ namespace CombatSimulation.Core.Tests
             driver.Ship(101).Armor.Consume(300f);
             driver.Kill(2);
             recorder.Step();
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(2));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(2));
             Assert.AreEqual(0.3f, recorder.Credit(2), Tolerance);
 
             // 3. A redeploys; the battle completes after another 30%.
@@ -88,7 +88,7 @@ namespace CombatSimulation.Core.Tests
 
             driver.Retreat(driver.Entity(101));
             driver.Step(Battle.RetreatTicks + 1);
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(101));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(101));
             Assert.AreEqual(0.25f, Fraction(driver, 101), Tolerance, "Ready after a retreat: the retained deficit.");
 
             driver.Surrender(1);
@@ -99,8 +99,8 @@ namespace CombatSimulation.Core.Tests
 
         private static float Fraction(Driver driver, uint rosterId)
         {
-            foreach (var slot in driver.Battle.Snapshot.Roster)
-                if (slot.RosterId.Value == rosterId) return slot.DamageFraction;
+            foreach (var slot in driver.Battle.Snapshot.Units)
+                if (slot.UnitId.Value == rosterId) return slot.DamageFraction;
             throw new KeyNotFoundException(rosterId.ToString());
         }
 
@@ -125,10 +125,10 @@ namespace CombatSimulation.Core.Tests
                     var snapshot = _driver.Battle.Snapshot;
                     foreach (var item in snapshot.Events)
                     {
-                        if (item.Kind == BattleEventKind.RosterTransition && item.Side == 0 &&
-                            (item.TransitionReason == RosterTransitionReason.Retreated ||
-                             item.TransitionReason == RosterTransitionReason.Killed))
-                            Checkpoint(snapshot, item.RosterId.Value);
+                        if (item.Kind == BattleEventKind.UnitTransition && item.Side == 0 &&
+                            (item.TransitionReason == UnitTransitionReason.Retreated ||
+                             item.TransitionReason == UnitTransitionReason.Killed))
+                            Checkpoint(snapshot, item.UnitId.Value);
                         else if (item.Kind == BattleEventKind.Result && TryGetLastActivated(snapshot, out var last))
                             Checkpoint(snapshot, last);
                     }
@@ -140,7 +140,7 @@ namespace CombatSimulation.Core.Tests
                 ++CheckpointCount;
 
                 var total = 0f;
-                foreach (var slot in snapshot.Roster)
+                foreach (var slot in snapshot.Units)
                     if (slot.Side == 1) total += slot.DamageFraction;
 
                 if (total <= _total) return;
@@ -152,11 +152,11 @@ namespace CombatSimulation.Core.Tests
             {
                 rosterId = 0;
                 var order = 0L;
-                foreach (var slot in snapshot.Roster)
+                foreach (var slot in snapshot.Units)
                 {
                     if (slot.Side != 0 || slot.DeploymentOrder <= order) continue;
                     order = slot.DeploymentOrder;
-                    rosterId = slot.RosterId.Value;
+                    rosterId = slot.UnitId.Value;
                 }
                 return order > 0;
             }

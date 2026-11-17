@@ -144,18 +144,18 @@ namespace CombatSimulation.Core.Tests
             {
                 if (Battle.IsCompleted) return;
                 var snapshot = Battle.Snapshot;
-                var roster = snapshot.Roster;
+                var roster = snapshot.Units;
                 var max = Battle.Setup.MaxActiveShipsPerSide;
                 for (var side = 0; side < BattleSetup.SideCount; ++side)
                 {
                     var active = 0;
                     for (var i = 0; i < roster.Length; ++i)
-                        if (roster[i].Side == side && roster[i].Status == RosterStatus.Active) ++active;
+                        if (roster[i].Side == side && roster[i].Status == UnitStatus.Active) ++active;
 
                     for (var i = 0; i < roster.Length && active < max; ++i)
                     {
-                        if (roster[i].Side != side || roster[i].Owner != Owner || roster[i].Status != RosterStatus.Ready) continue;
-                        Battle.Submit(RosterCommand.Deploy(Battle.BattleId, _nextCommandId++, Battle.Tick, roster[i].RosterId));
+                        if (roster[i].Side != side || roster[i].Owner != Owner || roster[i].Status != UnitStatus.Ready) continue;
+                        Battle.Submit(UnitCommand.Deploy(Battle.BattleId, _nextCommandId++, Battle.Tick, roster[i].UnitId));
                         ++active;
                     }
                 }
@@ -163,11 +163,11 @@ namespace CombatSimulation.Core.Tests
                 for (var i = 0; i < roster.Length; ++i)
                 {
                     var slot = roster[i];
-                    if (slot.Owner != Owner || slot.RosterId.Value % 100 != 1 || slot.Status != RosterStatus.Active ||
+                    if (slot.Owner != Owner || slot.UnitId.Value % 100 != 1 || slot.Status != UnitStatus.Active ||
                         slot.DeploymentCount != 1) continue;
                     if (!snapshot.TryGetShip(slot.ActiveEntity, out var ship) || ship.IsRetreating) continue;
                     if (ship.Armor.Value < ScriptedBattle.RetreatArmorFraction * ship.Armor.Max)
-                        Battle.Submit(RosterCommand.Retreat(Battle.BattleId, _nextCommandId++, Battle.Tick, ship.Id));
+                        Battle.Submit(UnitCommand.Retreat(Battle.BattleId, _nextCommandId++, Battle.Tick, ship.Id));
                 }
             }
 

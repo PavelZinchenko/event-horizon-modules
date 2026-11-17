@@ -203,9 +203,9 @@ namespace CombatSimulation.Core.Tests
         {
             var slots = new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Shooter(), 20),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship, 20),
-                new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship, 10),
+                new UnitSetup(new UnitId(1), 0, Shooter(), 20),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship, 20),
+                new UnitSetup(new UnitId(102), 1, Fixtures.Ship, 10),
             };
             var owner = new Driver(new BattleSetup(new BattleId(77), 13, slots, localOwners: new[] { 20 }));
             var copy = new Driver(new BattleSetup(new BattleId(77), 13, slots, localOwners: new[] { 10 }));

@@ -16,18 +16,18 @@ namespace CombatSimulation.Core
         public static bool operator !=(BattleId left, BattleId right) => !left.Equals(right);
     }
 
-    public readonly struct RosterId : IEquatable<RosterId>, IComparable<RosterId>
+    public readonly struct UnitId : IEquatable<UnitId>, IComparable<UnitId>
     {
         public readonly uint Value;
 
-        public RosterId(uint value) => Value = value;
-        public bool Equals(RosterId other) => Value == other.Value;
-        public override bool Equals(object obj) => obj is RosterId other && Equals(other);
+        public UnitId(uint value) => Value = value;
+        public bool Equals(UnitId other) => Value == other.Value;
+        public override bool Equals(object obj) => obj is UnitId other && Equals(other);
         public override int GetHashCode() => unchecked((int)Value);
-        public int CompareTo(RosterId other) => Value.CompareTo(other.Value);
+        public int CompareTo(UnitId other) => Value.CompareTo(other.Value);
         public override string ToString() => Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        public static bool operator ==(RosterId left, RosterId right) => left.Equals(right);
-        public static bool operator !=(RosterId left, RosterId right) => !left.Equals(right);
+        public static bool operator ==(UnitId left, UnitId right) => left.Equals(right);
+        public static bool operator !=(UnitId left, UnitId right) => !left.Equals(right);
     }
 
     // A spawn-derived public identity, never an array index or a physics handle.

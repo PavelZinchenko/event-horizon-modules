@@ -75,7 +75,7 @@ namespace CombatSimulation.Core.Tests
         public void CopyBelongsToItsBattle()
         {
             var setup = ScriptedBattle.Setup();
-            var other = new BattleSetup(new BattleId(setup.BattleId.Value + 1), setup.MatchSeed, setup.Roster, setup.Width,
+            var other = new BattleSetup(new BattleId(setup.BattleId.Value + 1), setup.MatchSeed, setup.Units, setup.Width,
                 setup.Height, setup.TimeLimitTicks, setup.MaxActiveShipsPerSide);
             var a = new ScriptedBattle(setup, record: false, retreat: false);
             var b = new ScriptedBattle(other, record: false, retreat: false);
@@ -89,7 +89,7 @@ namespace CombatSimulation.Core.Tests
             var text = new StringBuilder();
             Append(text, snapshot.BattleId); Append(text, snapshot.Tick); Append(text, snapshot.TimerElapsedTicks);
             Append(text, snapshot.Result); Append(text, snapshot.CandidateResult);
-            foreach (var item in snapshot.Roster) Append(text, item);
+            foreach (var item in snapshot.Units) Append(text, item);
             foreach (var ship in snapshot.Ships)
             {
                 Append(text, ship);

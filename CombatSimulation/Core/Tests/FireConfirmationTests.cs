@@ -24,8 +24,8 @@ namespace CombatSimulation.Core.Tests
         private static BattleSetup Setup(int localOwner, ShipDefinition ship) => new BattleSetup(new BattleId(77), 13,
             new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.Ship, 10),
-                new RosterSlotSetup(new RosterId(101), 1, ship, Owner),
+                new UnitSetup(new UnitId(1), 0, Fixtures.Ship, 10),
+                new UnitSetup(new UnitId(101), 1, ship, Owner),
             }, localOwners: new[] { localOwner });
 
         // The owner deploys slot 101; the receiver applies the deployment in the same tick; both then reach tick 2.

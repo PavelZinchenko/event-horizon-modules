@@ -26,7 +26,7 @@ namespace CombatSimulation.Core
         private BattleId BattleId => _world.BattleId;
         private long Tick => _world.Tick;
         private PhysicsWorld Physics => _world.Physics;
-        private Roster Roster => _world.Roster;
+        private UnitTable Units => _world.Units;
 
         // True while received records apply: their changes are commits and send no records.
         internal bool ApplyingRemoteOperation => _applyingRemoteOperation;
@@ -38,9 +38,9 @@ namespace CombatSimulation.Core
         internal long ResultFrontier()
         {
             var frontier = Tick;
-            for (var i = 0; i < Setup.Roster.Count; ++i)
+            for (var i = 0; i < Setup.Units.Count; ++i)
             {
-                var slot = Setup.Roster[i];
+                var slot = Setup.Units[i];
                 if (Setup.IsLocalOwner(slot.Owner)) continue;
                 if (!_watermarks.TryGetValue(slot.Owner, out var watermark)) { frontier = -1; break; }
                 watermark.Promote(OperationsThrough(slot.Owner));

@@ -73,7 +73,7 @@ namespace CombatSimulation.Ai
         // (or in the deployment SetMothership saw). A mothership without a slot (a drone or a decoy) is destroyed when it
         // leaves: drones and decoys have no retreat of their own.
         public bool IsMothershipDestroyed => HasMothershipRecord && !IsActive(_mothership) && (!_mothershipHasSlot ||
-            TryGetMothershipSlot(out var slot) && slot.Status == RosterStatus.Destroyed && slot.DeploymentCount == _mothershipDeployment);
+            TryGetMothershipSlot(out var slot) && slot.Status == UnitStatus.Destroyed && slot.DeploymentCount == _mothershipDeployment);
 
         // Legacy UnitState.Inactive of the mothership: it left the battle without being destroyed (retreat or vanish, D12).
         public bool IsMothershipRetreated => HasMothershipRecord && !IsActive(_mothership) && !IsMothershipDestroyed;
@@ -87,7 +87,7 @@ namespace CombatSimulation.Ai
             _aiMothership = true;
             _overrideAtSet = _ship.MothershipOverride;
             _mothershipHasSlot = TryGetShip(id, out var mother) && !mother.IsDrone && !mother.IsDecoy;
-            _mothershipRosterId = _mothershipHasSlot ? mother.RosterId : default;
+            _mothershipUnitId = _mothershipHasSlot ? mother.UnitId : default;
             _mothershipDeployment = TryGetMothershipSlot(out var slot) ? slot.DeploymentCount : 0;
         }
 
@@ -346,7 +346,7 @@ namespace CombatSimulation.Ai
                 _ownerRemoved = _mothership.IsNull;
                 _aiMothership = false;
                 _mothershipHasSlot = true;
-                _mothershipRosterId = TryGetShip(_mothership, out var mother) ? mother.RosterId : default;
+                _mothershipUnitId = TryGetShip(_mothership, out var mother) ? mother.UnitId : default;
                 _mothershipDeployment = TryGetMothershipSlot(out var slot) ? slot.DeploymentCount : 0;
             }
             FrameId++;
@@ -362,18 +362,18 @@ namespace CombatSimulation.Ai
 
             _mothership = _ship.MothershipId;
             _mothershipHasSlot = true;
-            _mothershipRosterId = _ship.BayKey.Value.RosterId;
+            _mothershipUnitId = _ship.BayKey.Value.UnitId;
             if (TryGetMothershipSlot(out var slot))
                 _mothershipDeployment = slot.DeploymentCount;
         }
 
-        private bool TryGetMothershipSlot(out RosterSlotState slot)
+        private bool TryGetMothershipSlot(out UnitState slot)
         {
             if (_mothershipHasSlot)
             {
-                foreach (var item in Snapshot.Roster)
+                foreach (var item in Snapshot.Units)
                 {
-                    if (item.RosterId != _mothershipRosterId) continue;
+                    if (item.UnitId != _mothershipUnitId) continue;
                     slot = item;
                     return true;
                 }
@@ -395,7 +395,7 @@ namespace CombatSimulation.Ai
         private float _timeToHit;
         private bool _threatsDisabled;
         private EntityId _mothership;
-        private RosterId _mothershipRosterId;
+        private UnitId _mothershipUnitId;
         private uint _mothershipDeployment;
         private bool _mothershipHasSlot;
         private bool _aiMothership;

@@ -43,8 +43,8 @@ namespace CombatSimulation.Core.Tests
         private static BattleRunner Start(Provider provider, int side0Slots = 1)
         {
             var runner = new BattleRunner(Fixtures.Setup(side0Slots, 1), provider);
-            runner.Deploy(new RosterId(1), 0);
-            runner.Deploy(new RosterId(101), 0);
+            runner.Deploy(new UnitId(1), 0);
+            runner.Deploy(new UnitId(101), 0);
             return runner;
         }
 
@@ -114,7 +114,7 @@ namespace CombatSimulation.Core.Tests
             var schedule = new PilotSchedule(2, 4);
             var counts = new int[4];
             for (uint roster = 1; roster <= 64; ++roster)
-                ++counts[schedule.OffsetOf(SpawnIdentity.CreateRoot(new BattleId(1), new RosterId(roster), 1, 0))];
+                ++counts[schedule.OffsetOf(SpawnIdentity.CreateRoot(new BattleId(1), new UnitId(roster), 1, 0))];
 
             foreach (var count in counts) Assert.Greater(count, 4);
         }
@@ -140,7 +140,7 @@ namespace CombatSimulation.Core.Tests
             runner.Step();
             var first = runner.Snapshot.Ships[0].Id;
             runner.Retreat(first, runner.Tick);
-            while (runner.Snapshot.Roster[0].Status != RosterStatus.Ready) runner.Step();
+            while (runner.Snapshot.Units[0].Status != UnitStatus.Ready) runner.Step();
 
             var removalTick = runner.Snapshot.Tick;
             var pilot = provider.Pilots[0];
@@ -151,7 +151,7 @@ namespace CombatSimulation.Core.Tests
             runner.Step();
             Assert.AreEqual(removalTick, pilot.ThinkTicks.Count, "No thinks after the removal.");
 
-            runner.Deploy(new RosterId(1), runner.Tick);
+            runner.Deploy(new UnitId(1), runner.Tick);
             runner.Step();
             Assert.AreEqual(2, provider.Pilots.Count);
             Assert.AreEqual(3, provider.Spawned.Count);

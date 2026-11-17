@@ -33,11 +33,11 @@ namespace CombatSimulation.Runtime
         public bool IsCompleted => _battle.IsCompleted;
         public BattleSnapshot Snapshot => _battle.Snapshot;
 
-        public bool Deploy(RosterId rosterId, long targetTick) =>
-            _battle.Submit(RosterCommand.Deploy(BattleId, _nextCommandId++, targetTick, rosterId));
+        public bool Deploy(UnitId rosterId, long targetTick) =>
+            _battle.Submit(UnitCommand.Deploy(BattleId, _nextCommandId++, targetTick, rosterId));
 
         public bool Retreat(EntityId entityId, long targetTick) =>
-            _battle.Submit(RosterCommand.Retreat(BattleId, _nextCommandId++, targetTick, entityId));
+            _battle.Submit(UnitCommand.Retreat(BattleId, _nextCommandId++, targetTick, entityId));
 
         public bool SelfDestruct(EntityId entityId, long targetTick) =>
             _battle.Submit(new SelfDestructCommand(BattleId, _nextCommandId++, targetTick, entityId));
@@ -49,10 +49,10 @@ namespace CombatSimulation.Runtime
             _battle.Submit(ShipCommand.ChangeAllegiance(BattleId, _nextCommandId++, targetTick, entityId, allegiance));
 
         public bool Surrender(int side, long targetTick) =>
-            _battle.Submit(RosterCommand.Surrender(BattleId, _nextCommandId++, targetTick, side));
+            _battle.Submit(UnitCommand.Surrender(BattleId, _nextCommandId++, targetTick, side));
 
         public bool KillAll(int requestingSide, long targetTick) =>
-            _battle.Submit(RosterCommand.KillAll(BattleId, _nextCommandId++, targetTick, requestingSide));
+            _battle.Submit(UnitCommand.KillAll(BattleId, _nextCommandId++, targetTick, requestingSide));
 
         public void Step()
         {

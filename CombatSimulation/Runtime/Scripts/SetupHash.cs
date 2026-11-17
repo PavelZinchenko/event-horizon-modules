@@ -24,7 +24,7 @@ namespace CombatSimulation.Runtime
             var hash = new Walker().Hash(setup, 0);
             // OwnerDelay is a method, so the walk does not see the delays.
             var owners = new List<int>();
-            foreach (var slot in setup.Roster)
+            foreach (var slot in setup.Units)
                 if (!owners.Contains(slot.Owner)) owners.Add(slot.Owner);
             owners.Sort();
             foreach (var owner in owners)

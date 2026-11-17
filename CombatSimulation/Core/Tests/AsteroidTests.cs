@@ -20,10 +20,10 @@ namespace CombatSimulation.Core.Tests
 
         private static BattleSetup Setup(ShipDefinition ship, IReadOnlyList<AsteroidSetup> asteroids, ulong battleId = 1,
             IReadOnlyCollection<int> localOwners = null) =>
-            new BattleSetup(new BattleId(battleId), 7, new List<RosterSlotSetup>
+            new BattleSetup(new BattleId(battleId), 7, new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, ship ?? Fixtures.Ship),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, ship ?? Fixtures.Ship),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
             }, localOwners: localOwners, asteroids: asteroids);
 
         // Both ships deploy at tick 0; then the ships and asteroids take their test poses.

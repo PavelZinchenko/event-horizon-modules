@@ -152,9 +152,9 @@ namespace CombatSimulation.Core.Tests
         public void AimingSatelliteSearchPrefersATargetInsideItsArc()
         {
             var setup = new BattleSetup(new BattleId(1), 7, new[] {
-                new RosterSlotSetup(new RosterId(1), 0, Carrier(Companion(-10f * Degree, 190f * Degree), CompanionBarrel, Cannon)),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
-                new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship) }, maxActiveShipsPerSide: 2);
+                new UnitSetup(new UnitId(1), 0, Carrier(Companion(-10f * Degree, 190f * Degree), CompanionBarrel, Cannon)),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(102), 1, Fixtures.Ship) }, maxActiveShipsPerSide: 2);
             var driver = new Driver(setup);
             driver.Deploy(1); driver.Deploy(101); driver.Deploy(102); driver.Step();
             driver.Place(1, Origin, Vec2.Zero);
@@ -170,8 +170,8 @@ namespace CombatSimulation.Core.Tests
         public void RemoteAimingSatelliteTakesTheOwnerTargetAndNeverSearches()
         {
             var roster = new[] {
-                new RosterSlotSetup(new RosterId(1), 0, Carrier(Companion(-10f * Degree, 190f * Degree), CompanionBarrel, Cannon), 0),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship, 1) };
+                new UnitSetup(new UnitId(1), 0, Carrier(Companion(-10f * Degree, 190f * Degree), CompanionBarrel, Cannon), 0),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship, 1) };
             var owner = new Driver(new BattleSetup(new BattleId(1), 7, roster, localOwners: new[] { 0 }));
             var copy = new Driver(new BattleSetup(new BattleId(1), 7, roster, localOwners: new[] { 1 }));
             owner.Deploy(1); copy.Deploy(101); owner.Step(); copy.Step();

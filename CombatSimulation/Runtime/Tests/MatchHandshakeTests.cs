@@ -132,7 +132,7 @@ namespace CombatSimulation.Runtime.Tests
             while (host.Tick < 20)
             {
                 pair.Now += 0.02;
-                if (host.Tick == 1) host.Deploy(new RosterId(1), host.Tick);
+                if (host.Tick == 1) host.Deploy(new UnitId(1), host.Tick);
                 host.Update(pair.Now);
                 if (guest != null) guest.Update(pair.Now);
                 else if (pair.Guest.State == HandshakeState.Ready && host.Tick >= 5) guest = pair.Guest.CreateSession(new SessionFixtures.Pilots(), pair.Now);
@@ -212,10 +212,10 @@ namespace CombatSimulation.Runtime.Tests
         {
             var ship = new ShipDefinition(1, 1, new EngineDefinition(20, 10, 5, 2), armor,
                 new ResourceDefinition(500, 10, 1), new ResourceDefinition(300, 20, 0.5f));
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), MatchPlan.HostSide, ship, MatchPlan.HostOwner),
-                new RosterSlotSetup(new RosterId(2), MatchPlan.GuestSide, ship, MatchPlan.GuestOwner),
+                new UnitSetup(new UnitId(1), MatchPlan.HostSide, ship, MatchPlan.HostOwner),
+                new UnitSetup(new UnitId(2), MatchPlan.GuestSide, ship, MatchPlan.GuestOwner),
             };
             return new BattleSetup(plan.BattleId, plan.Seed, roster, localOwners: plan.LocalOwners, ownerDelays: plan.OwnerDelays);
         }

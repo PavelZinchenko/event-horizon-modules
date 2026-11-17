@@ -157,11 +157,11 @@ namespace CombatSimulation.Core.Tests
         public void ARemovedTargetStartsASearchAtOnce()
         {
             // Q2b redesign (owner, 2026-10-20). Both enemies are outside the cone; the nearer deviation is 101.
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, MissileShip()),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
-                new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, MissileShip()),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(102), 1, Fixtures.Ship),
             };
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: 2));
             driver.Deploy(1);

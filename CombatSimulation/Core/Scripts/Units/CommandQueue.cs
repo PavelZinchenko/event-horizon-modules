@@ -13,7 +13,7 @@ namespace CombatSimulation.Core
         }
 
         // Each Add returns null when it accepts the item, otherwise the reason for the rejection.
-        public string Add(in RosterCommand command, long tick)
+        public string Add(in UnitCommand command, long tick)
         {
             if (command.BattleId != _battleId)
                 return "wrong battle";
@@ -21,7 +21,7 @@ namespace CombatSimulation.Core
                 return "past tick";
             if (!IsValidKind(command.Kind))
                 return "unknown kind";
-            if ((command.Kind == RosterCommandKind.Surrender || command.Kind == RosterCommandKind.KillAll) &&
+            if ((command.Kind == UnitCommandKind.Surrender || command.Kind == UnitCommandKind.KillAll) &&
                 (command.Side < 0 || command.Side >= BattleSetup.SideCount))
                 return "invalid side";
             if (!_pendingCommandIds.Add(command.CommandId))
@@ -91,7 +91,7 @@ namespace CombatSimulation.Core
         }
 
         // Each TakeDue clears the list, then moves the items for the tick into it, in queue order.
-        public void TakeDue(long tick, List<RosterCommand> due)
+        public void TakeDue(long tick, List<UnitCommand> due)
         {
             due.Clear();
             var count = 0;
@@ -144,7 +144,7 @@ namespace CombatSimulation.Core
             if (count > 0) _frames.RemoveRange(0, count);
         }
 
-        private int FindInsertIndex(in RosterCommand command)
+        private int FindInsertIndex(in UnitCommand command)
         {
             var low = 0;
             var high = _rosterCommands.Count;
@@ -176,12 +176,12 @@ namespace CombatSimulation.Core
             return low;
         }
 
-        private static bool IsValidKind(RosterCommandKind kind) =>
-            kind == RosterCommandKind.Deploy || kind == RosterCommandKind.Retreat ||
-            kind == RosterCommandKind.Surrender || kind == RosterCommandKind.KillAll;
+        private static bool IsValidKind(UnitCommandKind kind) =>
+            kind == UnitCommandKind.Deploy || kind == UnitCommandKind.Retreat ||
+            kind == UnitCommandKind.Surrender || kind == UnitCommandKind.KillAll;
 
         private readonly BattleId _battleId;
-        private readonly List<RosterCommand> _rosterCommands = new List<RosterCommand>();
+        private readonly List<UnitCommand> _rosterCommands = new List<UnitCommand>();
         private readonly List<SelfDestructCommand> _selfDestructs = new List<SelfDestructCommand>();
         private readonly List<ShipCommand> _shipCommands = new List<ShipCommand>();
         private readonly List<ControlFrame> _frames = new List<ControlFrame>();

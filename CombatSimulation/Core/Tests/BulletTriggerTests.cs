@@ -291,8 +291,8 @@ namespace CombatSimulation.Core.Tests
                 triggers: new[] { Spawn(BulletTriggerConditions.Hit, Child) });
             var d = new Driver(new BattleSetup(new BattleId(1), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.CannonShip(bolt, cooldown: 10f), 10),
-                new RosterSlotSetup(new RosterId(101), 1,
+                new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(bolt, cooldown: 10f), 10),
+                new UnitSetup(new UnitId(101), 1,
                     Fixtures.ShipWith(devices: new[] { new PointDefenseDefinition(4f, 0.1f, 1f) }), 20),
             }, localOwners: new[] { 10 }));
             d.Battle.DeploySlot(d.Slot(1));
@@ -365,8 +365,8 @@ namespace CombatSimulation.Core.Tests
         private static BattleSetup NetworkSetup(int localOwner, ShipDefinition ship) => new BattleSetup(new BattleId(77), 13,
             new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.Ship, 10),
-                new RosterSlotSetup(new RosterId(101), 1, ship, RemoteOwner),
+                new UnitSetup(new UnitId(1), 0, Fixtures.Ship, 10),
+                new UnitSetup(new UnitId(101), 1, ship, RemoteOwner),
             }, localOwners: new[] { localOwner });
 
         private static (Driver owner, Driver remote, Link link) Pair(BulletDefinition bullet)
@@ -461,8 +461,8 @@ namespace CombatSimulation.Core.Tests
             // the children.
             var d = new Driver(new BattleSetup(new BattleId(1), 7, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.Ship, 10),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.CannonShip(
+                new UnitSetup(new UnitId(1), 0, Fixtures.Ship, 10),
+                new UnitSetup(new UnitId(101), 1, Fixtures.CannonShip(
                     Bolt(Spawn(BulletTriggerConditions.Hit), Spawn(BulletTriggerConditions.Detonated, Other)), cooldown: 10f), 20),
             }, localOwners: new[] { 10 }));
             d.Battle.DeploySlot(d.Slot(1));

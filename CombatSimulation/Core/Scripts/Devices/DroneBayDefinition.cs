@@ -5,19 +5,19 @@ namespace CombatSimulation.Core
     // A bay belongs to a roster slot for the whole battle, including time spent in reserve.
     public readonly struct DroneBayKey : IEquatable<DroneBayKey>
     {
-        public readonly RosterId RosterId;
+        public readonly UnitId UnitId;
         public readonly int DeviceIndex;
 
-        public DroneBayKey(RosterId rosterId, int deviceIndex)
+        public DroneBayKey(UnitId rosterId, int deviceIndex)
         {
             if (deviceIndex < 0) throw new ArgumentOutOfRangeException(nameof(deviceIndex));
-            RosterId = rosterId;
+            UnitId = rosterId;
             DeviceIndex = deviceIndex;
         }
 
-        public bool Equals(DroneBayKey other) => RosterId == other.RosterId && DeviceIndex == other.DeviceIndex;
+        public bool Equals(DroneBayKey other) => UnitId == other.UnitId && DeviceIndex == other.DeviceIndex;
         public override bool Equals(object obj) => obj is DroneBayKey other && Equals(other);
-        public override int GetHashCode() => unchecked(RosterId.GetHashCode() * 397 ^ DeviceIndex);
+        public override int GetHashCode() => unchecked(UnitId.GetHashCode() * 397 ^ DeviceIndex);
         public static bool operator ==(DroneBayKey a, DroneBayKey b) => a.Equals(b);
         public static bool operator !=(DroneBayKey a, DroneBayKey b) => !a.Equals(b);
     }

@@ -15,16 +15,16 @@ namespace CombatSimulation.Runtime.Tests
         {
             var link = new Link();
             var batch = link.Battle;
-            var ship = new EntityId(1234); var drone = new EntityId(5678); var bay = new DroneBayKey(new RosterId(99), 6);
+            var ship = new EntityId(1234); var drone = new EntityId(5678); var bay = new DroneBayKey(new UnitId(99), 6);
             var pose = new SpawnPose(new Vec2(1.25f, -20.5f), 2.5f, new Vec2(-5, 7), -3);
             var shot = SpawnIdentity.CreateChild(ship, 127, 7, 3, 0);
             var child = SpawnIdentity.CreateChild(shot, 125, 2, 0, 1);
             // Batch tick 125: records 123-127 cover negative, zero and positive tick offsets.
             var operations = new[]
             {
-                OwnerOperation.RosterChange(batch, 20, 1, 123, ship,
-                    new RosterRecord(new RosterId(99), 4, RosterStatus.Ready, RosterStatus.Active,
-                        RosterTransitionReason.Deployed, 2, 5, 22.5f, 9.25f, 0.25f), pose),
+                OwnerOperation.UnitChange(batch, 20, 1, 123, ship,
+                    new UnitRecord(new UnitId(99), 4, UnitStatus.Ready, UnitStatus.Active,
+                        UnitTransitionReason.Deployed, 2, 5, 22.5f, 9.25f, 0.25f), pose),
                 OwnerOperation.DroneLaunch(batch, 20, 2, 124, drone, bay, ship, pose),
                 OwnerOperation.BulletFired(batch, 20, 3, 127, shot, ship, 7, 3, 0, new Vec2(12.5f, 187.25f), GridAngle(1000)),
                 OwnerOperation.BulletFired(batch, 20, 4, 125, child, shot, 2, 0, 1),
@@ -80,7 +80,7 @@ namespace CombatSimulation.Runtime.Tests
 
             // Sizes the plan expected: bullet spawn about 5 bytes, removal about 4, hit about 11; a launch pose (P1) adds
             // 1 + 18 + 18 + 14 bits in a 200-unit arena.
-            CollectionAssert.AreEqual(new[] { SessionCodec.RecordKind.Roster, SessionCodec.RecordKind.DroneLaunch,
+            CollectionAssert.AreEqual(new[] { SessionCodec.RecordKind.Unit, SessionCodec.RecordKind.DroneLaunch,
                 SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.BulletSpawn, SessionCodec.RecordKind.Retreat,
                 SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.Removal, SessionCodec.RecordKind.MissileTarget,
                 SessionCodec.RecordKind.MissileTarget, SessionCodec.RecordKind.Allegiance, SessionCodec.RecordKind.DeviceUse,
@@ -294,8 +294,8 @@ namespace CombatSimulation.Runtime.Tests
             var shot = SpawnIdentity.CreateChild(ship, 10, 0, 0, 0);
             var operations = new[]
             {
-                OwnerOperation.RosterChange(link.Battle, 20, 1, 10, ship, new RosterRecord(new RosterId(99), 1,
-                    RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0)),
+                OwnerOperation.UnitChange(link.Battle, 20, 1, 10, ship, new UnitRecord(new UnitId(99), 1,
+                    UnitStatus.Ready, UnitStatus.Active, UnitTransitionReason.Deployed, 1, 1, 0, 0, 0)),
                 OwnerOperation.BulletFired(link.Battle, 20, 2, 10, shot, ship, 0, 0, 0, new Vec2(-0.3001f, 123.45678f), -7.1234f),
             };
             link.Read(link.Write(10, operations, Array.Empty<ResolvedHit>()), out var read, out _);
@@ -319,8 +319,8 @@ namespace CombatSimulation.Runtime.Tests
             var launched = SpawnIdentity.CreateChild(ship, 10, 2, 0, 0);
             var operations = new[]
             {
-                OwnerOperation.RosterChange(link.Battle, 20, 1, 10, ship, new RosterRecord(new RosterId(99), 1,
-                    RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0)),
+                OwnerOperation.UnitChange(link.Battle, 20, 1, 10, ship, new UnitRecord(new UnitId(99), 1,
+                    UnitStatus.Ready, UnitStatus.Active, UnitTransitionReason.Deployed, 1, 1, 0, 0, 0)),
                 OwnerOperation.BulletFired(link.Battle, 20, 2, 10, plain, ship, 0, 0, 0),
                 OwnerOperation.BulletFired(link.Battle, 20, 3, 10, charged, ship, 1, 0, 0, 1000),
                 OwnerOperation.BulletFired(link.Battle, 20, 4, 10, launched, ship, 2, 0, 0, new Vec2(5f, 6f), GridAngle(10), 6),
@@ -344,8 +344,8 @@ namespace CombatSimulation.Runtime.Tests
 
         private static readonly CorrectionCodec.Arena Arena = new CorrectionCodec.Arena(200, 200);
 
-        private static OwnerOperation Deploy(BattleId battle) => OwnerOperation.RosterChange(battle, 20, 1, 10, new EntityId(77),
-            new RosterRecord(new RosterId(99), 1, RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0));
+        private static OwnerOperation Deploy(BattleId battle) => OwnerOperation.UnitChange(battle, 20, 1, 10, new EntityId(77),
+            new UnitRecord(new UnitId(99), 1, UnitStatus.Ready, UnitStatus.Active, UnitTransitionReason.Deployed, 1, 1, 0, 0, 0));
 
         [Test]
         public void TurretTargetsRoundTripEnemyAllyUnknownAndClearWithoutVersionChange()
@@ -380,8 +380,8 @@ namespace CombatSimulation.Runtime.Tests
             var shot = SpawnIdentity.CreateChild(ship, 10, 0, 0, 0);
             var operations = new[]
             {
-                OwnerOperation.RosterChange(link.Battle, 20, 1, 10, ship, new RosterRecord(new RosterId(99), 1,
-                    RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0)),
+                OwnerOperation.UnitChange(link.Battle, 20, 1, 10, ship, new UnitRecord(new UnitId(99), 1,
+                    UnitStatus.Ready, UnitStatus.Active, UnitTransitionReason.Deployed, 1, 1, 0, 0, 0)),
                 OwnerOperation.BulletFired(link.Battle, 20, 2, 10, shot, ship, 0, 0, 0),
             };
             var hits = new[] { new ResolvedHit(link.Battle, 10, shot, 20, 0, link.Target, 10, 0, HitContactState.Start, HitImpactKind.Energy, 3, 1) };
@@ -405,8 +405,8 @@ namespace CombatSimulation.Runtime.Tests
 
             internal Link()
             {
-                var deploy = OwnerOperation.RosterChange(Battle, 10, 1, 0, Target, new RosterRecord(new RosterId(1), 1,
-                    RosterStatus.Ready, RosterStatus.Active, RosterTransitionReason.Deployed, 1, 1, 0, 0, 0));
+                var deploy = OwnerOperation.UnitChange(Battle, 10, 1, 0, Target, new UnitRecord(new UnitId(1), 1,
+                    UnitStatus.Ready, UnitStatus.Active, UnitTransitionReason.Deployed, 1, 1, 0, 0, 0));
                 SenderPeer.AddBody(deploy); ReceiverOwn.AddBody(deploy);
             }
 

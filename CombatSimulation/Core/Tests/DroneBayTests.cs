@@ -23,12 +23,12 @@ namespace CombatSimulation.Core.Tests
         internal static Driver Start(ShipDefinition carrier = null, ShipDefinition enemy = null,
             bool reserve = true, long timeLimit = 0, int maxActive = 1)
         {
-            var slots = new List<RosterSlotSetup>
+            var slots = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, carrier ?? Carrier()),
-                new RosterSlotSetup(new RosterId(101), 1, enemy ?? Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, carrier ?? Carrier()),
+                new UnitSetup(new UnitId(101), 1, enemy ?? Fixtures.Ship),
             };
-            if (reserve) slots.Add(new RosterSlotSetup(new RosterId(2), 0, Fixtures.Ship));
+            if (reserve) slots.Add(new UnitSetup(new UnitId(2), 0, Fixtures.Ship));
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, slots, timeLimitTicks: timeLimit,
                 maxActiveShipsPerSide: maxActive));
             driver.Deploy(1);
@@ -45,7 +45,7 @@ namespace CombatSimulation.Core.Tests
         {
             driver.Control(rosterId, systems: 1);
             driver.StepUntil(21);
-            return driver.Battle.FindShip(Drones(driver).Single(s => s.BayKey.Value.RosterId == new RosterId(rosterId)).Id);
+            return driver.Battle.FindShip(Drones(driver).Single(s => s.BayKey.Value.UnitId == new UnitId(rosterId)).Id);
         }
 
         internal static void Place(Driver driver, ShipEntity drone, Vec2 point)
@@ -74,7 +74,7 @@ namespace CombatSimulation.Core.Tests
             Assert.IsEmpty(Drones(driver));
             driver.Step();
             var drone = Drones(driver).Single();
-            Assert.AreEqual(new DroneBayKey(new RosterId(1), 0), drone.BayKey.Value);
+            Assert.AreEqual(new DroneBayKey(new UnitId(1), 0), drone.BayKey.Value);
             Assert.AreEqual(driver.Entity(1), drone.MothershipId);
             Assert.AreEqual(0UL, drone.Systems);
             Assert.AreEqual(Vec2.Zero, drone.LinearVelocity);
@@ -143,7 +143,7 @@ namespace CombatSimulation.Core.Tests
             survivor.Energy.Consume(4f);
             driver.Control(survivor.Id, throttle: 0.1f);
             driver.StepUntil(completion + 1);
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1));
             var old = Drones(driver).Single();
             Assert.IsTrue(old.MothershipId.IsNull);
             Assert.AreEqual(1, driver.Slot(1).GetBay(0).InHangar);
@@ -189,7 +189,7 @@ namespace CombatSimulation.Core.Tests
             Assert.IsTrue(driver.Battle.IsCompleted);
             Assert.AreEqual(1, Drones(driver).Length);
             Assert.IsTrue(Drones(driver).Single().MothershipId.IsNull);
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(2));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(2));
         }
 
         [Test]
@@ -203,12 +203,12 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(22, driver.Battle.Snapshot.TimerElapsedTicks);
             driver.Deploy(2);
             driver.Step();
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(2), "The roster limit still applies.");
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(2), "The roster limit still applies.");
             driver.Retreat(driver.Entity(1));
             driver.Step(351);
             driver.Deploy(2);
             driver.Step();
-            Assert.AreEqual(RosterStatus.Active, driver.Status(2));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(2));
         }
 
         [Test]
@@ -222,12 +222,12 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(1, Drones(driver).Length);
             driver.Deploy(2);
             driver.Step();
-            Assert.AreEqual(RosterStatus.Active, driver.Status(2));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(2));
             Assert.AreEqual(1, driver.Battle.Snapshot.TimerElapsedTicks);
         }
 
         [Test]
-        public void SelfDestructAppliesAtTargetTickWithoutRosterTransition()
+        public void SelfDestructAppliesAtTargetTickWithoutUnitTransition()
         {
             var driver = Start();
             var drone = Launch(driver);
@@ -244,7 +244,7 @@ namespace CombatSimulation.Core.Tests
             Assert.IsTrue(removal.IsDrone);
             Assert.AreEqual(RemovalReason.Death, removal.RemovalReason);
             Assert.AreEqual(0, driver.Slot(1).GetBay(0).ActiveCount);
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
         }
 
         [Test]
@@ -451,8 +451,8 @@ namespace CombatSimulation.Core.Tests
         {
             var pilot = new DronePilot();
             var runner = new BattleRunner(Fixtures.Setup(Carrier()), pilot);
-            runner.Deploy(new RosterId(1), 0);
-            runner.Deploy(new RosterId(101), 0);
+            runner.Deploy(new UnitId(1), 0);
+            runner.Deploy(new UnitId(101), 0);
             while (pilot.SelfDestructTick < 0) runner.Step();
             var drone = runner.Snapshot.Ships.ToArray().Single(s => s.IsDrone);
             Assert.AreEqual(PilotSchedule.Drone.OffsetOf(drone.Id), pilot.ThinkTicks[0] % 2);

@@ -17,15 +17,15 @@ namespace CombatSimulation.Ai.Tests
         // Slot 1 searches; slot 101 on side 1 launches four decoys at its first tick.
         private static BattleRunner Start(out AiContext context)
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Ship),
-                new RosterSlotSetup(new RosterId(101), 1, Jammer),
+                new UnitSetup(new UnitId(1), 0, Ship),
+                new UnitSetup(new UnitId(101), 1, Jammer),
             };
             var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: 1),
                 new DecoyPilots());
             foreach (var slot in roster)
-                runner.Deploy(slot.RosterId, runner.Tick);
+                runner.Deploy(slot.UnitId, runner.Tick);
             runner.Step();
             runner.Step();
             runner.Step();

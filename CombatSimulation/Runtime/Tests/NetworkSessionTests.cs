@@ -190,7 +190,7 @@ namespace CombatSimulation.Runtime.Tests
         {
             var pair = new SessionFixtures.Pair(datagram: 80, slots: 6, maxActive: 6); var observer = new ObservationCounter();
             pair.B.Observer = observer;
-            for (var i = 0; i < 6; ++i) { pair.A.Deploy(new RosterId((uint)(1 + i)), 0); pair.B.Deploy(new RosterId((uint)(101 + i)), 0); }
+            for (var i = 0; i < 6; ++i) { pair.A.Deploy(new UnitId((uint)(1 + i)), 0); pair.B.Deploy(new UnitId((uint)(101 + i)), 0); }
             pair.Run(6);
             Assert.AreEqual(1, pair.A.SentCorrectionBatches);
             Assert.AreEqual(2, pair.TA.UnreliableSections);
@@ -225,7 +225,7 @@ namespace CombatSimulation.Runtime.Tests
         public void InputCanApplyWithAnInboundDeploymentInThePresentTick()
         {
             var pair = new SessionFixtures.Pair();
-            pair.A.Deploy(new RosterId(1), 0);
+            pair.A.Deploy(new UnitId(1), 0);
             pair.A.Step(0);
             var entity = Index(pair.A, SessionFixtures.Owned(pair.A, 10).Id);
             Inject(pair.B, entity, 0, 1);
@@ -270,8 +270,8 @@ namespace CombatSimulation.Runtime.Tests
             pair.B.Surrender(1, 0); pair.Run(10);
             Assert.AreEqual(pair.A.Snapshot.Result, pair.B.Snapshot.Result);
             Assert.AreEqual(0, pair.A.Snapshot.Result.Tick);
-            foreach (var slot in pair.A.Snapshot.Roster)
-                if (slot.Side == 1) Assert.AreEqual(RosterStatus.Destroyed, slot.Status);
+            foreach (var slot in pair.A.Snapshot.Units)
+                if (slot.Side == 1) Assert.AreEqual(UnitStatus.Destroyed, slot.Status);
             Assert.AreEqual(0, pair.A.Snapshot.Ships.Length);
         }
 
@@ -342,7 +342,7 @@ namespace CombatSimulation.Runtime.Tests
                 });
             var pair = new SessionFixtures.Pair(2, 3, ship: ship,
                 pilots: new SessionFixtures.Pilots { Enabled = true, AimAtEnemy = true, Throttle = 0.5f, Systems = 31 });
-            pair.A.Deploy(new RosterId(1), 0); pair.B.Deploy(new RosterId(101), 0);
+            pair.A.Deploy(new UnitId(1), 0); pair.B.Deploy(new UnitId(101), 0);
             var sent = new Dictionary<(int, ulong), OwnerOperation>();
             var applied = new Dictionary<(int, ulong), OwnerOperation>();
             var hits = 0; var drones = 0; var droneDeaths = 0; var bullets = 0;

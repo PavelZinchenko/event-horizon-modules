@@ -26,15 +26,15 @@ namespace CombatSimulation.Runtime
     public readonly struct SessionCommand
     {
         public SessionCommandKind Kind { get; }
-        public RosterId Roster { get; }
+        public UnitId Unit { get; }
         public EntityId Entity { get; }
         public int Side { get; }
         public PilotControls Controls { get; }
 
-        private SessionCommand(SessionCommandKind kind, RosterId roster, EntityId entity, int side, PilotControls controls)
-        { Kind = kind; Roster = roster; Entity = entity; Side = side; Controls = controls; }
+        private SessionCommand(SessionCommandKind kind, UnitId roster, EntityId entity, int side, PilotControls controls)
+        { Kind = kind; Unit = roster; Entity = entity; Side = side; Controls = controls; }
 
-        public static SessionCommand Deploy(RosterId roster) => new SessionCommand(SessionCommandKind.Deploy, roster, default, 0, default);
+        public static SessionCommand Deploy(UnitId roster) => new SessionCommand(SessionCommandKind.Deploy, roster, default, 0, default);
         public static SessionCommand Retreat(EntityId entity) => new SessionCommand(SessionCommandKind.Retreat, default, entity, 0, default);
         public static SessionCommand SelfDestruct(EntityId entity) => new SessionCommand(SessionCommandKind.SelfDestruct, default, entity, 0, default);
         public static SessionCommand Surrender(int side) => new SessionCommand(SessionCommandKind.Surrender, default, default, side, default);
@@ -251,7 +251,7 @@ namespace CombatSimulation.Runtime
                     {
                         switch (command.Kind)
                         {
-                            case SessionCommandKind.Deploy: _session.Deploy(command.Roster, tick); break;
+                            case SessionCommandKind.Deploy: _session.Deploy(command.Unit, tick); break;
                             case SessionCommandKind.Retreat: _session.Retreat(command.Entity, tick); break;
                             case SessionCommandKind.SelfDestruct: _session.SelfDestruct(command.Entity, tick); break;
                             case SessionCommandKind.Surrender: _session.Surrender(command.Side, tick); break;

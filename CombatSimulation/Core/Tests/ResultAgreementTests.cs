@@ -10,8 +10,8 @@ namespace CombatSimulation.Core.Tests
         public void EarliestEliminationWinsRegardlessOfArrivalOrder(bool reverse)
         {
             var flow = new CommittedBattleFlow(Fixtures.Setup());
-            flow.Add(reverse ? 8 : 4, reverse ? 1 : 0, RosterStatus.Ready, RosterStatus.Destroyed);
-            flow.Add(reverse ? 4 : 8, reverse ? 0 : 1, RosterStatus.Ready, RosterStatus.Destroyed);
+            flow.Add(reverse ? 8 : 4, reverse ? 1 : 0, UnitStatus.Ready, UnitStatus.Destroyed);
+            flow.Add(reverse ? 4 : 8, reverse ? 0 : 1, UnitStatus.Ready, UnitStatus.Destroyed);
             var result = flow.Evaluate(10, 10, out _, out _);
             Assert.AreEqual(BattleOutcome.Victory, result.Outcome);
             Assert.AreEqual(1, result.WinningSide);
@@ -22,11 +22,11 @@ namespace CombatSimulation.Core.Tests
         public void LateDeploymentInvalidatesPendingTimeout()
         {
             var flow = new CommittedBattleFlow(Fixtures.Setup(2, 1, timeLimitTicks: 5));
-            flow.Add(0, 0, RosterStatus.Ready, RosterStatus.Active);
-            flow.Add(0, 1, RosterStatus.Ready, RosterStatus.Active);
+            flow.Add(0, 0, UnitStatus.Ready, UnitStatus.Active);
+            flow.Add(0, 1, UnitStatus.Ready, UnitStatus.Active);
             Assert.IsFalse(flow.Evaluate(8, 1, out var candidate, out _).IsCompleted);
             Assert.AreEqual(4, candidate.Tick);
-            flow.Add(3, 0, RosterStatus.Ready, RosterStatus.Active);
+            flow.Add(3, 0, UnitStatus.Ready, UnitStatus.Active);
             var final = flow.Evaluate(8, 8, out _, out _);
             Assert.AreEqual(BattleEndReason.Timeout, final.Reason);
             Assert.AreEqual(7, final.Tick);
@@ -36,11 +36,11 @@ namespace CombatSimulation.Core.Tests
         public void LateRemovalAndRedeploymentReconstructTimerPause()
         {
             var flow = new CommittedBattleFlow(Fixtures.Setup(timeLimitTicks: 10));
-            flow.Add(0, 0, RosterStatus.Ready, RosterStatus.Active);
-            flow.Add(0, 1, RosterStatus.Ready, RosterStatus.Active);
+            flow.Add(0, 0, UnitStatus.Ready, UnitStatus.Active);
+            flow.Add(0, 1, UnitStatus.Ready, UnitStatus.Active);
             flow.Evaluate(7, 1, out _, out _);
-            flow.Add(2, 1, RosterStatus.Active, RosterStatus.Ready);
-            flow.Add(6, 1, RosterStatus.Ready, RosterStatus.Active);
+            flow.Add(2, 1, UnitStatus.Active, UnitStatus.Ready);
+            flow.Add(6, 1, UnitStatus.Ready, UnitStatus.Active);
             Assert.IsFalse(flow.Evaluate(8, 8, out _, out var elapsed).IsCompleted);
             Assert.AreEqual(3, elapsed);
         }
@@ -49,9 +49,9 @@ namespace CombatSimulation.Core.Tests
         public void EliminationPrecedesTimeoutAtTheSameTick()
         {
             var flow = new CommittedBattleFlow(Fixtures.Setup(timeLimitTicks: 5));
-            flow.Add(0, 0, RosterStatus.Ready, RosterStatus.Active);
-            flow.Add(0, 1, RosterStatus.Ready, RosterStatus.Active);
-            flow.Add(4, 0, RosterStatus.Active, RosterStatus.Destroyed);
+            flow.Add(0, 0, UnitStatus.Ready, UnitStatus.Active);
+            flow.Add(0, 1, UnitStatus.Ready, UnitStatus.Active);
+            flow.Add(4, 0, UnitStatus.Active, UnitStatus.Destroyed);
             Assert.AreEqual(BattleEndReason.Elimination, flow.Evaluate(10, 10, out _, out _).Reason);
         }
 
@@ -92,8 +92,8 @@ namespace CombatSimulation.Core.Tests
 
         private static BattleSetup Setup(int local) => new BattleSetup(new BattleId(1), 7, new[]
         {
-            new RosterSlotSetup(new RosterId(1), 0, Fixtures.Ship, 10),
-            new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship, 20),
+            new UnitSetup(new UnitId(1), 0, Fixtures.Ship, 10),
+            new UnitSetup(new UnitId(101), 1, Fixtures.Ship, 20),
         }, localOwners: new[] { local });
 
         private static void Deliver(Driver from, Driver to, int owner)

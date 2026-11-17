@@ -22,8 +22,8 @@ namespace CombatSimulation.Core.Tests
                 energy: new ResourceDefinition(300f), resistances: resistances ?? Resistances());
             var setup = new BattleSetup(new BattleId(77), 13, new[]
             {
-                new RosterSlotSetup(new RosterId(1), 0, ship, 10),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship, 20),
+                new UnitSetup(new UnitId(1), 0, ship, 10),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship, 20),
             }, localOwners: new[] { 10 });
             var driver = new Driver(setup);
             driver.Deploy(1);
@@ -187,12 +187,12 @@ namespace CombatSimulation.Core.Tests
             // Point defense deals energy (type 1) by default, which a one-type table does not have.
             var single = new DamageTypeTable(new[] { new DamageTypeDefinition(0) }, 0);
             var defender = Fixtures.ShipWith(devices: new DeviceDefinition[] { new PointDefenseDefinition(1f, 1f, 1f) });
-            Assert.Throws<ArgumentException>(() => new BattleSetup(new BattleId(1), 7, new List<RosterSlotSetup>
+            Assert.Throws<ArgumentException>(() => new BattleSetup(new BattleId(1), 7, new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, defender),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, defender),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
             }, damageTypes: single));
-            Assert.DoesNotThrow(() => new BattleSetup(new BattleId(1), 7, Fixtures.Roster(1, 1), damageTypes: single));
+            Assert.DoesNotThrow(() => new BattleSetup(new BattleId(1), 7, Fixtures.Units(1, 1), damageTypes: single));
 
             Assert.Throws<ArgumentOutOfRangeException>(() => new DamageTypeTable(Array.Empty<DamageTypeDefinition>(), 0));
             Assert.Throws<ArgumentOutOfRangeException>(() => new DamageTypeTable(new[] { new DamageTypeDefinition(0) }, 1));

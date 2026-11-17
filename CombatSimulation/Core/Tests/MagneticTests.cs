@@ -102,11 +102,11 @@ namespace CombatSimulation.Core.Tests
 
         private static uint FirstTarget(BulletDefinition bullet)
         {
-            var roster = new List<RosterSlotSetup>
+            var roster = new List<UnitSetup>
             {
-                new RosterSlotSetup(new RosterId(1), 0, Fixtures.CannonShip(bullet, cooldown: 10f)),
-                new RosterSlotSetup(new RosterId(101), 1, Fixtures.Ship),
-                new RosterSlotSetup(new RosterId(102), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(bullet, cooldown: 10f)),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
+                new UnitSetup(new UnitId(102), 1, Fixtures.Ship),
             };
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: 2));
             driver.Deploy(1);

@@ -13,13 +13,13 @@ namespace CombatSimulation.Core
             _playerSide = setup.PlayerSide;
             _onlyOneShip = setup.OnlyOneShip;
             _remoteOwners = setup.HasRemoteOwners;
-            foreach (var slot in setup.Roster)
+            foreach (var slot in setup.Units)
                 if (slot.Side == 0) ++_confirmed.Alive0; else ++_confirmed.Alive1;
             _confirmed.Tick = -1;
             _confirmed.LossDeadline = long.MaxValue;
         }
 
-        internal void Add(long tick, int side, RosterStatus before, RosterStatus after)
+        internal void Add(long tick, int side, UnitStatus before, UnitStatus after)
         {
             if (tick <= _confirmed.Tick)
                 throw new InvalidOperationException("A roster commit precedes the confirmed result frontier.");
@@ -70,15 +70,15 @@ namespace CombatSimulation.Core
                 while (index < _pending.Count && _pending[index].Tick == next)
                 {
                     var change = _pending[index++];
-                    var alive = (change.After != RosterStatus.Destroyed ? 1 : 0) -
-                        (change.Before != RosterStatus.Destroyed ? 1 : 0);
-                    var active = (change.After == RosterStatus.Active ? 1 : 0) -
-                        (change.Before == RosterStatus.Active ? 1 : 0);
+                    var alive = (change.After != UnitStatus.Destroyed ? 1 : 0) -
+                        (change.Before != UnitStatus.Destroyed ? 1 : 0);
+                    var active = (change.After == UnitStatus.Active ? 1 : 0) -
+                        (change.Before == UnitStatus.Active ? 1 : 0);
                     if (change.Side == 0) { state.Alive0 += alive; state.Active0 += active; }
                     else { state.Alive1 += alive; state.Active1 += active; }
                     resets |= Classify(change);
                     if (_onlyOneShip && (_remoteOwners || change.Side == _playerSide) &&
-                        change.Before == RosterStatus.Active && change.After == RosterStatus.Destroyed)
+                        change.Before == UnitStatus.Active && change.After == UnitStatus.Destroyed)
                         MarkLoss(ref state, next, change.Side);
                 }
                 if (ShouldReset(resets, state)) state.Elapsed = 0;
@@ -135,9 +135,9 @@ namespace CombatSimulation.Core
         private Resets Classify(in Transition change)
         {
             var player = change.Side == _playerSide;
-            if (change.After == RosterStatus.Active && change.Before != RosterStatus.Active)
+            if (change.After == UnitStatus.Active && change.Before != UnitStatus.Active)
                 return player ? Resets.PlayerDeployed : Resets.EnemyDeployed;
-            if (change.Before == RosterStatus.Active && change.After != RosterStatus.Active)
+            if (change.Before == UnitStatus.Active && change.After != UnitStatus.Active)
                 return player ? Resets.PlayerRemoved : Resets.EnemyRemoved;
             return Resets.None;
         }
@@ -170,8 +170,8 @@ namespace CombatSimulation.Core
         {
             internal readonly long Tick;
             internal readonly int Side;
-            internal readonly RosterStatus Before, After;
-            internal Transition(long tick, int side, RosterStatus before, RosterStatus after)
+            internal readonly UnitStatus Before, After;
+            internal Transition(long tick, int side, UnitStatus before, UnitStatus after)
             { Tick = tick; Side = side; Before = before; After = after; }
         }
         private State _confirmed;

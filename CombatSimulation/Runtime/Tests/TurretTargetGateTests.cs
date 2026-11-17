@@ -26,7 +26,7 @@ namespace CombatSimulation.Runtime.Tests
             var received = new Dictionary<(int, ulong), OwnerOperation>();
             var targetsA = new Dictionary<(EntityId, int), EntityId>();
             var targetsB = new Dictionary<(EntityId, int), EntityId>();
-            pair.A.Deploy(new RosterId(1), 0); pair.B.Deploy(new RosterId(101), 0);
+            pair.A.Deploy(new UnitId(1), 0); pair.B.Deploy(new UnitId(101), 0);
             for (var i = 0; i < 2; ++i)
             {
                 pair.Step();

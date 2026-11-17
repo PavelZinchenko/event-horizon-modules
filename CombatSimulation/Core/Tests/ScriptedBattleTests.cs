@@ -22,7 +22,7 @@ namespace CombatSimulation.Core.Tests
         public void ExplicitAllLocalOwnersMatchDefaultAndProduceOnlyCommittedEvents()
         {
             var setup = ScriptedBattle.Setup();
-            var explicitSetup = new BattleSetup(setup.BattleId, setup.MatchSeed, setup.Roster, setup.Width,
+            var explicitSetup = new BattleSetup(setup.BattleId, setup.MatchSeed, setup.Units, setup.Width,
                 setup.Height, setup.TimeLimitTicks, setup.MaxActiveShipsPerSide, new[] { 0 });
             var battle = new ScriptedBattle(explicitSetup, record: true, retreat: true);
             while (!battle.IsCompleted && battle.Runner.Tick < ScriptedBattle.MaxTicks)
@@ -54,10 +54,10 @@ namespace CombatSimulation.Core.Tests
 
             var loser = 1 - snapshot.Result.WinningSide;
             var winnerAlive = 0;
-            foreach (var slot in snapshot.Roster)
+            foreach (var slot in snapshot.Units)
             {
-                if (slot.Side == loser) Assert.AreEqual(RosterStatus.Destroyed, slot.Status, $"Slot {slot.RosterId}");
-                else if (slot.Status != RosterStatus.Destroyed) ++winnerAlive;
+                if (slot.Side == loser) Assert.AreEqual(UnitStatus.Destroyed, slot.Status, $"Slot {slot.UnitId}");
+                else if (slot.Status != UnitStatus.Destroyed) ++winnerAlive;
             }
             Assert.Greater(winnerAlive, 0);
 
@@ -151,14 +151,14 @@ namespace CombatSimulation.Core.Tests
             var r2 = (long)r2Bullets * SnapshotSizes.Bullet + (long)r2Ships * SnapshotSizes.Ship;
 
             TestContext.WriteLine($"Element sizes: ShipState {SnapshotSizes.Ship} B, BulletState {SnapshotSizes.Bullet} B, " +
-                $"RosterSlotState {SnapshotSizes.RosterSlot} B, BattleEvent {SnapshotSizes.Event} B, DeviceState {SnapshotSizes.Device} B");
+                $"UnitState {SnapshotSizes.Unit} B, BattleEvent {SnapshotSizes.Event} B, DeviceState {SnapshotSizes.Device} B");
             TestContext.WriteLine($"Scripted battle: peak {battle.MaxShips} ships, {battle.MaxBullets} bullets; " +
                 $"mean {battle.SnapshotBytesTotal / battle.Ticks} B, max {battle.SnapshotBytesMax} B per tick");
             TestContext.WriteLine($"R2 ({r2Bullets} bullets, {r2Ships} ships): {r2} B per tick, without roster and events");
 
             Assert.Greater(SnapshotSizes.Ship, 0);
             Assert.Greater(SnapshotSizes.Bullet, 0);
-            Assert.Greater(SnapshotSizes.RosterSlot, 0);
+            Assert.Greater(SnapshotSizes.Unit, 0);
             Assert.Greater(SnapshotSizes.Event, 0);
             Assert.Greater(SnapshotSizes.Device, 0);
             Assert.Greater(battle.SnapshotBytesMax, 0L);

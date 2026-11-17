@@ -78,15 +78,15 @@ namespace CombatSimulation.Core.Tests
             driver.Ship(1).Armor.Value = 900f;
             Assert.IsTrue(driver.Battle.Submit(ShipCommand.Vanish(driver.BattleId, 1000, driver.Tick + 1, ship)));
             driver.Step();
-            Assert.AreEqual(RosterStatus.Active, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
 
             var events = driver.StepCollecting();
             var removal = events.Single(e => e.Kind == BattleEventKind.Removal);
             Assert.AreEqual(ship, removal.EntityId);
             Assert.AreEqual(RemovalReason.Vanish, removal.RemovalReason);
-            var transition = events.Single(e => e.Kind == BattleEventKind.RosterTransition);
-            Assert.AreEqual(RosterTransitionReason.Retreated, transition.TransitionReason);
-            Assert.AreEqual(RosterStatus.Ready, driver.Status(1));
+            var transition = events.Single(e => e.Kind == BattleEventKind.UnitTransition);
+            Assert.AreEqual(UnitTransitionReason.Retreated, transition.TransitionReason);
+            Assert.AreEqual(UnitStatus.Ready, driver.Status(1));
             Assert.AreEqual(100f, driver.Slot(1).ArmorDeficit);
             Assert.IsFalse(driver.Battle.Snapshot.IsCompleted);
         }
@@ -221,8 +221,8 @@ namespace CombatSimulation.Core.Tests
             var ship = p.A.Entity(101);
             Assert.IsTrue(p.A.Battle.Submit(ShipCommand.Vanish(p.A.BattleId, 1003, p.A.Tick, ship)));
             p.Step(2);
-            Assert.AreEqual(RosterStatus.Ready, p.A.Status(101));
-            Assert.AreEqual(RosterStatus.Ready, p.B.Status(101));
+            Assert.AreEqual(UnitStatus.Ready, p.A.Status(101));
+            Assert.AreEqual(UnitStatus.Ready, p.B.Status(101));
             // The roster record carries no removal reason: the copy shows a retreat.
             Assert.AreEqual(RemovalReason.Retreat, p.B.Battle.Snapshot.Events.ToArray()
                 .Single(e => e.Kind == BattleEventKind.Removal).RemovalReason);

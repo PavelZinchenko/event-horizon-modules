@@ -114,9 +114,9 @@ namespace CombatSimulation.Ai.Tests
                 AiWeaponCapability.DamageEnemy, 50f, 0f) }, null, null, false, false, SizeClass.Frigate,
                 10f, 10f, 20f, 0f, 1f, 2f, 0f);
             runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, new[] {
-                new RosterSlotSetup(new RosterId(1), 0, definition),
-                new RosterSlotSetup(new RosterId(101), 1, AiFixtures.Ship) }), new AiFixtures.NoPilots());
-            runner.Deploy(new RosterId(1), 0); runner.Deploy(new RosterId(101), 0); runner.Step();
+                new UnitSetup(new UnitId(1), 0, definition),
+                new UnitSetup(new UnitId(101), 1, AiFixtures.Ship) }), new AiFixtures.NoPilots());
+            runner.Deploy(new UnitId(1), 0); runner.Deploy(new UnitId(101), 0); runner.Step();
             var ship = runner.Battle.FindShip(runner.Snapshot.Ships[0].Id);
             var target = runner.Battle.FindShip(runner.Snapshot.Ships[1].Id);
             var world = runner.Battle.World;

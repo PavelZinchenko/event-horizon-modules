@@ -21,7 +21,7 @@ namespace CombatSimulation.Core
                 Height = setup.Height,
                 Substeps = Battle.PhysicsSubsteps,
             });
-            Roster = new Roster(setup);
+            Units = new UnitTable(setup);
             Asteroids = new Asteroids(this);
         }
 
@@ -32,7 +32,7 @@ namespace CombatSimulation.Core
         public long Tick { get; private set; }
 
         public PhysicsWorld Physics { get; }
-        public Roster Roster { get; }
+        public UnitTable Units { get; }
         public ShipStore Ships { get; } = new ShipStore();
 
         // Live drones and decoys (phase 5, step 10c) in entity ID order.
@@ -89,10 +89,10 @@ namespace CombatSimulation.Core
         public ShipEntity FindShip(EntityId id) =>
             Entities.TryGet(id, out var handle) ? Ships.Get(handle) : null;
 
-        // Roster entries can be empty; live drones and decoys follow them in stable entity ID order.
-        public int ShipEntryCount => Roster.Slots.Count + Drones.Count;
-        public ShipEntity GetShipEntry(int index) => index < Roster.Slots.Count
-            ? Roster.Slots[index].ActiveShip : Drones[index - Roster.Slots.Count];
+        // Unit entries can be empty; live drones and decoys follow them in stable entity ID order.
+        public int ShipEntryCount => Units.All.Count + Drones.Count;
+        public ShipEntity GetShipEntry(int index) => index < Units.All.Count
+            ? Units.All[index].ActiveShip : Drones[index - Units.All.Count];
 
         public void ReportDefect(string message)
         {

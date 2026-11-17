@@ -59,22 +59,22 @@ namespace CombatSimulation.Core.Tests
             driver.Place(101, Right, Vec2.Zero);
 
             BattleEvent[] events = null;
-            for (var i = 0; i < 5 && driver.Status(1) == RosterStatus.Active; ++i)
+            for (var i = 0; i < 5 && driver.Status(1) == UnitStatus.Active; ++i)
                 events = driver.StepCollecting().ToArray();
 
-            Assert.AreEqual(RosterStatus.Destroyed, driver.Status(1));
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
             Assert.AreEqual(new[]
             {
                 BattleEventKind.Hit,
                 BattleEventKind.Hit,
                 BattleEventKind.Removal,
-                BattleEventKind.RosterTransition,
+                BattleEventKind.UnitTransition,
                 BattleEventKind.Result,
             }, events.Select(e => e.Kind).Where(kind => kind != BattleEventKind.Damage).ToArray());
 
             Assert.AreEqual(victim, events[2].EntityId);
             Assert.AreEqual(RemovalReason.Death, events[2].RemovalReason);
-            Assert.AreEqual(RosterTransitionReason.Killed, events[3].TransitionReason);
+            Assert.AreEqual(UnitTransitionReason.Killed, events[3].TransitionReason);
             Assert.AreEqual(1, events[4].Result.WinningSide);
         }
 
