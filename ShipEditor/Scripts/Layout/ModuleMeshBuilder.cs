@@ -27,6 +27,7 @@ namespace ShipEditor
 			var color = component.Color.ToUnity();
 
 			var sprite = _resourceLocator.GetSprite(component.Icon);
+			if (sprite == null) return;
 			var spriteRect = SpriteRect.Create(sprite);
 			var rect = new ComponentRect(layout);
             var size = layout.Size > 0 ? layout.Size : 1;

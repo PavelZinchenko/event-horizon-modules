@@ -26,7 +26,10 @@ namespace ShipEditor
 
 		public void AddComponent(int x, int y, GameDatabase.DataModel.Component component, bool updateImmediately = true)
 		{
-			var texture = _resourceLocator.GetSprite(component.Icon)?.texture;
+			var sprite = _resourceLocator.GetSprite(component.Icon);
+			Texture2D texture = null;
+			if (sprite != null)
+				texture = sprite.texture;
 			if (texture == null) return;
 
 			if (!_groups.TryGetValue(texture, out var group))
