@@ -2,7 +2,7 @@ using System;
 
 namespace CombatSimulation.Physics
 {
-    // Whole-body depenetration of one body pair (docs/combat_simulation.md, "Whole-body depenetration").
+    // Whole-body depenetration of one body pair (docs/combat_simulator/physics.md, "Whole-body depenetration").
     // The reference body has the smaller inverse mass; the moving body leaves it along a fixed direction.
     internal struct Separation
     {

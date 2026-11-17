@@ -142,7 +142,7 @@ namespace CombatSimulation.Physics
         }
 
         // True when path 'index' of a collider is a hole: a clockwise path that lies inside another path. A hull
-        // loader leaves holes out, so the outer path stays solid (docs/combat_simulation.md, inner edges).
+        // loader leaves holes out, so the outer path stays solid (docs/combat_simulator/physics.md, inner edges).
         public static bool IsHole(IReadOnlyList<IReadOnlyList<Vec2>> paths, int index)
         {
             if (paths == null) throw new ArgumentNullException(nameof(paths));

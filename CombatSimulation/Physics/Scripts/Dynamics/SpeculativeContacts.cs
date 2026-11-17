@@ -10,7 +10,7 @@ namespace CombatSimulation.Physics
         // Speculative contacts cleared in the last step: their shapes do not come within the speculative distance.
         public int DroppedSpeculativeCount { get; private set; }
 
-        // Before the solve (docs/combat_simulation.md, "Ghost passes"). The manifold normal of a speculative contact
+        // Before the solve (docs/combat_simulator/physics.md, "Ghost passes"). The manifold normal of a speculative contact
         // comes from the closest features at the start of the step, and the solver stops any approach along it.
         // A body that passes close by but does not touch would stop too (ghost collision). Such a contact is cleared
         // for this step when the time of impact shows that the shapes do not come within the speculative distance.

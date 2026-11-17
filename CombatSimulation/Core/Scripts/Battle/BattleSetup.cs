@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace CombatSimulation.Core
 {
     // What the timer does (phase 4, step 8). Draw is the symmetric rule; the others copy legacy TimeOutMode
-    // with its player and enemy reset rules ("Result and timer" in docs/combat_simulation.md).
+    // with its player and enemy reset rules ("Result and timer" in docs/combat_simulator/core.md).
     public enum TimerMode : byte
     {
         // Any deployment or removal resets; the limit is a draw.
