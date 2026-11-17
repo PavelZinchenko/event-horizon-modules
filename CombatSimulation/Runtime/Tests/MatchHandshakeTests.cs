@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CombatSimulation.Core;
+using CombatSimulation.Modes;
 using CombatSimulation.Network;
 using NUnit.Framework;
 
@@ -217,7 +218,8 @@ namespace CombatSimulation.Runtime.Tests
                 new UnitSetup(new UnitId(1), MatchPlan.HostSide, ship, MatchPlan.HostOwner),
                 new UnitSetup(new UnitId(2), MatchPlan.GuestSide, ship, MatchPlan.GuestOwner),
             };
-            return new BattleSetup(plan.BattleId, plan.Seed, roster, localOwners: plan.LocalOwners, ownerDelays: plan.OwnerDelays);
+            return new BattleSetup(plan.BattleId, plan.Seed, roster,
+                rules: RosterRules.Default, localOwners: plan.LocalOwners, ownerDelays: plan.OwnerDelays);
         }
 
         private sealed class Pair

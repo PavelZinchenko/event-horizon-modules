@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using CombatSimulation.Runtime;
 using NUnit.Framework;
@@ -519,7 +520,7 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(101), 1, side1 ?? Fixtures.Ship, 20),
                 new UnitSetup(new UnitId(2), 0, Fixtures.Ship, 10),
                 new UnitSetup(new UnitId(102), 1, Fixtures.Ship, 20),
-            }, localOwners: owners);
+            }, rules: RosterRules.Default, localOwners: owners);
 
         // Seed remote entities through trusted internals until the inbound deployment interface arrives in step 3.
         private static Driver Start(IReadOnlyCollection<int> owners, ShipDefinition side0 = null, ShipDefinition side1 = null)

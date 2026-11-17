@@ -57,6 +57,9 @@ namespace CombatSimulation.Core
         public int Revision { get; private set; }
         internal float? OwnerDamageFraction { get; private set; }
 
+        // What the unit's ships, drones and clones did (PerformanceLedger).
+        internal UnitPerformance Performance;
+
         internal void Import(in UnitRecord record, ShipEntity ship)
         {
             Status = record.Status;
@@ -93,5 +96,22 @@ namespace CombatSimulation.Core
             ActiveShip = null;
             ++Revision;
         }
+
+        // A mode's respawn (ModeContext.Respawn): the unit is Ready with full resources. Each drone bay and cloning
+        // centre refills to its capacity less the unit's live drones (legacy DroneBay.LookForDrones), and the next
+        // deployment takes the live drones.
+        internal void Respawn()
+        {
+            Status = UnitStatus.Ready;
+            ArmorDeficit = 0f;
+            ShieldDeficit = 0f;
+            OwnerDamageFraction = null;
+            TakesLiveDrones = true;
+            foreach (var bay in _bays) bay?.Refill();
+            ++Revision;
+        }
+
+        // Set by Respawn until the next deployment, which gives the unit's live drones to the new ship.
+        internal bool TakesLiveDrones { get; set; }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -200,7 +201,7 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(2), 0, TargetShip()),
                 new UnitSetup(new UnitId(101), 1, TargetShip()),
                 new UnitSetup(new UnitId(102), 1, TargetShip()),
-            }, maxActiveShipsPerSide: 2);
+            }, rules: new RosterRules(maxActiveShipsPerSide: 2));
             var driver = new Driver(setup);
             driver.Deploy(reverseAllocation ? 102u : 101u);
             driver.Deploy(1);

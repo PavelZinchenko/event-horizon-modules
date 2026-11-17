@@ -27,6 +27,9 @@ namespace CombatSimulation.Core
         // A decoy (phase 5, step 10c): its lifetime share, and its spin in whole degrees per second.
         DecoyLifetime = 8,
         DecoySpin = 9,
+
+        // A battle mode's draw (ModeContext.Random): entity 0, then the mode's own purpose.
+        Mode = 10,
     }
 
     // Counter-based random (investigation 6.7): a draw is a function of match seed, entity, tick and purpose.
@@ -59,6 +62,20 @@ namespace CombatSimulation.Core
             hash = StableHash.Append(hash, (ulong)tick, 8);
             hash = StableHash.Append(hash, (uint)purpose, 4);
             hash = StableHash.Append(hash, other.Value, 8);
+            return new RandomState { Value = PcgRandomAlgorithm.InitializeState(StableHash.Mix(hash)) };
+        }
+
+        // A battle mode's draw: the fields of entity 0 with purpose Mode, then the mode's purpose u32.
+        internal static RandomState Create(ulong matchSeed, long tick, uint modePurpose)
+        {
+            if (tick < 0) throw new ArgumentOutOfRangeException(nameof(tick));
+
+            var hash = StableHash.Begin(Tag);
+            hash = StableHash.Append(hash, matchSeed, 8);
+            hash = StableHash.Append(hash, 0UL, 8);
+            hash = StableHash.Append(hash, (ulong)tick, 8);
+            hash = StableHash.Append(hash, (uint)RandomPurpose.Mode, 4);
+            hash = StableHash.Append(hash, modePurpose, 4);
             return new RandomState { Value = PcgRandomAlgorithm.InitializeState(StableHash.Mix(hash)) };
         }
     }

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -211,7 +212,8 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(2), 0, Fixtures.Ship),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
             };
-            var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: 2));
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster,
+                rules: new RosterRules(maxActiveShipsPerSide: 2)));
             driver.Deploy(1);
             driver.Deploy(2);
             driver.Deploy(101);
@@ -253,7 +255,8 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(101), 1, StealthShip(TargetPriority.High)),
                 new UnitSetup(new UnitId(102), 1, Fixtures.Ship),
             };
-            var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: 2));
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster,
+                rules: new RosterRules(maxActiveShipsPerSide: 2)));
             driver.Deploy(1);
             driver.Deploy(101);
             driver.Deploy(102);
@@ -344,7 +347,7 @@ namespace CombatSimulation.Core.Tests
             {
                 new UnitSetup(new UnitId(1), 0, StealthShip(), 10),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship, 20),
-            }, localOwners: new[] { 10 });
+            }, rules: RosterRules.Default, localOwners: new[] { 10 });
             var driver = new Driver(setup);
             driver.Deploy(1);
             driver.Step();

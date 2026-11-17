@@ -1,6 +1,6 @@
 {
     "name": "CombatSimulation.Runtime.Tests",
-    "references": ["CombatSimulation.Core", "CombatSimulation.Physics", "CombatSimulation.Network", "CombatSimulation.Runtime"],
+    "references": ["CombatSimulation.Core", "CombatSimulation.Modes", "CombatSimulation.Physics", "CombatSimulation.Network", "CombatSimulation.Runtime"],
     "optionalUnityReferences": ["TestAssemblies"],
     "includePlatforms": ["Editor"],
     "autoReferenced": false

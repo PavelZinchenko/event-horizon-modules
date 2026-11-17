@@ -3,6 +3,7 @@
     "references": [
         "CombatSimulation.Ai",
         "CombatSimulation.Core",
+        "CombatSimulation.Modes",
         "CombatSimulation.Physics",
         "CombatSimulation.Runtime",
         "Database",

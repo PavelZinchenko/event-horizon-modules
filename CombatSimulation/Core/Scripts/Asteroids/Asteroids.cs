@@ -151,7 +151,9 @@ namespace CombatSimulation.Core
                     Setup = definition,
                     Body = body,
                     Shape = shape,
-                    Owner = setup.Units[0].Owner,
+                    // Nobody owns an asteroid; a battle with one has no remote owners (BattleSetup). A setup without
+                    // units has owner 0.
+                    Owner = setup.Units.Count > 0 ? setup.Units[0].Owner : 0,
                     HitPoints = definition.HitPoints,
                 });
                 ++AliveCount;

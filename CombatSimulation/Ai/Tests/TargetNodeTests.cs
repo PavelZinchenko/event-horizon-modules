@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CombatSimulation.Core;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using CombatSimulation.Runtime;
 using GameDatabase.Enums;
@@ -45,8 +46,8 @@ namespace CombatSimulation.Ai.Tests
                 new UnitSetup(new UnitId(2), 0, Ship),
                 new UnitSetup(new UnitId(101), 1, Ship),
             };
-            var runner = new BattleRunner(new BattleSetup(new BattleId(55), 7, roster, timeLimitTicks: 1,
-                maxActiveShipsPerSide: 2, timerMode: TimerMode.DrainPlayerHp), new NoPilots());
+            var runner = new BattleRunner(new BattleSetup(new BattleId(55), 7, roster,
+                rules: new RosterRules(timeLimitTicks: 1, maxActiveShipsPerSide: 2, timerMode: TimerMode.DrainPlayerHp)), new NoPilots());
             foreach (var slot in roster) runner.Deploy(slot.UnitId, 0);
             runner.Step();
             var context = ContextOf(runner, 0, WithWeaponRange(1000f));
@@ -416,7 +417,8 @@ namespace CombatSimulation.Ai.Tests
                 new UnitSetup(new UnitId(1), 0, Ship),
                 new UnitSetup(new UnitId(101), 1, Ship),
             };
-            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster, asteroids: asteroids), new NoPilots());
+            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster,
+                rules: RosterRules.Default, asteroids: asteroids), new NoPilots());
             foreach (var slot in roster) runner.Deploy(slot.UnitId, runner.Tick);
             runner.Step();
 
@@ -947,7 +949,8 @@ namespace CombatSimulation.Ai.Tests
         private static BattleRunner Start(List<UnitSetup> roster, int maxActive, IPilotProvider pilots,
             IReadOnlyList<AsteroidSetup> asteroids = null)
         {
-            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: maxActive,
+            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster,
+                rules: new RosterRules(maxActiveShipsPerSide: maxActive),
                 asteroids: asteroids), pilots);
             foreach (var slot in roster)
                 runner.Deploy(slot.UnitId, runner.Tick);

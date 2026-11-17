@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -80,7 +81,7 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(1), 0, shooter),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
                 new UnitSetup(new UnitId(reserve), reserve < 100 ? 0 : 1, Fixtures.Ship),
-            }));
+            }, rules: RosterRules.Default));
             driver.Deploy(1);
             driver.Deploy(101);
             driver.Step();
@@ -473,7 +474,7 @@ namespace CombatSimulation.Core.Tests
                     new UnitSetup(new UnitId(1), 0, shooter, Owner20),
                     new UnitSetup(new UnitId(101), 1, enemy, both ? Owner20 : Receiver),
                     new UnitSetup(new UnitId(102), 1, Fixtures.Ship, Receiver),
-                }, localOwners: new[] { localOwner });
+                }, rules: RosterRules.Default, localOwners: new[] { localOwner });
 
             private readonly List<OwnerOperation> _held = new List<OwnerOperation>(64);
             private ulong _lastSequence;

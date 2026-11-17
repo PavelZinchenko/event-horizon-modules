@@ -2,6 +2,7 @@
     "name": "CombatSimulation.Core.Tests",
     "references": [
         "CombatSimulation.Core",
+        "CombatSimulation.Modes",
         "CombatSimulation.Physics",
         "CombatSimulation.Runtime",
         "Utilites"

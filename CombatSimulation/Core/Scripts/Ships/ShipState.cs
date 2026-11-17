@@ -207,6 +207,9 @@ namespace CombatSimulation.Core
         // snapshot of a Retreated or Killed transition and of the result; the tick's roster updates are applied.
         public readonly float DamageFraction;
 
+        // What the unit did so far (PerformanceLedger).
+        public readonly UnitPerformance Performance;
+
         internal UnitState(Unit slot)
         {
             UnitId = slot.UnitId;
@@ -220,6 +223,7 @@ namespace CombatSimulation.Core
             ArmorDeficit = slot.ArmorDeficit;
             ShieldDeficit = slot.ShieldDeficit;
             DamageFraction = slot.OwnerDamageFraction ?? GetDamageFraction(slot);
+            Performance = slot.Performance;
         }
 
         private static float GetDamageFraction(Unit slot)

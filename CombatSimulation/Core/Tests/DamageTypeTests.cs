@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -24,7 +25,7 @@ namespace CombatSimulation.Core.Tests
             {
                 new UnitSetup(new UnitId(1), 0, ship, 10),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship, 20),
-            }, localOwners: new[] { 10 });
+            }, rules: RosterRules.Default, localOwners: new[] { 10 });
             var driver = new Driver(setup);
             driver.Deploy(1);
             driver.Step();
@@ -191,8 +192,9 @@ namespace CombatSimulation.Core.Tests
             {
                 new UnitSetup(new UnitId(1), 0, defender),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
-            }, damageTypes: single));
-            Assert.DoesNotThrow(() => new BattleSetup(new BattleId(1), 7, Fixtures.Units(1, 1), damageTypes: single));
+            }, rules: RosterRules.Default, damageTypes: single));
+            Assert.DoesNotThrow(() => new BattleSetup(new BattleId(1), 7, Fixtures.Units(1, 1),
+                rules: RosterRules.Default, damageTypes: single));
 
             Assert.Throws<ArgumentOutOfRangeException>(() => new DamageTypeTable(Array.Empty<DamageTypeDefinition>(), 0));
             Assert.Throws<ArgumentOutOfRangeException>(() => new DamageTypeTable(new[] { new DamageTypeDefinition(0) }, 1));

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CombatSimulation.Core;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using CombatSimulation.Runtime;
 using GameDatabase.DataModel;
@@ -83,7 +84,8 @@ namespace CombatSimulation.Ai.Tests
                 roster.Add(new UnitSetup(new UnitId(102), 1, Ship));
             }
 
-            var setup = new BattleSetup(new BattleId(1), matchSeed, roster, maxActiveShipsPerSide: extraSlots ? 2 : 1);
+            var setup = new BattleSetup(new BattleId(1), matchSeed, roster,
+                rules: new RosterRules(maxActiveShipsPerSide: extraSlots ? 2 : 1));
             var runner = new BattleRunner(setup, pilots);
             foreach (var slot in roster)
                 runner.Deploy(slot.UnitId, runner.Tick);

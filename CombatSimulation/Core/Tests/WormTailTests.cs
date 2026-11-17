@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -31,7 +32,7 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(1), 0, worm ?? Worm()),
                 new UnitSetup(new UnitId(2), 0, Fixtures.Ship),
                 new UnitSetup(new UnitId(101), 1, enemy ?? Fixtures.Ship),
-            }));
+            }, rules: RosterRules.Default));
             driver.Deploy(1);
             driver.Deploy(101);
             driver.Step();
@@ -423,7 +424,7 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(), 10),
                 new UnitSetup(new UnitId(101), 1, Worm(), RemoteOwner),
                 new UnitSetup(new UnitId(102), 1, Fixtures.Ship, RemoteOwner),
-            }, localOwners: new[] { localOwner });
+            }, rules: RosterRules.Default, localOwners: new[] { localOwner });
 
         private static (Driver owner, Driver remote, Link link) Pair()
         {

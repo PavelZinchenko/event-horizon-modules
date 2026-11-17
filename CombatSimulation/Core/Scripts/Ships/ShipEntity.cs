@@ -153,6 +153,13 @@ namespace CombatSimulation.Core
 
         public EntityId Id { get; private set; }
         public Unit Slot { get; private set; }
+
+        // The unit that gets the ship's performance credit: its own, or its bay's for a drone or a clone. Null for a decoy.
+        internal Unit CreditUnit => Slot ?? Bay?.Slot;
+
+        // Stage 10: the last hostile unit that dealt armor damage in KillCreditTick (PerformanceLedger).
+        internal Unit KillCredit;
+        internal long KillCreditTick;
         public DroneBayInventory Bay { get; private set; }
         public bool IsDrone => Bay != null;
 
@@ -337,7 +344,8 @@ namespace CombatSimulation.Core
             Decoy = null;
             MothershipOverride = null;
             Side = side;
-            Allegiance = Allegiances.OfSide(side);
+            // The unit's allegiance (UnitSetup.Allegiance); a drone takes its bay unit's.
+            Allegiance = slot?.Setup.Allegiance ?? bay?.Slot.Setup.Allegiance ?? Allegiances.OfSide(side);
             Owner = owner;
             Body = body;
             Definition = definition;
@@ -350,6 +358,8 @@ namespace CombatSimulation.Core
             BlockedDevices = 0;
             LastContactTick = NoContact;
             LastBodyContact = default;
+            KillCredit = null;
+            KillCreditTick = -1;
             TouchesLastBodyContact = false;
             Tint = 0f;
             ResistanceShare = 0f;
@@ -546,6 +556,8 @@ namespace CombatSimulation.Core
             BlockedDevices = 0;
             LastContactTick = NoContact;
             LastBodyContact = default;
+            KillCredit = null;
+            KillCreditTick = -1;
             TouchesLastBodyContact = false;
             StealthDevices = 0;
             HasContactStealth = false;

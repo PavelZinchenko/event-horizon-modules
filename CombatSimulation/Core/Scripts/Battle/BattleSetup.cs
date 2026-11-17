@@ -3,27 +3,14 @@ using System.Collections.Generic;
 
 namespace CombatSimulation.Core
 {
-    // What the timer does (phase 4, step 8). Draw is the symmetric rule; the others copy legacy TimeOutMode
-    // with its player and enemy reset rules ("Result and timer" in docs/combat_simulator/core.md).
-    public enum TimerMode : byte
-    {
-        // Any deployment or removal resets; the limit is a draw.
-        Draw,
-
-        // The limit holds the timer; the adapter calls the next enemy. Never a draw.
-        CallNextEnemy,
-
-        // As CallNextEnemy while the enemy side has a ready slot; without one, 3 × the limit is a draw.
-        CallNextEnemyOrDraw,
-
-        // After the limit, the active player ships lose armor and shield.
-        DrainPlayerHp,
-    }
-
-    // Immutable setup shared by battle instances. It contains no mutable physics settings.
+    // Immutable setup shared by battle instances. It contains no mutable physics settings and no game rules: the rules
+    // are a separate object (IBattleRules) that it holds.
     public sealed class BattleSetup
     {
         public const int SideCount = 2;
+
+        // D9: above about 4096 one float step is a tenth of the contact slop. 2048 keeps a margin.
+        public const float MaxWorldSize = 2048f;
 
         public BattleSetup(
             BattleId battleId,
@@ -31,60 +18,27 @@ namespace CombatSimulation.Core
             IReadOnlyList<UnitSetup> roster,
             float width = 200f,
             float height = 200f,
-            long timeLimitTicks = 0,
-            int maxActiveShipsPerSide = 1,
+            IBattleRules rules = null,
             IReadOnlyCollection<int> localOwners = null,
             IReadOnlyDictionary<int, int> ownerDelays = null,
             DamageTypeTable damageTypes = null,
-            TimerMode timerMode = TimerMode.Draw,
-            int playerSide = 0,
-            IReadOnlyList<int> maxActiveShipsBySide = null,
-            bool onlyOneShip = false,
             IReadOnlyList<AsteroidSetup> asteroids = null)
         {
             if (roster == null) throw new ArgumentNullException(nameof(roster));
-            if (!(width > 0f) || float.IsInfinity(width))
-                throw new ArgumentOutOfRangeException(nameof(width), "Arena width must be finite and positive.");
-            if (!(height > 0f) || float.IsInfinity(height))
-                throw new ArgumentOutOfRangeException(nameof(height), "Arena height must be finite and positive.");
-            if (timeLimitTicks < 0)
-                throw new ArgumentOutOfRangeException(nameof(timeLimitTicks), "Time limit must be zero (none) or positive.");
-            if (maxActiveShipsPerSide < 1)
-                throw new ArgumentOutOfRangeException(nameof(maxActiveShipsPerSide), "A side must allow at least one active ship.");
-            if (timerMode > TimerMode.DrainPlayerHp)
-                throw new ArgumentOutOfRangeException(nameof(timerMode));
-            if (playerSide < 0 || playerSide >= SideCount)
-                throw new ArgumentOutOfRangeException(nameof(playerSide));
-            _maxActiveShips = new int[SideCount];
-            for (var side = 0; side < SideCount; ++side)
-                _maxActiveShips[side] = maxActiveShipsPerSide;
-            if (maxActiveShipsBySide != null)
-            {
-                if (maxActiveShipsBySide.Count != SideCount)
-                    throw new ArgumentException("One limit per side is required.", nameof(maxActiveShipsBySide));
-                for (var side = 0; side < SideCount; ++side)
-                {
-                    if (maxActiveShipsBySide[side] < 1)
-                        throw new ArgumentOutOfRangeException(nameof(maxActiveShipsBySide), "A side must allow at least one active ship.");
-                    _maxActiveShips[side] = maxActiveShipsBySide[side];
-                }
-            }
+            if (!(width > 0f) || width > MaxWorldSize)
+                throw new ArgumentOutOfRangeException(nameof(width), $"Arena width must be positive and at most {MaxWorldSize}.");
+            if (!(height > 0f) || height > MaxWorldSize)
+                throw new ArgumentOutOfRangeException(nameof(height), $"Arena height must be positive and at most {MaxWorldSize}.");
 
             var slots = new UnitSetup[roster.Count];
             var rosterIds = new HashSet<UnitId>();
-            var slotsPerSide = new int[SideCount];
             for (var i = 0; i < slots.Length; ++i)
             {
                 var slot = roster[i] ?? throw new ArgumentException("Roster contains a null slot.", nameof(roster));
                 if (!rosterIds.Add(slot.UnitId))
                     throw new ArgumentException($"Duplicate roster ID {slot.UnitId}.", nameof(roster));
-                slotsPerSide[slot.Side]++;
                 slots[i] = slot;
             }
-
-            for (var side = 0; side < SideCount; ++side)
-                if (slotsPerSide[side] == 0)
-                    throw new ArgumentException($"Side {side} has no roster slot.", nameof(roster));
 
             DamageTypes = damageTypes ?? LegacyDamageModel.Types;
             var checkedShips = new HashSet<ShipDefinition>();
@@ -95,14 +49,12 @@ namespace CombatSimulation.Core
             Units = Array.AsReadOnly(slots);
             Width = width;
             Height = height;
-            TimeLimitTicks = timeLimitTicks;
-            MaxActiveShipsPerSide = maxActiveShipsPerSide;
-            TimerMode = timerMode;
-            PlayerSide = playerSide;
-            OnlyOneShip = onlyOneShip;
+            Rules = rules;
             _localOwners = new HashSet<int>();
             if (localOwners == null)
             {
+                // Owner 0 too: a mode adds units of owner 0 to a setup that starts without units.
+                _localOwners.Add(0);
                 foreach (var slot in slots) _localOwners.Add(slot.Owner);
             }
             else
@@ -134,37 +86,22 @@ namespace CombatSimulation.Core
             if (rocks.Length > 0 && HasRemoteOwners)
                 throw new ArgumentException("A battle with remote owners has no asteroids.", nameof(asteroids));
             Asteroids = Array.AsReadOnly(rocks);
+
+            rules?.Validate(this);
         }
 
         public BattleId BattleId { get; }
         public ulong MatchSeed { get; }
 
-        // Slots in setup order, as a read-only copy; the caller's list can change without effect.
+        // The initial units in setup order, as a read-only copy; the caller's list can change without effect. It can be
+        // empty: a mode adds units during the battle.
         public IReadOnlyList<UnitSetup> Units { get; }
 
         public float Width { get; }
         public float Height { get; }
 
-        // Ticks both sides must have an active ship before the timer expires (TimerMode). Zero means no timer.
-        public long TimeLimitTicks { get; }
-
-        // The limit of both sides unless maxActiveShipsBySide replaces it; MaxActiveShips gives the one in force.
-        public int MaxActiveShipsPerSide { get; }
-        public int MaxActiveShips(int side) => _maxActiveShips[side];
-
-        public TimerMode TimerMode { get; }
-
-        // The side the legacy timer rules call the player; the other side is the enemy. Draw ignores it.
-        public int PlayerSide { get; }
-        public int EnemySide => 1 - PlayerSide;
-
-        // The sides the legacy player rules (the DrainPlayerHp drain, OnlyOneShip) apply to: PlayerSide alone, or
-        // both sides with remote owners (phase 7, Q1). Single-player battles are unchanged.
-        public bool HasPlayerRules(int side) => side == PlayerSide || HasRemoteOwners;
-
-        // Legacy PlayerShipSelectionMode.OnlyOneShip: the first death of a player roster ship ends the battle
-        // Battle.ShipLostTicks later, unless an elimination comes first; the player reserves stay ready.
-        public bool OnlyOneShip { get; }
+        // The game rules (battle modes). Null: an open battle without a deployment limit or a result.
+        public IBattleRules Rules { get; }
 
         // Phase 5, step 14: created before tick 0, in this order. Empty with remote owners.
         public IReadOnlyList<AsteroidSetup> Asteroids { get; }
@@ -176,6 +113,9 @@ namespace CombatSimulation.Core
         public bool HasRemoteOwners { get; }
         public bool HasOwner(int owner) => _owners.Contains(owner);
         public int OwnerDelay(int owner) => _ownerDelays.TryGetValue(owner, out var delay) ? delay : 0;
+
+        // A ship that a mode adds (ModeContext.AddUnit).
+        internal void ValidateDamageTypes(ShipDefinition ship) => ValidateDamageTypes(ship, new HashSet<ShipDefinition>());
 
         // Every damage type a ship, its devices or its drones name must exist in the table.
         private void ValidateDamageTypes(ShipDefinition ship, HashSet<ShipDefinition> checkedShips)
@@ -207,7 +147,6 @@ namespace CombatSimulation.Core
             }
         }
 
-        private readonly int[] _maxActiveShips;
         private readonly HashSet<int> _localOwners;
         private readonly HashSet<int> _owners = new HashSet<int>();
         private readonly Dictionary<int, int> _ownerDelays = new Dictionary<int, int>();

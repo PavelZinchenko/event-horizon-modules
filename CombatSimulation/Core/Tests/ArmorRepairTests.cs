@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -134,7 +135,7 @@ namespace CombatSimulation.Core.Tests
             {
                 new UnitSetup(new UnitId(1), 0, Bionic()),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
-            }, timeLimitTicks: 10, timerMode: TimerMode.DrainPlayerHp));
+            }, rules: new RosterRules(timeLimitTicks: 10, timerMode: TimerMode.DrainPlayerHp)));
             driver.Deploy(1);
             driver.Deploy(101);
             driver.Step(200);

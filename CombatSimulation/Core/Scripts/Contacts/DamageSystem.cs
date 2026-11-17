@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace CombatSimulation.Core
@@ -21,7 +22,7 @@ namespace CombatSimulation.Core
 
         // Stage 10. Tail segments first: the damage a tail cannot take passes to its ship (phase 5, step 7d). Then one
         // pass: the shield devices' energy (phase 5, step 10d), the shield, then armor (legacy Impact.ApplyShield and
-        // ShipStats.ApplyDamage).
+        // ShipStats.ApplyDamage). Then the mode's drains (RosterMode: the DrainPlayerHp overtime).
         // Received hits add to a local target's pending damage. A remote target's pending damage is only the damage
         // this device sent it (N3): a prediction that corrections replace.
         public void Apply()
@@ -35,13 +36,23 @@ namespace CombatSimulation.Core
                 if (ship.IsDecoy) _world.Decoys.ApplyDamage(ship);
                 else
                 {
+                    var raw = PendingTotal(ship) + ShieldRules.PendingDamage(ship);
                     ShieldRules.ApplyPending(_battle.DeviceContext, ship, Setup.DamageTypes);
+                    var shieldBefore = ship.Shield.Value;
+                    var armorBefore = ship.Armor.Value;
+                    // What a shield device absorbed: its damage that did not reach the ship's pending damage.
+                    var absorbed = raw - PendingTotal(ship);
                     ApplyShieldFirst(ship);
+                    // Legacy Armor.Get: the loss, so at most the armor the ship had.
+                    if (Setup.IsLocalOwner(ship.Owner))
+                        _world.Performance.Settle(ship, Tick, raw, shieldBefore - ship.Shield.Value + absorbed,
+                            Math.Min(ArmorLoss(ship), armorBefore));
                 }
                 ship.ClearPendingDamage();
             }
+            _world.Performance.Clear();
 
-            DrainPlayerShips();
+            _battle.ApplyModeDrains();
             ReactToLethalDamage();
             _world.Bullets.ApplyDamage(Setup);
         }
@@ -80,6 +91,25 @@ namespace CombatSimulation.Core
                 if (amount > 0f)
                     _damageEvents.Add(new DamageEvent(ship, type, amount));
             }
+        }
+
+        private static float PendingTotal(ShipEntity ship)
+        {
+            var total = 0f;
+            for (var type = 0; type < ship.PendingDamage.Length; ++type)
+                total += ship.PendingDamage[type] + ship.PendingDamageIgnoringShield[type];
+            return total;
+        }
+
+        // After ApplyShieldFirst: the armor damage of the tick, by AddDamageEvents' rule.
+        private float ArmorLoss(ShipEntity ship)
+        {
+            var total = 0f;
+            var damage = ship.PendingDamage;
+            for (var type = 0; type < damage.Length; ++type)
+                if (damage[type] > 0f)
+                    total += damage[type] * (1f - ArmorResistance(Setup.DamageTypes, ship.Definition, type, ship.ResistanceShare));
+            return total;
         }
 
         private readonly struct DamageEvent
@@ -180,28 +210,6 @@ namespace CombatSimulation.Core
                     if (ship.GetDevice(d).OnLethalDamage(_battle.DeviceContext, ship)) break;
             }
         }
-
-        // Legacy CombatTimer, DrainPlayerHp (TM3): after the limit, each active player roster ship loses k % of its
-        // maximum armor and of its maximum shield per second, k being the whole overtime seconds already passed.
-        // No resistances; both restart their delay. It reads the timer of the previous tick. Only the owner drains;
-        // a remote copy follows through corrections. Drones are not drained. With remote owners both sides drain.
-        private void DrainPlayerShips()
-        {
-            if (Setup.TimerMode != TimerMode.DrainPlayerHp || Setup.TimeLimitTicks <= 0) return;
-            var overtime = _battle.TimerElapsedTicks - Setup.TimeLimitTicks;
-            if (overtime < DrainTicksPerSecond) return;
-
-            var fraction = overtime / DrainTicksPerSecond * 0.01f * Battle.TickDuration;
-            foreach (var slot in _world.Units.All)
-            {
-                var ship = slot.ActiveShip;
-                if (!Setup.HasPlayerRules(slot.Side) || ship == null || !Setup.IsLocalOwner(ship.Owner)) continue;
-                ship.Armor.Consume(fraction * ship.Armor.Max);
-                ship.Shield.Consume(fraction * ship.Shield.Max);
-            }
-        }
-
-        private const long DrainTicksPerSecond = 50;
 
         // Stage 11. Marks deaths and bullet expiry; stage 12 applies them. Armor 0 is a death; so are missile hit points 0.
         // A decoy dies at its expiry tick; its damage death is marked at stage 10 (phase 5, step 10c).

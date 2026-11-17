@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -26,7 +27,7 @@ namespace CombatSimulation.Core.Tests
             {
                 new UnitSetup(new UnitId(1), 0, Fixtures.Ship, 10),
                 new UnitSetup(new UnitId(101), 1, ship, Owner),
-            }, localOwners: new[] { localOwner });
+            }, rules: RosterRules.Default, localOwners: new[] { localOwner });
 
         // The owner deploys slot 101; the receiver applies the deployment in the same tick; both then reach tick 2.
         private static (Driver owner, Driver remote, Link link) Pair(ShipDefinition ship)

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using CombatSimulation.Core;
+using CombatSimulation.Modes;
 using CombatSimulation.Runtime;
 using NUnit.Framework;
 using static CombatSimulation.Ai.Tests.AiFixtures;
@@ -22,7 +23,8 @@ namespace CombatSimulation.Ai.Tests
                 new UnitSetup(new UnitId(1), 0, Ship),
                 new UnitSetup(new UnitId(101), 1, Jammer),
             };
-            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: 1),
+            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, roster,
+                rules: new RosterRules(maxActiveShipsPerSide: 1)),
                 new DecoyPilots());
             foreach (var slot in roster)
                 runner.Deploy(slot.UnitId, runner.Tick);

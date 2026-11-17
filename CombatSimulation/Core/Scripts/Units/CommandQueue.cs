@@ -70,6 +70,21 @@ namespace CombatSimulation.Core
             return null;
         }
 
+        public string Add(in ModeCommand command, long tick)
+        {
+            if (command.BattleId != _battleId) return "wrong battle";
+            if (command.TargetTick < tick) return "past tick";
+            if (!_pendingCommandIds.Add(command.CommandId)) return "duplicate command ID";
+
+            var index = 0;
+            while (index < _modeCommands.Count &&
+                (_modeCommands[index].TargetTick < command.TargetTick ||
+                 (_modeCommands[index].TargetTick == command.TargetTick && _modeCommands[index].CommandId < command.CommandId)))
+                ++index;
+            _modeCommands.Insert(index, command);
+            return null;
+        }
+
         public string Add(in ShipCommand command, long tick)
         {
             if (command.BattleId != _battleId) return "wrong battle";
@@ -115,6 +130,19 @@ namespace CombatSimulation.Core
                 due.Add(command);
             }
             if (count > 0) _selfDestructs.RemoveRange(0, count);
+        }
+
+        public void TakeDue(long tick, List<ModeCommand> due)
+        {
+            due.Clear();
+            var count = 0;
+            while (count < _modeCommands.Count && _modeCommands[count].TargetTick == tick)
+            {
+                var command = _modeCommands[count++];
+                _pendingCommandIds.Remove(command.CommandId);
+                due.Add(command);
+            }
+            if (count > 0) _modeCommands.RemoveRange(0, count);
         }
 
         public void TakeDue(long tick, List<ShipCommand> due)
@@ -184,6 +212,7 @@ namespace CombatSimulation.Core
         private readonly List<UnitCommand> _rosterCommands = new List<UnitCommand>();
         private readonly List<SelfDestructCommand> _selfDestructs = new List<SelfDestructCommand>();
         private readonly List<ShipCommand> _shipCommands = new List<ShipCommand>();
+        private readonly List<ModeCommand> _modeCommands = new List<ModeCommand>();
         private readonly List<ControlFrame> _frames = new List<ControlFrame>();
         private readonly HashSet<FrameKey> _pendingFrameKeys = new HashSet<FrameKey>();
         private readonly HashSet<ulong> _pendingCommandIds = new HashSet<ulong>();

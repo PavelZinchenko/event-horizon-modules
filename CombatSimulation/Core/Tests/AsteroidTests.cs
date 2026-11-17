@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -24,7 +25,7 @@ namespace CombatSimulation.Core.Tests
             {
                 new UnitSetup(new UnitId(1), 0, ship ?? Fixtures.Ship),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
-            }, localOwners: localOwners, asteroids: asteroids);
+            }, rules: RosterRules.Default, localOwners: localOwners, asteroids: asteroids);
 
         // Both ships deploy at tick 0; then the ships and asteroids take their test poses.
         private static Driver Start(ShipDefinition ship, params AsteroidSetup[] asteroids)

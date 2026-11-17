@@ -229,6 +229,7 @@ namespace CombatSimulation.Core
             bullet.Id = id;
             bullet.ParentId = parent.Id;
             bullet.ShipId = parent.ShipId;
+            bullet.SourceUnit = parent.SourceUnit;
             bullet.AllegianceOwner = parent.AllegianceOwner;
             bullet.Side = parent.Side;
             bullet.Allegiance = parent.Allegiance;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -16,7 +17,9 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(2), 0, Fixtures.Ship, 10),
                 new UnitSetup(new UnitId(101), 1, remoteShip ?? Fixtures.Ship, 20),
                 new UnitSetup(new UnitId(102), 1, Fixtures.Ship, 20),
-            }, localOwners: new[] { localOwner }, ownerDelays: delays ?? new Dictionary<int, int> { [20] = delay });
+            },
+                rules: RosterRules.Default, localOwners: new[] { localOwner },
+                ownerDelays: delays ?? new Dictionary<int, int> { [20] = delay });
 
         private static Driver Target(int delay = 0)
         {

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -266,7 +267,7 @@ namespace CombatSimulation.Core.Tests
             {
                 new UnitSetup(new UnitId(1), 0, Gun(new BulletDefinition(0.25f, 20f, 10f, 5f, push: 1f)), 10),
                 new UnitSetup(new UnitId(101), 1, shielded, GateDeviceTests.RemoteOwner),
-            }, localOwners: new[] { local });
+            }, rules: RosterRules.Default, localOwners: new[] { local });
             var owner = new Driver(Setup(GateDeviceTests.RemoteOwner));
             var attacker = new Driver(Setup(10));
             var link = new GateDeviceTests.Link();

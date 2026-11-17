@@ -1,4 +1,5 @@
 using System;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -70,7 +71,7 @@ namespace CombatSimulation.Core.Tests
             var setup = new BattleSetup(new BattleId(1), 7, new[] {
                 new UnitSetup(new UnitId(1), 0, ship),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
-                new UnitSetup(new UnitId(102), 1, Fixtures.Ship) }, maxActiveShipsPerSide: 2);
+                new UnitSetup(new UnitId(102), 1, Fixtures.Ship) }, rules: new RosterRules(maxActiveShipsPerSide: 2));
             var driver = new Driver(setup);
             driver.Deploy(1); driver.Deploy(101); driver.Deploy(102); driver.Step();
             driver.Place(1, Origin, Vec2.Zero);
@@ -267,8 +268,10 @@ namespace CombatSimulation.Core.Tests
             var roster = new[] {
                 new UnitSetup(new UnitId(1), 0, Definition(80f, turret), 0),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship, 1) };
-            var owner = new Driver(new BattleSetup(new BattleId(1), 7, roster, localOwners: new[] { 0 }));
-            var copy = new Driver(new BattleSetup(new BattleId(1), 7, roster, localOwners: new[] { 1 }));
+            var owner = new Driver(new BattleSetup(new BattleId(1), 7, roster,
+                rules: RosterRules.Default, localOwners: new[] { 0 }));
+            var copy = new Driver(new BattleSetup(new BattleId(1), 7, roster,
+                rules: RosterRules.Default, localOwners: new[] { 1 }));
             owner.Deploy(1); copy.Deploy(101); owner.Step(); copy.Step();
             foreach (var op in owner.Battle.Snapshot.OutgoingOperations) Assert.IsTrue(copy.Battle.Submit(0, op));
             foreach (var op in copy.Battle.Snapshot.OutgoingOperations) Assert.IsTrue(owner.Battle.Submit(1, op));
@@ -291,7 +294,7 @@ namespace CombatSimulation.Core.Tests
             var driver = new Driver(new BattleSetup(new BattleId(1), 7, new[] {
                 new UnitSetup(new UnitId(1), 0, Definition(arc, turret, device)),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
-                new UnitSetup(new UnitId(102), 1, Fixtures.Ship) }));
+                new UnitSetup(new UnitId(102), 1, Fixtures.Ship) }, rules: RosterRules.Default));
             driver.Deploy(1); driver.Deploy(101); driver.Step();
             driver.Place(1, Origin, Vec2.Zero);
             driver.Place(101, new Vec2(150f, 150f), Vec2.Zero);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -276,7 +277,7 @@ namespace CombatSimulation.Core.Tests
             {
                 new UnitSetup(new UnitId(1), 0, Carrier(Satellite()), GateDeviceTests.RemoteOwner),
                 new UnitSetup(new UnitId(101), 1, Fixtures.CannonShip(new BulletDefinition(0.25f, 100f, 100f, 4f)), 10),
-            }, localOwners: new[] { 10 }));
+            }, rules: RosterRules.Default, localOwners: new[] { 10 }));
             driver.Battle.DeploySlot(driver.Slot(1));
             driver.Battle.DeploySlot(driver.Slot(101));
             driver.Step();

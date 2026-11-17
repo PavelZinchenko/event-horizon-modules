@@ -13,15 +13,14 @@ namespace CombatSimulation.Core
         // Legacy ShipRetreatEffect(7.0f): 7 s at 50 Hz.
         public const long RetreatTicks = 350;
 
-        // Legacy CombatManager: the 3 s cooldown before IsPlayerDefeated ends an OnlyOneShip battle.
-        public const long ShipLostTicks = 150;
-
         public Battle(BattleSetup setup)
         {
             if (setup == null) throw new ArgumentNullException(nameof(setup));
             _world = new BattleWorld(setup);
             _commands = new CommandQueue(setup.BattleId);
-            _flow = new CommittedBattleFlow(setup);
+            _mode = setup.Rules == null ? OpenMode.Instance
+                : setup.Rules.CreateMode(setup) ?? throw new InvalidOperationException("The rules created no mode.");
+            _modeContext = new ModeContext(this);
             _targets = new TargetGrid(World.Torus, setup.MatchSeed);
             _tails = new WormTails(_world, this);
             _world.RepairBots = new RepairBots(_world, this);
@@ -60,7 +59,6 @@ namespace CombatSimulation.Core
         internal UnitTable Units => _world.Units;
         internal BattleResult Result { get; private set; }
         internal BattleResult CandidateResult { get; private set; }
-        private readonly CommittedBattleFlow _flow;
 
         // Ticks counted toward the time limit since the last reset.
         internal long TimerElapsedTicks { get; private set; }
@@ -169,7 +167,6 @@ namespace CombatSimulation.Core
             Publish();
         }
 
-        internal CommittedBattleFlow Flow => _flow;
         internal TargetGrid Targets => _targets;
 
         // Contact and damage members for tails, the network part and tests (8b, decision 1).
@@ -289,10 +286,12 @@ namespace CombatSimulation.Core
             return reason == null || Reject(command, reason);
         }
 
-        // Stage 1. Roster commands, self-destruct requests, ship commands, then control frames; each group in command
-        // ID order.
+        // Stage 1. The mode (its commands and actions), then unit commands, self-destruct requests, ship commands and
+        // control frames; each group in command ID order.
         private void ApplyCommands()
         {
+            BeginModeTick();
+
             _commands.TakeDue(Tick, _dueUnitCommands);
             foreach (var command in _dueUnitCommands)
                 ApplyUnitCommand(command);
@@ -463,7 +462,8 @@ namespace CombatSimulation.Core
 
         private void StepPhysics() => World.Step(TickDuration);
 
-        // Stage 12. One batch, in roster order: deaths, then retreat completions, then surrender and kill-all.
+        // Stage 12. One batch, in unit order: deaths, then retreat completions, then surrender and kill-all, then the
+        // mode's destructions.
         // Drone deaths follow the roster batch, then tail segments, repair bots, satellites and asteroids. Bullets leave
         // last, by ID.
         // Attached beams die with their ship.
@@ -481,6 +481,7 @@ namespace CombatSimulation.Core
                 var id = ship.Id;
                 if (ship.PendingDeath)
                 {
+                    PerformanceLedger.RecordDeath(ship, Tick);
                     RemoveShip(ship, RemovalReason.Death);
                     slot.Destroy();
                     AddTransition(slot, UnitStatus.Active, UnitTransitionReason.Killed, id);
@@ -517,6 +518,7 @@ namespace CombatSimulation.Core
                     AddTransition(slot, previousStatus, UnitTransitionReason.ForcedDestruction, id);
                 }
             }
+            DestroyModeUnits();
 
             // Mothership removal does not remove drones or decoys. Only their own damage, lifetime or pilot command does.
             for (var i = 0; i < _world.Drones.Count;)
@@ -566,19 +568,12 @@ namespace CombatSimulation.Core
             _world.Bullets.Release(index);
         }
 
-        // Stage 13. Elimination first, then the timer.
+        // Stage 13. The mode decides the result.
         private void UpdateBattleFlow()
         {
-            EvaluateResult();
+            EndModeTick();
             if (Result.IsCompleted)
                 _world.Events.Add(BattleEvent.ResultEvent(BattleId, Tick, _world.Events.Count, Result));
-        }
-
-        private void EvaluateResult()
-        {
-            Result = _flow.Evaluate(Tick, _network?.ResultFrontier() ?? Tick, out var candidate, out var elapsed);
-            CandidateResult = candidate;
-            TimerElapsedTicks = elapsed;
         }
 
         // Stage 14. Writes the snapshot and the event batch of this tick, then swaps the buffers.
@@ -623,15 +618,15 @@ namespace CombatSimulation.Core
             if (slot == null) { Reject(command, "unknown roster ID"); return; }
             if (!Setup.IsLocalOwner(slot.Owner)) { Reject(command, "remote owner"); return; }
             if (slot.Status != UnitStatus.Ready) { Reject(command, $"slot is {slot.Status}"); return; }
-            if (Units.CountActive(slot.Side) >= Setup.MaxActiveShips(slot.Side)) { Reject(command, "side limit"); return; }
-            if (Setup.OnlyOneShip && Setup.HasPlayerRules(slot.Side) && Units.HasDestroyed(slot.Side))
-            { Reject(command, "only one ship"); return; }
+            if (!AllowDeploy(slot, out var reason)) { Reject(command, reason); return; }
 
             if (!DeploySlot(slot)) Reject(command, "entity ID collision");
         }
 
-        // Local deployment uses spawn placement. Received deployments use the owner's recorded pose.
-        internal bool DeploySlot(Unit slot)
+        internal bool DeploySlot(Unit slot) => DeploySlot(slot, SpawnPlacement.Auto);
+
+        // A local deployment at the placement. Received deployments use the owner's recorded pose.
+        internal bool DeploySlot(Unit slot, in SpawnPlacement placement)
         {
             var id = SpawnIdentity.CreateRoot(BattleId, slot.UnitId, slot.DeploymentCount + 1, Tick);
             var ship = _world.Ships.Allocate();
@@ -647,7 +642,7 @@ namespace CombatSimulation.Core
 
             _world.AddShipShapes(ship, CollisionFilters.Ship(ship.Allegiance));
 
-            _spawns.PlaceUnitShip(body, id, slot.Side);
+            PlaceDeployment(slot, ship, body, placement);
             Satellites.Add(_world, ship);
             slot.Activate(ship, ++_world.DeploymentOrder);
 
@@ -728,7 +723,8 @@ namespace CombatSimulation.Core
         {
             _world.Events.Add(BattleEvent.Transition(BattleId, Tick, _world.Events.Count, slot, previousStatus, reason, id,
                 ApplyingRemoteOperation ? BattleEventAuthority.Committed : _world.Authority(slot.Owner)));
-            if (!ApplyingRemoteOperation) _flow.Add(Tick, slot.Side, previousStatus, slot.Status);
+            if (!ApplyingRemoteOperation)
+                _mode.OnTransition(new UnitChange(Tick, slot.UnitId, slot.Side, previousStatus, slot.Status, reason));
             _network?.CaptureUnit(slot, previousStatus, reason, id);
         }
 

@@ -43,8 +43,8 @@ namespace CombatSimulation.Core
         // Live asteroids in setup order (phase 5, step 14).
         public ReadOnlySpan<AsteroidState> Asteroids => new ReadOnlySpan<AsteroidState>(_asteroids, 0, _asteroidCount);
 
-        // Every slot in setup order.
-        public ReadOnlySpan<UnitState> Units => new ReadOnlySpan<UnitState>(_roster, 0, _roster.Length);
+        // Every unit in table order: the setup's units, then the ones a mode added.
+        public ReadOnlySpan<UnitState> Units => new ReadOnlySpan<UnitState>(_roster, 0, _unitCount);
 
         // Presentation events of this tick, in order. Authority distinguishes predictions from commits.
         public ReadOnlySpan<BattleEvent> Events => new ReadOnlySpan<BattleEvent>(_events, 0, _eventCount);
@@ -84,15 +84,15 @@ namespace CombatSimulation.Core
         // battle to reuse its arrays; it allocates only to grow them. The state structs hold only immutable definitions.
         public BattleSnapshot CopyTo(BattleSnapshot target = null)
         {
-            target ??= new BattleSnapshot(BattleId, _roster.Length);
+            target ??= new BattleSnapshot(BattleId, _unitCount);
             if (target == this) throw new ArgumentException("A snapshot cannot copy itself.", nameof(target));
-            if (target.BattleId != BattleId || target._roster.Length != _roster.Length)
+            if (target.BattleId != BattleId)
                 throw new ArgumentException("The copy belongs to another battle.", nameof(target));
             target.Tick = Tick;
             target.TimerElapsedTicks = TimerElapsedTicks;
             target.Result = Result;
             target.CandidateResult = CandidateResult;
-            Array.Copy(_roster, target._roster, _roster.Length);
+            target._unitCount = Copy(_roster, _unitCount, ref target._roster);
             target._shipCount = Copy(_ships, _shipCount, ref target._ships);
             target._deviceCount = Copy(_devices, _deviceCount, ref target._devices);
             target._barrelCount = Copy(_barrels, _barrelCount, ref target._barrels);
@@ -123,7 +123,10 @@ namespace CombatSimulation.Core
             Result = battle.Result;
             CandidateResult = battle.CandidateResult;
 
+            // A mode can add units (ModeContext.AddUnit): the array grows as the other arrays do.
             var slots = units.All;
+            if (_roster.Length < slots.Count) Array.Resize(ref _roster, Math.Max(slots.Count, _roster.Length * 2));
+            _unitCount = slots.Count;
             _shipCount = 0;
             for (var i = 0; i < slots.Count; ++i)
             {
@@ -218,7 +221,8 @@ namespace CombatSimulation.Core
             _appliedOperationCount = applied.Count;
         }
 
-        private readonly UnitState[] _roster;
+        private UnitState[] _roster;
+        private int _unitCount;
         private ShipState[] _ships;
         private int _shipCount;
         private BarrelState[] _barrels = new BarrelState[16];
@@ -257,6 +261,8 @@ namespace CombatSimulation.Core
         }
 
         public void CopyTo(BattleEvent[] target) => Array.Copy(_items, target, Count);
+
+        public ReadOnlySpan<BattleEvent> AsSpan() => new ReadOnlySpan<BattleEvent>(_items, 0, Count);
 
         public void Clear()
         {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using CombatSimulation.Runtime;
 
@@ -69,8 +70,8 @@ namespace CombatSimulation.Core.Tests
                 roster.Add(new UnitSetup(new UnitId(first + 2), side, carrier));
             }
 
-            return new BattleSetup(new BattleId(1), matchSeed, roster, ArenaSize, ArenaSize, TimeLimitTicks,
-                maxActiveShipsPerSide);
+            return new BattleSetup(new BattleId(1), matchSeed, roster, ArenaSize, ArenaSize,
+                rules: new RosterRules(timeLimitTicks: TimeLimitTicks, maxActiveShipsPerSide: maxActiveShipsPerSide));
         }
 
         // Phase 5 content (step 8b baseline): child bullets with nesting, areas with falloff and push, a cloud, point
@@ -176,7 +177,9 @@ namespace CombatSimulation.Core.Tests
                     roster.Add(new UnitSetup(new UnitId((uint)(1 + i + 100 * side)), side, ships[i],
                         side == 0 ? owner0 : owner1));
 
-            return new BattleSetup(new BattleId(5), 11, roster, ArenaSize, ArenaSize, TimeLimitTicks, ships.Length, localOwners);
+            return new BattleSetup(new BattleId(5), 11, roster, ArenaSize, ArenaSize,
+                rules: new RosterRules(timeLimitTicks: TimeLimitTicks, maxActiveShipsPerSide: ships.Length),
+                localOwners: localOwners);
         }
 
         // Step 12a baseline: auto-aiming mounts. Battery: a hidden 20° barrel (device 0), an 80° turret on the left
@@ -215,7 +218,9 @@ namespace CombatSimulation.Core.Tests
                     roster.Add(new UnitSetup(new UnitId((uint)(1 + i + 100 * side)), side, ships[i],
                         side == 0 ? owner0 : owner1));
 
-            return new BattleSetup(new BattleId(12), 13, roster, ArenaSize, ArenaSize, TimeLimitTicks, ships.Length, localOwners);
+            return new BattleSetup(new BattleId(12), 13, roster, ArenaSize, ArenaSize,
+                rules: new RosterRules(timeLimitTicks: TimeLimitTicks, maxActiveShipsPerSide: ships.Length),
+                localOwners: localOwners);
         }
 
         private static BulletSpawnPattern Ring(int count)
@@ -239,7 +244,7 @@ namespace CombatSimulation.Core.Tests
         public ScriptedBattle(BattleSetup setup, bool record, bool retreat, bool fullDigest = false, bool barrelDigest = false)
         {
             Runner = new BattleRunner(setup, new PilotProvider());
-            _maxActive = setup.MaxActiveShipsPerSide;
+            _maxActive = ((RosterRules)setup.Rules).MaxActiveShipsPerSide;
             _record = record;
             _retreat = retreat;
             _fullDigest = fullDigest;

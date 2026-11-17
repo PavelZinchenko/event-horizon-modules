@@ -1,0 +1,75 @@
+using System;
+using Utilites;
+
+namespace CombatSimulation.Core
+{
+    // What a battle mode reads and does. The battle gives the same context to every call.
+    //
+    // Actions run only in IBattleMode.BeginTick, at once and in call order, before the queued commands of the tick. They
+    // have no command IDs. A bool action returns false when it does not apply (unknown ID, wrong status). With remote
+    // owners every action that changes units or ships throws (D10): the online duel runs only RosterMode.
+    public sealed class ModeContext
+    {
+        internal ModeContext(Battle battle) => _battle = battle;
+
+        // The tick being processed.
+        public long Tick => _battle.Tick;
+        public BattleSetup Setup => _battle.Setup;
+
+        // The state and events of the last completed tick.
+        public BattleSnapshot Snapshot => _battle.Snapshot;
+
+        // The events of the tick so far. At stage 13 the batch has every event of the tick except the result and the
+        // damage events.
+        public ReadOnlySpan<BattleEvent> TickEvents => _battle.TickEvents;
+
+        // The units now, in table order: the setup's units, then the added ones.
+        public int UnitCount => _battle.Units.All.Count;
+        public UnitState GetUnit(int index) => new UnitState(_battle.Units.All[index]);
+
+        public bool TryGetUnit(UnitId id, out UnitState unit)
+        {
+            var slot = _battle.Units.Find(id);
+            unit = slot != null ? new UnitState(slot) : default;
+            return slot != null;
+        }
+
+        public int CountUnits(int side, UnitStatus status) => _battle.Units.Count(side, status);
+
+        // Adds a Ready unit after the existing units. The ID must be new and the owner local; the damage types are
+        // checked as at setup.
+        public void AddUnit(UnitSetup unit) => _battle.ModeAddUnit(unit);
+
+        // Deploys a Ready unit, as the Deploy command does, at the placement.
+        public bool Deploy(UnitId id, in SpawnPlacement placement) => _battle.ModeDeploy(id, placement);
+
+        // A Destroyed unit becomes Ready (UnitTransitionReason.Respawned). Its deficits become zero, and its drone bays
+        // and cloning centres refill. Its next deployment takes its live drones.
+        public bool Respawn(UnitId id) => _battle.ModeRespawn(id);
+
+        // As the Retreat command.
+        public bool Retreat(EntityId id) => _battle.ModeRetreat(id);
+
+        // As the Vanish ship command (D12).
+        public bool Vanish(EntityId id) => _battle.ModeVanish(id);
+
+        // As the ChangeAllegiance ship command (D13).
+        public bool ChangeAllegiance(EntityId id, Allegiance allegiance) => _battle.ModeChangeAllegiance(id, allegiance);
+
+        // Destroys a unit at stage 12, as surrender does for each unit of a side. A Ready unit has no entity.
+        public bool DestroyUnit(UnitId id) => _battle.ModeDestroyUnit(id);
+
+        // At stage 10, after the damage: the unit's active ship, when it has one of a local owner, loses the fractions of
+        // its maximum armor and shield. No resistance; both delays restart. Drains apply in call order.
+        public void Drain(UnitId id, float armorFraction, float shieldFraction) =>
+            _battle.ModeDrain(id, armorFraction, shieldFraction);
+
+        // Adds a BattleEventKind.Mode event to the tick's batch. Also at stage 13, before the result.
+        public void Publish(in ModeEvent item) => _battle.ModePublish(item);
+
+        // A counter-based random state for the tick and the purpose: the same on every run and every device.
+        public RandomState Random(uint purpose) => CounterRandom.Create(Setup.MatchSeed, Tick, purpose);
+
+        private readonly Battle _battle;
+    }
+}

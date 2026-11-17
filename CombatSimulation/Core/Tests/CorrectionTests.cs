@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -760,9 +761,10 @@ namespace CombatSimulation.Core.Tests
                 roster.Add(new UnitSetup(new UnitId(2), 0, Fixtures.Ship, OwnerB));
                 roster.Add(new UnitSetup(new UnitId(102), 1, Fixtures.Ship, OwnerA));
             }
-            return new BattleSetup(new BattleId(77), 13, roster, localOwners: new[] { localOwner },
-                ownerDelays: new Dictionary<int, int> { [OwnerB] = delayB, [OwnerA] = delayA },
-                timeLimitTicks: rules.TimeLimitTicks, timerMode: rules.TimerMode, onlyOneShip: rules.OnlyOneShip);
+            return new BattleSetup(new BattleId(77), 13, roster,
+                rules: new RosterRules(timeLimitTicks: rules.TimeLimitTicks, timerMode: rules.TimerMode, onlyOneShip: rules.OnlyOneShip),
+                localOwners: new[] { localOwner },
+                ownerDelays: new Dictionary<int, int> { [OwnerB] = delayB, [OwnerA] = delayA });
         }
 
         private readonly struct Rules

@@ -155,6 +155,17 @@ namespace CombatSimulation.Core
         internal override DeviceState GetState(DeviceContext context, ShipEntity ship, long tick) =>
             new DeviceState(_use.IsRunning || IsReady(ship, tick + 1), IsActive, _use.Cooldown(Definition.Activation, tick + 1));
 
+        // The damage of this tick's contacts on the shield, before ApplyPending (PerformanceLedger).
+        internal float PendingDamageTotal
+        {
+            get
+            {
+                var total = 0f;
+                for (var i = 0; i < _damage.Length; ++i) total += _damage[i];
+                return total;
+            }
+        }
+
         // Stage 9 and the remote hits of stage 10: the impact of this tick's contacts on the shield, by damage type.
         internal void AddPendingDamage(ShipEntity ship, int type, float amount)
         {
@@ -326,6 +337,15 @@ namespace CombatSimulation.Core
         }
 
         // Stage 10, before the ship's shield points.
+        // The damage that the ship's shield devices hold for stage 10 (PerformanceLedger).
+        public static float PendingDamage(ShipEntity ship)
+        {
+            var total = 0f;
+            for (var d = 0; d < ship.DeviceCount; ++d)
+                if (ship.GetDevice(d) is ShieldDevice shield) total += shield.PendingDamageTotal;
+            return total;
+        }
+
         public static void ApplyPending(DeviceContext context, ShipEntity ship, DamageTypeTable types)
         {
             for (var d = 0; d < ship.DeviceCount; ++d)

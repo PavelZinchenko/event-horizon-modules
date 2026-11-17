@@ -54,6 +54,10 @@ namespace CombatSimulation.Runtime
         public bool KillAll(int requestingSide, long targetTick) =>
             _battle.Submit(UnitCommand.KillAll(BattleId, _nextCommandId++, targetTick, requestingSide));
 
+        // An input for the battle mode (ModeCommand); the mode defines the kind and the arguments.
+        public bool SubmitModeCommand(int kind, long targetTick, long argument0 = 0, long argument1 = 0) =>
+            _battle.Submit(new ModeCommand(BattleId, _nextCommandId++, targetTick, kind, argument0, argument1));
+
         public void Step()
         {
             _battle.Step();

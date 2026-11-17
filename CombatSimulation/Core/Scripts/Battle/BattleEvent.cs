@@ -45,6 +45,10 @@ namespace CombatSimulation.Core
         // For presentation (satellite plan, phase 6): a destructible satellite died or respawned. EntityId is its ship,
         // DeviceIndex the satellite index, Point its position, and RemovalReason Death for a death or None for a respawn.
         SatelliteChange = 13,
+
+        // For the application (battle modes): an event that the mode published (ModeContext.Publish). ModeEvent has the
+        // mode's code and values.
+        Mode = 14,
     }
 
     public enum RemovalReason : byte
@@ -70,8 +74,11 @@ namespace CombatSimulation.Core
         Retreated,
         Killed,
 
-        // Surrender or kill-all destroyed the slot; a ready reserve has no entity.
+        // Surrender, kill-all or a mode destroyed the slot; a ready reserve has no entity.
         ForcedDestruction,
+
+        // A mode returned a destroyed unit to Ready (ModeContext.Respawn).
+        Respawned,
     }
 
     // One presentation event of a tick, with explicit authority. A flat tagged form, so the batch never allocates.
@@ -141,6 +148,9 @@ namespace CombatSimulation.Core
         // Rename: the copy's ID before it.
         public readonly EntityId PreviousId;
 
+        // Mode: the published code and values.
+        public readonly ModeEvent ModeEvent;
+
         public bool IsBullet => BulletDefinition != null || IsBeam;
         public bool IsBeam => BeamDefinition != null;
 
@@ -152,7 +162,7 @@ namespace CombatSimulation.Core
             BeamDefinition beamDefinition = null, int deviceIndex = -1, DroneBayKey? bayKey = null,
             BattleEventAuthority authority = BattleEventAuthority.Committed, EntityId previousId = default,
             bool isDecoy = false, Vec2 destination = default,
-            BulletTriggerConditions removalConditions = BulletTriggerConditions.None)
+            BulletTriggerConditions removalConditions = BulletTriggerConditions.None, ModeEvent modeEvent = default)
         {
             BattleId = battleId;
             Tick = tick;
@@ -184,6 +194,7 @@ namespace CombatSimulation.Core
             BeamDefinition = beamDefinition;
             ParentId = parentId;
             PreviousId = previousId;
+            ModeEvent = modeEvent;
         }
 
         internal static BattleEvent Spawn(BattleId battleId, long tick, int sequence, ShipEntity ship,
@@ -285,6 +296,10 @@ namespace CombatSimulation.Core
                 ship.Side, ship.Owner, ship.Definition, RemovalReason.None, default, default, UnitTransitionReason.None, 0,
                 0f, 0f, default, damage: amount, deviceIndex: damageType, authority: authority);
 
+        internal static BattleEvent ModeItem(BattleId battleId, long tick, int sequence, in ModeEvent item) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.Mode, default, default, -1, 0, null,
+                RemovalReason.None, default, default, UnitTransitionReason.None, 0, 0f, 0f, default, modeEvent: item);
+
         public override string ToString()
         {
             switch (Kind)
@@ -317,6 +332,8 @@ namespace CombatSimulation.Core
                     return $"{Tick}.{Sequence} Satellite {DeviceIndex} of {EntityId} {(RemovalReason == RemovalReason.Death ? "destroyed" : "respawned")} at {Point}";
                 case BattleEventKind.Damage:
                     return $"{Tick}.{Sequence} Damage {EntityId} type {DeviceIndex}: {Damage}";
+                case BattleEventKind.Mode:
+                    return $"{Tick}.{Sequence} Mode {ModeEvent.Code} ({ModeEvent.Value0}, {ModeEvent.Value1})";
                 default:
                     return $"{Tick}.{Sequence} {Kind}";
             }

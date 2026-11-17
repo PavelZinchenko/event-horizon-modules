@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using CombatSimulation.Runtime;
 using NUnit.Framework;
@@ -29,8 +30,8 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(101), 1, enemy ?? Fixtures.Ship),
             };
             if (reserve) slots.Add(new UnitSetup(new UnitId(2), 0, Fixtures.Ship));
-            var driver = new Driver(new BattleSetup(new BattleId(1), 7, slots, timeLimitTicks: timeLimit,
-                maxActiveShipsPerSide: maxActive));
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, slots,
+                rules: new RosterRules(timeLimitTicks: timeLimit, maxActiveShipsPerSide: maxActive)));
             driver.Deploy(1);
             driver.Deploy(101);
             driver.Step();

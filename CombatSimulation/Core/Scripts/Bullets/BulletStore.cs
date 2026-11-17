@@ -18,6 +18,8 @@ namespace CombatSimulation.Core
         // Capture keeps spawn identity and source weapon, but changes whose allegiance the missile follows.
         public EntityId? AllegianceOwner;
         public EntityId SourceShipId => AllegianceOwner ?? ShipId;
+        // The unit that gets the bullet's performance credit (ShipEntity.CreditUnit of ShipId); it outlives the ship.
+        public Unit SourceUnit;
         public int Side;
         public Allegiance Allegiance;
         public int Owner;

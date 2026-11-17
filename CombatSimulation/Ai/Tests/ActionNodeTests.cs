@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CombatSimulation.Core;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using CombatSimulation.Runtime;
 using GameDatabase.DataModel;
@@ -35,7 +36,7 @@ namespace CombatSimulation.Ai.Tests
                     new UnitSetup(new UnitId(1), 0, shooter),
                     new UnitSetup(new UnitId(101), 1, AiFixtures.Ship),
                     new UnitSetup(new UnitId(102), 1, AiFixtures.Ship),
-                }), new FirePilots());
+                }, rules: RosterRules.Default), new FirePilots());
                 result.Deploy(new UnitId(1), result.Tick);
                 result.Deploy(new UnitId(101), result.Tick);
                 result.Step();
@@ -345,7 +346,7 @@ namespace CombatSimulation.Ai.Tests
             {
                 new UnitSetup(new UnitId(1), 0, bomber),
                 new UnitSetup(new UnitId(101), 1, AiFixtures.Ship),
-            }), new FirePilots());
+            }, rules: RosterRules.Default), new FirePilots());
             runner.Deploy(new UnitId(1), runner.Tick);
             runner.Deploy(new UnitId(101), runner.Tick);
             for (var i = 0; i < 5; ++i) runner.Step();
@@ -388,7 +389,7 @@ namespace CombatSimulation.Ai.Tests
             {
                 new UnitSetup(new UnitId(1), 0, laser),
                 new UnitSetup(new UnitId(101), 1, AiFixtures.Ship),
-            }), new FirePilots());
+            }, rules: RosterRules.Default), new FirePilots());
             runner.Deploy(new UnitId(1), runner.Tick);
             runner.Deploy(new UnitId(101), runner.Tick);
             for (var i = 0; i < 6; ++i) runner.Step();

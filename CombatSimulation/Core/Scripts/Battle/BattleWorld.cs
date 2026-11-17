@@ -47,6 +47,7 @@ namespace CombatSimulation.Core
         public EntityRegistry Entities { get; } = new EntityRegistry();
         public ShapeTable Shapes { get; } = new ShapeTable();
         public BattleEventBuffer Events { get; } = new BattleEventBuffer();
+        public PerformanceLedger Performance { get; } = new PerformanceLedger();
 
         // Phase 5b, step 7b: the removal events of repair bots and tail segments wait for stage 14 and go last in the
         // batch, after the result, so the other events keep their sequence numbers.
@@ -246,6 +247,7 @@ namespace CombatSimulation.Core
             bullet.Id = id;
             bullet.ParentId = ship.Id;
             bullet.ShipId = ship.Id;
+            bullet.SourceUnit = ship.CreditUnit;
             bullet.Side = ship.Side;
             bullet.Allegiance = ship.Allegiance;
             bullet.Owner = ship.Owner;
@@ -364,6 +366,7 @@ namespace CombatSimulation.Core
             beam.Id = id;
             beam.ParentId = ship.Id;
             beam.ShipId = ship.Id;
+            beam.SourceUnit = ship.CreditUnit;
             beam.Side = ship.Side;
             beam.Allegiance = ship.Allegiance;
             beam.Owner = ship.Owner;

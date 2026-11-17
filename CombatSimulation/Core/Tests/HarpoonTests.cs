@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -207,8 +208,10 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship, 20),
                 new UnitSetup(new UnitId(102), 1, Fixtures.Ship, 10),
             };
-            var owner = new Driver(new BattleSetup(new BattleId(77), 13, slots, localOwners: new[] { 20 }));
-            var copy = new Driver(new BattleSetup(new BattleId(77), 13, slots, localOwners: new[] { 10 }));
+            var owner = new Driver(new BattleSetup(new BattleId(77), 13, slots,
+                rules: RosterRules.Default, localOwners: new[] { 20 }));
+            var copy = new Driver(new BattleSetup(new BattleId(77), 13, slots,
+                rules: RosterRules.Default, localOwners: new[] { 10 }));
             ulong sequence = 0;
             var pending = new List<OwnerOperation>();
             void Capture()

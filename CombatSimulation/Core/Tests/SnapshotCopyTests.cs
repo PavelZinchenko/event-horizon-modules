@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
+using CombatSimulation.Modes;
 using NUnit.Framework;
 
 namespace CombatSimulation.Core.Tests
@@ -76,7 +77,7 @@ namespace CombatSimulation.Core.Tests
         {
             var setup = ScriptedBattle.Setup();
             var other = new BattleSetup(new BattleId(setup.BattleId.Value + 1), setup.MatchSeed, setup.Units, setup.Width,
-                setup.Height, setup.TimeLimitTicks, setup.MaxActiveShipsPerSide);
+                setup.Height, rules: setup.Rules);
             var a = new ScriptedBattle(setup, record: false, retreat: false);
             var b = new ScriptedBattle(other, record: false, retreat: false);
             Assert.Throws<ArgumentException>(() => a.Runner.Snapshot.CopyTo(a.Runner.Snapshot));

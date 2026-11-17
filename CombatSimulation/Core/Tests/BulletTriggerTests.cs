@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -294,7 +295,7 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(bolt, cooldown: 10f), 10),
                 new UnitSetup(new UnitId(101), 1,
                     Fixtures.ShipWith(devices: new[] { new PointDefenseDefinition(4f, 0.1f, 1f) }), 20),
-            }, localOwners: new[] { 10 }));
+            }, rules: RosterRules.Default, localOwners: new[] { 10 }));
             d.Battle.DeploySlot(d.Slot(1));
             d.Battle.DeploySlot(d.Slot(101));
             d.Step();
@@ -367,7 +368,7 @@ namespace CombatSimulation.Core.Tests
             {
                 new UnitSetup(new UnitId(1), 0, Fixtures.Ship, 10),
                 new UnitSetup(new UnitId(101), 1, ship, RemoteOwner),
-            }, localOwners: new[] { localOwner });
+            }, rules: RosterRules.Default, localOwners: new[] { localOwner });
 
         private static (Driver owner, Driver remote, Link link) Pair(BulletDefinition bullet)
             => Pair(Fixtures.CannonShip(bullet, cooldown: 10f, energy: new ResourceDefinition(100000f)));
@@ -464,7 +465,7 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(1), 0, Fixtures.Ship, 10),
                 new UnitSetup(new UnitId(101), 1, Fixtures.CannonShip(
                     Bolt(Spawn(BulletTriggerConditions.Hit), Spawn(BulletTriggerConditions.Detonated, Other)), cooldown: 10f), 20),
-            }, localOwners: new[] { 10 }));
+            }, rules: RosterRules.Default, localOwners: new[] { 10 }));
             d.Battle.DeploySlot(d.Slot(1));
             d.Battle.DeploySlot(d.Slot(101));
             d.Step();

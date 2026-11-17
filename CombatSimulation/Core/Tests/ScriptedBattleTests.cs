@@ -1,4 +1,5 @@
 using System;
+using CombatSimulation.Modes;
 using NUnit.Framework;
 
 namespace CombatSimulation.Core.Tests
@@ -23,7 +24,7 @@ namespace CombatSimulation.Core.Tests
         {
             var setup = ScriptedBattle.Setup();
             var explicitSetup = new BattleSetup(setup.BattleId, setup.MatchSeed, setup.Units, setup.Width,
-                setup.Height, setup.TimeLimitTicks, setup.MaxActiveShipsPerSide, new[] { 0 });
+                setup.Height, rules: setup.Rules, localOwners: new[] { 0 });
             var battle = new ScriptedBattle(explicitSetup, record: true, retreat: true);
             while (!battle.IsCompleted && battle.Runner.Tick < ScriptedBattle.MaxTicks)
             {

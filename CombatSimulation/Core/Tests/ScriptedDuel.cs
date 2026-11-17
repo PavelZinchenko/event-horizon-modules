@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CombatSimulation.Modes;
 using CombatSimulation.Runtime;
 
 namespace CombatSimulation.Core.Tests
@@ -145,7 +146,7 @@ namespace CombatSimulation.Core.Tests
                 if (Battle.IsCompleted) return;
                 var snapshot = Battle.Snapshot;
                 var roster = snapshot.Units;
-                var max = Battle.Setup.MaxActiveShipsPerSide;
+                var max = ((RosterRules)Battle.Setup.Rules).MaxActiveShipsPerSide;
                 for (var side = 0; side < BattleSetup.SideCount; ++side)
                 {
                     var active = 0;

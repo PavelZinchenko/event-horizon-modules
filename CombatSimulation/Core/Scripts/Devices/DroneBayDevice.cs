@@ -58,6 +58,13 @@ namespace CombatSimulation.Core
 
         // A remote copy: the owner launched a drone that its replicator restored.
         public void RecordRemoteRestore() => ++Restored;
+
+        // A respawn of the unit (Unit.Respawn): the hangar has the capacity less the live drones.
+        public void Refill()
+        {
+            Restored = Launched - ActiveCount;
+            BuildCyclesLeft = BuildExtraCycles;
+        }
     }
 
     internal sealed class DroneBayDevice : ShipDevice

@@ -306,7 +306,8 @@ namespace CombatSimulation.Core
             }
             slot.Import(record, ship);
             _world.DeploymentOrder = Math.Max(_world.DeploymentOrder, record.DeploymentOrder);
-            _battle.Flow.Add(operation.Tick, slot.Side, record.PreviousStatus, record.Status);
+            _battle.NotifyMode(new UnitChange(operation.Tick, slot.UnitId, slot.Side, record.PreviousStatus, record.Status,
+                record.Reason));
             _battle.AddTransition(slot, record.PreviousStatus, record.Reason, operation.EntityId);
             return true;
         }

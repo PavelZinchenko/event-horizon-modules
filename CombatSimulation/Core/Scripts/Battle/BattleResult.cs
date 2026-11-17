@@ -20,6 +20,9 @@ namespace CombatSimulation.Core
         // OnlyOneShip: a player roster ship died, and its reserves may not deploy (phase 4, step 9). With remote
         // owners either side can lose; first deaths of both sides in one tick are a draw (phase 7, Q1).
         ShipLost,
+
+        // A battle mode ended the battle; BattleResult.ModeReason says why.
+        Mode,
     }
 
     public readonly struct BattleResult
@@ -32,19 +35,26 @@ namespace CombatSimulation.Core
         public readonly BattleEndReason Reason;
         public readonly long Tick;
 
-        public BattleResult(BattleOutcome outcome, int winningSide, BattleEndReason reason, long tick)
+        // BattleEndReason.Mode only: defined by the mode (Frontier: level complete, starbase lost, out of lives, exit).
+        public readonly ushort ModeReason;
+
+        public BattleResult(BattleOutcome outcome, int winningSide, BattleEndReason reason, long tick,
+            ushort modeReason = 0)
         {
             Outcome = outcome;
             WinningSide = winningSide;
             Reason = reason;
             Tick = tick;
+            ModeReason = modeReason;
         }
 
         public bool IsCompleted => Outcome != BattleOutcome.None;
 
         public override string ToString() =>
             Outcome == BattleOutcome.Victory
-                ? $"Victory of side {WinningSide} ({Reason}) at tick {Tick}"
-                : $"{Outcome} ({Reason}) at tick {Tick}";
+                ? $"Victory of side {WinningSide} ({ReasonText}) at tick {Tick}"
+                : $"{Outcome} ({ReasonText}) at tick {Tick}";
+
+        private string ReasonText => Reason == BattleEndReason.Mode ? $"Mode {ModeReason}" : Reason.ToString();
     }
 }

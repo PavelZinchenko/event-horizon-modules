@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -92,7 +93,8 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(2), 0, Fixtures.Ship),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
             };
-            var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsPerSide: 2));
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster,
+                rules: new RosterRules(maxActiveShipsPerSide: 2)));
             driver.Deploy(1);
             driver.Deploy(2);
             driver.Deploy(101);
@@ -194,7 +196,7 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(2), 0, Fixtures.Ship),
                 new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
             };
-            var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster));
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, roster, rules: RosterRules.Default));
             driver.Deploy(1);
             driver.Deploy(101);
             driver.Step();

@@ -1,4 +1,5 @@
 using System;
+using CombatSimulation.Modes;
 using NUnit.Framework;
 
 namespace CombatSimulation.Core.Tests
@@ -10,8 +11,8 @@ namespace CombatSimulation.Core.Tests
 
         private static BattleSetup Setup(TimerMode mode, int playerSlots, int enemySlots, long limit = Limit,
             int maxEnemies = 1) =>
-            new BattleSetup(new BattleId(1), 7, Fixtures.Units(playerSlots, enemySlots), timeLimitTicks: limit,
-                timerMode: mode, maxActiveShipsBySide: new[] { 1, maxEnemies });
+            new BattleSetup(new BattleId(1), 7, Fixtures.Units(playerSlots, enemySlots),
+                rules: new RosterRules(timeLimitTicks: limit, timerMode: mode, maxActiveShipsBySide: new[] { 1, maxEnemies }));
 
         private static Driver Started(TimerMode mode, int playerSlots, int enemySlots, long limit = Limit,
             int maxEnemies = 1)
@@ -229,13 +230,13 @@ namespace CombatSimulation.Core.Tests
         {
             var roster = Fixtures.Units(1, 1);
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new BattleSetup(new BattleId(1), 7, roster, playerSide: 2));
+                new BattleSetup(new BattleId(1), 7, roster, rules: new RosterRules(playerSide: 2)));
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new BattleSetup(new BattleId(1), 7, roster, timerMode: (TimerMode)9));
+                new BattleSetup(new BattleId(1), 7, roster, rules: new RosterRules(timerMode: (TimerMode)9)));
             Assert.Throws<ArgumentException>(() =>
-                new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsBySide: new[] { 1 }));
+                new BattleSetup(new BattleId(1), 7, roster, rules: new RosterRules(maxActiveShipsBySide: new[] { 1 })));
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new BattleSetup(new BattleId(1), 7, roster, maxActiveShipsBySide: new[] { 1, 0 }));
+                new BattleSetup(new BattleId(1), 7, roster, rules: new RosterRules(maxActiveShipsBySide: new[] { 1, 0 })));
         }
     }
 }

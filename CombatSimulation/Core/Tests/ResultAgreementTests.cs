@@ -1,3 +1,4 @@
+using CombatSimulation.Modes;
 using NUnit.Framework;
 
 namespace CombatSimulation.Core.Tests
@@ -5,11 +6,13 @@ namespace CombatSimulation.Core.Tests
     [TestFixture]
     public class ResultAgreementTests
     {
+        private static CommittedBattleFlow NewFlow(BattleSetup setup) => new CommittedBattleFlow(setup, (RosterRules)setup.Rules);
+
         [TestCase(false)]
         [TestCase(true)]
         public void EarliestEliminationWinsRegardlessOfArrivalOrder(bool reverse)
         {
-            var flow = new CommittedBattleFlow(Fixtures.Setup());
+            var flow = NewFlow(Fixtures.Setup());
             flow.Add(reverse ? 8 : 4, reverse ? 1 : 0, UnitStatus.Ready, UnitStatus.Destroyed);
             flow.Add(reverse ? 4 : 8, reverse ? 0 : 1, UnitStatus.Ready, UnitStatus.Destroyed);
             var result = flow.Evaluate(10, 10, out _, out _);
@@ -21,7 +24,7 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void LateDeploymentInvalidatesPendingTimeout()
         {
-            var flow = new CommittedBattleFlow(Fixtures.Setup(2, 1, timeLimitTicks: 5));
+            var flow = NewFlow(Fixtures.Setup(2, 1, timeLimitTicks: 5));
             flow.Add(0, 0, UnitStatus.Ready, UnitStatus.Active);
             flow.Add(0, 1, UnitStatus.Ready, UnitStatus.Active);
             Assert.IsFalse(flow.Evaluate(8, 1, out var candidate, out _).IsCompleted);
@@ -35,7 +38,7 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void LateRemovalAndRedeploymentReconstructTimerPause()
         {
-            var flow = new CommittedBattleFlow(Fixtures.Setup(timeLimitTicks: 10));
+            var flow = NewFlow(Fixtures.Setup(timeLimitTicks: 10));
             flow.Add(0, 0, UnitStatus.Ready, UnitStatus.Active);
             flow.Add(0, 1, UnitStatus.Ready, UnitStatus.Active);
             flow.Evaluate(7, 1, out _, out _);
@@ -48,7 +51,7 @@ namespace CombatSimulation.Core.Tests
         [Test]
         public void EliminationPrecedesTimeoutAtTheSameTick()
         {
-            var flow = new CommittedBattleFlow(Fixtures.Setup(timeLimitTicks: 5));
+            var flow = NewFlow(Fixtures.Setup(timeLimitTicks: 5));
             flow.Add(0, 0, UnitStatus.Ready, UnitStatus.Active);
             flow.Add(0, 1, UnitStatus.Ready, UnitStatus.Active);
             flow.Add(4, 0, UnitStatus.Active, UnitStatus.Destroyed);
@@ -94,7 +97,7 @@ namespace CombatSimulation.Core.Tests
         {
             new UnitSetup(new UnitId(1), 0, Fixtures.Ship, 10),
             new UnitSetup(new UnitId(101), 1, Fixtures.Ship, 20),
-        }, localOwners: new[] { local });
+        }, rules: RosterRules.Default, localOwners: new[] { local });
 
         private static void Deliver(Driver from, Driver to, int owner)
         {

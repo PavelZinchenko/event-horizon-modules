@@ -1,17 +1,18 @@
 using System;
 using System.Collections.Generic;
+using CombatSimulation.Core;
 
-namespace CombatSimulation.Core
+namespace CombatSimulation.Modes
 {
-    // Only roster commits enter this timeline. Physics and presentation never rewind.
+    // RosterMode's result and timer. Only roster commits enter this timeline. Physics and presentation never rewind.
     internal sealed class CommittedBattleFlow
     {
-        internal CommittedBattleFlow(BattleSetup setup)
+        internal CommittedBattleFlow(BattleSetup setup, RosterRules rules)
         {
-            _timeLimit = setup.TimeLimitTicks;
-            _mode = setup.TimerMode;
-            _playerSide = setup.PlayerSide;
-            _onlyOneShip = setup.OnlyOneShip;
+            _timeLimit = rules.TimeLimitTicks;
+            _mode = rules.TimerMode;
+            _playerSide = rules.PlayerSide;
+            _onlyOneShip = rules.OnlyOneShip;
             _remoteOwners = setup.HasRemoteOwners;
             foreach (var slot in setup.Units)
                 if (slot.Side == 0) ++_confirmed.Alive0; else ++_confirmed.Alive1;
@@ -103,10 +104,10 @@ namespace CombatSimulation.Core
         {
             if (state.LossDeadline == long.MaxValue)
             {
-                state.LossDeadline = tick + Battle.ShipLostTicks;
+                state.LossDeadline = tick + RosterMode.ShipLostTicks;
                 state.LosingSide = side;
             }
-            else if (state.LossDeadline == tick + Battle.ShipLostTicks && state.LosingSide != side)
+            else if (state.LossDeadline == tick + RosterMode.ShipLostTicks && state.LosingSide != side)
                 state.LosingSide = -1;
         }
 

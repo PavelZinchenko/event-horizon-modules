@@ -231,10 +231,13 @@ namespace CombatSimulation.Core
                     var effectScale = 1f;
                     var attackerShip = default(EntityId);
                     var hostile = true;
+                    // The unit that gets the performance credit (PerformanceLedger); none for an asteroid.
+                    Unit credit = null;
                     if (_world.Bullets.TryGet(hit.AttackerHandle, out var index))
                     {
                         ref readonly var attacker = ref _world.Bullets[index];
                         owner = attacker.Owner;
+                        credit = attacker.SourceUnit;
                         deviceIndex = attacker.DeviceIndex;
                         attackerShip = attacker.SourceShipId;
                         hostile = Allegiances.IsHostile(attacker.Allegiance, target.Allegiance);
@@ -285,6 +288,8 @@ namespace CombatSimulation.Core
                         var attacker = _world.Ships.Get(hit.AttackerHandle);
                         if (attacker == null) continue;
                         owner = attacker.Owner;
+                        credit = attacker.CreditUnit;
+                        hostile = Allegiances.IsHostile(attacker.Allegiance, target.Allegiance);
                         deviceIndex = hit.AttackerDeviceIndex;
                         kind = hit.PointDefense != null ? HitImpactKind.Energy : HitImpactKind.Impact;
                         impulse = hit.Impulse;
@@ -314,7 +319,8 @@ namespace CombatSimulation.Core
                         }
                         else if (repairDamage > 0f)
                         {
-                            AddPendingDamage(target, shield, effects.RepairDamageType, repairDamage * effectScale, effects.IgnoreShield);
+                            AddPendingDamage(target, shield, effects.RepairDamageType, repairDamage * effectScale, effects.IgnoreShield,
+                                credit, hostile);
                             if (remote)
                                 _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                     hit.Target, target.Owner, shape, HitContactState.Start, kind, repairDamage,
@@ -358,7 +364,7 @@ namespace CombatSimulation.Core
                                 }
                             }
                         }
-                        AddPendingDamage(target, shield, damageType, damage, effects.IgnoreShield);
+                        AddPendingDamage(target, shield, damageType, damage, effects.IgnoreShield, credit, hostile);
                         if (remote)
                         {
                             _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
@@ -380,7 +386,8 @@ namespace CombatSimulation.Core
                             {
                                 var extraAmount = BulletStore.EffectDamage(projectile, extra[e].Amount, extra[e].Falloff,
                                     falloff);
-                                AddPendingDamage(target, shield, extra[e].DamageType, extraAmount, effects.IgnoreShield);
+                                AddPendingDamage(target, shield, extra[e].DamageType, extraAmount, effects.IgnoreShield,
+                                    credit, hostile);
                                 if (remote)
                                     _network.OutgoingHits.Add(new ResolvedHit(BattleId, Tick, hit.Attacker, owner, deviceIndex,
                                         hit.Target, target.Owner, hit.TargetShapeOrder, HitContactState.Start, kind,
@@ -413,6 +420,7 @@ namespace CombatSimulation.Core
                         if (!hostile)
                         {
                             target.AddPendingRepair(effects.Repair * effectScale);
+                            if (!remote) PerformanceLedger.AddRepair(credit, effects.Repair * effectScale);
                             if (shield == null)
                                 target.AddPendingRecharge(effects.EnergyRecharge * effectScale, effects.ShieldRecharge * effectScale);
                             else
@@ -519,11 +527,14 @@ namespace CombatSimulation.Core
             target.NextSearchTick = Tick + 1;
         }
 
-        // Phase 5, step 10d: a shield shape's damage pays the shield's energy at stage 10.
-        private static void AddPendingDamage(ShipEntity target, ShieldDevice shield, int type, float amount, bool ignoreShield)
+        // Phase 5, step 10d: a shield shape's damage pays the shield's energy at stage 10. The attacker's unit gets the
+        // performance credit.
+        private void AddPendingDamage(ShipEntity target, ShieldDevice shield, int type, float amount, bool ignoreShield,
+            Unit credit, bool hostile)
         {
             if (shield != null) shield.AddPendingDamage(target, type, amount);
             else target.AddPendingDamage(type, amount, ignoreShield);
+            _world.Performance.AddDamage(target, credit, amount, hostile);
         }
 
         // A ship effect on a remote target: its own record, or its own interval with the rate as amount.

@@ -2,6 +2,7 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using CombatSimulation.Core;
+using CombatSimulation.Modes;
 using CombatSimulation.Network;
 using CombatSimulation.Physics;
 
@@ -21,8 +22,9 @@ namespace CombatSimulation.Runtime.Tests
                 roster.Add(new UnitSetup(new UnitId((uint)(1 + i)), 0, ship ?? Ship, 10));
                 roster.Add(new UnitSetup(new UnitId((uint)(101 + i)), 1, ship ?? Ship, 20));
             }
-            return new BattleSetup(new BattleId(123), 7, roster, timeLimitTicks: timeout, maxActiveShipsPerSide: maxActive, localOwners: new[] { owner },
-                ownerDelays: new Dictionary<int, int> { { 10, delay0 }, { 20, delay1 } });
+            return new BattleSetup(new BattleId(123), 7, roster,
+                rules: new RosterRules(timeLimitTicks: timeout, maxActiveShipsPerSide: maxActive),
+                localOwners: new[] { owner }, ownerDelays: new Dictionary<int, int> { { 10, delay0 }, { 20, delay1 } });
         }
 
         internal sealed class Pilots : IPilotProvider, IPilot

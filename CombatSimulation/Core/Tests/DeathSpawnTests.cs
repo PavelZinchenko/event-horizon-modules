@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 using NUnit.Framework;
 
@@ -39,7 +40,7 @@ namespace CombatSimulation.Core.Tests
                 new UnitSetup(new UnitId(1), 0, ship),
                 new UnitSetup(new UnitId(101), 1, Target),
                 new UnitSetup(new UnitId(2), 0, Fixtures.Ship),
-            }));
+            }, rules: RosterRules.Default));
             driver.Deploy(1);
             driver.Deploy(101);
             driver.Step();

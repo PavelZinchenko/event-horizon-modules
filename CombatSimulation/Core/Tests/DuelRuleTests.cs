@@ -1,3 +1,4 @@
+using CombatSimulation.Modes;
 using NUnit.Framework;
 
 namespace CombatSimulation.Core.Tests
@@ -50,7 +51,7 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(BattleOutcome.Victory, result.Outcome);
             Assert.AreEqual(1 - side, result.WinningSide);
             Assert.AreEqual(BattleEndReason.ShipLost, result.Reason);
-            Assert.AreEqual(deathTick + Battle.ShipLostTicks, result.Tick);
+            Assert.AreEqual(deathTick + RosterMode.ShipLostTicks, result.Tick);
         }
 
         [Test]

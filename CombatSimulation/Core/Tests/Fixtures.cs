@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CombatSimulation.Modes;
 using CombatSimulation.Physics;
 
 namespace CombatSimulation.Core.Tests
@@ -64,7 +65,7 @@ namespace CombatSimulation.Core.Tests
         public static BattleSetup Setup(int side0Slots = 1, int side1Slots = 1, long timeLimitTicks = 0,
             int maxActiveShipsPerSide = 1, ulong battleId = 1, ulong matchSeed = 7) =>
             new BattleSetup(new BattleId(battleId), matchSeed, Units(side0Slots, side1Slots),
-                timeLimitTicks: timeLimitTicks, maxActiveShipsPerSide: maxActiveShipsPerSide);
+                rules: new RosterRules(timeLimitTicks: timeLimitTicks, maxActiveShipsPerSide: maxActiveShipsPerSide));
 
         // One slot per side; slot 1 flies the given ship, slot 101 the default one.
         public static BattleSetup Setup(ShipDefinition ship) =>
@@ -72,7 +73,7 @@ namespace CombatSimulation.Core.Tests
             {
                 new UnitSetup(new UnitId(1), 0, ship),
                 new UnitSetup(new UnitId(101), 1, Ship),
-            });
+            }, rules: RosterRules.Default);
 
         // One slot per side with the given ships: slot 1 on side 0, slot 101 on side 1.
         public static BattleSetup Setup(ShipDefinition side0, ShipDefinition side1, ulong matchSeed = 7) =>
@@ -80,7 +81,7 @@ namespace CombatSimulation.Core.Tests
             {
                 new UnitSetup(new UnitId(1), 0, side0),
                 new UnitSetup(new UnitId(101), 1, side1),
-            });
+            }, rules: RosterRules.Default);
     }
 
     // Submits roster commands with increasing command IDs, targeted at the next tick by default.
