@@ -143,6 +143,25 @@ The change kept the scripted battle log and its SHA-256, and every engine-free t
 
 The game computes `AskForMore` (in Frontier from `IAP_DISABLED`, the level loot and the tutorial), the prices and the windows. `LivesTests` covers it.
 
+## Exploration (`ExplorationMode`)
+
+The shared exploration level of both games (`CombatSimulation.Modes`). It uses only the mode API, `Docking` and `Lives`, so it needs no core change. The game decides what is on the level; the shared code decides where.
+
+1. **Layout.** `ExplorationLayout.Generate(ExplorationLayoutInput)` is a pure function that runs before the battle. The input has the seed (the planet's, never `MatchSeed`), the world size, `UnitIdBase`, the game's objectives (kind, radius, content key, guardian group), the guardian groups, a content key for each random ship, the zones and the asteroids.
+2. **Placement.** The player starts at the world centre, which is grid point (5, 5) of a 10 × 10 grid. Each objective takes its own grid point (not the player's), with a jitter of ±25 % of a cell. Guardians ring their objective, starting at its angle. Random ships, zones and asteroids are uniform, outside `StartClearance` (75) of the start.
+3. **Random streams.** Each part draws from its own stream: `RandomState.FromSeed` of a SplitMix64 mix of the seed, the part and the index. A change in one part does not move the others, and a new objective at the end keeps the earlier ones. `ExplorationLayout.Version` increases with any change to the output.
+4. **Spawners.** One for each hostile objective, guardian, dockable ship and random ship, in this order. `UnitId = UnitIdBase + index`; `TryFindSpawner(UnitId)` finds the layout item. The setup's own units must be outside this range.
+5. **Content.** `IExplorationContent.CreateShip(role, contentKey)` gives the `ShipDefinition`. It is pure, and the mode calls it in `BeginTick` when a spawner first activates, and for the dockable ships at tick 0.
+6. **Rules.** `ExplorationRules` holds the layout, the content, the player's unit (side 0, in the setup), the player's `LivesSetup`, the objectives complete before the visit (Main), and the distances: activation 75, vanish 100, docking release margin 0.6. The world must have the layout's size, and the battle must be local.
+7. **Start (tick 0).** The player deploys at the start. Each dockable ship is added (side 0, `Ally`) and deployed at its objective. Each dockable object and dockable ship gets a docking area; a hostile objective gets none.
+8. **Spawners at run time.** `Dormant` → `AddUnit` (side 1, `Enemy`) and deploy when the player is within 75 of the spawner position → `Active`. `Active` → `Vanish` when the ship is farther than 100 from the player → `Away` (the unit is `Ready` with its armor and shield damage). `Away` → deploy again within 75. A deploy is at the spawner position, facing the player, at rest. A kill → `Dead`. A guardian with a respawn delay respawns to `Away` while its objective's ship lives. Nothing activates or vanishes while the player has no ship. A dockable ship never vanishes. The mode checks every spawner each tick; the ship positions come from one pass over the snapshot.
+9. **Objectives.** A dockable object completes on the `CompleteObjective` command (scan window), a dockable ship on the command (store) or its death, a hostile objective on its death. A forced destruction (kill-all) counts as a death. Each completion removes the docking area and publishes the completed event with `ExplorationCompletion`. Objectives complete before the visit get no area and no ship, and their guardians never come.
+10. **Commands:** `CompleteObjective` (ID; an unknown or complete ID is ignored), `Exit`, `BuyLife`, `Decline`, `KillAll` (the cheat: `DestroyUnit` for each active hostile, guardian and random ship). The mode rejects every `Deploy` command.
+11. **Events:** docked and undocked (objective ID, player entity), objective completed (ID, how), lives changed and the decision (from `Lives`).
+12. **Results:** `AllComplete` (victory of side 0), then `PlayerOut` (`Lives` says `Out`; victory of side 1), then `PlayerExit` (victory of side 1; Main ignores the outcome). The battle continues after the result (`ContinueAfterResult`), and the mode keeps running. The application times the result window.
+
+`ExplorationModeTests` covers the layout, the spawners, the guardians, the objectives, the results, determinism, and the cost of 620 random spawners.
+
 ## World size
 
 `BattleSetup` rejects a width or height above `MaxWorldSize` (2048). Above about 4096, one float step is a tenth of the contact slop and contacts lose precision. `WorldSizeTests` runs the scripted fleets near (300, 300) and near (1900, 1900) of a 2048 world: the logs differ by rounding, but the hits stay within 5 %, and the deaths and survivors match.
