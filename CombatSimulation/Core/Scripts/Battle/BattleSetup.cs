@@ -23,7 +23,8 @@ namespace CombatSimulation.Core
             IReadOnlyDictionary<int, int> ownerDelays = null,
             DamageTypeTable damageTypes = null,
             IReadOnlyList<AsteroidSetup> asteroids = null,
-            IReadOnlyList<ZoneSetup> zones = null)
+            IReadOnlyList<ZoneSetup> zones = null,
+            bool continueAfterResult = false)
         {
             if (roster == null) throw new ArgumentNullException(nameof(roster));
             if (!(width > 0f) || width > MaxWorldSize)
@@ -101,6 +102,11 @@ namespace CombatSimulation.Core
                 throw new ArgumentException("A battle with remote owners has no zones.", nameof(zones));
             Zones = Array.AsReadOnly(areas);
 
+            // D12: Main's online duel stops at its result; the peers would have to agree on the ticks after it.
+            if (continueAfterResult && HasRemoteOwners)
+                throw new ArgumentException("A battle with remote owners stops at its result.", nameof(continueAfterResult));
+            ContinueAfterResult = continueAfterResult;
+
             rules?.Validate(this);
         }
 
@@ -123,6 +129,10 @@ namespace CombatSimulation.Core
         // Damage zones (exploration objects): created before tick 0 after the asteroids, in this order. Empty with remote
         // owners.
         public IReadOnlyList<ZoneSetup> Zones { get; }
+
+        // Battle continuity (D12): the battle steps and takes commands after its result. The first result stays; the
+        // mode keeps running. False: Step and Submit throw after the result. Local battles only.
+        public bool ContinueAfterResult { get; }
 
         // D4. The legacy table by default.
         public DamageTypeTable DamageTypes { get; }

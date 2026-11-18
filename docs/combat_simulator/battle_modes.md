@@ -73,6 +73,17 @@ The unit table and `BattleSnapshot.Units` grow when a mode adds a unit. Units ar
 
 `BattleResult` has outcome, winning side, reason and tick. A mode's own result uses `BattleEndReason.Mode` and a `ushort ModeReason` that the mode defines. `ToString` prints "Mode n" for it; the other reasons print as before.
 
+## Battle continuity
+
+D12: one local `Battle` lives for a whole level visit (preparation, combat, result, preparation again), as legacy Frontier keeps its `Game` scene. A new battle would rebuild every view and lose the world state.
+
+1. **After the result.** `BattleSetup.ContinueAfterResult` (default false) lets the battle step and take commands after its result. The first completed result latches: later results of the mode are ignored, and the `Result` event comes once. The mode's `BeginTick` and `EndTick` keep running. `IsCompleted` means "has a result"; `IsStopped` means "has a result and steps no more". `BattleRunner` keeps the pilots thinking. A setup with remote owners rejects the flag: Main's online duel stops at its result.
+2. **Battle commands.** `BattleCommand` carries battle ID, command ID, target tick and a kind: `Ceasefire(enabled)` or `ChangeRules(rules)`. It shares the command ID namespace and the "past tick" check. Stage 1 applies the commands of its tick first, in command ID order, before the mode's `BeginTick`, so a replay gives them again. A battle with remote owners throws at `Submit`. `BattleRunner.Ceasefire` and `BattleRunner.ChangeRules` assign the command ID.
+3. **Ceasefire.** As legacy `CeasefireSignal`: while it is on, every ship's `Systems` is 0 and the frames' turret requests are dropped; `RequestedSystems` keeps the frame's bits, and the engine controls stay. A change applies at stage 1 after `PreviousSystems`, so the devices see the release, and a held button presses again when the ceasefire ends. It covers the player, the AI and drones. A running device finishes its duration, and bullets in flight still hit. `BattleSnapshot.Ceasefire` publishes it.
+4. **`ChangeRules`.** `Submit` validates the rules against the setup (`IBattleRules.Validate` throws as at setup). At stage 1 the battle creates the new mode (null rules: an open battle), clears the latched result and the ceasefire, and sets every unit's performance to zero. `Battle.Rules` gives the running rules; `Setup.Rules` keeps the first ones. The units, the ships, the entity IDs, the world size, the asteroids and the zones stay. The new mode starts from the current units: it reads them through its context. The application reads the performance for the reward before it submits the command.
+
+With the flag off and no battle commands, the battle steps as before: Main's scripted battle digest does not change.
+
 ## Unit performance
 
 Each unit counts what its ships, drones and clones did, as legacy Frontier's `ShipPerformance` does. `UnitState.Performance` publishes the counts. They only read the results of stage 10, so they never change the battle. The application selects the units it shows and derives the combat contribution and the experience.

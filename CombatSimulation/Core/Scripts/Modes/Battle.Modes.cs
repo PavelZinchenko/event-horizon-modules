@@ -10,7 +10,7 @@ namespace CombatSimulation.Core
     {
         public bool Submit(in ModeCommand command)
         {
-            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
+            if (IsStopped) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
             var reason = _commands.Add(command, Tick);
             return reason == null || Reject(command, reason);
         }
@@ -57,9 +57,12 @@ namespace CombatSimulation.Core
             _modeStage = ModeStage.End;
             try
             {
-                Result = _mode.EndTick(_modeContext, _network?.ResultFrontier() ?? Tick, out var candidate);
-                CandidateResult = candidate;
+                var result = _mode.EndTick(_modeContext, _network?.ResultFrontier() ?? Tick, out var candidate);
                 TimerElapsedTicks = _mode.TimerElapsedTicks;
+                // After the result (ContinueAfterResult) the mode keeps running, but the first result stays.
+                if (IsCompleted) return;
+                Result = result;
+                CandidateResult = candidate;
             }
             finally
             {
@@ -238,7 +241,8 @@ namespace CombatSimulation.Core
             }
         }
 
-        private readonly IBattleMode _mode;
+        // ChangeRules replaces it (Battle.Continuity).
+        private IBattleMode _mode;
         private readonly ModeContext _modeContext;
         private ModeStage _modeStage;
         private readonly List<ModeCommand> _dueModeCommands = new List<ModeCommand>();

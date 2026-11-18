@@ -58,13 +58,24 @@ namespace CombatSimulation.Runtime
         public bool SubmitModeCommand(int kind, long targetTick, long argument0 = 0, long argument1 = 0) =>
             _battle.Submit(new ModeCommand(BattleId, _nextCommandId++, targetTick, kind, argument0, argument1));
 
+        // Battle continuity (D12), local battles only.
+        public bool Ceasefire(bool enabled, long targetTick) =>
+            _battle.Submit(BattleCommand.Ceasefire(BattleId, _nextCommandId++, targetTick, enabled));
+
+        public bool ChangeRules(IBattleRules rules, long targetTick) =>
+            _battle.Submit(BattleCommand.ChangeRules(BattleId, _nextCommandId++, targetTick, rules));
+
+        // The battle has a result and steps no more; with BattleSetup.ContinueAfterResult it steps after the result.
+        public bool IsStopped => _battle.IsStopped;
+
         public void Step()
         {
             _battle.Step();
 
             var snapshot = _battle.Snapshot;
             UpdateRegistrations(snapshot);
-            if (snapshot.IsCompleted) return;
+            // With ContinueAfterResult the pilots keep thinking after the result.
+            if (_battle.IsStopped) return;
 
             for (var i = 0; i < _pilots.Count; ++i)
             {

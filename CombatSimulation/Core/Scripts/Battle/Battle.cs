@@ -20,6 +20,7 @@ namespace CombatSimulation.Core
             _commands = new CommandQueue(setup.BattleId);
             _mode = setup.Rules == null ? OpenMode.Instance
                 : setup.Rules.CreateMode(setup) ?? throw new InvalidOperationException("The rules created no mode.");
+            Rules = setup.Rules;
             _modeContext = new ModeContext(this);
             _targets = new TargetGrid(World.Torus, setup.MatchSeed);
             _tails = new WormTails(_world, this);
@@ -48,7 +49,15 @@ namespace CombatSimulation.Core
         // The next tick to execute. The first Step processes tick 0, then leaves Tick at 1.
         public long Tick => _world.Tick;
 
+        // The battle has a result. With BattleSetup.ContinueAfterResult it still steps; the first result stays until
+        // ChangeRules.
         public bool IsCompleted => Result.IsCompleted;
+
+        // The battle has a result and steps no more.
+        public bool IsStopped => IsCompleted && !Setup.ContinueAfterResult;
+
+        // The ceasefire (BattleCommandKind.Ceasefire): every ship's control bits and turret requests are masked.
+        public bool Ceasefire { get; private set; }
 
         // The state and events of the last completed tick (tick -1 before the first step).
         // A reader finishes with it before the next Step returns.
@@ -75,7 +84,7 @@ namespace CombatSimulation.Core
 
         public bool Submit(in UnitCommand command)
         {
-            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
+            if (IsStopped) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
             var reason = _commands.Add(command, Tick);
             return reason == null || Reject(command, reason);
         }
@@ -83,7 +92,7 @@ namespace CombatSimulation.Core
         // The entity is checked at stage 1 of the target tick: a frame may name a ship that deploys in that tick.
         public bool Submit(in ControlFrame frame)
         {
-            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
+            if (IsStopped) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
             var reason = _commands.Add(frame, Tick);
             return reason == null || Reject(frame, reason);
         }
@@ -136,12 +145,12 @@ namespace CombatSimulation.Core
 
         private void RequireRunning()
         {
-            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no records.");
+            if (IsStopped) throw new InvalidOperationException("The battle has a result; it accepts no records.");
         }
 
         public void Step()
         {
-            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it cannot step.");
+            if (IsStopped) throw new InvalidOperationException("The battle has a result; it cannot step.");
             if (Tick == long.MaxValue)
                 throw new InvalidOperationException("Battle tick counter exhausted.");
 
@@ -275,22 +284,23 @@ namespace CombatSimulation.Core
 
         public bool Submit(in SelfDestructCommand command)
         {
-            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
+            if (IsStopped) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
             var reason = _commands.Add(command, Tick);
             return reason == null || Reject(command, reason);
         }
 
         public bool Submit(in ShipCommand command)
         {
-            if (IsCompleted) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
+            if (IsStopped) throw new InvalidOperationException("The battle has a result; it accepts no commands.");
             var reason = _commands.Add(command, Tick);
             return reason == null || Reject(command, reason);
         }
 
-        // Stage 1. The mode (its commands and actions), then unit commands, self-destruct requests, ship commands and
-        // control frames; each group in command ID order.
+        // Stage 1. Battle commands, the mode (its commands and actions), then unit commands, self-destruct requests, ship
+        // commands and control frames; each group in command ID order.
         private void ApplyCommands()
         {
+            ApplyBattleCommands();
             BeginModeTick();
 
             _commands.TakeDue(Tick, _dueUnitCommands);
@@ -317,7 +327,7 @@ namespace CombatSimulation.Core
             }
 
             for (var i = 0; i < _world.ShipEntryCount; ++i)
-                _world.GetShipEntry(i)?.BeginControlTick();
+                _world.GetShipEntry(i)?.BeginControlTick(Ceasefire);
 
             _commands.TakeDue(Tick, _dueFrames);
             foreach (var frame in _dueFrames)
@@ -326,7 +336,7 @@ namespace CombatSimulation.Core
                 // tick + delay, so a ship that dies in between leaves one: counted, not logged (owner, 2026-11-12).
                 var ship = _world.FindShip(frame.EntityId);
                 if (ship == null) ++RejectedCommandCount;
-                else ship.ApplyControls(frame);
+                else ship.ApplyControls(frame, Ceasefire);
             }
         }
 
@@ -569,11 +579,12 @@ namespace CombatSimulation.Core
             _world.Bullets.Release(index);
         }
 
-        // Stage 13. The mode decides the result.
+        // Stage 13. The mode decides the result. The first completed result latches; its event comes once.
         private void UpdateBattleFlow()
         {
+            var wasCompleted = IsCompleted;
             EndModeTick();
-            if (Result.IsCompleted)
+            if (!wasCompleted && IsCompleted)
                 _world.Events.Add(BattleEvent.ResultEvent(BattleId, Tick, _world.Events.Count, Result));
         }
 

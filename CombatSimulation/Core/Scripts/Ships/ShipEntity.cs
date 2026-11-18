@@ -200,6 +200,9 @@ namespace CombatSimulation.Core
         public float Course { get; private set; }
         public ulong Systems { get; private set; }
 
+        // The control bits of the last applied frame. Systems is 0 during a ceasefire (D12), otherwise equal.
+        public ulong RequestedSystems { get; private set; }
+
         // Systems at the end of the previous tick. The core detects edges; the driver sends no events.
         public ulong PreviousSystems { get; private set; }
         public ulong PressedSystems => Systems & ~PreviousSystems;
@@ -451,19 +454,33 @@ namespace CombatSimulation.Core
             TurretTargetSystems = SearchTurretSystems = 0;
         }
 
-        internal void ApplyControls(in ControlFrame frame)
+        // A ceasefire (D12) masks the control bits and drops the turret requests; the engine controls stay.
+        internal void ApplyControls(in ControlFrame frame, bool ceasefire)
         {
             Throttle = frame.Throttle;
             HasCourse = frame.HasCourse;
             Course = frame.Course;
+            RequestedSystems = frame.Systems;
+            if (ceasefire)
+            {
+                Systems = 0;
+                ClearTurretRequests();
+                return;
+            }
             Systems = frame.Systems;
             TurretTarget = frame.TurretTarget;
             TurretTargetSystems = frame.TurretTargetSystems;
             SearchTurretSystems = frame.SearchTurretSystems;
         }
 
-        // Stage 1, before this tick's frames.
-        internal void BeginControlTick() => PreviousSystems = Systems;
+        // Stage 1, before this tick's frames. A change of the ceasefire applies here, after PreviousSystems, so the
+        // devices see the release, and a held button presses again when it ends. Without a ceasefire Systems already
+        // equals RequestedSystems.
+        internal void BeginControlTick(bool ceasefire)
+        {
+            PreviousSystems = Systems;
+            Systems = ceasefire ? 0 : RequestedSystems;
+        }
 
         // Stage 5, once per tick in increasing tick order, so the kept samples cover consecutive ticks.
         internal void RecordSpawnSample(in SpawnSample sample)
@@ -605,6 +622,7 @@ namespace CombatSimulation.Core
             HasCourse = false;
             Course = 0f;
             Systems = 0;
+            RequestedSystems = 0;
             PreviousSystems = 0;
         }
     }

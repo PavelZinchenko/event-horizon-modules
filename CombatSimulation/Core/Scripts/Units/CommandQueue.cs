@@ -105,6 +105,23 @@ namespace CombatSimulation.Core
             return null;
         }
 
+        public string Add(in BattleCommand command, long tick)
+        {
+            if (command.BattleId != _battleId) return "wrong battle";
+            if (command.TargetTick < tick) return "past tick";
+            if (command.Kind != BattleCommandKind.Ceasefire && command.Kind != BattleCommandKind.ChangeRules)
+                return "unknown kind";
+            if (!_pendingCommandIds.Add(command.CommandId)) return "duplicate command ID";
+
+            var index = 0;
+            while (index < _battleCommands.Count &&
+                (_battleCommands[index].TargetTick < command.TargetTick ||
+                 (_battleCommands[index].TargetTick == command.TargetTick && _battleCommands[index].CommandId < command.CommandId)))
+                ++index;
+            _battleCommands.Insert(index, command);
+            return null;
+        }
+
         // Each TakeDue clears the list, then moves the items for the tick into it, in queue order.
         public void TakeDue(long tick, List<UnitCommand> due)
         {
@@ -143,6 +160,19 @@ namespace CombatSimulation.Core
                 due.Add(command);
             }
             if (count > 0) _modeCommands.RemoveRange(0, count);
+        }
+
+        public void TakeDue(long tick, List<BattleCommand> due)
+        {
+            due.Clear();
+            var count = 0;
+            while (count < _battleCommands.Count && _battleCommands[count].TargetTick == tick)
+            {
+                var command = _battleCommands[count++];
+                _pendingCommandIds.Remove(command.CommandId);
+                due.Add(command);
+            }
+            if (count > 0) _battleCommands.RemoveRange(0, count);
         }
 
         public void TakeDue(long tick, List<ShipCommand> due)
@@ -213,6 +243,7 @@ namespace CombatSimulation.Core
         private readonly List<SelfDestructCommand> _selfDestructs = new List<SelfDestructCommand>();
         private readonly List<ShipCommand> _shipCommands = new List<ShipCommand>();
         private readonly List<ModeCommand> _modeCommands = new List<ModeCommand>();
+        private readonly List<BattleCommand> _battleCommands = new List<BattleCommand>();
         private readonly List<ControlFrame> _frames = new List<ControlFrame>();
         private readonly HashSet<FrameKey> _pendingFrameKeys = new HashSet<FrameKey>();
         private readonly HashSet<ulong> _pendingCommandIds = new HashSet<ulong>();

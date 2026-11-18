@@ -8,7 +8,7 @@ The units are a read-only copy of the caller's list; the list can be empty, beca
 
 The hull is a list of `HullShape` (phase 4, D5): 1 point is a circle, 2 points a capsule, 3 or more an outline. Only circles and capsules have a radius. The `HullShape` constructor validates the shape and splits an outline with `ConvexDecomposition`, so an invalid shape throws at setup. `HullParts` lists the physics parts (`HullPart`: circle, capsule or convex polygon) in shape order, each shape's parts in decomposition order. Mass is set by the definition; the centre of mass and the inertia come from the parts. `HullRadius` is the farthest hull point from the body origin. `HullHash` hashes every part's geometry bit by bit, in order; the phase 7 handshake compares it so both duel peers build the same hull. A second constructor takes a radius and extra circles, for code fixtures.
 `EngineDefinition` holds derived stats in core units: propulsion (u/s²), maximum velocity (u/s), turn rate (rad/s²) and maximum angular velocity (rad/s). Phase 4 derives them from engine power and weight.
-Each `Battle` owns a separate `PhysicsWorld`. Physics state is internal; the public surface exposes setup, battle ID, tick, `IsCompleted`, `Snapshot`, `Submit(UnitCommand)`, `Submit(ControlFrame)` and `Step()`.
+Each `Battle` owns a separate `PhysicsWorld`. Physics state is internal; the public surface exposes setup, battle ID, tick, `IsCompleted`, `IsStopped`, `Ceasefire`, `Rules`, `Snapshot`, the `Submit` overloads and `Step()`.
 
 `Tick` identifies the next tick to execute. It starts at zero. The first `Step()` processes tick zero and leaves `Tick` at one.
 The stage order is commands, systems, modifiers, motion, spawn requests, queries, physics, contacts, response, damage, deaths, structure, battle flow, publish.
@@ -96,6 +96,7 @@ A frame for an unknown or removed entity is dropped and counted in `RejectedComm
 
 1. A frame stays in force until the next frame for that entity. A deployment starts with empty controls.
 2. At stage 1, before the frames, each ship copies its system bits to `PreviousSystems`. `PressedSystems` and `ReleasedSystems` give the edges; the driver sends no events.
+3. `RequestedSystems` keeps the frame's bits. `Systems` equals it, except during a ceasefire ([Battle modes](battle_modes.md#battle-continuity)).
 
 ## Ship resources
 
@@ -162,7 +163,7 @@ A delayed deployment or removal can replace a pending timeout. All transitions a
 The first eliminated side loses; elimination of both sides at the same tick is a draw. Drones and predicted health never enter this evaluator.
 `BattleSnapshot.CandidateResult` exposes the provisional result. `Result` and `IsCompleted` stay unset until the local core executes its tick
 and every remote watermark covers it. Missing operation sequences and pending roster revisions block the confirmed prefix.
-The core continues stepping and accepting commands while a candidate is pending. After finalization, `Step()` and `Submit()` throw.
+The core continues stepping and accepting commands while a candidate is pending. After finalization, `Step()` and `Submit()` throw, unless the setup has `ContinueAfterResult` ([Battle continuity](battle_modes.md#battle-continuity)); `IsStopped` tells which.
 One final result event uses the publication tick; its `Result.Tick` retains the historical result tick.
 Single player uses the same evaluator with an immediately confirmed local frontier, preserving its event log and timer behavior.
 
@@ -234,7 +235,7 @@ B2 participation facts: `DamageFraction` is the share of a slot's armor that is 
 3. Locked mode: after each step, a pilot thinks on the snapshot of tick `N` when `N mod Period` equals `EntityId mod Period`. Its frame targets `N + Delay`; the battle's command buffer holds it until then. Pilots run in spawn order.
 4. Presets (Q9): `Ship` (delay 2, period 1), `Drone` (2, 2), `PlayerShip` (1, 1).
 5. Pilots run synchronously on the calling thread, so a pilot is never late. Free-running mode is deferred to the worker thread (owner, 2026-10-20): without one it equals locked mode with delay 1.
-6. No pilot thinks on the result snapshot. Frames already queued for a ship that leaves are dropped at stage 1 and counted as rejected.
+6. No pilot thinks on the result snapshot of a stopped battle; with `ContinueAfterResult` the pilots keep thinking. Frames already queued for a ship that leaves are dropped at stage 1 and counted as rejected.
 
 Core tests cover tick advancement, fixed physics timing, independent battle instances, setup validation, identity derivation and value semantics, the entity registry, counter-based random, roster transitions, roster commands, control frames, spawn placement, the result, the timer, resources, B4 deficits, the engine, snapshots, events, pilot scheduling, contact ordering and selection, ramming, damage, B2 facts, the cannon (Q1) and bullets: hits, expiry, filters, identity, events, the snapshot and allocation, the target grid, and the homing missile (Q2): launch, thrust, turn, search timing, retarget, hits on ships, bolts and missiles, expiry and allocation.
 Beam (Q3), point-defense (Q4) and drone-bay (Q5/Q6) tests cover full battle steps and allocation. The scripted battle tests cover all of it together. All 654 engine-free tests pass, including Network and the step 2 authority checks. Core, Runtime and Core.Tests compile separately with Unity 6000.0.75f1's compiler.

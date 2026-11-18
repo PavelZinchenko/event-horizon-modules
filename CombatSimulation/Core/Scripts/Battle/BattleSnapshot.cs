@@ -27,6 +27,9 @@ namespace CombatSimulation.Core
         public BattleResult CandidateResult { get; private set; }
         public bool IsCompleted => Result.IsCompleted;
 
+        // The ceasefire after this tick's battle commands (battle continuity, D12).
+        public bool Ceasefire { get; private set; }
+
         // Active roster ships in roster order, then drones and decoys in entity ID order.
         public ReadOnlySpan<ShipState> Ships => new ReadOnlySpan<ShipState>(_ships, 0, _shipCount);
 
@@ -92,6 +95,7 @@ namespace CombatSimulation.Core
             target.TimerElapsedTicks = TimerElapsedTicks;
             target.Result = Result;
             target.CandidateResult = CandidateResult;
+            target.Ceasefire = Ceasefire;
             target._unitCount = Copy(_roster, _unitCount, ref target._roster);
             target._shipCount = Copy(_ships, _shipCount, ref target._ships);
             target._deviceCount = Copy(_devices, _deviceCount, ref target._devices);
@@ -122,6 +126,7 @@ namespace CombatSimulation.Core
             TimerElapsedTicks = battle.TimerElapsedTicks;
             Result = battle.Result;
             CandidateResult = battle.CandidateResult;
+            Ceasefire = battle.Ceasefire;
 
             // A mode can add units (ModeContext.AddUnit): the array grows as the other arrays do.
             var slots = units.All;
