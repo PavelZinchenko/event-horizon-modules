@@ -156,6 +156,25 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(0, driver.Battle.Asteroids.AliveCount);
         }
 
+        // Exploration objects: the snapshot and the removal event carry the setup's opaque tag; 0 by default.
+        [Test]
+        public void TheSnapshotAndTheRemovalCarryTheTag()
+        {
+            var tagged = new AsteroidSetup(new Vec2(56f, 50f), Vec2.Zero, 4f, 80f, 1600f, 1f, tag: long.MinValue + 3);
+            var driver = Start(Fixtures.CannonShip(cooldown: 0.5f), tagged, Rock(Away + new Vec2(10f, 0f)));
+            Assert.AreEqual(long.MinValue + 3, driver.Battle.Snapshot.Asteroids[0].Tag);
+            Assert.AreEqual(0L, driver.Battle.Snapshot.Asteroids[1].Tag);
+
+            var asteroid = Asteroid(driver);
+            asteroid.HitPoints = 1f;
+            driver.Control(1, systems: 1);
+            var events = StepUntilHit(driver, asteroid.Id);
+
+            var removal = events.Single(e => e.Kind == BattleEventKind.AsteroidRemoval);
+            Assert.AreEqual(asteroid.Id, removal.EntityId);
+            Assert.AreEqual(long.MinValue + 3, removal.Tag);
+        }
+
         // Examples 6 and 7: 0.1 × 5 × min(80, 200) × the rammer's multiplier, each way, once per touch.
         [TestCase(1f, 40f)]
         [TestCase(11f, 440f)]

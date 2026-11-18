@@ -47,8 +47,10 @@ namespace CombatSimulation.Core
                 {
                     if (!battle.Bullets.TryGetByBody(target.Bullet, out var index)) continue;
                     ref readonly var bullet = ref battle.Bullets[index];
-                    // A beam has no collider in legacy; the bullets attached to the own ship are its parts.
-                    if (bullet.IsBeam || bullet.Definition.IsBeamBolt || bullet.PendingRemoval != RemovalReason.None ||
+                    // A beam has no collider in legacy; the bullets attached to the own ship are its parts. A zone is a
+                    // legacy SpaceObject, which ignores Destroy and the push.
+                    if (bullet.IsBeam || bullet.Definition.IsBeamBolt || bullet.Definition.IsZone ||
+                        bullet.PendingRemoval != RemovalReason.None ||
                         bullet.ParentId == ship.Id && bullet.Definition.AttachedToParent || device.HasTouched(bullet.Id))
                         continue;
                     var point = world.GetBulletPosition(bullet.Body);

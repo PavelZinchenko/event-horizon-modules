@@ -152,9 +152,14 @@ namespace CombatSimulation.Core
         // Absolute arc scale, shared by the collider and view; zero for other bullets.
         public readonly float WaveScale;
 
+        // A damage zone of BattleSetup.Zones (exploration objects): its ZoneSetup.Tag. It has no parent and never expires.
+        public readonly long ZoneTag;
+        public bool IsZone => Definition != null && Definition.IsZone;
+
         internal BulletState(in BulletEntity bullet, PhysicsWorld world)
         {
             Id = bullet.Id;
+            ZoneTag = bullet.ZoneTag;
             ParentId = bullet.ParentId;
             Side = bullet.Side;
             Allegiance = bullet.Allegiance;

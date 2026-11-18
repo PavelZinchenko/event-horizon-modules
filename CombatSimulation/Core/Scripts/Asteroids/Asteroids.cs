@@ -12,7 +12,7 @@ namespace CombatSimulation.Core
         public const float AngularDamping = 0.02f;
 
         public AsteroidSetup(Vec2 position, Vec2 velocity, float size, float mass, float hitPoints,
-            float rammingDamageMultiplier)
+            float rammingDamageMultiplier, long tag = 0)
         {
             if (!position.IsFinite) throw new ArgumentOutOfRangeException(nameof(position), "The position must be finite.");
             if (!velocity.IsFinite) throw new ArgumentOutOfRangeException(nameof(velocity), "The velocity must be finite.");
@@ -30,6 +30,7 @@ namespace CombatSimulation.Core
             Mass = mass;
             HitPoints = hitPoints;
             RammingDamageMultiplier = rammingDamageMultiplier;
+            Tag = tag;
         }
 
         public Vec2 Position { get; }
@@ -42,6 +43,10 @@ namespace CombatSimulation.Core
 
         // Legacy DefaultCollisionBehaviour(powerMultiplier): the damage the asteroid deals when it rams.
         public float RammingDamageMultiplier { get; }
+
+        // Opaque to the core (exploration objects): the mode maps it to its loot. The snapshot and the removal event
+        // carry it.
+        public long Tag { get; }
 
         private static bool IsPositive(float value) => value > 0f && !float.IsInfinity(value);
     }
@@ -75,6 +80,7 @@ namespace CombatSimulation.Core
     public readonly struct AsteroidState
     {
         public readonly EntityId Id;
+        public readonly long Tag;
 
         // The circle diameter.
         public readonly float Size;
@@ -90,6 +96,7 @@ namespace CombatSimulation.Core
         internal AsteroidState(Asteroid asteroid, PhysicsWorld world)
         {
             Id = asteroid.Id;
+            Tag = asteroid.Setup.Tag;
             Size = asteroid.Setup.Size;
             Mass = asteroid.Setup.Mass;
             HitPoints = asteroid.HitPoints;

@@ -50,9 +50,17 @@ namespace CombatSimulation.Core
             : this(radius, speed, range, damage, weight, parentVelocityEffect, hitPoints, homing, startingVelocityMultiplier,
                 damageType, recoil, push, extraDamage, triggers, detonateWhenDestroyed, canBeDisarmed, impact, damageFalloff,
                 radialPush, radialPushWithFalloff, lifetime, scale, attachedToParent, rocket, stickyLifetime, magnetic,
-                hasDirection, beamLength, piercing, aura, effects, null, 1f, friendlyFire, circleCenter, wave, harpoon, addSizeToAimRange)
+                hasDirection, beamLength, piercing, aura, effects, null, 1f, friendlyFire, circleCenter, wave, harpoon, addSizeToAimRange,
+                false)
         {
         }
+
+        // A damage zone (exploration objects; legacy CreatePlanetaryGasCloud): an OverTime circle without speed, range or
+        // lifetime. It never moves and never expires.
+        internal static BulletDefinition Zone(float radius, int damageType, float damagePerSecond) =>
+            new BulletDefinition(radius, 0f, 0f, damagePerSecond, 0f, 0f, 0f, false, 1f, damageType, 0f, 0f, null, null, false,
+                false, BulletImpact.OverTime, false, 0f, 0f, 0f, 0f, false, false, 0f, false, false, 0f, false, false, default,
+                null, 1f, false, default, null, false, false, true);
 
         // A charged copy (phase 5, step 4f) names its uncharged definition and its charge.
         private BulletDefinition(float radius, float speed, float range, float damage, float weight,
@@ -62,7 +70,7 @@ namespace CombatSimulation.Core
             float radialPushWithFalloff, float lifetime, float scale, bool attachedToParent, bool rocket,
             float stickyLifetime, bool magnetic, bool hasDirection, float beamLength, bool piercing, bool aura,
             ImpactEffects effects, BulletDefinition uncharged, float charge, bool friendlyFire, Vec2 circleCenter,
-            WaveDefinition wave, bool harpoon, bool addSizeToAimRange)
+            WaveDefinition wave, bool harpoon, bool addSizeToAimRange, bool zone)
         {
             if (!(radius > 0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be finite and positive.");
@@ -73,7 +81,7 @@ namespace CombatSimulation.Core
             if (!(lifetime >= 0f) || float.IsInfinity(lifetime))
                 throw new ArgumentOutOfRangeException(nameof(lifetime), "Lifetime must be finite and not negative.");
             // Legacy RangeMultiplier is 0 at a charge of 0.1 or less: such a bullet expires after its first step.
-            if (!(lifetime > 0f) && !(speed > 0f && (range > 0f || uncharged != null)))
+            if (!zone && !(lifetime > 0f) && !(speed > 0f && (range > 0f || uncharged != null)))
                 throw new ArgumentException("A bullet needs a lifetime, or a positive speed and range.", nameof(lifetime));
             if (!(scale >= 0f) || float.IsInfinity(scale))
                 throw new ArgumentOutOfRangeException(nameof(scale), "Scale must be finite and not negative.");
@@ -203,7 +211,8 @@ namespace CombatSimulation.Core
             IsAura = aura;
             AuraGrowthTicks = aura ? TickTime.AtLeast(lifetime) : 0;
             BodyLifetime = lifetime;
-            Lifetime = lifetime > 0f ? lifetime : range / speed;
+            IsZone = zone;
+            Lifetime = zone ? float.PositiveInfinity : lifetime > 0f ? lifetime : range / speed;
             LifetimeTicks = SpawnLifetimeTicks(Lifetime, 1f);
             Triggers = triggerList;
             TriggerConditions = conditions;
@@ -295,8 +304,11 @@ namespace CombatSimulation.Core
         public float Acceleration { get; }
 
         // Legacy BulletStats.GetBulletLifetime, in seconds: Body.Lifetime when positive, else range / speed. Homing
-        // bullets too (Q2a).
+        // bullets too (Q2a). Infinite for a zone.
         public float Lifetime { get; }
+
+        // A damage zone of BattleSetup.Zones (exploration objects): no ship fired it, and nothing removes it.
+        public bool IsZone { get; }
 
         // Phase 5, step 3. A bullet that is neither a missile nor a FirstTarget bolt is a legacy area of effect
         // (UnitClass.AreaOfEffect): it hits like an energy bolt, but point defense ignores it and nothing damages it.
@@ -431,7 +443,7 @@ namespace CombatSimulation.Core
                 Push * charge, extra, triggers, DetonateWhenDestroyed, CanBeDisarmed, Impact, DamageFalloff,
                 RadialPush * charge, RadialPushWithFalloff * charge, BodyLifetime, Scale * size, AttachedToParent, IsRocket,
                 StickyLifetime, IsMagnetic, HasDirection, BeamLength * size, Piercing, IsAura, Effects.WithCharge(charge), this,
-                charge, FriendlyFire, CircleCenter * size, Wave, IsHarpoon, AddSizeToAimRange);
+                charge, FriendlyFire, CircleCenter * size, Wave, IsHarpoon, AddSizeToAimRange, IsZone);
             scaled.Add(this, result);
             return result;
         }

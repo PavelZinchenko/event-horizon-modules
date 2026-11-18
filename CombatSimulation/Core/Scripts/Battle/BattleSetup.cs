@@ -22,7 +22,8 @@ namespace CombatSimulation.Core
             IReadOnlyCollection<int> localOwners = null,
             IReadOnlyDictionary<int, int> ownerDelays = null,
             DamageTypeTable damageTypes = null,
-            IReadOnlyList<AsteroidSetup> asteroids = null)
+            IReadOnlyList<AsteroidSetup> asteroids = null,
+            IReadOnlyList<ZoneSetup> zones = null)
         {
             if (roster == null) throw new ArgumentNullException(nameof(roster));
             if (!(width > 0f) || width > MaxWorldSize)
@@ -87,6 +88,19 @@ namespace CombatSimulation.Core
                 throw new ArgumentException("A battle with remote owners has no asteroids.", nameof(asteroids));
             Asteroids = Array.AsReadOnly(rocks);
 
+            var areas = new ZoneSetup[zones?.Count ?? 0];
+            for (var i = 0; i < areas.Length; ++i)
+            {
+                areas[i] = zones[i] ?? throw new ArgumentException("Zones contain a null entry.", nameof(zones));
+                if (!DamageTypes.Contains(areas[i].DamageType))
+                    throw new ArgumentException($"Damage type {areas[i].DamageType} does not exist in the battle's table.",
+                        nameof(zones));
+            }
+            // As an asteroid, a zone has no owner to give it an authority.
+            if (areas.Length > 0 && HasRemoteOwners)
+                throw new ArgumentException("A battle with remote owners has no zones.", nameof(zones));
+            Zones = Array.AsReadOnly(areas);
+
             rules?.Validate(this);
         }
 
@@ -105,6 +119,10 @@ namespace CombatSimulation.Core
 
         // Phase 5, step 14: created before tick 0, in this order. Empty with remote owners.
         public IReadOnlyList<AsteroidSetup> Asteroids { get; }
+
+        // Damage zones (exploration objects): created before tick 0 after the asteroids, in this order. Empty with remote
+        // owners.
+        public IReadOnlyList<ZoneSetup> Zones { get; }
 
         // D4. The legacy table by default.
         public DamageTypeTable DamageTypes { get; }

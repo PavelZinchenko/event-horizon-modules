@@ -64,6 +64,9 @@ namespace CombatSimulation.Core
         // The last tick the bullet flies in; stage 11 of that tick marks its expiry.
         public long ExpiryTick;
 
+        // A damage zone (Definition.IsZone): its ZoneSetup.Tag.
+        public long ZoneTag;
+
         // A restoring bullet on its owner (phase 5, step 5d): its full lifetime in ticks, which caps the restore, and the
         // fraction of a tick restored but not yet added to the expiry.
         public int LifetimeCapTicks;

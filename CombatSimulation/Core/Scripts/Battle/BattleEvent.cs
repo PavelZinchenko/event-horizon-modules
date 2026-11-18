@@ -27,8 +27,8 @@ namespace CombatSimulation.Core
         // wave, DeviceIndex the generator.
         GravityWave = 9,
 
-        // For presentation (phase 5, step 14): an asteroid died. EntityId is the asteroid, Point its last position. Side
-        // is -1: an asteroid belongs to no side.
+        // For presentation (phase 5, step 14): an asteroid died. EntityId is the asteroid, Point its last position, Tag
+        // its AsteroidSetup.Tag (exploration objects). Side is -1: an asteroid belongs to no side.
         AsteroidRemoval = 10,
 
         // For presentation (phase 5b, step 4): what one ship lost at stage 10 of the tick, for the damage text.
@@ -151,6 +151,9 @@ namespace CombatSimulation.Core
         // Mode: the published code and values.
         public readonly ModeEvent ModeEvent;
 
+        // Asteroid removal: the asteroid's opaque tag.
+        public readonly long Tag;
+
         public bool IsBullet => BulletDefinition != null || IsBeam;
         public bool IsBeam => BeamDefinition != null;
 
@@ -162,7 +165,8 @@ namespace CombatSimulation.Core
             BeamDefinition beamDefinition = null, int deviceIndex = -1, DroneBayKey? bayKey = null,
             BattleEventAuthority authority = BattleEventAuthority.Committed, EntityId previousId = default,
             bool isDecoy = false, Vec2 destination = default,
-            BulletTriggerConditions removalConditions = BulletTriggerConditions.None, ModeEvent modeEvent = default)
+            BulletTriggerConditions removalConditions = BulletTriggerConditions.None, ModeEvent modeEvent = default,
+            long tag = 0)
         {
             BattleId = battleId;
             Tick = tick;
@@ -195,6 +199,7 @@ namespace CombatSimulation.Core
             ParentId = parentId;
             PreviousId = previousId;
             ModeEvent = modeEvent;
+            Tag = tag;
         }
 
         internal static BattleEvent Spawn(BattleId battleId, long tick, int sequence, ShipEntity ship,
@@ -277,7 +282,7 @@ namespace CombatSimulation.Core
             Vec2 position) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.AsteroidRemoval, asteroid.Id, default, -1,
                 asteroid.Owner, null, RemovalReason.Death, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
-                point: position);
+                point: position, tag: asteroid.Setup.Tag);
 
         internal static BattleEvent AuxiliaryRemoval(BattleId battleId, long tick, int sequence, EntityId id, int owner,
             EntityId shipId, Vec2 position, RemovalReason reason) =>

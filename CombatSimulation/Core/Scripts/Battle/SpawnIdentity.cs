@@ -9,6 +9,7 @@ namespace CombatSimulation.Core
 
         // Tag 3 is CounterRandom's.
         private const byte AsteroidTag = 4;
+        private const byte ZoneTag = 5;
 
         // Root: tag 1, battle u64, roster u32, deployment u32, tick u64.
         // A roster deployment creates one root, so its spawn slot is implicit.
@@ -46,6 +47,15 @@ namespace CombatSimulation.Core
         internal static EntityId CreateAsteroid(BattleId battleId, uint index)
         {
             var hash = StableHash.Begin(AsteroidTag);
+            hash = StableHash.Append(hash, battleId.Value, 8);
+            hash = StableHash.Append(hash, index, 4);
+            return Finish(hash);
+        }
+
+        // Damage zone (exploration objects): tag 5, battle u64, index u32 in BattleSetup.Zones. Created before tick 0.
+        internal static EntityId CreateZone(BattleId battleId, uint index)
+        {
+            var hash = StableHash.Begin(ZoneTag);
             hash = StableHash.Append(hash, battleId.Value, 8);
             hash = StableHash.Append(hash, index, 4);
             return Finish(hash);

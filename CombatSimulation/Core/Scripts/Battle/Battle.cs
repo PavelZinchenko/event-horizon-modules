@@ -34,6 +34,7 @@ namespace CombatSimulation.Core
             _contacts = new ContactSystem(_world, this, _tails, _triggers, _network, bulletContacts);
             _damage = new DamageSystem(_world, this, _tails);
             _world.Asteroids.Create();
+            Zones.Create(_world);
 
             _published = new BattleSnapshot(BattleId, Units.All.Count);
             _writing = new BattleSnapshot(BattleId, Units.All.Count);
