@@ -188,6 +188,39 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(3, driver.Battle.Snapshot.CopyTo(copy).Units.Length);
         }
 
+        // Exploration objects, step 3: an objective's death needs no new event. At stage 13 the mode reads a tagged
+        // asteroid's removal and a unit's Killed transition in the tick's events.
+        [Test]
+        public void TheModeSeesTheDeathOfATaggedAsteroidAndAUnitInTheSameTick()
+        {
+            var rules = new ScriptRules();
+            var asteroids = new[] { new AsteroidSetup(new Vec2(300f, 300f), Vec2.Zero, 4f, 80f, 1600f, 1f, tag: 42) };
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, Fixtures.Units(1, 1), rules: rules,
+                asteroids: asteroids));
+            driver.Deploy(1);
+            driver.Deploy(101);
+            driver.Step();
+
+            var seen = new List<BattleEvent>();
+            rules.Mode.End = context =>
+            {
+                foreach (var item in context.TickEvents)
+                    if (item.Kind == BattleEventKind.AsteroidRemoval ||
+                        item.Kind == BattleEventKind.UnitTransition && item.TransitionReason == UnitTransitionReason.Killed)
+                        seen.Add(item);
+            };
+            var ship = driver.Entity(101);
+            driver.Battle.QueueDeath(ship);
+            driver.Battle.Asteroids.Items[0].PendingDeath = true;
+            driver.Step();
+
+            Assert.AreEqual(2, seen.Count);
+            var unit = seen.Single(e => e.Kind == BattleEventKind.UnitTransition);
+            Assert.AreEqual(new UnitId(101), unit.UnitId);
+            Assert.AreEqual(ship, unit.EntityId);
+            Assert.AreEqual(42L, seen.Single(e => e.Kind == BattleEventKind.AsteroidRemoval).Tag);
+        }
+
         [Test]
         public void ModeActionsRunOnlyInBeginTick()
         {

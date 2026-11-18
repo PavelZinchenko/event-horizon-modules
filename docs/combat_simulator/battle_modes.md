@@ -117,6 +117,21 @@ The change kept the scripted battle log and its SHA-256, and every engine-free t
 4. Each change is a `ModeEvent` with the mode's docked or undocked code, the tag (`Value0`) and the ship's entity ID (`Value1`).
 5. A null or absent ship undocks from every area. A new ship first undocks the previous one. Areas dock on their own, in the order they were added.
 
+## Lives
+
+`Lives` (`CombatSimulation.Modes`) is a mode helper for lives with respawn: legacy `PlayerLivesHolder` and the scene managers' `CheckPlayerStatus`. It uses only `Respawn`, `Deploy`, `Publish`, `TickEvents` and the snapshot, so it needs no core change.
+
+1. The mode adds and deploys a unit, then calls `Track(unit, LivesSetup)`. `LivesSetup` gives the lives (respawns), the delay in ticks, the placement, `AtLastPose` and `AskForMore`.
+2. The mode calls `BeginTick` after it handles its `ModeCommand`s, and `EndTick` before it decides the result.
+3. `EndTick` reads the `Killed` transitions in `TickEvents`. A death spends a life at once, as legacy `--_lives`, and the unit is `Waiting` until the death tick + the delay. A `ForcedDestruction` stops the tracking; a retreat or a vanish is not a death.
+4. `BeginTick` handles the due units in `Track` order. With a spent life, the unit respawns: `Respawn`, then `Deploy`. With no life and `AskForMore`, it is `Deciding` and the decision event is published. Otherwise it is `Out`.
+5. `AtLastPose` deploys with `Near` (radius 40) at the dead ship's pose in the last snapshot, with zero velocity. A ship that died in its spawn tick is not in the snapshot, so the placement is used.
+6. Only one unit is `Deciding` at a time. The mode answers with `AddLife` (the unit respawns in the next `BeginTick`) or `Decline` (`Out`). A unit with a life respawns while another one decides.
+7. The helper never ends the battle. The mode reads `Status` and sets its result.
+8. Events: the changed code with the unit ID (`Value0`) and the lives left (`Value1`), when they changed in the call; the decision code with the unit ID and the deaths.
+
+The game computes `AskForMore` (in Frontier from `IAP_DISABLED`, the level loot and the tutorial), the prices and the windows. `LivesTests` covers it.
+
 ## World size
 
 `BattleSetup` rejects a width or height above `MaxWorldSize` (2048). Above about 4096, one float step is a tenth of the contact slop and contacts lose precision. `WorldSizeTests` runs the scripted fleets near (300, 300) and near (1900, 1900) of a 2048 world: the logs differ by rounding, but the hits stay within 5 %, and the deaths and survivors match.

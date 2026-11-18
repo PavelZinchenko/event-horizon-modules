@@ -145,7 +145,8 @@ namespace CombatSimulation.Core.Tests
         private bool _exit;
     }
 
-    // A mode for single checks: each BeginTick runs the actions queued for it, and EndTick runs End. It never ends.
+    // A mode for single checks: each BeginTick runs the actions queued for it, then Begin, and EndTick runs End. It never
+    // ends.
     internal sealed class ScriptRules : IBattleRules
     {
         public void Validate(BattleSetup setup) { }
@@ -159,6 +160,7 @@ namespace CombatSimulation.Core.Tests
     internal sealed class ScriptMode : IBattleMode
     {
         public readonly List<Action<ModeContext>> Next = new List<Action<ModeContext>>();
+        public Action<ModeContext> Begin;
         public Action<ModeContext> End;
         public Func<UnitState, string> Veto;
         public readonly List<UnitChange> Changes = new List<UnitChange>();
@@ -172,6 +174,7 @@ namespace CombatSimulation.Core.Tests
             var actions = Next.ToArray();
             Next.Clear();
             foreach (var action in actions) action(context);
+            Begin?.Invoke(context);
         }
 
         public bool AllowDeploy(ModeContext context, in UnitState unit, out string reason)
