@@ -4,7 +4,7 @@
     <string name="Loading">Chargement...</string>
     <string name="Credits">Crédits</string>
     <string name="ShipExperience">Le vaisseau $1 a gagné $2 ${2|point|points} d\'expérience</string>
-    <string name="PlayerExperience">L\'équipage à gagné $1 points d\'expérience ${1|point|points}</string>
+    <string name="PlayerExperience">L\'équipage a gagné $1 ${1|point|points} d\'expérience</string>
     <string name="FactionResearchPoints">$1 ${1|point|points}  de recherche reçus</string>
     <string name="RateApp">Noter</string>
     <string name="RateDescriptionAndroid">Vous aimez le jeu? Aidez-nous et notez-nous sur le Play Store</string>

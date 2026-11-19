@@ -4,7 +4,7 @@
     <string name="Loading">Načítání...</string>
     <string name="Credits">Kredity</string>
     <string name="ShipExperience">Loď $1 získala $2 zkušenostních ${2|bod|bodů}</string>
-    <string name="PlayerExperience">Posádka získala $1 zkušenostních %{1|bod|bodů}</string>
+    <string name="PlayerExperience">Posádka získala $1 zkušenostních ${1|bod|bodů}</string>
     <string name="FactionResearchPoints">$1 výzkumných ${1|bod|bodů} obdrženo</string>
     <string name="RateApp">Ohodnotit</string>
     <string name="RateDescriptionAndroid">Líbí se vám hra? Pomožte nám and napište hodnocení na Obchod Play.</string>
