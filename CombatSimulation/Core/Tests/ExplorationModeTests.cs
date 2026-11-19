@@ -72,9 +72,10 @@ namespace CombatSimulation.Core.Tests
             return _driver.StepCollecting(steps);
         }
 
-        private List<BattleEvent> Command(int kind, long argument = 0, long steps = 1)
+        private List<BattleEvent> Command(int kind, long argument = 0, long steps = 1, long argument1 = 0)
         {
-            Assert.IsTrue(_driver.Battle.Submit(new ModeCommand(_driver.BattleId, _commandId++, _driver.Tick, kind, argument)));
+            Assert.IsTrue(_driver.Battle.Submit(new ModeCommand(_driver.BattleId, _commandId++, _driver.Tick, kind, argument,
+                argument1)));
             return _driver.StepCollecting(steps);
         }
 
@@ -83,10 +84,10 @@ namespace CombatSimulation.Core.Tests
 
         private uint Unit(int spawner) => _layout.Spawners[spawner].UnitId.Value;
 
-        private static void AssertClose(Vec2 expected, Vec2 actual)
+        private static void AssertClose(Vec2 expected, Vec2 actual, string message = null)
         {
-            Assert.AreEqual(expected.X, actual.X, Tolerance);
-            Assert.AreEqual(expected.Y, actual.Y, Tolerance);
+            Assert.AreEqual(expected.X, actual.X, Tolerance, message);
+            Assert.AreEqual(expected.Y, actual.Y, Tolerance, message);
         }
 
         [Test]
@@ -354,6 +355,57 @@ namespace CombatSimulation.Core.Tests
             Assert.IsEmpty(ModeEvents(Command(ExplorationMode.CompleteObjective, 0), ExplorationMode.ObjectiveCompleted));
             _driver.Step(10);
             Assert.AreEqual(result.Tick, _driver.Battle.Snapshot.Result.Tick);
+        }
+
+        // The docking brake (owner, 2026-11-19): only while the player is docked, the game shows the docking and the
+        // throttle is low. A start while not docked is ignored; an undock ends the docking.
+        [Test]
+        public void TheDockingBrakeActsOnlyWhileDockingIsInProgress()
+        {
+            Create(Input(new[] { Crate }));
+            var crate = _layout.Objectives[0];
+            var velocity = new Vec2(0f, 0.5f);
+            Command(ExplorationMode.DockingInProgress, 0, argument1: 1);
+            _driver.Place(Player.Value, _layout.Torus.Wrap(crate.Position + new Vec2(5.5f, 0f)), velocity);
+            Assert.AreEqual(1, ModeEvents(_driver.StepCollecting(2), ExplorationMode.Docked).Length);
+            AssertClose(velocity, Velocity(), "A start before the dock is ignored.");
+
+            Command(ExplorationMode.DockingInProgress, 0, argument1: 1);
+            var factor = 1f - ExplorationRules.DefaultDockingBrakeRate * Battle.TickDuration;
+            AssertClose(factor * velocity, Velocity());
+            _driver.Step();
+            AssertClose(factor * factor * velocity, Velocity());
+
+            var slowed = Velocity();
+            _driver.Control(Player.Value, throttle: 0.5f);
+            _driver.Place(Player.Value, Position(), slowed);
+            _driver.Step(2);
+            Assert.Greater(Velocity().Length, slowed.Length, "The engine pushes; no brake at this throttle.");
+
+            _driver.Control(Player.Value, throttle: 0f);
+            Command(ExplorationMode.DockingInProgress, 0, argument1: 0);
+            _driver.Place(Player.Value, Position(), velocity);
+            _driver.Step(2);
+            AssertClose(velocity, Velocity(), "No brake after the end.");
+
+            Command(ExplorationMode.DockingInProgress, 0, argument1: 1);
+            Assert.AreEqual(1, ModeEvents(MovePlayer(crate.Position + new Vec2(30f, 0f)), ExplorationMode.Undocked).Length);
+            ModeEvents(MovePlayer(crate.Position + new Vec2(5.5f, 0f)), ExplorationMode.Docked).Single();
+            _driver.Place(Player.Value, Position(), velocity);
+            _driver.Step(2);
+            AssertClose(velocity, Velocity(), "The undock ended the docking.");
+        }
+
+        private Vec2 Velocity()
+        {
+            Assert.IsTrue(_driver.Battle.Snapshot.TryGetShip(_driver.Entity(Player.Value), out var ship));
+            return ship.LinearVelocity;
+        }
+
+        private Vec2 Position()
+        {
+            Assert.IsTrue(_driver.Battle.Snapshot.TryGetShip(_driver.Entity(Player.Value), out var ship));
+            return ship.Position;
         }
 
         // The merchant's area follows the ship; its death completes it.

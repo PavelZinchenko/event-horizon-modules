@@ -117,6 +117,17 @@ namespace CombatSimulation.Core
             return true;
         }
 
+        // Stage 1, before the engine and the physics. A body with a fixed position keeps its zero velocity.
+        internal bool ModeSetVelocity(EntityId id, Vec2 velocity)
+        {
+            RequireAction();
+            if (!velocity.IsFinite) throw new ArgumentOutOfRangeException(nameof(velocity), "The velocity must be finite.");
+            var ship = _world.FindShip(id);
+            if (ship == null) return false;
+            World.SetLinearVelocity(ship.Body, velocity);
+            return true;
+        }
+
         internal bool ModeChangeAllegiance(EntityId id, Allegiance allegiance)
         {
             RequireAction();

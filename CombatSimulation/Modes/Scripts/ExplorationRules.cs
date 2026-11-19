@@ -23,6 +23,11 @@ namespace CombatSimulation.Modes
         // exploration_objects.md: the legacy merchant docks below a gap of 3 and undocks above 3.6.
         public const float DefaultDockingReleaseMargin = 0.6f;
 
+        // The docking brake (owner, 2026-11-19): Frontier's legacy DockingSystem slows a docked player with a throttle below
+        // 0.001 by its velocity × dt each step. Main's legacy DockingStationCollisionBehaviour: 3 × and below 0.1.
+        public const float DefaultDockingBrakeRate = 1f;
+        public const float DefaultDockingBrakeThrottle = 0.001f;
+
         // completedObjectives: Main's completion state; the mode skips these IDs and ignores the unknown ones.
         public ExplorationRules(
             ExplorationLayout layout,
@@ -32,12 +37,18 @@ namespace CombatSimulation.Modes
             IReadOnlyCollection<int> completedObjectives = null,
             float activationDistance = DefaultActivationDistance,
             float vanishDistance = DefaultVanishDistance,
-            float dockingReleaseMargin = DefaultDockingReleaseMargin)
+            float dockingReleaseMargin = DefaultDockingReleaseMargin,
+            float dockingBrakeRate = DefaultDockingBrakeRate,
+            float dockingBrakeThrottle = DefaultDockingBrakeThrottle)
         {
             if (!(activationDistance > 0f)) throw new ArgumentOutOfRangeException(nameof(activationDistance));
             if (!(vanishDistance > activationDistance))
                 throw new ArgumentOutOfRangeException(nameof(vanishDistance), "The vanish distance must exceed the activation.");
             if (!(dockingReleaseMargin >= 0f)) throw new ArgumentOutOfRangeException(nameof(dockingReleaseMargin));
+            if (!(dockingBrakeRate >= 0f) || float.IsInfinity(dockingBrakeRate))
+                throw new ArgumentOutOfRangeException(nameof(dockingBrakeRate));
+            if (!(dockingBrakeThrottle >= 0f && dockingBrakeThrottle <= 1f))
+                throw new ArgumentOutOfRangeException(nameof(dockingBrakeThrottle));
 
             Layout = layout ?? throw new ArgumentNullException(nameof(layout));
             Content = content ?? throw new ArgumentNullException(nameof(content));
@@ -51,6 +62,8 @@ namespace CombatSimulation.Modes
             ActivationDistance = activationDistance;
             VanishDistance = vanishDistance;
             DockingReleaseMargin = dockingReleaseMargin;
+            DockingBrakeRate = dockingBrakeRate;
+            DockingBrakeThrottle = dockingBrakeThrottle;
         }
 
         public ExplorationLayout Layout { get; }
@@ -70,6 +83,11 @@ namespace CombatSimulation.Modes
         // An active ship vanishes when it is farther than this from the player.
         public float VanishDistance { get; }
         public float DockingReleaseMargin { get; }
+
+        // While the player is docked at an objective whose docking is in progress (the DockingInProgress command) and its
+        // throttle is below DockingBrakeThrottle, its velocity loses DockingBrakeRate × its value per second.
+        public float DockingBrakeRate { get; }
+        public float DockingBrakeThrottle { get; }
 
         // A local square world of the layout's size, with the player's unit on side 0 and no unit in the spawners' range.
         public void Validate(BattleSetup setup)

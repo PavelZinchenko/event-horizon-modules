@@ -1,4 +1,5 @@
 using System;
+using CombatSimulation.Physics;
 using Utilites;
 
 namespace CombatSimulation.Core
@@ -55,6 +56,10 @@ namespace CombatSimulation.Core
 
         // As the ChangeAllegiance ship command (D13).
         public bool ChangeAllegiance(EntityId id, Allegiance allegiance) => _battle.ModeChangeAllegiance(id, allegiance);
+
+        // The ship's linear velocity, at once. BeginTick comes before the engine and the physics, so the velocity in the
+        // snapshot is the ship's velocity until this call (exploration docking brake).
+        public bool SetVelocity(EntityId id, Vec2 velocity) => _battle.ModeSetVelocity(id, velocity);
 
         // Destroys a unit at stage 12, as surrender does for each unit of a side. A Ready unit has no entity.
         public bool DestroyUnit(UnitId id) => _battle.ModeDestroyUnit(id);

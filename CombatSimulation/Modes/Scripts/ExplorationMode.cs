@@ -44,6 +44,10 @@ namespace CombatSimulation.Modes
         public const int Decline = 4;
         public const int KillAll = 5;
 
+        // Argument 0: the objective ID; argument 1: 1 when the game shows the docking (a scan window, an animation), 0 when
+        // it stops. The mode ignores a start while the player is not docked there, and ends it on undock and completion.
+        public const int DockingInProgress = 6;
+
         // Event codes. Docked and undocked: objective ID, player entity. Completed: objective ID, ExplorationCompletion.
         // Lives changed: unit ID, lives left. Decision: unit ID, deaths.
         public const int Docked = 1;
@@ -74,6 +78,7 @@ namespace CombatSimulation.Modes
             for (var i = 0; i < _shipTicks.Length; ++i) _shipTicks[i] = -1;
 
             _completed = new bool[_layout.Objectives.Count];
+            _dockingInProgress = new bool[_layout.Objectives.Count];
             for (var i = 0; i < _completed.Length; ++i)
             {
                 _completed[i] = rules.CompletedObjectives[i];
@@ -117,6 +122,10 @@ namespace CombatSimulation.Modes
                     case Decline:
                         _lives.Decline(Rules.Player);
                         break;
+                    case DockingInProgress:
+                        if (input.Argument0 >= 0 && input.Argument0 < _dockingInProgress.Length)
+                            _dockingInProgress[input.Argument0] = input.Argument1 != 0 && _docking.IsDocked(input.Argument0);
+                        break;
                     case KillAll:
                         for (var i = 0; i < _states.Length; ++i)
                             if (_states[i] == ExplorationSpawnerState.Active &&
@@ -138,6 +147,7 @@ namespace CombatSimulation.Modes
             UpdateSpawners(context, hasPlayer, playerPosition);
             MoveDockableShips();
             _docking.Update(context, player);
+            if (hasPlayer) Brake(context, player);
         }
 
         // The mode deploys every unit.
@@ -202,6 +212,23 @@ namespace CombatSimulation.Modes
                 context.Deploy(spawner.UnitId, SpawnPlacement.At(spawner.Position, spawner.Angle));
                 _states[spawner.Index] = ExplorationSpawnerState.Active;
             }
+        }
+
+        // The docking brake: once a tick, however many areas are in progress. An undock or a completion ends the docking.
+        private void Brake(ModeContext context, EntityId player)
+        {
+            var braking = false;
+            for (var i = 0; i < _dockingInProgress.Length; ++i)
+            {
+                if (!_dockingInProgress[i]) continue;
+                if (_docking.IsDocked(i)) braking = true;
+                else _dockingInProgress[i] = false;
+            }
+
+            if (!braking || !context.Snapshot.TryGetShip(player, out var ship) ||
+                !(ship.Throttle < Rules.DockingBrakeThrottle)) return;
+            var factor = Math.Max(0f, 1f - Rules.DockingBrakeRate * Battle.TickDuration);
+            context.SetVelocity(player, factor * ship.LinearVelocity);
         }
 
         // A hostile objective has no docking area; Remove ignores it.
@@ -311,6 +338,9 @@ namespace CombatSimulation.Modes
         private long _snapshotTick = -1;
 
         private readonly bool[] _completed;
+
+        // By objective ID: the game shows the docking (DockingInProgress).
+        private readonly bool[] _dockingInProgress;
         private bool _started;
         private bool _exit;
         private BattleResult _result;
