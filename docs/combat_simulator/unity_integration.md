@@ -4,15 +4,16 @@ Part of [Combat simulator](index.md).
 
 This part describes Event Horizon's code. Frontier does not use the core yet ([Status](index.md#status)).
 
-Migration phases 3c and 4. Quick combat and campaign battles run on the core in a separate scene when the database selects it; the old scene stays the default. The plans and decisions are in `TODO/battle_simulator_scene.md` (S1–S5) and `TODO/battle_simulator_phase4.md`.
+Migration phases 3c, 4 and 6. Quick combat, campaign battles and planet exploration run on the core in separate scenes when the database selects it; the old scenes stay the default. The plans and decisions are in `TODO/battle_simulator_scene.md` (S1–S5) and `TODO/battle_simulator_phase4.md`.
 
 | Part | Location |
 | --- | --- |
 | Adapter, ship mapper, entity ID map, pilots, keyboard driver | `Assets/Scripts/Combat/Integration/Core/` |
 | Views | `Assets/Modules/CombatView/` (references Core and Physics; the core never references it) |
-| Installer | `Assets/Scripts/Installers/CoreCombatSceneInstaller.cs` |
-| Scene | `Assets/Scenes/CoreCombatScene.unity` (`GameScene.CoreCombat`) |
+| Installer | `Assets/Scripts/Installers/CoreCombatSceneInstaller.cs`, `CoreExplorationSceneInstaller.cs` |
+| Scene | `Assets/Scenes/CoreCombatScene.unity` (`GameScene.CoreCombat`), `CoreExplorationScene.unity` (`GameScene.CoreExploration`) |
 | Editor entry | `Assets/Editor/CoreCombatLauncher.cs`: menu `Tools/Combat/Start Core Quick Combat` |
+| Exploration views | `Assets/Modules/CombatView/Resources/CombatView/Exploration/` |
 
 ## Scene selection
 
@@ -66,10 +67,36 @@ Editor menu *Tools/Combat/Check AI Replay* runs every armed built-in build again
 10. Device objects (phase 5b, step 7b). Decoys, energy and frontal shields, repair bots and worm tail segments use copies of the legacy prefabs in `Resources/CombatView/Objects` without their physics: `Decoy` (two sprites, no life fade), `EnergyShield` (the sprite of a `CircularSpriteObject` record), `EnergyShieldOutline` (the ring of a `CircularOutlineObject` record, copied `CircleView`), `FrontalShield`, `RepairBot` with its beam (item 11), and `WormSegment` (set up from a `WormTailSegment` record) or `WormSegment2` with the copied `ShipSegmentView` in the ship's colour scheme. A new segment after the head shows `OrbAdditive` for 0.5 s. A decoy, a repair bot and a segment that die show legacy `DroneExplosionActionObsolete`'s flash, black `Smoke` at 2 × scale and `explosion_10` (smoke since step 8).
 11. Device records (phase 5b, step 7c). The detonator's `Device.VisualEffect` record is its explosion, played at the area's radius in the device colour; the ship then dies without its own explosion, with its sound and wreck. The repair bot's beam is the first `Laser` element of its record, `Size` × the legacy length; other elements are left out, because the beam is on while the bot repairs and its length follows the flight range, and the record player has one timeline and one size (owner, 2026-11-12). The frontal shield draws the image of its `ColliderSpriteObject` record. Each falls back to the legacy look without a record.
 
+## Exploration
+
+Migration phase 6, exploration part. The plan and its decisions (E1–E15) are in Frontier's `TODO/exploration_main.md`. The shared runtime is `ExplorationMode` ([Battle modes](battle_modes.md), exploration). The legacy reference is `ExplorationSceneManager`.
+
+1. **Scene.** `ExplorationState` reads `UseNewCombatSimulator` in its constructor and loads `GameScene.CoreExploration`. The scene is a copy of the legacy one: `PlanetBackground`, the HUD panels, and the scan, loot and menu windows. `CoreExplorationSceneInstaller` binds `ExplorationData`, the adapter, the HUD presenter, the panels and input. It binds no legacy manager, scene, AI or factory. `ExplorationState` binds the `Planet` and opens the menu on Escape, as before.
+2. **Setup.** `CoreExplorationSetup` turns `ExplorationData` into the layout input, the `BattleSetup` and the `ExplorationRules`. The world is 1000 square. The layout comes from the planet seed, so the same planet gives the same level; the match seed comes from `UnityEngine.Random`.
+   - Container, meteorite, wreck and minerals are dockable objectives. The docking radius is the legacy trigger radius × the legacy view size, drawn from the objective seed.
+   - Outpost and hive are hostile objectives, each with a group of 1–4 guardians on a ring of 10. Hive guardians respawn 30 s after death; outpost turrets do not.
+   - Random ships: one spawner for each `ExplorationData.EnemyShips` entry.
+   - Gas clouds are damage zones: the legacy count, corrosive damage at `GasCloudDPS(level)`, no defense multiplier.
+   - Rules: 0 lives, the battle ends 250 ticks after the player's death, no question; the docking brake at rate 3 below a throttle of 0.1. The set bits of the planet's data are the completed objectives.
+3. **Content.** `CoreExplorationContent` maps the legacy builders' specifications (`CreateSpecification`) when a spawner first activates. It caches by role, content key and guardian ordinal. The outpost, its turrets and the hive are stationary (E15). Every enemy gets the AI level `Maths.Distance.AiLevel(level)`.
+4. **Adapter.** `CoreExplorationAdapter` sits on `CoreBattleHost`. It implements `IScenePresentation`, and `IBattleView` with neutral values for `CoreKeyboardDriver`. It implements none of the roster contracts: the exploration menu sends `Surrender` and `KillAllEnemies` through the messenger.
+   - `Docked`: the messenger event and the scan window. While the window is open, the adapter sends `DockingInProgress`, so the brake acts. Ok sends `CompleteObjective`.
+   - `Undocked`: the messenger event; the scan window closes with Cancel.
+   - `ObjectiveCompleted`: `ExplorationData.Complete`, the loot, `Consume` and the loot window. A hostile objective's death comes here too.
+   - Exit: all complete exits 5 s later, in game time; out of lives exits at once (the core already waited); surrender exits at once without a result.
+   - Camera: the player in the middle; the target is the nearest active enemy ship, chosen each tick.
+   - Beacons: one for each open objective, at its layout position, drawn at the image nearest to the camera. A beacon closes on its objective's completion.
+5. **HUD.** `CoreExplorationHudPresenter` follows the legacy rules: the player's stats always; the enemy's stats for the camera target, otherwise closed; the controls for the player ship; a radar for each enemy ship view (`CoreBattleHost.ShipAdded`).
+6. **Views.** `CoreExplorationObjects` draws the still objects with copies of the 11 legacy `Combat/Exploration` prefabs, without their collider and body. The lava keeps `Utils.Flicker`. Dockable objectives are drawn at their layout positions. An objective complete before the visit has no view; a view stays after its completion. Craters keep their legacy positions, moved by the layout start. Each zone gets a gas cloud at 2 × its radius. `BattleRenderer` draws no view for a zone bullet. Static wrecks are on; shadows are off (E10).
+7. **Host changes.** The host registers the worm tail and repair bot looks at each ship spawn, because the content maps ships after the start. Hooks for the mode: `OnModeEvent`, `RenderMode`, `DisposeMode`.
+8. **Editor.** *Tools/Combat/Check Exploration Content* generates the layout of sample planets of each type and level, maps every spawner and reports inert devices and exceptions.
+
+Differences from legacy: the layout places everything again (positions, guardian counts, gas clouds); gas clouds apply resistances instead of the defense multiplier; a vanished ship keeps its shield damage; the docking brake acts only while the scan window is open, and ends at the completion.
+
 ## Known limits
 
 1. Two built-in components are deferred and inert: they keep their stats and do nothing ([Deferred content](#deferred-content)). The adapter lists inert devices once per battle. Satellite bodies remain pending.
-2. The owner sets `UseNewCombatSimulator` by hand (migration H12). Exploration and the controls scene still use the old simulator until phase 6.
+2. The owner sets `UseNewCombatSimulator` by hand (migration H12). The controls scene still uses the old simulator until phase 6. Exploration ships have no shadows until phase 4 of Frontier's plan (exploration plan, E10).
 3. A new player ship spawns at a random map point, so the camera whips toward it (legacy spawns the same way).
 4. The Editor pauses the game when it loses focus with an Android build target (`MobileApplication`). Play-mode checks from the CLI must force focus.
 

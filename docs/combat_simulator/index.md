@@ -4,11 +4,11 @@
 
 ## Status
 
-Status on 2026-11-17:
+Status on 2026-11-19:
 
 | Game | Status |
 | --- | --- |
-| Event Horizon | Quick combat and campaign battles run on the core when `CombatSettings.UseNewCombatSimulator` is true. The flag also shows the online duel, which runs only on the core. The legacy `BattleSimulator` stays the default. |
+| Event Horizon | Quick combat, campaign battles and planet exploration run on the core when `CombatSettings.UseNewCombatSimulator` is true. The flag also shows the online duel, which runs only on the core. The legacy `BattleSimulator` stays the default. |
 | Frontier | The core is present and compiles, and `EngineFree.Tests` passes. The application does not use it: every battle runs on `BattleSimulator`, and Frontier's `CombatSettings` has no `UseNewCombatSimulator` field. The migration plan is in Frontier's `TODO/new_combat_simulator.md`. |
 
 [Unity integration](unity_integration.md) describes Event Horizon's code. Frontier has no Unity integration for the core yet.
