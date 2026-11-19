@@ -63,7 +63,7 @@
     <string name="UnlockComponent">Sblocca</string>
     <string name="UnlockConfirmation">Sbloccare il modulo selezionato?</string>
     <string name="RequiredSpaceText">Spazio libero richiesto: $1</string>
-    <string name="OutOfSpaceWarning">Spazio libero insufficiente. Libera $1 ${|cella|celle} o aumenta il livello della nave.</string>
+    <string name="OutOfSpaceWarning">Spazio libero insufficiente. Libera $1 ${1|cella|celle} o aumenta il livello della nave.</string>
     <string name="LowLevelText">La tua nave deve essere di livello $1 o superiore.</string>
     <string name="LowLevelUnlockText">Per sbloccare questo modulo la tua nave deve essere di livello $1 o superiore.</string>
     <string name="UnknownTech">Tecnologia sconosciuta. Devi prima ricercarla</string>

@@ -15,7 +15,7 @@
     <string name="MainRescueUnit">Unité de secours</string>
     <string name="MainRescueUnitDesc">Permet aux vaisseaux de se retirer du champs de bataille</string>
     <string name="ConditionNode">Vous devez remplir une condition</string>
-    <string name="ShipLevelsRequirement">Améliorez $1 {1|vaisseau|vaisseaux} au niveau $2</string>
+    <string name="ShipLevelsRequirement">Améliorez $1 ${1|vaisseau|vaisseaux} au niveau $2</string>
     <string name="BeatAllEnemiesRequirement">Capturer la base spatiale de chaque faction du jeu</string>
     <string name="HangarSlotNode">Un vaisseau en plus dans votre flotte</string>
     <string name="NewHangarSlotDesc">Déverrouille un emplacement en plus dans votre hangar</string>
