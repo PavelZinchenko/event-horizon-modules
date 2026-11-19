@@ -58,7 +58,8 @@ namespace CombatSimulation.Core
         public bool ChangeAllegiance(EntityId id, Allegiance allegiance) => _battle.ModeChangeAllegiance(id, allegiance);
 
         // The ship's linear velocity, at once. BeginTick comes before the engine and the physics, so the velocity in the
-        // snapshot is the ship's velocity until this call (exploration docking brake).
+        // snapshot is the ship's velocity until this call (exploration docking brake). A battle with remote owners
+        // throws (D10).
         public bool SetVelocity(EntityId id, Vec2 velocity) => _battle.ModeSetVelocity(id, velocity);
 
         // Destroys a unit at stage 12, as surrender does for each unit of a side. A Ready unit has no entity.

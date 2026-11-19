@@ -98,6 +98,7 @@ namespace CombatSimulation.Core.Tests
 
         [Test]
         [SetCulture("en-US")]
+        [DotNetOnly("The pinned digest differs by float rounding.")]
         public void ObserverPreservesTheSinglePlayerDigestAndSeesCombat()
         {
             var observer = new Counter();

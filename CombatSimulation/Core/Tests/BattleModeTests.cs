@@ -248,6 +248,7 @@ namespace CombatSimulation.Core.Tests
             {
                 Assert.Throws<InvalidOperationException>(() => context.Deploy(new UnitId(1), SpawnPlacement.Auto));
                 Assert.Throws<InvalidOperationException>(() => context.DestroyUnit(new UnitId(1)));
+                Assert.Throws<InvalidOperationException>(() => context.SetVelocity(default, Vec2.Zero));
                 context.Drain(new UnitId(1), 0f, 0f);
                 context.Publish(new ModeEvent(3));
             });

@@ -5,6 +5,7 @@
         "CombatSimulation.Modes",
         "CombatSimulation.Physics",
         "CombatSimulation.Runtime",
+        "Diagnostics",
         "Utilites"
     ],
     "optionalUnityReferences": [

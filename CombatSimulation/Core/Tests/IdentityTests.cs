@@ -148,9 +148,32 @@ namespace CombatSimulation.Core.Tests
 
             Assert.Throws<InvalidOperationException>(() => driver.Battle.TryRegister(ship.Id, ship.Handle));
 
+            // The defect logs an error. The Unity test runner fails a test on an unexpected error log, so capture it.
             driver.Battle.ThrowOnDefect = false;
-            Assert.IsFalse(driver.Battle.TryRegister(ship.Id, ship.Handle));
+            var logger = new ErrorLog();
+            var previous = GameDiagnostics.Trace.Logger;
+            GameDiagnostics.Trace.Logger = logger;
+            try
+            {
+                Assert.IsFalse(driver.Battle.TryRegister(ship.Id, ship.Handle));
+            }
+            finally
+            {
+                GameDiagnostics.Trace.Logger = previous == GameDiagnostics.Trace.DefaultLogger ? null : previous;
+            }
+            Assert.AreEqual(1, logger.Errors.Count);
+            StringAssert.Contains("is already alive", logger.Errors[0]);
             Assert.AreSame(ship, driver.Battle.FindShip(ship.Id), "The live entity keeps its ID.");
+        }
+
+        private sealed class ErrorLog : GameDiagnostics.ILogger
+        {
+            public readonly List<string> Errors = new List<string>();
+
+            public void Log(string message, object context) { }
+            public void LogWarning(string message, object context) { }
+            public void LogError(string message, object context) => Errors.Add(message);
+            public void LogException(Exception e, object context) => Errors.Add(e.Message);
         }
 
         [Test]

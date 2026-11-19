@@ -9,6 +9,7 @@ namespace CombatSimulation.Core.Tests
     {
         [Test]
         [SetCulture("en-US")]
+        [DotNetOnly("The pinned digest differs by float rounding.")]
         public void AuthorityChangePreservesSinglePlayerLog()
         {
             var battle = ScriptedBattle.RunToResult(ScriptedBattle.Setup());
@@ -145,6 +146,7 @@ namespace CombatSimulation.Core.Tests
 
         // A measurement, not a budget: the performance gate decides.
         [Test]
+        [DotNetOnly("GC.GetAllocatedBytesForCurrentThread reads 0, so every element size is 0.")]
         public void SnapshotSizeIsMeasured()
         {
             var battle = ScriptedBattle.RunToResult(ScriptedBattle.Setup());

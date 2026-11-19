@@ -12,6 +12,7 @@ namespace CombatSimulation.Core.Tests
     {
         [Test]
         [SetCulture("en-US")]
+        [DotNetOnly("The pinned digest differs by float rounding.")]
         public void Phase5SinglePlayerLogIsUnchanged()
         {
             var battle = ScriptedBattle.RunToResult(ScriptedBattle.Phase5Setup(), fullDigest: true);
@@ -38,6 +39,7 @@ namespace CombatSimulation.Core.Tests
 
         [Test]
         [SetCulture("en-US")]
+        [DotNetOnly("The pinned digest differs by float rounding.")]
         public void Phase5TwoOwnerLogsAreUnchanged()
         {
             var duel = ScriptedDuel.RunToResult();
@@ -68,6 +70,7 @@ namespace CombatSimulation.Core.Tests
         // low-priority target and a redeployment. The digest adds barrel angles and targets; the scenes above omit them.
         [Test]
         [SetCulture("en-US")]
+        [DotNetOnly("The pinned digest differs by float rounding.")]
         public void TurretSinglePlayerLogIsUnchanged()
         {
             var battle = ScriptedBattle.RunToResult(ScriptedBattle.TurretSetup(), fullDigest: true, barrelDigest: true);
@@ -85,6 +88,7 @@ namespace CombatSimulation.Core.Tests
 
         [Test]
         [SetCulture("en-US")]
+        [DotNetOnly("The pinned digest differs by float rounding.")]
         public void TurretTwoOwnerLogsAreUnchanged()
         {
             var duel = ScriptedDuel.RunToResult(ScriptedBattle.TurretSetup, barrelDigest: true);
