@@ -28,7 +28,7 @@
     <string name="SOS_DEADSHIP_ACTION_Salvage">Cerca oggetti utili</string>
     <string name="SOS_OUTOFFUEL_Message">Saluti! Siamo rimasti senza carburante e non riusciamo ad uscire da questo sistema. Potresti aiutarci?</string>
     <string name="SOS_OUTOFFUEL_Reward">Grazie! Accetta questa ricompensa.</string>
-    <string name="SOS_OUTOFFUEL_ACTION_Give">Dai $1 ${1|unità|unità} di carburante</string>
+    <string name="SOS_OUTOFFUEL_ACTION_Give">Dai loro un po' di carburante</string>
     <string name="SOS_OUTOFFUEL_ACTION_Attack">Attacca</string>
     <string name="SOS_OUTOFFUEL_ACTION_Decline">Rifiuta</string>
     <string name="SOS_TRAP_Message">Siamo arrivati a destinazione e siamo stati immediatamente attaccati. Sembra che questo segnale fosse una trappola.</string>
