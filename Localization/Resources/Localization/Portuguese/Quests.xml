@@ -32,7 +32,7 @@
 <string name="SOS_DEADSHIP_ACTION_Salvage">Procura itens úteis</string>
 <string name="SOS_OUTOFFUEL_Message">Saudações! Ficamos sem combustível e não podemos sair deste sistema. Podem ajudar-nos?</string>
 <string name="SOS_OUTOFFUEL_Reward">Muito obrigado! Aceita esta lembrança como agradecimento.</string>
-<string name="SOS_OUTOFFUEL_ACTION_Give">Dar $1 ${1|unidade|unidade} de combustível</string>
+<string name="SOS_OUTOFFUEL_ACTION_Give">Dar-lhes um pouco de combustível</string>
 <string name="SOS_OUTOFFUEL_ACTION_Attack">Atacar</string>
 <string name="SOS_OUTOFFUEL_ACTION_Decline">Recusar</string>
 <string name="SOS_TRAP_Message">Chegámos ao destino e fomos imediatamente atacados. Parece que este sinal era uma armadilha.</string>
