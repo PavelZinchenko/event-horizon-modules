@@ -33,6 +33,18 @@ namespace CombatSimulation.Core
         // Angular speed of the turn controller, in radians per second.
         public float MaxAngularVelocity { get; }
 
+        // Legacy StarbaseEngine (exploration plan, E15): the engine ignores the course and the throttle, the velocity decays,
+        // and the spin moves toward this rate, in radians per second. Null for every other engine.
+        public float? HoldSpin { get; private set; }
+
+        // Legacy StarbaseEngine: no thrust or turn control, and a constant spin, in radians per second.
+        public static EngineDefinition Starbase(float spin)
+        {
+            if (float.IsNaN(spin) || float.IsInfinity(spin))
+                throw new ArgumentOutOfRangeException(nameof(spin), "The spin must be finite.");
+            return new EngineDefinition(0f, 0f, 0f, Math.Abs(spin), 0f) { HoldSpin = spin };
+        }
+
         // Legacy EngineStats.IsNull: an engine that neither thrusts nor turns.
         public bool IsNull => Propulsion <= 0.0001f && TurnRate <= 0.0001f;
 

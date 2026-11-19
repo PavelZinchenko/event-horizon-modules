@@ -224,7 +224,7 @@ namespace CombatSimulation.Modes
     public readonly struct ExplorationSpawner
     {
         public ExplorationSpawner(int index, UnitId unitId, ExplorationShipRole role, Vec2 position, float angle,
-            long contentKey, int objective, int parent, long respawnDelayTicks)
+            long contentKey, int ordinal, int objective, int parent, long respawnDelayTicks)
         {
             Index = index;
             UnitId = unitId;
@@ -232,6 +232,7 @@ namespace CombatSimulation.Modes
             Position = position;
             Angle = angle;
             ContentKey = contentKey;
+            Ordinal = ordinal;
             Objective = objective;
             Parent = parent;
             RespawnDelayTicks = respawnDelayTicks;
@@ -245,6 +246,9 @@ namespace CombatSimulation.Modes
         public Vec2 Position { get; }
         public float Angle { get; }
         public long ContentKey { get; }
+
+        // A guardian's number in its group (0 to n - 1); 0 otherwise.
+        public int Ordinal { get; }
 
         // The objective ID of a hostile objective or a dockable ship; -1 otherwise.
         public int Objective { get; }
@@ -350,7 +354,8 @@ namespace CombatSimulation.Modes
                 var objective = input.Objectives[i];
                 if (objective.Kind != ExplorationObjectiveKind.Hostile) continue;
                 spawnerOf[i] = spawners.Count;
-                Add(spawners, ExplorationShipRole.Hostile, placed[i].Position, placed[i].Angle, objective.ContentKey, i, -1, 0);
+                Add(spawners, ExplorationShipRole.Hostile, placed[i].Position, placed[i].Angle, objective.ContentKey, 0, i,
+                    -1, 0);
             }
 
             for (var i = 0; i < placed.Length; ++i)
@@ -365,7 +370,7 @@ namespace CombatSimulation.Modes
                     // Legacy: the ring starts at the objective's angle.
                     var angle = placed[i].Angle + j * 2f * (float)Math.PI / count;
                     var position = Torus.Wrap(placed[i].Position + group.RingRadius * Rot.FromAngle(angle).Rotate(new Vec2(1f, 0f)));
-                    Add(spawners, ExplorationShipRole.Guardian, position, angle, group.ContentKey, -1, spawnerOf[i],
+                    Add(spawners, ExplorationShipRole.Guardian, position, angle, group.ContentKey, j, -1, spawnerOf[i],
                         group.RespawnDelayTicks);
                 }
             }
@@ -376,14 +381,15 @@ namespace CombatSimulation.Modes
                 if (objective.Kind != ExplorationObjectiveKind.DockableShip) continue;
                 spawnerOf[i] = spawners.Count;
                 Add(spawners, ExplorationShipRole.DockableShip, placed[i].Position, placed[i].Angle, objective.ContentKey,
-                    i, -1, 0);
+                    0, i, -1, 0);
             }
 
             for (var i = 0; i < input.RandomShips.Count; ++i)
             {
                 var random = Random(Stream.RandomShips, i);
                 var position = NextClearPosition(ref random);
-                Add(spawners, ExplorationShipRole.RandomShip, position, NextAngle(ref random), input.RandomShips[i], -1, -1, 0);
+                Add(spawners, ExplorationShipRole.RandomShip, position, NextAngle(ref random), input.RandomShips[i], 0, -1,
+                    -1, 0);
             }
 
             var objectives = new ExplorationObjective[placed.Length];
@@ -423,11 +429,11 @@ namespace CombatSimulation.Modes
         }
 
         private void Add(List<ExplorationSpawner> spawners, ExplorationShipRole role, Vec2 position, float angle,
-            long contentKey, int objective, int parent, long respawnDelayTicks)
+            long contentKey, int ordinal, int objective, int parent, long respawnDelayTicks)
         {
             var index = spawners.Count;
             spawners.Add(new ExplorationSpawner(index, new UnitId(checked(Input.UnitIdBase + (uint)index)), role, position,
-                angle, contentKey, objective, parent, respawnDelayTicks));
+                angle, contentKey, ordinal, objective, parent, respawnDelayTicks));
         }
 
         // Uniform over the world, outside the start clearance. The clearance is below half the world, so a fifth of the

@@ -118,6 +118,7 @@ A frame for an unknown or removed entity is dropped and counted in `RejectedComm
 3. With a course, the legacy turn controller brakes inside 120° when the spin would overshoot, and drops to a tenth of the turn rate above the maximum angular velocity. Without a course it brakes the spin.
 4. A retreating ship has its engine off and drifts (legacy `ShipRetreatEffect`).
 5. Body damping is 0, as the legacy prefab drag.
+6. **Stationary ships** (exploration plan, E15). `ShipDefinition.BodyFlags` gives the ship's body `FixedPosition` (a starbase) or also `FixedRotation` (a turret), as the legacy prefab constraints. Contacts and impulses do not move it. `EngineDefinition.Starbase(spin)` ports legacy `StarbaseEngine`: it ignores the course and the throttle, the velocity decays by v·dt, and the spin moves by (rate − spin)·dt. As in legacy, a change below 0.001°/s per tick is skipped, so the spin settles 0.05°/s short of the rate.
 
 ## Contacts and damage
 

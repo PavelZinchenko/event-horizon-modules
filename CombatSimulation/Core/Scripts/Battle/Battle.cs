@@ -649,7 +649,7 @@ namespace CombatSimulation.Core
             }
 
             var definition = slot.Setup.Ship;
-            var body = World.CreateBody(new BodyDef { Mass = definition.Mass });
+            var body = World.CreateBody(new BodyDef { Mass = definition.Mass, Flags = definition.BodyFlags });
             ship.Initialize(id, slot, body, Tick, Setup.DamageTypes.Count);
 
             _world.AddShipShapes(ship, CollisionFilters.Ship(ship.Allegiance));

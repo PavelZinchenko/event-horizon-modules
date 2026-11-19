@@ -113,7 +113,7 @@ Phase 7, step 6 (2026-11-14). An online duel runs in `CoreCombatScene` with a `C
 2. The battle scene reuses the mapper and the slots of `CoreDuelSetup`'s last `Build`: each `Map` call makes new definitions,
    and the views look up the session's definitions in the mapper that made them. `DuelCombatModel` holds the fleets as
    `ShipInfo` (local ships `CombatSide.Player`) and gives no loot and no experience.
-3. `CoreCombatAdapter` with a duel: each frame it takes every snapshot copy, oldest first, through the same handling as a
+3. `CoreCombatAdapter` with a duel: each frame its `CoreBattleHost` takes every snapshot copy, oldest first, through the same handling as a
    single-player step. Commands go to `SessionThread.Post`. The render alpha is the time since the newest copy was published.
    No enemy commander, kill-all, reinforcement, asteroids or effect preview.
 4. Threads: `PlayerPilot` and the player pilot map of `CorePilotProvider` sit behind locks. Player input reaches the trees

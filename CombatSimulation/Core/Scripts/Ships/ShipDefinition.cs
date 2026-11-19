@@ -17,10 +17,10 @@ namespace CombatSimulation.Core
             IReadOnlyList<BarrelDefinition> barrels = null, IReadOnlyList<DeviceDefinition> devices = null,
             IReadOnlyList<DamageResistance> resistances = null, float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal,
             IReadOnlyList<SatelliteDefinition> satellites = null, float chanceToAvoidMissile = 0f,
-            float armorRepairRate = 0f, float armorRepairDelay = 0f)
+            float armorRepairRate = 0f, float armorRepairDelay = 0f, BodyFlags bodyFlags = BodyFlags.None)
             : this(CircleHull(hullRadius, extraHullParts), mass, engine, armor, shield, energy, engineWithoutEnergy,
                 rammingDamageMultiplier, barrels, devices, resistances, scale, teleportImmune, targetPriority, satellites,
-                chanceToAvoidMissile, armorRepairRate, armorRepairDelay)
+                chanceToAvoidMissile, armorRepairRate, armorRepairDelay, bodyFlags)
         {
         }
 
@@ -32,7 +32,7 @@ namespace CombatSimulation.Core
             IReadOnlyList<DeviceDefinition> devices = null, IReadOnlyList<DamageResistance> resistances = null,
             float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal,
             IReadOnlyList<SatelliteDefinition> satellites = null, float chanceToAvoidMissile = 0f,
-            float armorRepairRate = 0f, float armorRepairDelay = 0f)
+            float armorRepairRate = 0f, float armorRepairDelay = 0f, BodyFlags bodyFlags = BodyFlags.None)
         {
             if (hull == null) throw new ArgumentNullException(nameof(hull));
             if (hull.Count == 0) throw new ArgumentException("A hull needs at least one shape.", nameof(hull));
@@ -105,6 +105,7 @@ namespace CombatSimulation.Core
             HullRadius = hullRadius;
             Scale = scale > 0f ? scale : 2f * hullRadius;
             TeleportImmune = teleportImmune;
+            BodyFlags = bodyFlags;
             TargetPriority = targetPriority;
             ChanceToAvoidMissile = chanceToAvoidMissile;
             HullParts = parts.AsReadOnly();
@@ -138,6 +139,11 @@ namespace CombatSimulation.Core
 
         // Legacy TeleportAction excludes Starbase and Special ship types, including their drones and clones.
         public bool TeleportImmune { get; }
+
+        // Legacy prefab constraints (exploration plan, E15): a starbase has a fixed position, a turret also a fixed
+        // rotation. The ship's body has these flags; contacts and impulses do not move it.
+        public BodyFlags BodyFlags { get; }
+
         public TargetPriority TargetPriority { get; }
 
         // Legacy Features.ChanceToAvoidMissile (missile camouflage, phase 5, step 9a): a homing search skips the ship

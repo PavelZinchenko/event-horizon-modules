@@ -9,7 +9,8 @@ namespace CombatSimulation.Modes
     {
         // Pure: the same arguments always give the same definition. Called in BeginTick on the battle thread, when a
         // spawner first activates and for each dockable ship at the start. The game caches by build and satellites.
-        ShipDefinition CreateShip(ExplorationShipRole role, long contentKey);
+        // ordinal: a guardian's number in its group (0 to n - 1); 0 for the other roles. A respawn keeps the unit.
+        ShipDefinition CreateShip(ExplorationShipRole role, long contentKey, int ordinal);
     }
 
     // The rules of an exploration level (new combat simulator, phase 3, step 5; TODO/exploration_mode.md). The setup has

@@ -29,11 +29,12 @@ namespace CombatSimulation.Core.Tests
         // Builds a fresh definition on each call, as a game provider without a cache.
         private sealed class Content : IExplorationContent
         {
-            public readonly List<(ExplorationShipRole Role, long Key)> Calls = new List<(ExplorationShipRole, long)>();
+            public readonly List<(ExplorationShipRole Role, long Key, int Ordinal)> Calls =
+                new List<(ExplorationShipRole, long, int)>();
 
-            public ShipDefinition CreateShip(ExplorationShipRole role, long contentKey)
+            public ShipDefinition CreateShip(ExplorationShipRole role, long contentKey, int ordinal)
             {
-                Calls.Add((role, contentKey));
+                Calls.Add((role, contentKey, ordinal));
                 return Fixtures.ShipWith();
             }
         }
@@ -171,6 +172,9 @@ namespace CombatSimulation.Core.Tests
             Assert.IsFalse(layout.TryFindSpawner(new UnitId(Base - 1), out _));
             Assert.IsFalse(layout.TryFindSpawner(new UnitId(Base + (uint)layout.Spawners.Count), out _));
 
+            CollectionAssert.AreEqual(new[] { 0, 0, 1, 2 }.Concat(Enumerable.Repeat(0, 51)),
+                layout.Spawners.Select(s => s.Ordinal));
+
             var hostile = layout.Objectives[1];
             Assert.AreEqual(0, hostile.Spawner);
             Assert.AreEqual(4, layout.Objectives[0].Spawner);
@@ -220,7 +224,7 @@ namespace CombatSimulation.Core.Tests
             var unit = _driver.Slot(Unit(merchant.Spawner));
             Assert.AreEqual(0, unit.Side);
             AssertClose(merchant.Position, _driver.Battle.World.GetPosition(unit.ActiveShip.Body));
-            Assert.AreEqual(new[] { (ExplorationShipRole.DockableShip, 12L) }, content.Calls.ToArray());
+            Assert.AreEqual(new[] { (ExplorationShipRole.DockableShip, 12L, 0) }, content.Calls.ToArray());
             Assert.AreEqual(2, _driver.Battle.Units.All.Count);
         }
 
@@ -288,12 +292,13 @@ namespace CombatSimulation.Core.Tests
         }
 
         // A guardian respawns after its delay while its objective lives. The objective's death completes it and stops the
-        // respawns; a live guardian keeps fighting.
+        // respawns; a live guardian keeps fighting. Each guardian gets its ordinal; a respawn keeps the unit and its ship.
         [Test]
         public void GuardiansRespawnUntilTheirObjectiveDies()
         {
             var groups = new[] { new ExplorationGuardianGroup(2, 2, 10f, 20, 21) };
-            Create(Input(new[] { Hostile(0), Crate }, groups: groups));
+            var content = new Content();
+            Create(Input(new[] { Hostile(0), Crate }, groups: groups), content: content);
             var hostile = _layout.Objectives[0];
             MovePlayer(hostile.Position + new Vec2(40f, 0f));
             for (var i = 0; i < 3; ++i) Assert.AreEqual(ExplorationSpawnerState.Active, _mode.State(i));
@@ -304,6 +309,11 @@ namespace CombatSimulation.Core.Tests
             var events = _driver.StepCollecting(2);
             Assert.IsTrue(events.Any(e => e.UnitId.Value == Unit(1) && e.TransitionReason == UnitTransitionReason.Respawned));
             Assert.AreEqual(ExplorationSpawnerState.Active, _mode.State(1));
+            CollectionAssert.AreEquivalent(new[]
+            {
+                (ExplorationShipRole.Hostile, 13L, 0), (ExplorationShipRole.Guardian, 21L, 0),
+                (ExplorationShipRole.Guardian, 21L, 1),
+            }, content.Calls);
 
             _driver.Kill(Unit(0));
             events = _driver.StepCollecting();

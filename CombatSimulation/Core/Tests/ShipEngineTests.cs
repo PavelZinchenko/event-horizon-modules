@@ -176,6 +176,63 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(1f, world.GetAngularVelocity(ship.Body), Tolerance);
         }
 
+        // Legacy StarbaseEngine and the starbase prefab (exploration plan, E15): the position stays exact, and the spin
+        // moves toward 10 deg/s by (rate - spin) x dt whatever the pilot does.
+        [Test]
+        public void AStarbaseKeepsItsPositionAndSpinsWhateverItsPilotDoes()
+        {
+            var spin = 10f * Fixtures.Degrees;
+            var engine = EngineDefinition.Starbase(spin);
+            var definition = new ShipDefinition(1f, 1f, engine, 1000f, Fixtures.Shield, Fixtures.Energy, engine,
+                bodyFlags: BodyFlags.FixedPosition);
+            var driver = new Driver(Fixtures.Setup(definition));
+            driver.Deploy(1);
+            driver.Step();
+            var ship = driver.Ship(1);
+            var world = driver.Battle.World;
+            var position = world.GetPosition(ship.Body);
+            var before = world.GetAngularVelocity(ship.Body);
+
+            driver.Control(1, course: world.GetAngle(ship.Body) + 1f, throttle: 1f);
+            driver.Step();
+            Assert.AreEqual(before + (spin - before) * 0.02f, world.GetAngularVelocity(ship.Body), Tolerance);
+
+            world.ApplyImpulseToCenter(ship.Body, new Vec2(5f, 5f));
+            world.SetLinearVelocity(ship.Body, new Vec2(3f, 0f));
+            driver.Step(500);
+
+            // Legacy skips a change below 0.001 deg/s per tick, so the spin settles within one change of 0.05 deg/s short
+            // of the rate.
+            Assert.AreEqual(spin - 0.05f * Fixtures.Degrees, world.GetAngularVelocity(ship.Body), 0.001f * Fixtures.Degrees);
+            AssertVector(Vec2.Zero, Velocity(driver, ship));
+            Assert.AreEqual(position, world.GetPosition(ship.Body));
+            Assert.IsTrue(engine.IsNull);
+        }
+
+        // Legacy turret prefab (E15): neither the engine nor an impulse moves or turns the ship.
+        [Test]
+        public void AFixedTurretNeitherMovesNorTurns()
+        {
+            var definition = new ShipDefinition(1f, 1f, Fixtures.Engine, 1000f, Fixtures.Shield, Fixtures.Energy,
+                bodyFlags: BodyFlags.FixedPosition | BodyFlags.FixedRotation);
+            var driver = new Driver(Fixtures.Setup(definition));
+            driver.Deploy(1);
+            driver.Step();
+            var ship = driver.Ship(1);
+            var world = driver.Battle.World;
+            var position = world.GetPosition(ship.Body);
+            var angle = world.GetAngle(ship.Body);
+
+            world.ApplyImpulse(ship.Body, new Vec2(0f, 5f), position + new Vec2(1f, 0f));
+            driver.Control(1, course: angle + 1f, throttle: 1f);
+            driver.Step(100);
+
+            Assert.AreEqual(position, world.GetPosition(ship.Body));
+            Assert.AreEqual(angle, world.GetAngle(ship.Body));
+            AssertVector(Vec2.Zero, Velocity(driver, ship));
+            Assert.AreEqual(0f, world.GetAngularVelocity(ship.Body));
+        }
+
         private static Driver Deployed(ShipDefinition definition, out ShipEntity ship)
         {
             var driver = new Driver(Fixtures.Setup(definition));

@@ -286,7 +286,7 @@ namespace CombatSimulation.Core
                     _world.Entities.TryGet(operation.EntityId, out _)) return false;
                 ship = _world.Ships.Allocate();
                 if (!_world.TryRegister(operation.EntityId, ship.Handle)) { _world.Ships.Release(ship); return false; }
-                var body = Physics.CreateBody(new BodyDef { Mass = slot.Setup.Ship.Mass });
+                var body = Physics.CreateBody(new BodyDef { Mass = slot.Setup.Ship.Mass, Flags = slot.Setup.Ship.BodyFlags });
                 // Initialize with the owner's retained resources, not values inferred from a prediction.
                 slot.Import(record, null);
                 ship.Initialize(operation.EntityId, slot, body, operation.Tick, Setup.DamageTypes.Count);

@@ -11,6 +11,8 @@ namespace CombatSimulation.Core
         private const float MinPropulsionDelta = 0.001f;
         private const float BrakeBand = (float)(120.0 * Math.PI / 180.0);
         private const float MinSpin = (float)(0.01 * Math.PI / 180.0);
+        private const float MinHoldSpeedSquared = 0.001f;
+        private const float MinHoldSpinChange = (float)(0.001 * Math.PI / 180.0);
         private const float FullCircle = (float)(2.0 * Math.PI);
 
         // Legacy BrakeDevice acts at this throttle or less; legacy ApplyDeceleration skips a slower ship.
@@ -47,6 +49,11 @@ namespace CombatSimulation.Core
         {
             var engine = input.Engine;
             if (engine == null) return;
+            if (engine.HoldSpin is float spin)
+            {
+                ApplyHoldSpin(spin, ref velocity, ref angularVelocity, dt);
+                return;
+            }
             if (input.Throttle > MinThrottle) ApplyThrust(engine, input.Throttle, input.Scale, rotation, ref velocity, dt);
             if (input.Deceleration > 0f) ApplyDeceleration(input.Deceleration, ref velocity, dt);
 
@@ -54,6 +61,15 @@ namespace CombatSimulation.Core
                 ApplyTurn(engine, input.Course, rotation.Angle, ref angularVelocity, dt);
             else if (Math.Abs(angularVelocity) > MinSpin)
                 ApplySpinBrake(engine, ref angularVelocity, dt);
+        }
+
+        // Legacy StarbaseEngine.Update (exploration plan, E15): the velocity decays and the spin moves toward its rate, by
+        // legacy's impulses (rigidbody degrees per second, so the thresholds are legacy's in radians).
+        private static void ApplyHoldSpin(float spin, ref Vec2 velocity, ref float angularVelocity, float dt)
+        {
+            if (velocity.LengthSquared >= MinHoldSpeedSquared) velocity = velocity - dt * velocity;
+            var change = (spin - angularVelocity) * dt;
+            if (Math.Abs(change) >= MinHoldSpinChange) angularVelocity += change;
         }
 
         // Steers the velocity toward MaxVelocity along the heading. Faster forward motion is kept. An accelerator scales

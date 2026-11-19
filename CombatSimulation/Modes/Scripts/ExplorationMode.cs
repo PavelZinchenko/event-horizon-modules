@@ -198,7 +198,7 @@ namespace CombatSimulation.Modes
 
                 var spawner = _layout.Spawners[objective.Spawner];
                 context.AddUnit(new UnitSetup(spawner.UnitId, 0,
-                    Rules.Content.CreateShip(spawner.Role, spawner.ContentKey), allegiance: Allegiance.Ally));
+                    CreateShip(spawner), allegiance: Allegiance.Ally));
                 context.Deploy(spawner.UnitId, SpawnPlacement.At(spawner.Position, spawner.Angle));
                 _states[spawner.Index] = ExplorationSpawnerState.Active;
             }
@@ -240,7 +240,7 @@ namespace CombatSimulation.Modes
                     case ExplorationSpawnerState.Dormant:
                         if (!hasPlayer || _torus.Delta(spawner.Position, player).LengthSquared > activation) break;
                         context.AddUnit(new UnitSetup(spawner.UnitId, 1,
-                            Rules.Content.CreateShip(spawner.Role, spawner.ContentKey), allegiance: Allegiance.Enemy));
+                            CreateShip(spawner), allegiance: Allegiance.Enemy));
                         Deploy(context, spawner, player);
                         break;
                     case ExplorationSpawnerState.Away:
@@ -274,6 +274,9 @@ namespace CombatSimulation.Modes
                     _docking.Move(objective.Id, _shipPositions[objective.Spawner]);
             }
         }
+
+        private ShipDefinition CreateShip(in ExplorationSpawner spawner) =>
+            Rules.Content.CreateShip(spawner.Role, spawner.ContentKey, spawner.Ordinal);
 
         // At the spawner's position, facing the player, at rest.
         private void Deploy(ModeContext context, in ExplorationSpawner spawner, Vec2 player)
