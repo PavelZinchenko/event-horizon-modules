@@ -1,0 +1,29 @@
+{
+    "name": "CombatSimulation.Integration",
+    "rootNamespace": "Combat.Integration",
+    "references": [
+        "CombatSimulation.Ai",
+        "CombatSimulation.Core",
+        "CombatSimulation.Physics",
+        "CombatSimulation.Runtime",
+        "CombatView",
+        "Database",
+        "Database.Unity",
+        "ShipConstructor",
+        "ServicesFacade",
+        "BattleSimulator",
+        "CommonComponents",
+        "CommonComponents.Unity",
+        "Utilites",
+        "Zenject"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
