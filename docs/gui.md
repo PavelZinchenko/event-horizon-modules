@@ -1,16 +1,15 @@
 # Gui Module
 
-The Gui module is the shared uGUI layer. It has a window manager that opens and closes windows by name and applies stacking rules, an animated window component, a color and font theme, an in-game debug console, a component tree for the ship editor's inventory list, and layout helpers. It also carries two vendored plugins: `ListScrollRect` (a recycling scroll list) and Unity UI Extensions.
+The Gui module is the shared uGUI layer. It has a window manager that opens and closes windows by name and applies stacking rules, an animated window component, a color and font theme, an in-game debug console, a component tree for the ship editor's inventory list, and layout helpers. It also carries two vendored plugins: `ListScrollRect` (a recycling scroll list) and `FlowLayoutGroup` from Unity UI Extensions.
 
 | | |
 | --- | --- |
 | Assembly | `Gui` ([Gui.asmdef](../Gui/Gui.asmdef)). References: AppConfiguration, CommonComponents, ServicesFacade, Unity.InputSystem, Zenject, ShipConstructor, Localization, Database, Diagnostics, Utilites. AppConfiguration is not used. Auto-referenced. |
-| Editor assemblies | `GuiThemeEditor` ([Theme/Editor](../Gui/Scripts/Theme/Editor)), `ListScrollRectEditor`, `UnityUIExtensions.editor` |
-| Vendored runtime assembly | `UnityUIExtensions` (Unity UI Extensions 2.3.2) |
+| Editor assemblies | `GuiThemeEditor` ([Theme/Editor](../Gui/Scripts/Theme/Editor)), `ListScrollRectEditor` |
 | Namespaces | `Services.Gui` (window manager API), `Gui.Windows`, `Gui.Theme`, `Gui.Theme.Wrappers`, `Gui.ComponentList`, `Gui.DebugConsole`, `Gui.Utils`. `LayoutGroupExtensions`, `ListScrollRect`, and `IContentFiller` are in the global namespace. |
 | Location | [`Assets/ModulesShared/Gui/`](../Gui), inside the `Assets/ModulesShared` Git submodule. |
 | Source | [`Scripts/`](../Gui/Scripts) (30 files, 2,740 lines; 2 of them editor files) |
-| Plugins | [`Plugins/ListScrollRect/`](../Gui/Plugins/ListScrollRect) (4 files, 1,561 lines); [`Plugins/com.unity.uiextensions/`](../Gui/Plugins/com.unity.uiextensions) (191 C# files, about 31,700 lines) |
+| Plugins | [`Plugins/ListScrollRect/`](../Gui/Plugins/ListScrollRect) (4 files, 1,561 lines); [`Plugins/FlowLayoutGroup/`](../Gui/Plugins/FlowLayoutGroup) (1 file, 479 lines) |
 | Prefabs | [`Prefabs/`](../Gui/Prefabs) (6 prefabs) |
 | Bindings | [`ServicesInstaller`](../../Scripts/Installers/ServicesInstaller.cs) (window manager, window signals, theme loader, debug console logger); [`TestSceneInstaller`](../../Scripts/Installers/TestSceneInstaller.cs) (window manager and signals; sets the theme directly) |
 | Default theme | [`UiTheme.asset`](../../Modules/AppConfiguration/ScriptableObjects/UiTheme.asset) in the [AppConfiguration module](../../../docs/app_configuration.md#assets) |
@@ -460,11 +459,11 @@ Contract:
 
 Users: the ship editor (`ComponentsPanel`, `ShipsPanel`) and application lists (`FleetPanel` (two), `MultiplayerWindow`, `SpecialStore`, `CargoHold`, `IapStore`, `ManageShipsPanel`, `ScrapPanelViewModel`, `MarketDialog`).
 
-### Unity UI Extensions
+### FlowLayoutGroup
 
-[`com.unity.uiextensions/`](../Gui/Plugins/com.unity.uiextensions) is a copy of [Unity UI Extensions](https://github.com/Unity-UI-Extensions/com.unity.uiextensions) 2.3.2 (BSD 3-clause license, see its `LICENSE.md`). It is not installed through the Package Manager.
+[`FlowLayoutGroup.cs`](../Gui/Plugins/FlowLayoutGroup/FlowLayoutGroup.cs) is the only file kept from [Unity UI Extensions](https://github.com/Unity-UI-Extensions/com.unity.uiextensions) 2.3.2 (BSD 3-clause license, see [`LICENSE.md`](../Gui/Plugins/FlowLayoutGroup/LICENSE.md)). It compiles into the `Gui` assembly and keeps its `UnityEngine.UI.Extensions` namespace. Its `.meta` keeps the original GUID, so scene references stay valid.
 
-The project uses one component from it: `FlowLayoutGroup`, in `CommonGuiScene`. No code refers to the `UnityEngine.UI.Extensions` namespace. The other 190 files compile into every build. See [GU15](issues/gui.md#gu15-the-ui-extensions-copy-is-almost-unused).
+The layout group places children in rows and starts a new row when a row is full. Users: Main's `CommonGuiScene`, Frontier's `FleetEditorScene` and `ResearchLabScene`.
 
 ## Adding a window
 

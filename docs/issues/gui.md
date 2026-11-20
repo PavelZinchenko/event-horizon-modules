@@ -161,14 +161,6 @@ The module is in the `ModulesShared` submodule, which Frontier also uses. A fix 
 
 **Direction.** Move `ComponentList` into the ShipEditor module. Move `UiTheme.Import` and the currency and quality lookups into the application. Remove the unused reference. Agree the change with Frontier first.
 
-### GU15. The UI Extensions copy is almost unused
-
-**Problem.** 191 C# files (about 31,700 lines) and 17 shaders compile into every build. The project uses one component.
-
-**Evidence.** Only `FlowLayoutGroup` has a scene reference (`CommonGuiScene`). No code uses the `UnityEngine.UI.Extensions` namespace. The copy is version 2.3.2 from 2023, outside the Package Manager, so updates are manual.
-
-**Direction.** Install the package through the Package Manager, or keep only `FlowLayoutGroup.cs` with its BSD license text.
-
 ### GU16. `ListScrollRect` is Asset Store code in a public repository
 
 **Problem.** The `.meta` files of `Plugins/ListScrollRect` say `licenseType: Store`. The folder has no license file, author, or version. The `ModulesShared` repository is public under GPLv3.
