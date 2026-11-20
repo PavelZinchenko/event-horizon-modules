@@ -169,6 +169,8 @@ Tests: `Core/Tests/RestoreLifetimeTests.cs`.
 Phase 5, step 5e. Examples: `TODO/battle_simulator_phase5.md`, "Friendly fire and repair (5e)".
 
 1. **Contacts.** `BulletDefinition.FriendlyFire` and `BeamDefinition.FriendlyFire` select a neutral collision filter.
+   `CoreWeaponMapper` sets it from the ammunition's `Body.FriendlyFire` or the weapon's
+   `WeaponStatModifier.ForceFriendlyFire` (Frontier's Berserker perk); a child bullet inherits the modifier.
    The bullet keeps its firing ship's allegiance for repair and recharge. Rays and projectile contacts exclude
    the firing ship, its drones, its tail and its bullets. Another ship of the same network owner remains a target.
    Friendly rays grow their reusable hit buffer on overflow, so excluded units cannot hide the next valid target.

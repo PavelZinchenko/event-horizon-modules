@@ -72,7 +72,7 @@ namespace Combat.Integration.Core
                     var shotDamage = effects.BeamDamage;
                     return BeamDefinition.Shot(barrelIndex, cooldown, energyCost, range,
                         shotDamage.Amount * modifier.DamageMultiplier.Value, body.Lifetime, shotDamage.DamageType,
-                        spread, TrackingAngle(ammunition), effects.ToCore(modifier), friendlyFire: body.FriendlyFire,
+                        spread, TrackingAngle(ammunition), effects.ToCore(modifier), friendlyFire: FriendlyFire(body, modifier),
                         triggers: beamTriggers, impact: ammunition.ImpactType == BulletImpactType.HitAllTargets ?
                             BulletImpact.AllTargets : BulletImpact.OverTime);
                 case WeaponClass.Common:
@@ -100,7 +100,7 @@ namespace Combat.Integration.Core
                     var chargedDamage = effects.BeamDamage;
                     return BeamDefinition.Charged(barrelIndex, cooldown, energyCost, range,
                         chargedDamage.Amount * modifier.DamageMultiplier.Value, body.Lifetime, chargedDamage.DamageType,
-                        spread, TrackingAngle(ammunition), effects.ToCore(modifier), friendlyFire: body.FriendlyFire);
+                        spread, TrackingAngle(ammunition), effects.ToCore(modifier), friendlyFire: FriendlyFire(body, modifier));
                 case WeaponClass.RequiredCharging:
                     var chargeContext = new Context(armorMultiplier, children, spawns);
                     var charged = MapBullet(ammunition, modifier, effects, 0, chargeContext, out inertReason);
@@ -126,7 +126,7 @@ namespace Combat.Integration.Core
                     var damage = effects.BeamDamage;
                     return new BeamDefinition(barrelIndex, cooldown, energyCost * body.Lifetime, energyCost, range,
                         damage.Amount * modifier.DamageMultiplier.Value, damage.DamageType, spread, TrackingAngle(ammunition),
-                        effects.ToCore(modifier), friendlyFire: body.FriendlyFire);
+                        effects.ToCore(modifier), friendlyFire: FriendlyFire(body, modifier));
                 default:
                     return Inert($"weapon class {stats.WeaponClass}", out inertReason);
             }
@@ -192,6 +192,11 @@ namespace Combat.Integration.Core
         }
 
         // The database clamps it to [0, 180°].
+        // The ammunition's own flag, or Frontier's ForceFriendlyFire (the Berserker captain perk, legacy BulletFactory).
+        // A child bullet takes its parent's modifier, so it keeps the flag.
+        private static bool FriendlyFire(BulletBody body, WeaponStatModifier modifier) =>
+            body.FriendlyFire || modifier.ForceFriendlyFire;
+
         private static float TrackingAngle(Ammunition ammunition) =>
             Math.Min(((BulletController_Beam)ammunition.Controller).TrackingAngle * DegreesToRadians, (float)Math.PI);
 
@@ -388,7 +393,7 @@ namespace Combat.Integration.Core
                 beamLength: beamLength,
                 piercing: shape == BulletShape.PiercingLaser,
                 aura: aura,
-                effects: effects.ToCore(modifier), friendlyFire: body.FriendlyFire,
+                effects: effects.ToCore(modifier), friendlyFire: FriendlyFire(body, modifier),
                 circleCenter: shape == BulletShape.CircularSaw ? new Vec2(0.4f * scale, 0f) : Vec2.Zero, wave: wave, harpoon: harpoon,
                 addSizeToAimRange: body.AiBulletBehavior != AiBulletBehavior.Beam && body.AiBulletBehavior != AiBulletBehavior.AreaOfEffect);
 
