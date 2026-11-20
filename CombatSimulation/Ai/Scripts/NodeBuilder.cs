@@ -271,8 +271,21 @@ namespace CombatSimulation.Ai
             return weapons.Count > 0 ? new ChargeWeaponsNode(weapons) : EmptyNode.Failure;
         }
 #if EH_FRONTIER
-        // TODO: Implement KeepAoeActive in core AI; see TASKS.md. The legacy battle simulator handles it.
-        public INode Create(BehaviorTreeNode_KeepAoeActive content) => EmptyNode.Failure;
+        // Frontier's legacy KeepAuraActive.Create: the manageable or continuous beam and area weapons; none gives Failure.
+        // Main's schema has no KeepAoeActive node.
+        public INode Create(BehaviorTreeNode_KeepAoeActive content)
+        {
+            var weapons = new List<AiWeapon>();
+            foreach (var weapon in _profile.Weapons)
+            {
+                var isHeld = weapon.WeaponClass == AiWeaponClass.Manageable || weapon.WeaponClass == AiWeaponClass.Continuous;
+                var isArea = weapon.BulletBehavior == AiBulletBehavior.Beam || weapon.BulletBehavior == AiBulletBehavior.AreaOfEffect;
+                if (isHeld && isArea)
+                    weapons.Add(weapon);
+            }
+
+            return weapons.Count > 0 ? new KeepAoeActiveNode(weapons) : EmptyNode.Failure;
+        }
 #endif
         public INode Create(BehaviorTreeNode_Chase content) => new ChaseNode(FirstDevice(DeviceClass.TeleporterV2));
         public INode Create(BehaviorTreeNode_AvoidThreats content) => new AvoidThreatsNode();

@@ -41,7 +41,7 @@ namespace CombatView
                     RunEffect(i, pose, lifetime, float.NegativeInfinity);
         }
 
-        // Each tick with a pose: the Cooldown triggers, the first at once.
+        // Each tick with a pose: the Cooldown triggers, the first at once, then the effects synced with the bullet.
         public void Tick(float time, in BulletPose pose, float lifetime)
         {
             for (var i = 0; i < _triggers.Count; ++i)
@@ -51,6 +51,12 @@ namespace CombatView
                 PlaySound(i, time);
                 RunEffect(i, pose, lifetime, time);
             }
+
+            if (_syncLifetimes == null)
+                return;
+            for (var i = 0; i < _triggers.Count; ++i)
+                if (_triggers[i].SyncLifetime && !IsHitEffect(_triggers[i]))
+                    FollowBullet(i, lifetime);
         }
 
         // Legacy Bullet.OnCollision: the bullet actions on Hit. They run for the bullet that hits, and for a bullet that
@@ -216,7 +222,24 @@ namespace CombatView
                 attached.Size = trigger.Size;
             }
 
+            if (trigger.SyncLifetime)
+                (_syncLifetimes ??= new float[_triggers.Count])[index] = lifetime;
             attached.Run(trigger.SyncLifetime ? lifetime : trigger.Lifetime, Vector2.zero, 0f);
+        }
+
+        // SyncLifetimeWithBullet. Legacy copies the bullet's lifetime into the effect once, at its start; a bullet whose
+        // lifetime a ContinuousCannon restores every frame then outlives its effect (the Pulsar aura vanished after 2 s).
+        // Here the effect follows the bullet each tick: its life is the bullet's remaining share of the lifetime at the
+        // effect's start, so it fades as legacy does and ends with the bullet.
+        private void FollowBullet(int index, float lifetime)
+        {
+            var effect = _bulletEffects[index];
+            var start = _syncLifetimes[index];
+            if (effect == null || !effect.IsAlive || !(start > 0f) || float.IsPositiveInfinity(start))
+                return;
+
+            effect.Run(start, Vector2.zero, 0f);
+            effect.Life = Mathf.Clamp01(lifetime / start);
         }
 
         // ShowHitEffectAction: one effect at the latest hit, run again at each; OncePerCollision keeps one per target.
@@ -289,6 +312,9 @@ namespace CombatView
 
         // Per trigger: the effect on the bullet (bullet actions) or the latest hit effect (ShowHitEffectAction).
         private readonly IEffect[] _bulletEffects;
+
+        // Per SyncLifetimeWithBullet trigger: the bullet's remaining lifetime when its effect last started.
+        private float[] _syncLifetimes;
         private Dictionary<EntityId, IEffect>[] _targetEffects;
         private readonly Dictionary<EntityId, long> _targetTicks = new Dictionary<EntityId, long>();
         private List<int> _loops;

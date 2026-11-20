@@ -460,6 +460,31 @@ namespace CombatSimulation.Ai
         private readonly IReadOnlyList<AiWeapon> _weapons;
     }
 
+    // Frontier's legacy KeepAuraActive (KeepAoeActive): holds the key of every free manageable or continuous beam or
+    // area weapon that is already active, so an aura someone switched on stays on. Running while any is held; else
+    // Failure. Legacy reads WeaponInfo.EnergyCost when it builds the node; the core reads it from the definition here.
+    internal sealed class KeepAoeActiveNode : INode
+    {
+        public KeepAoeActiveNode(IReadOnlyList<AiWeapon> weapons) => _weapons = weapons;
+
+        public NodeState Evaluate(AiContext context)
+        {
+            var result = NodeState.Failure;
+            foreach (var weapon in _weapons)
+            {
+                if (!context.DeviceOf(weapon.DeviceIndex).Active) continue;
+                if (WeaponMount.Of(context.Ship, weapon, context.Snapshot).EnergyCost > 0) continue;
+
+                context.Controls.ActivateSystem(weapon.DeviceIndex);
+                result = NodeState.Running;
+            }
+
+            return result;
+        }
+
+        private readonly IReadOnlyList<AiWeapon> _weapons;
+    }
+
     // Legacy TrackControllableAmmo (phase 5, step 4b): holds the key of each active weapon whose bullet closes on the
     // main target, or with secondaryTargets on any target of the list, at a closing speed of at least -0.1 u/s. A
     // released key detonates a manageable weapon's bullet. Running while it holds a key.

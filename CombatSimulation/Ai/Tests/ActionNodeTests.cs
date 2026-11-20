@@ -415,6 +415,49 @@ namespace CombatSimulation.Ai.Tests
             Assert.AreEqual(0f, context.LockedEnergy);
         }
 
+#if EH_FRONTIER
+        // Frontier's legacy KeepAuraActive: holds the key of a free beam or area weapon that is already active. A weapon
+        // that costs energy or is not active is not held; a ship without such a weapon builds Failure.
+        [TestCase(0f, true)]
+        [TestCase(5f, false)]
+        public void KeepAoeActiveHoldsAnActiveFreeAura(float energyPerSecond, bool held)
+        {
+            var leaf = Leaf(BehaviorNodeType.KeepAoeActive);
+            Assert.AreSame(EmptyNode.Failure, Builder(Context(out _)).Build(Node(leaf)), "no beam or area weapon");
+
+            // Two continuous beams; FirePilot holds only the first.
+            var aura = new ShipDefinition(1f, 1f, AiFixtures.Engine, 1000f, new ResourceDefinition(0f), new ResourceDefinition(300f),
+                barrels: new[] { new BarrelDefinition(new Vec2(1f, 0f)) },
+                devices: new DeviceDefinition[]
+                {
+                    new BeamDefinition(0, 0f, 0f, energyPerSecond, 5f, 10f),
+                    new BeamDefinition(0, 0f, 0f, 0f, 5f, 10f),
+                });
+            var runner = new BattleRunner(new BattleSetup(new BattleId(1), 7, new List<UnitSetup>
+            {
+                new UnitSetup(new UnitId(1), 0, aura),
+                new UnitSetup(new UnitId(101), 1, AiFixtures.Ship),
+            }, rules: RosterRules.Default), new FirePilots());
+            runner.Deploy(new UnitId(1), runner.Tick);
+            runner.Deploy(new UnitId(101), runner.Tick);
+            for (var i = 0; i < 3; ++i) runner.Step();
+
+            AiWeapon Beam(int device) => new AiWeapon(device, AiWeaponClass.Continuous, AiBulletBehavior.Beam,
+                AiWeaponCapability.DamageEnemy, 5f, 0f);
+            var profile = new AiShipProfile(new[] { Beam(0), Beam(1) }, null, null, false, false, default, 1f, 1f, 0f, 0f,
+                1f, 1f, 0f);
+            var context = new AiContext(profile, AiSettings.Default, 0.02f, default, BattleData());
+            context.Update(runner.Snapshot, runner.Snapshot.Ships[0]);
+            Assert.IsTrue(context.DeviceOf(0).Active);
+            Assert.IsFalse(context.DeviceOf(1).Active);
+
+            var node = Builder(context).Build(Node(leaf));
+            Assert.AreEqual(held ? R : F, node.Evaluate(context));
+            Assert.AreEqual(held, context.Controls.IsSystemActivated(0));
+            Assert.IsFalse(context.Controls.IsSystemActivated(1));
+        }
+#endif
+
         // Phase 5, step 7c: legacy KeepDistance succeeds between the distances plus a third of both model scales; it
         // flies toward a target that is too far and away from one that is too near. It swaps reversed bounds.
         [Test]
