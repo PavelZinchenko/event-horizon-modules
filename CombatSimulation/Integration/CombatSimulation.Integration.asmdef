@@ -9,6 +9,7 @@
         "CombatView",
         "Database",
         "Database.Unity",
+        "Localization.Abstractions",
         "ShipConstructor",
         "ServicesFacade",
         "BattleSimulator",
