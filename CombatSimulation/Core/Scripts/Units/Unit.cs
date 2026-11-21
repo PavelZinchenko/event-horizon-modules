@@ -113,5 +113,9 @@ namespace CombatSimulation.Core
 
         // Set by Respawn until the next deployment, which gives the unit's live drones to the new ship.
         internal bool TakesLiveDrones { get; set; }
+
+        // ModeContext.SetNoDamage: the unit's ship gets its armor back after the damage of each tick (legacy
+        // NoDamageSystem). Its drones do not. It stays through respawns and ChangeRules until the mode clears it.
+        internal bool NoDamage { get; set; }
     }
 }

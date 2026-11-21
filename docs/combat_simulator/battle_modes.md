@@ -43,6 +43,7 @@ The actions run at once, in call order, before the queued commands. They have no
 | `DestroyUnit(UnitId)` | Destroys the unit at stage 12, after surrender and kill-all, with reason `ForcedDestruction`. A `Ready` unit gets no entity. |
 | `SetVelocity(EntityId, Vec2)` | Sets the ship's linear velocity at once. `BeginTick` runs before the engine and the physics, so the snapshot's velocity is the ship's velocity until this call. A body with a fixed position keeps its zero velocity. |
 | `Drain(UnitId, armorFraction, shieldFraction)` | At stage 10, after the damage: the unit's active ship of a local owner loses the fractions of its maximum armor and shield. No resistance; both delays restart. |
+| `SetNoDamage(UnitId, bool)` | Legacy `NoDamageSystem` (Frontier's preparation ships, the god mode cheat). The unit's ship gets its full armor back at stage 10 after the damage of each tick, so no hit kills it. The hit still counts in the performance and gives damage events; shield and energy change as without it. Drains, `DestroyUnit` and the unit's drones are not covered. The flag stays through respawns and `ChangeRules` until the mode clears it; `UnitState.NoDamage` shows it. |
 | `Publish(ModeEvent)` | Adds a `BattleEventKind.Mode` event with the mode's code and two values. Also allowed in `EndTick`, where it comes before the result. |
 | `Random(purpose)` | A counter-based random state of the match seed, the tick and the mode's purpose (`RandomPurpose.Mode`). |
 

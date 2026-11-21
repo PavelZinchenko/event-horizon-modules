@@ -45,8 +45,12 @@ namespace CombatSimulation.Core
                     ApplyShieldFirst(ship);
                     // Legacy Armor.Get: the loss, so at most the armor the ship had.
                     if (Setup.IsLocalOwner(ship.Owner))
+                    {
                         _world.Performance.Settle(ship, Tick, raw, shieldBefore - ship.Shield.Value + absorbed,
                             Math.Min(ArmorLoss(ship), armorBefore));
+                        // Legacy NoDamageSystem restores the armor after the hit; the hit still counts.
+                        if (ship.Slot != null && ship.Slot.NoDamage) ship.Armor.Value = ship.Armor.Max;
+                    }
                 }
                 ship.ClearPendingDamage();
             }

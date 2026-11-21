@@ -249,6 +249,7 @@ namespace CombatSimulation.Core.Tests
                 Assert.Throws<InvalidOperationException>(() => context.Deploy(new UnitId(1), SpawnPlacement.Auto));
                 Assert.Throws<InvalidOperationException>(() => context.DestroyUnit(new UnitId(1)));
                 Assert.Throws<InvalidOperationException>(() => context.SetVelocity(default, Vec2.Zero));
+                Assert.Throws<InvalidOperationException>(() => context.SetNoDamage(new UnitId(1), true));
                 context.Drain(new UnitId(1), 0f, 0f);
                 context.Publish(new ModeEvent(3));
             });
@@ -276,6 +277,42 @@ namespace CombatSimulation.Core.Tests
             Assert.IsTrue(events.Any(e => e.Kind == BattleEventKind.Removal && e.EntityId == ship && e.RemovalReason == RemovalReason.Death));
             Assert.AreEqual(2, events.Count(e => e.TransitionReason == UnitTransitionReason.ForcedDestruction));
             Assert.AreEqual(UnitStatus.Ready, rules.Mode.Changes[2].Before, "The reserve had no entity.");
+        }
+
+        [Test]
+        public void NoDamageKeepsTheArmorFullUntilTheModeClearsIt()
+        {
+            // The bolt deals 5 a hit to a ship with 2 armor and no shield.
+            var rules = new ScriptRules();
+            var units = new List<UnitSetup>
+            {
+                new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(cooldown: 0.1f)),
+                new UnitSetup(new UnitId(101), 1, Fixtures.ShipWith(armor: 2f, shield: new ResourceDefinition(0f))),
+            };
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, units, rules: rules));
+            driver.Deploy(1);
+            driver.Deploy(101);
+            driver.Step();
+            driver.Place(1, new Vec2(50f, 50f), Vec2.Zero);
+            driver.Place(101, new Vec2(55f, 50f), Vec2.Zero);
+            rules.Mode.Next.Add(context =>
+            {
+                Assert.IsTrue(context.SetNoDamage(new UnitId(101), true));
+                Assert.IsFalse(context.SetNoDamage(new UnitId(7), true));
+            });
+            driver.Control(1, systems: 1);
+            var events = new List<BattleEvent>();
+            for (var i = 0; i < 30; ++i) events.AddRange(driver.StepCollecting());
+
+            Assert.AreEqual(UnitStatus.Active, driver.Status(101));
+            Assert.AreEqual(2f, driver.Ship(101).Armor.Value);
+            Assert.IsTrue(Unit(driver.Battle, new UnitId(101)).NoDamage);
+            Assert.IsTrue(events.Any(e => e.Kind == BattleEventKind.Damage), "The hits still give damage events.");
+            Assert.Greater(Unit(driver.Battle, new UnitId(101)).Performance.ArmorDamageReceived, 0f, "The hits still count.");
+
+            rules.Mode.Next.Add(context => context.SetNoDamage(new UnitId(101), false));
+            for (var i = 0; i < 30 && driver.Status(101) == UnitStatus.Active; ++i) driver.Step();
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(101));
         }
 
         [Test]

@@ -215,6 +215,9 @@ namespace CombatSimulation.Core
         // What the unit did so far (PerformanceLedger).
         public readonly UnitPerformance Performance;
 
+        // ModeContext.SetNoDamage.
+        public readonly bool NoDamage;
+
         internal UnitState(Unit slot)
         {
             UnitId = slot.UnitId;
@@ -229,6 +232,7 @@ namespace CombatSimulation.Core
             ShieldDeficit = slot.ShieldDeficit;
             DamageFraction = slot.OwnerDamageFraction ?? GetDamageFraction(slot);
             Performance = slot.Performance;
+            NoDamage = slot.NoDamage;
         }
 
         private static float GetDamageFraction(Unit slot)

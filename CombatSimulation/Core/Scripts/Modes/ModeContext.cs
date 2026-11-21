@@ -65,6 +65,12 @@ namespace CombatSimulation.Core
         // Destroys a unit at stage 12, as surrender does for each unit of a side. A Ready unit has no entity.
         public bool DestroyUnit(UnitId id) => _battle.ModeDestroyUnit(id);
 
+        // The unit's ship, from this tick on, gets its full armor back after the damage of each tick, so no hit kills it
+        // (legacy NoDamageSystem: Frontier's preparation ships and the god mode cheat). Shield, energy and the damage
+        // events stay as without it; drains, a forced destruction and the unit's drones are not covered. The flag stays
+        // through respawns and ChangeRules until the mode clears it. A battle with remote owners throws (D10).
+        public bool SetNoDamage(UnitId id, bool noDamage) => _battle.ModeSetNoDamage(id, noDamage);
+
         // At stage 10, after the damage: the unit's active ship, when it has one of a local owner, loses the fractions of
         // its maximum armor and shield. No resistance; both delays restart. Drains apply in call order.
         public void Drain(UnitId id, float armorFraction, float shieldFraction) =>

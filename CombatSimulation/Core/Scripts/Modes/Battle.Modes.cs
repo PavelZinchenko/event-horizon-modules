@@ -147,6 +147,15 @@ namespace CombatSimulation.Core
             return true;
         }
 
+        internal bool ModeSetNoDamage(UnitId id, bool noDamage)
+        {
+            RequireAction();
+            var slot = Units.Find(id);
+            if (slot == null) return false;
+            slot.NoDamage = noDamage;
+            return true;
+        }
+
         internal void ModeDrain(UnitId id, float armorFraction, float shieldFraction)
         {
             if (_modeStage != ModeStage.Begin)
