@@ -47,7 +47,8 @@ namespace Combat.Integration.Core
             _scene = scene;
         }
 
-        // Called once by the mode adapter's constructor, after it has mapped its ships: the mapper's looks are read here.
+        // Called by the mode adapter after it has mapped its ships: the mapper's looks are read here. A new battle in the
+        // same scene (Frontier's level host, a new world size) calls Dispose, then Initialize again.
         // asteroids: the battle has asteroids to draw.
         protected void Initialize(ICoreLookSource mapper, IPlayerPilots pilots, IBattleSource source, ICameraFraming framing,
             Torus torus, bool asteroids, CombatViewSettings viewSettings)
@@ -105,18 +106,20 @@ namespace Combat.Integration.Core
 
         // Camera framing by the game's rule (ICameraFraming). Drawn positions are continuous across the wrap, so the
         // camera never jumps at the map edge. Phase 5b, step 3: the effects' camera shake moves the rect, as legacy
-        // Scene.ViewRect.
+        // Scene.ViewRect. Empty before Initialize: Frontier's level host starts its battle at the first rules.
         public Rect CameraRect
         {
             get
             {
+                if (_framing == null)
+                    return default;
                 var rect = _framing.Rect;
                 rect.position += Renderer.CameraOffset;
                 return rect;
             }
         }
 
-        public Vector2 ViewPoint => _framing.Center;
+        public Vector2 ViewPoint => _framing?.Center ?? default;
 
         #endregion
 
@@ -179,7 +182,8 @@ namespace Combat.Integration.Core
             UpdateExit();
         }
 
-        // Scene unload. Clears the battle without events: the outcome is already final or abandoned. Also before Initialize.
+        // Scene unload, or before a new battle. Clears the battle without events: the outcome is already final or
+        // abandoned. Also before Initialize.
         public void Dispose()
         {
             _playerInputSignal.Event -= OnPlayerInput;
@@ -187,12 +191,24 @@ namespace Combat.Integration.Core
             _source = null;
             DisposeMode();
             Renderer?.Dispose();
+            Renderer = null;
             _asteroids?.Dispose();
+            _asteroids = null;
             _views.Clear();
             _viewsByCore.Clear();
+            _removed.Clear();
             _ids.Clear();
             _pilots?.Clear();
             _broadcasts.Clear();
+            // The looks belong to the renderer and its effects; the next Initialize registers them again.
+            _looks.Clear();
+            _shieldLooks.Clear();
+            _segmentLookCount = 0;
+            _repairBotLookCount = 0;
+            _lastTick = -1;
+            _exitDelay = -1f;
+            _exited = false;
+            _playerInput = false;
         }
 
         // The mode's view of the player ship and the camera: the controlled ship, the framed target (None for no target),
@@ -472,10 +488,12 @@ namespace Combat.Integration.Core
             Renderer.AddDecoy(item.EntityId, DecoyDefinition.Size, color, sound, 4f * DecoyDefinition.Size, item.Tick);
         }
 
-        // Phase 5b, step 8: legacy AsteroidExplosionAction.
+        // Phase 5b, step 8: legacy AsteroidExplosionAction. Frontier's phase 9: a mode's refill vanishes the extra
+        // asteroids at a stage switch, without an explosion (legacy Vanish).
         private void OnAsteroidRemoved(in BattleEvent item)
         {
-            if (_asteroids != null && _asteroids.Remove(item.EntityId, out var size))
+            if (_asteroids != null && _asteroids.Remove(item.EntityId, out var size) &&
+                item.RemovalReason != RemovalReason.Vanish)
                 Renderer.AddAsteroidExplosion(item.Point, size);
         }
 
