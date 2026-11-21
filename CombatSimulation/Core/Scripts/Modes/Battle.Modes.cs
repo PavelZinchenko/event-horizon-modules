@@ -147,6 +147,30 @@ namespace CombatSimulation.Core
             return true;
         }
 
+        internal bool ModeRemoveUnit(UnitId id)
+        {
+            RequireAction();
+            var slot = Units.Find(id);
+            if (slot == null) return false;
+            foreach (var removal in _removeUnits)
+                if (removal.Unit == slot) return true;
+            _removeUnits.Add(new Removal { Unit = slot });
+            return true;
+        }
+
+        internal EntityId ModeSpawnAsteroid(AsteroidSetup asteroid)
+        {
+            RequireAction();
+            if (asteroid == null) throw new ArgumentNullException(nameof(asteroid));
+            return _world.Asteroids.Spawn(asteroid)?.Id ?? default;
+        }
+
+        internal bool ModeVanishAsteroid(EntityId id)
+        {
+            RequireAction();
+            return _world.Asteroids.Vanish(id);
+        }
+
         internal bool ModeSetNoDamage(UnitId id, bool noDamage)
         {
             RequireAction();
@@ -201,6 +225,40 @@ namespace CombatSimulation.Core
                 AddTransition(slot, previousStatus, UnitTransitionReason.ForcedDestruction, id);
             }
             _destroyUnits.Clear();
+        }
+
+        // Stage 12, after the mode's destructions and before the drone removals: the removed units' ships vanish, and
+        // their drones and clones are marked, so the drone pass removes them in its own order.
+        private void VanishRemovedUnits()
+        {
+            for (var i = 0; i < _removeUnits.Count; ++i)
+            {
+                var removal = _removeUnits[i];
+                var slot = removal.Unit;
+                var ship = slot.ActiveShip;
+                removal.PreviousStatus = slot.Status;
+                if (ship != null)
+                {
+                    removal.EntityId = ship.Id;
+                    RemoveShip(ship, RemovalReason.Vanish);
+                }
+                slot.Destroy();
+                _removeUnits[i] = removal;
+
+                foreach (var drone in _world.Drones)
+                    if (drone.Bay?.Slot == slot) drone.PendingVanish = true;
+            }
+        }
+
+        // Stage 12, after the drone removals: the units leave the table, in call order.
+        private void RemoveModeUnits()
+        {
+            foreach (var removal in _removeUnits)
+            {
+                Units.Remove(removal.Unit);
+                AddTransition(removal.Unit, removal.PreviousStatus, UnitTransitionReason.Removed, removal.EntityId);
+            }
+            _removeUnits.Clear();
         }
 
         // The placement of a local deployment. A unit that respawned gives its live drones to the new ship.
@@ -261,6 +319,13 @@ namespace CombatSimulation.Core
             }
         }
 
+        private struct Removal
+        {
+            public Unit Unit;
+            public UnitStatus PreviousStatus;
+            public EntityId EntityId;
+        }
+
         // ChangeRules replaces it (Battle.Continuity).
         private IBattleMode _mode;
         private readonly ModeContext _modeContext;
@@ -269,5 +334,6 @@ namespace CombatSimulation.Core
         private ModeCommand[] _modeInputs = new ModeCommand[4];
         private readonly List<Drain> _drains = new List<Drain>();
         private readonly List<Unit> _destroyUnits = new List<Unit>();
+        private readonly List<Removal> _removeUnits = new List<Removal>();
     }
 }

@@ -41,6 +41,9 @@ The actions run at once, in call order, before the queued commands. They have no
 | `Respawn(UnitId)` | See "Respawn". |
 | `Retreat`, `Vanish`, `ChangeAllegiance` | As the unit and ship commands. |
 | `DestroyUnit(UnitId)` | Destroys the unit at stage 12, after surrender and kill-all, with reason `ForcedDestruction`. A `Ready` unit gets no entity. |
+| `RemoveUnit(UnitId)` | Removes the unit from the table at stage 12, after the mode's destructions (Frontier `TODO/common_level_mode.md`, decision 1). Its ship vanishes (`Removal`, `Vanish`), then the drone pass removes its drones and clones, and then the unit leaves with a `Removed` transition (status `Destroyed`). A ship that dies in the same tick dies first. A bullet in flight keeps the removed unit's credit, which no snapshot shows. A later tick may add the ID again. |
+| `SpawnAsteroid(AsteroidSetup)` | Adds an asteroid at once and returns its entity ID (decision 2). The ID is new in the battle: the setup's asteroids take the numbers 0 to n − 1, and each spawn takes the next. A free storage entry is reused with a new generation. |
+| `VanishAsteroid(EntityId)` | The asteroid leaves at stage 12 with an `AsteroidRemoval` event whose `RemovalReason` is `Vanish`: the view plays no explosion, and a mode gives no loot. |
 | `SetVelocity(EntityId, Vec2)` | Sets the ship's linear velocity at once. `BeginTick` runs before the engine and the physics, so the snapshot's velocity is the ship's velocity until this call. A body with a fixed position keeps its zero velocity. |
 | `Drain(UnitId, armorFraction, shieldFraction)` | At stage 10, after the damage: the unit's active ship of a local owner loses the fractions of its maximum armor and shield. No resistance; both delays restart. |
 | `SetNoDamage(UnitId, bool)` | Legacy `NoDamageSystem` (Frontier's preparation ships, the god mode cheat). The unit's ship gets its full armor back at stage 10 after the damage of each tick, so no hit kills it. The hit still counts in the performance and gives damage events; shield and energy change as without it. Drains, `DestroyUnit` and the unit's drones are not covered. The flag stays through respawns and `ChangeRules` until the mode clears it; `UnitState.NoDamage` shows it. |
@@ -59,7 +62,7 @@ Rules:
 
 ## Units added during the battle
 
-The unit table and `BattleSnapshot.Units` grow when a mode adds a unit. Units are never removed, so a long level adds one unit per enemy. The snapshot array grows as the other arrays do; the growth allocates. `UnitSetup.Allegiance` (default `Allegiances.OfSide(side)`) is the allegiance of the unit's ships and drones at deployment.
+The unit table and `BattleSnapshot.Units` grow when a mode adds a unit, and shrink when it removes one (`RemoveUnit`). A long level adds one unit per enemy; a mode that runs many levels in one battle removes the old units at each switch (Frontier's common level, decision 1). The later units move up one place in table order. The snapshot array grows as the other arrays do; the growth allocates. `UnitSetup.Allegiance` (default `Allegiances.OfSide(side)`) is the allegiance of the unit's ships and drones at deployment.
 
 ## Respawn
 

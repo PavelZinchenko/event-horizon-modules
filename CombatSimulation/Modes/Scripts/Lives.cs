@@ -134,7 +134,8 @@ namespace CombatSimulation.Modes
             PublishChanges(context);
         }
 
-        // Stage 13: the deaths and forced destructions of the tick, in batch order.
+        // Stage 13: the deaths, forced destructions and removals of the tick, in batch order. A destroyed or removed unit
+        // is no longer tracked.
         public void EndTick(ModeContext context)
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
@@ -145,7 +146,8 @@ namespace CombatSimulation.Modes
                 var entry = Find(item.UnitId);
                 if (entry == null) continue;
 
-                if (item.TransitionReason == UnitTransitionReason.ForcedDestruction) _entries.Remove(entry);
+                if (item.TransitionReason == UnitTransitionReason.ForcedDestruction ||
+                    item.TransitionReason == UnitTransitionReason.Removed) _entries.Remove(entry);
                 else if (item.TransitionReason == UnitTransitionReason.Killed && entry.Status == LifeStatus.Alive)
                     Die(context, entry, item.EntityId);
             }

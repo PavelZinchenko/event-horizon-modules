@@ -27,8 +27,9 @@ namespace CombatSimulation.Core
         // wave, DeviceIndex the generator.
         GravityWave = 9,
 
-        // For presentation (phase 5, step 14): an asteroid died. EntityId is the asteroid, Point its last position, Tag
-        // its AsteroidSetup.Tag (exploration objects). Side is -1: an asteroid belongs to no side.
+        // For presentation (phase 5, step 14): an asteroid left. EntityId is the asteroid, Point its last position, Tag
+        // its AsteroidSetup.Tag (exploration objects). Side is -1: an asteroid belongs to no side. RemovalReason is Death,
+        // or Vanish when a mode removed it (ModeContext.VanishAsteroid): no explosion and no loot.
         AsteroidRemoval = 10,
 
         // For presentation (phase 5b, step 4): what one ship lost at stage 10 of the tick, for the damage text.
@@ -79,6 +80,10 @@ namespace CombatSimulation.Core
 
         // A mode returned a destroyed unit to Ready (ModeContext.Respawn).
         Respawned,
+
+        // A mode removed the unit from the table (ModeContext.RemoveUnit). The status after it is Destroyed, and no
+        // later snapshot lists the unit. Local battles only.
+        Removed,
     }
 
     // One presentation event of a tick, with explicit authority. A flat tagged form, so the batch never allocates.
@@ -279,9 +284,9 @@ namespace CombatSimulation.Core
                 0f, 0f, default, point: origin, deviceIndex: deviceIndex, authority: authority);
 
         internal static BattleEvent AsteroidRemoval(BattleId battleId, long tick, int sequence, Asteroid asteroid,
-            Vec2 position) =>
+            Vec2 position, RemovalReason reason) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.AsteroidRemoval, asteroid.Id, default, -1,
-                asteroid.Owner, null, RemovalReason.Death, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
+                asteroid.Owner, null, reason, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
                 point: position, tag: asteroid.Setup.Tag);
 
         internal static BattleEvent AuxiliaryRemoval(BattleId battleId, long tick, int sequence, EntityId id, int owner,
@@ -330,7 +335,7 @@ namespace CombatSimulation.Core
                 case BattleEventKind.GravityWave:
                     return $"{Tick}.{Sequence} Gravity wave {EntityId} device {DeviceIndex} at {Point}";
                 case BattleEventKind.AsteroidRemoval:
-                    return $"{Tick}.{Sequence} Asteroid {EntityId} destroyed at {Point}";
+                    return $"{Tick}.{Sequence} Asteroid {EntityId} {(RemovalReason == RemovalReason.Vanish ? "vanished" : "destroyed")} at {Point}";
                 case BattleEventKind.AuxiliaryRemoval:
                     return $"{Tick}.{Sequence} Removal {EntityId} of {ParentId} ({RemovalReason}) at {Point}";
                 case BattleEventKind.SatelliteChange:

@@ -67,6 +67,9 @@ namespace CombatSimulation.Core
         public float Damage;
         public bool PendingDeath;
 
+        // ModeContext.VanishAsteroid: it leaves at stage 12 without dying.
+        public bool PendingVanish;
+
         // Linear velocity at the end of stage 4 (ramming speed).
         public Vec2 PreStepVelocity;
 
@@ -110,12 +113,13 @@ namespace CombatSimulation.Core
     // Phase 5, step 14 (H10; legacy Asteroid). The battle creates the setup's asteroids before tick 0. An asteroid takes the
     // total damage of every hit without resistance and the push of a projectile or a gravity wave; no other effect acts
     // on it. It dies below 0 hit points. It rams hostile ships, drones and tail segments with its own multiplier
-    // (RammingTracker). Nothing ever spawns one later, so each storage index is used once.
+    // (RammingTracker). A mode can spawn and vanish asteroids during the battle (common level mode, decision 2).
     internal sealed class Asteroids
     {
         public Asteroids(BattleWorld world) => _world = world;
 
-        // In setup order; a removed asteroid leaves a null entry.
+        // In storage order: the setup's asteroids first, then each spawn in the first free entry. A removed asteroid
+        // leaves a null entry.
         public IReadOnlyList<Asteroid> Items => _items;
         public int AliveCount { get; private set; }
 
@@ -128,43 +132,65 @@ namespace CombatSimulation.Core
         public void Create()
         {
             var setup = _world.Setup;
+            for (var i = 0; i < setup.Asteroids.Count; ++i)
+                Add(setup.Asteroids[i]);
+        }
+
+        // A mode's spawn at stage 1. The ID takes the next asteroid number, so it never repeats in the battle; a free
+        // entry is reused with a new generation.
+        public Asteroid Spawn(AsteroidSetup definition) => Add(definition);
+
+        // A mode's vanish at stage 1; stage 12 removes it.
+        public bool Vanish(EntityId id)
+        {
+            var asteroid = Find(id);
+            if (asteroid == null) return false;
+            asteroid.PendingVanish = true;
+            return true;
+        }
+
+        private Asteroid Add(AsteroidSetup definition)
+        {
+            var setup = _world.Setup;
+            var index = _items.IndexOf(null);
+            if (index < 0)
+            {
+                index = _items.Count;
+                _items.Add(null);
+                _generations.Add(0);
+            }
+
+            var id = SpawnIdentity.CreateAsteroid(setup.BattleId, _nextNumber++);
+            var handle = new EntityHandle(EntityKind.Asteroid, index, ++_generations[index]);
+            if (!_world.TryRegister(id, handle)) return null;
+
             var physics = _world.Physics;
             var shapeDef = ShapeDef.Default;
             shapeDef.Filter = CollisionFilters.Asteroid;
-            for (var i = 0; i < setup.Asteroids.Count; ++i)
+            var body = physics.CreateBody(new BodyDef
             {
-                var definition = setup.Asteroids[i];
-                var id = SpawnIdentity.CreateAsteroid(setup.BattleId, (uint)i);
-                var handle = new EntityHandle(EntityKind.Asteroid, i, 1);
-                if (!_world.TryRegister(id, handle))
-                {
-                    _items.Add(null);
-                    continue;
-                }
-
-                var body = physics.CreateBody(new BodyDef
-                {
-                    Position = definition.Position,
-                    LinearVelocity = definition.Velocity,
-                    Mass = definition.Mass,
-                    AngularDamping = AsteroidSetup.AngularDamping,
-                });
-                var shape = physics.AddCircle(body, new Circle(Vec2.Zero, 0.5f * definition.Size), shapeDef);
-                _world.Shapes.Register(shape, new ShapeEntry(handle, id, ShapeHitPriority.Hull, 0));
-                _items.Add(new Asteroid
-                {
-                    Id = id,
-                    Handle = handle,
-                    Setup = definition,
-                    Body = body,
-                    Shape = shape,
-                    // Nobody owns an asteroid; a battle with one has no remote owners (BattleSetup). A setup without
-                    // units has owner 0.
-                    Owner = setup.Units.Count > 0 ? setup.Units[0].Owner : 0,
-                    HitPoints = definition.HitPoints,
-                });
-                ++AliveCount;
-            }
+                Position = definition.Position,
+                LinearVelocity = definition.Velocity,
+                Mass = definition.Mass,
+                AngularDamping = AsteroidSetup.AngularDamping,
+            });
+            var shape = physics.AddCircle(body, new Circle(Vec2.Zero, 0.5f * definition.Size), shapeDef);
+            _world.Shapes.Register(shape, new ShapeEntry(handle, id, ShapeHitPriority.Hull, 0));
+            var asteroid = new Asteroid
+            {
+                Id = id,
+                Handle = handle,
+                Setup = definition,
+                Body = body,
+                Shape = shape,
+                // Nobody owns an asteroid; a battle with one has no remote owners (BattleSetup). A setup without
+                // units has owner 0.
+                Owner = setup.Units.Count > 0 ? setup.Units[0].Owner : 0,
+                HitPoints = definition.HitPoints,
+            };
+            _items[index] = asteroid;
+            ++AliveCount;
+            return asteroid;
         }
 
         // Stage 4: physics reports a touch after the solve, so ramming uses the velocity from before the step.
@@ -194,17 +220,18 @@ namespace CombatSimulation.Core
             }
         }
 
-        // Stage 12, in setup order. A bullet stuck to it or a harpoon on it lets go by its own rule (target gone).
+        // Stage 12, in storage order: the dead and the vanished. A bullet stuck to it or a harpoon on it lets go by its
+        // own rule (target gone).
         public void RemoveDead(Battle battle)
         {
             for (var i = 0; i < _items.Count; ++i)
             {
                 var asteroid = _items[i];
-                if (asteroid == null || !asteroid.PendingDeath) continue;
+                if (asteroid == null || !asteroid.PendingDeath && !asteroid.PendingVanish) continue;
 
                 var physics = _world.Physics;
                 _world.Events.Add(BattleEvent.AsteroidRemoval(_world.BattleId, _world.Tick, _world.Events.Count, asteroid,
-                    physics.GetPosition(asteroid.Body)));
+                    physics.GetPosition(asteroid.Body), asteroid.PendingDeath ? RemovalReason.Death : RemovalReason.Vanish));
                 _world.Shapes.Release(asteroid.Shape);
                 battle.ForgetContacts(asteroid.Id);
                 physics.DestroyBody(asteroid.Body);
@@ -216,5 +243,11 @@ namespace CombatSimulation.Core
 
         private readonly BattleWorld _world;
         private readonly List<Asteroid> _items = new List<Asteroid>();
+
+        // By storage entry: the generation of its last asteroid.
+        private readonly List<int> _generations = new List<int>();
+
+        // The number of the next asteroid ID (SpawnIdentity.CreateAsteroid): the setup's asteroids take 0 to n - 1.
+        private uint _nextNumber;
     }
 }

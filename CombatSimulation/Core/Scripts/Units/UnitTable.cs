@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace CombatSimulation.Core
 {
     // The core-owned units (fleet slots). Units keep setup order; simulation stages visit drones after unit ships.
-    // A mode can add units during the battle (ModeContext.AddUnit); units are never removed.
+    // A mode can add units during the battle (ModeContext.AddUnit) and remove them at stage 12 (ModeContext.RemoveUnit).
     internal sealed class UnitTable
     {
         private readonly List<Unit> _slots;
@@ -26,6 +26,13 @@ namespace CombatSimulation.Core
             _byId.Add(slot.UnitId, slot);
             _slots.Add(slot);
             return slot;
+        }
+
+        // The later units move up one place; their order stays.
+        public void Remove(Unit slot)
+        {
+            _byId.Remove(slot.UnitId);
+            _slots.Remove(slot);
         }
 
         public int Count(int side, UnitStatus status)

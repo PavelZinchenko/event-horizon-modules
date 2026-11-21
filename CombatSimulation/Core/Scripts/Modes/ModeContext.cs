@@ -65,6 +65,19 @@ namespace CombatSimulation.Core
         // Destroys a unit at stage 12, as surrender does for each unit of a side. A Ready unit has no entity.
         public bool DestroyUnit(UnitId id) => _battle.ModeDestroyUnit(id);
 
+        // Removes the unit from the table at stage 12 of this tick, after the mode's destructions (common level mode,
+        // decision 1): its ship vanishes, then its drones and clones, and then the unit leaves with a Removed
+        // transition. A ship that dies in this tick dies first. A bullet in flight keeps the unit's credit, which no
+        // snapshot shows. A later tick may add the ID again. A battle with remote owners throws (D10).
+        public bool RemoveUnit(UnitId id) => _battle.ModeRemoveUnit(id);
+
+        // Adds an asteroid at once (common level mode, decision 2). Its ID is new in the battle: the setup's asteroids
+        // take the numbers 0 to n - 1, and each spawn takes the next number. The snapshot of this tick lists it.
+        public EntityId SpawnAsteroid(AsteroidSetup asteroid) => _battle.ModeSpawnAsteroid(asteroid);
+
+        // The asteroid leaves at stage 12 with an AsteroidRemoval event whose RemovalReason is Vanish.
+        public bool VanishAsteroid(EntityId id) => _battle.ModeVanishAsteroid(id);
+
         // The unit's ship, from this tick on, gets its full armor back after the damage of each tick, so no hit kills it
         // (legacy NoDamageSystem: Frontier's preparation ships and the god mode cheat). Shield, energy and the damage
         // events stay as without it; drains, a forced destruction and the unit's drones are not covered. The flag stays

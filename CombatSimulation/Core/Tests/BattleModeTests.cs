@@ -250,6 +250,8 @@ namespace CombatSimulation.Core.Tests
                 Assert.Throws<InvalidOperationException>(() => context.DestroyUnit(new UnitId(1)));
                 Assert.Throws<InvalidOperationException>(() => context.SetVelocity(default, Vec2.Zero));
                 Assert.Throws<InvalidOperationException>(() => context.SetNoDamage(new UnitId(1), true));
+                Assert.Throws<InvalidOperationException>(() => context.RemoveUnit(new UnitId(1)));
+                Assert.Throws<InvalidOperationException>(() => context.VanishAsteroid(default));
                 context.Drain(new UnitId(1), 0f, 0f);
                 context.Publish(new ModeEvent(3));
             });
@@ -277,6 +279,108 @@ namespace CombatSimulation.Core.Tests
             Assert.IsTrue(events.Any(e => e.Kind == BattleEventKind.Removal && e.EntityId == ship && e.RemovalReason == RemovalReason.Death));
             Assert.AreEqual(2, events.Count(e => e.TransitionReason == UnitTransitionReason.ForcedDestruction));
             Assert.AreEqual(UnitStatus.Ready, rules.Mode.Changes[2].Before, "The reserve had no entity.");
+        }
+
+        // Common level mode, decision 1: the ship vanishes, then the drones, then the unit leaves the table.
+        [Test]
+        public void RemoveUnitVanishesTheShipAndItsDronesAndLeavesTheTable()
+        {
+            var rules = new ScriptRules();
+            var units = new List<UnitSetup>
+            {
+                new UnitSetup(new UnitId(1), 0, DroneBayTests.Carrier(capacity: 3)),
+                new UnitSetup(new UnitId(2), 0, Fixtures.Ship),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
+            };
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, units, rules: rules));
+            driver.Deploy(1);
+            driver.Deploy(101);
+            driver.Step();
+            driver.Place(1, new Vec2(50f, 50f), Vec2.Zero);
+            driver.Place(101, new Vec2(150f, 150f), Vec2.Zero);
+            var drone = DroneBayTests.Launch(driver);
+            driver.Control(1, systems: 0);
+            driver.Step();
+            var ship = driver.Entity(1);
+            var droneId = drone.Id;
+
+            rules.Mode.Next.Add(context =>
+            {
+                Assert.IsTrue(context.RemoveUnit(new UnitId(1)));
+                Assert.IsTrue(context.RemoveUnit(new UnitId(1)), "A second call changes nothing.");
+                Assert.IsTrue(context.RemoveUnit(new UnitId(2)), "A Ready unit has no entity.");
+                Assert.IsFalse(context.RemoveUnit(new UnitId(7)));
+            });
+            var events = driver.StepCollecting();
+
+            var removals = events.Where(e => e.Kind == BattleEventKind.Removal).ToArray();
+            CollectionAssert.AreEqual(new[] { ship, droneId }, removals.Select(e => e.EntityId).ToArray());
+            Assert.IsTrue(removals.All(e => e.RemovalReason == RemovalReason.Vanish));
+            var transitions = events.Where(e => e.TransitionReason == UnitTransitionReason.Removed).ToArray();
+            CollectionAssert.AreEqual(new[] { new UnitId(1), new UnitId(2) }, transitions.Select(e => e.UnitId).ToArray());
+            Assert.AreEqual(ship, transitions[0].EntityId);
+            Assert.AreEqual(UnitStatus.Destroyed, transitions[0].Status);
+            Assert.Greater(transitions[0].Sequence, removals[1].Sequence, "The unit leaves after its drones.");
+            Assert.AreEqual(UnitStatus.Active, rules.Mode.Changes[rules.Mode.Changes.Count - 2].Before);
+            Assert.AreEqual(UnitStatus.Ready, rules.Mode.Changes.Last().Before);
+
+            Assert.IsNull(driver.Battle.Units.Find(new UnitId(1)));
+            CollectionAssert.AreEqual(new[] { new UnitId(101) }, driver.Battle.Snapshot.Units.ToArray().Select(u => u.UnitId));
+            CollectionAssert.AreEqual(new[] { driver.Entity(101) }, driver.Battle.Snapshot.Ships.ToArray().Select(s => s.Id));
+
+            rules.Mode.Next.Add(context =>
+            {
+                context.AddUnit(new UnitSetup(new UnitId(1), 0, Fixtures.Ship));
+                Assert.IsTrue(context.Deploy(new UnitId(1), SpawnPlacement.Auto));
+            });
+            driver.Step();
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1), "A later tick adds the ID again.");
+            Assert.AreNotEqual(ship, driver.Entity(1));
+        }
+
+        // Common level mode, decision 2.
+        [Test]
+        public void AModeSpawnsAndVanishesAsteroidsWithNewIds()
+        {
+            var rules = new ScriptRules();
+            var rock = new AsteroidSetup(new Vec2(300f, 300f), Vec2.Zero, 4f, 80f, 1600f, 1f, tag: 5);
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, Fixtures.Units(1, 1), rules: rules,
+                asteroids: new[] { rock }));
+            driver.Step();
+            var first = driver.Battle.Snapshot.Asteroids[0].Id;
+
+            var spawned = default(EntityId);
+            rules.Mode.Next.Add(context =>
+            {
+                spawned = context.SpawnAsteroid(new AsteroidSetup(new Vec2(100f, 100f), new Vec2(1f, 0f), 2f, 20f, 400f, 1f));
+                Assert.IsTrue(context.VanishAsteroid(first));
+                Assert.IsFalse(context.VanishAsteroid(new EntityId(99)));
+            });
+            var events = driver.StepCollecting();
+            Assert.AreNotEqual(default(EntityId), spawned);
+            Assert.AreNotEqual(first, spawned);
+            var removal = events.Single(e => e.Kind == BattleEventKind.AsteroidRemoval);
+            Assert.AreEqual(first, removal.EntityId);
+            Assert.AreEqual(RemovalReason.Vanish, removal.RemovalReason);
+            Assert.AreEqual(5L, removal.Tag);
+            Assert.AreEqual(spawned, driver.Battle.Snapshot.Asteroids.ToArray().Single().Id);
+            Assert.AreEqual(2f, driver.Battle.Snapshot.Asteroids[0].Size);
+
+            // The free entry is reused with a new generation, and the ID stays new.
+            var third = default(EntityId);
+            rules.Mode.Next.Add(context =>
+                third = context.SpawnAsteroid(new AsteroidSetup(new Vec2(200f, 100f), Vec2.Zero, 3f, 45f, 900f, 1f)));
+            driver.Step();
+            Assert.AreEqual(2, driver.Battle.Asteroids.Items.Count);
+            Assert.AreEqual(2, driver.Battle.Asteroids.AliveCount);
+            Assert.AreNotEqual(first, third);
+            Assert.AreNotEqual(spawned, third);
+            Assert.AreEqual(third, driver.Battle.Asteroids.Items[0].Id);
+            Assert.IsNull(driver.Battle.Asteroids.Find(first));
+
+            var again = new Driver(new BattleSetup(new BattleId(1), 7, Fixtures.Units(1, 1), asteroids: new[] { rock, rock }));
+            Assert.AreEqual(spawned, again.Battle.Snapshot.Asteroids[1].Id,
+                "Asteroid number 1: the setup and the spawns share the numbering.");
         }
 
         [Test]

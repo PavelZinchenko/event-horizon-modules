@@ -474,7 +474,7 @@ namespace CombatSimulation.Core
         private void StepPhysics() => World.Step(TickDuration);
 
         // Stage 12. One batch, in unit order: deaths, then retreat completions, then surrender and kill-all, then the
-        // mode's destructions.
+        // mode's destructions, then the ships of the units the mode removes. Their transitions follow the drones.
         // Drone deaths follow the roster batch, then tail segments, repair bots, satellites and asteroids. Bullets leave
         // last, by ID.
         // Attached beams die with their ship.
@@ -530,8 +530,10 @@ namespace CombatSimulation.Core
                 }
             }
             DestroyModeUnits();
+            VanishRemovedUnits();
 
-            // Mothership removal does not remove drones or decoys. Only their own damage, lifetime or pilot command does.
+            // Mothership removal does not remove drones or decoys. Only their own damage, lifetime or pilot command does,
+            // or the removal of their unit.
             for (var i = 0; i < _world.Drones.Count;)
             {
                 var drone = _world.Drones[i];
@@ -539,6 +541,7 @@ namespace CombatSimulation.Core
                 RemoveShip(drone, drone.PendingDeath ? RemovalReason.Death : RemovalReason.Vanish);
                 _world.Drones.RemoveAt(i);
             }
+            RemoveModeUnits();
 
             _tails.RemoveDeadSegments();
             _world.RepairBots.RemoveFinished();

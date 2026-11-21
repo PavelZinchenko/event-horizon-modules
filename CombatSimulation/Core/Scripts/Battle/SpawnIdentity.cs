@@ -43,7 +43,8 @@ namespace CombatSimulation.Core
             return Finish(hash);
         }
 
-        // Asteroid (phase 5, step 14): tag 4, battle u64, index u32 in BattleSetup.Asteroids. Created before tick 0.
+        // Asteroid (phase 5, step 14): tag 4, battle u64, number u32. The setup's asteroids take their index in
+        // BattleSetup.Asteroids before tick 0; each mode spawn takes the next number.
         internal static EntityId CreateAsteroid(BattleId battleId, uint index)
         {
             var hash = StableHash.Begin(AsteroidTag);
