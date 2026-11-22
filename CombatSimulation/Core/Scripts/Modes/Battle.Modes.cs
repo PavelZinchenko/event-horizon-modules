@@ -285,7 +285,7 @@ namespace CombatSimulation.Core
             if (!slot.TakesLiveDrones) return;
             slot.TakesLiveDrones = false;
             foreach (var drone in _world.Drones)
-                if (drone.Bay.Slot == slot && !drone.MothershipOverride.HasValue) drone.MothershipOverride = ship.Id;
+                if (drone.Bay?.Slot == slot && !drone.MothershipOverride.HasValue) drone.MothershipOverride = ship.Id;
         }
 
         private void RequireAction()

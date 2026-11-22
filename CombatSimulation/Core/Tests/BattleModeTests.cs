@@ -467,6 +467,39 @@ namespace CombatSimulation.Core.Tests
         }
 
         [Test]
+        public void ARespawnedUnitDeploysWhileADecoyLives()
+        {
+            var rules = new ScriptRules();
+            var decoys = new DeviceDefinition[] { new DecoyDefinition(10f, 20f, 4, 4f, 100f, 10f) };
+            var units = new List<UnitSetup>
+            {
+                new UnitSetup(new UnitId(1), 0, Fixtures.ShipWith(devices: decoys)),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
+            };
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, units, rules: rules));
+            driver.Deploy(1);
+            driver.Deploy(101);
+            driver.Step();
+            driver.Place(1, new Vec2(50f, 50f), Vec2.Zero);
+            driver.Place(101, new Vec2(150f, 150f), Vec2.Zero);
+            driver.Control(1, systems: 1);
+            driver.Control(1, systems: 0, tick: driver.Tick + 1);
+            driver.Step();
+
+            driver.Kill(1);
+            driver.Step();
+            Assert.AreEqual(UnitStatus.Destroyed, driver.Status(1));
+            Assert.IsTrue(Enumerable.Range(0, driver.Battle.ShipEntryCount).Select(driver.Battle.GetShipEntry)
+                .Any(s => s != null && s.IsDecoy), "A decoy outlives its ship.");
+
+            rules.Mode.Next.Add(context => Assert.IsTrue(context.Respawn(new UnitId(1))));
+            driver.Step();
+            driver.Deploy(1);
+            driver.Step();
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1), "A decoy has no bay, so the live-drone handover skips it.");
+        }
+
+        [Test]
         public void PerformanceCountsDamageKillsAndDeaths()
         {
             // The bolt deals 5: the target's shield takes it.
