@@ -64,6 +64,9 @@ namespace CombatView
 
         public CombatViewSettings Settings { get; }
 
+        // The ship HSV materials, for a game's own ship-like views (Frontier's arrival sprite). The renderer owns them.
+        public HsvMaterials HsvMaterials => _hsv;
+
         // The side of the local player (legacy UnitSide.Player): a stealth ship of it stays more visible.
         public int ViewerSide { get; set; }
 

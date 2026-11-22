@@ -256,6 +256,9 @@ namespace Combat.Integration.Core
         // The last handled snapshot's tick, local or remote.
         protected long LastTick => _lastTick;
 
+        // The views' place between the last two snapshots: 0 draws the one before LastTick, 1 draws LastTick.
+        protected float RenderAlpha => IsStepping ? _source.Alpha : 1f;
+
         // False after the result and after disposal: no deployment, mode command or timer.
         protected bool IsRunning => _source != null && _source.IsRunning;
 
@@ -313,7 +316,7 @@ namespace Combat.Integration.Core
             if (player != null)
                 _ids.TryGetCore(player.Id, out controlled);
 
-            var alpha = IsStepping ? _source.Alpha : 1f;
+            var alpha = RenderAlpha;
             Renderer.ViewPoint = _framing.Center;
             Renderer.Render(alpha, controlled, ref _anchor, Time.deltaTime);
             _asteroids?.Render(alpha, _anchor, Time.deltaTime);
