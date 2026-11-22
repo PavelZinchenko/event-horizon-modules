@@ -319,8 +319,10 @@ namespace CombatSimulation.Core
             _commands.TakeDue(Tick, _dueShipCommands);
             foreach (var command in _dueShipCommands)
             {
+                // As a frame: a pilot's Vanish or ChangeAllegiance applies at its think tick + delay, so a drone that dies
+                // in between leaves one. Counted, not logged.
                 var ship = _world.FindShip(command.EntityId);
-                if (ship == null) Reject(command, "unknown entity");
+                if (ship == null) ++RejectedCommandCount;
                 else if (!Setup.IsLocalOwner(ship.Owner)) Reject(command, "remote owner");
                 else if (command.Kind == ShipCommandKind.Vanish) ship.PendingVanish = true;
                 else ChangeAllegiance(ship, command.Allegiance);

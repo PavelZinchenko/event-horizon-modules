@@ -54,6 +54,10 @@ namespace CombatSimulation.Core
         // As the Vanish ship command (D12).
         public bool Vanish(EntityId id) => _battle.ModeVanish(id);
 
+        // A bullet or beam leaves at stage 12 with a Disposal removal and runs no triggers (Frontier's preparation clears
+        // the enemy's parasites, which restore their lifetime with each hit). A battle with remote owners throws (D10).
+        public bool VanishBullet(EntityId id) => _battle.ModeVanishBullet(id);
+
         // As the ChangeAllegiance ship command (D13).
         public bool ChangeAllegiance(EntityId id, Allegiance allegiance) => _battle.ModeChangeAllegiance(id, allegiance);
 

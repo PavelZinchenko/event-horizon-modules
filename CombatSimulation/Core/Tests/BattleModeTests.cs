@@ -252,6 +252,7 @@ namespace CombatSimulation.Core.Tests
                 Assert.Throws<InvalidOperationException>(() => context.SetNoDamage(new UnitId(1), true));
                 Assert.Throws<InvalidOperationException>(() => context.RemoveUnit(new UnitId(1)));
                 Assert.Throws<InvalidOperationException>(() => context.VanishAsteroid(default));
+                Assert.Throws<InvalidOperationException>(() => context.VanishBullet(default));
                 context.Drain(new UnitId(1), 0f, 0f);
                 context.Publish(new ModeEvent(3));
             });
@@ -336,6 +337,42 @@ namespace CombatSimulation.Core.Tests
             driver.Step();
             Assert.AreEqual(UnitStatus.Active, driver.Status(1), "A later tick adds the ID again.");
             Assert.AreNotEqual(ship, driver.Entity(1));
+        }
+
+        // Frontier's preparation clears the enemy's bullets (TODO/core_results.md, play check): a disposal without the
+        // bullet's triggers.
+        [Test]
+        public void AModeVanishesABulletWithoutItsTriggers()
+        {
+            var rules = new ScriptRules();
+            var bullet = new BulletDefinition(4f, 0f, 0f, 15f, lifetime: 12f);
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, new List<UnitSetup>
+            {
+                new UnitSetup(new UnitId(1), 0, Fixtures.CannonShip(bullet, cooldown: 20f, energyCost: 0f)),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
+            }, rules: rules));
+            driver.Deploy(1);
+            driver.Step();
+
+            driver.Control(1, systems: 1);
+            var id = default(EntityId);
+            for (var i = 0; i < 10 && id.IsNull; ++i)
+            {
+                var spawns = CannonTests.BulletSpawns(driver.StepCollecting());
+                if (spawns.Count > 0) id = spawns[0].EntityId;
+            }
+            Assert.IsFalse(id.IsNull, "The cannon did not fire.");
+            driver.Control(1, systems: 0);
+
+            rules.Mode.Next.Add(context =>
+            {
+                Assert.IsTrue(context.VanishBullet(id));
+                Assert.IsFalse(context.VanishBullet(new EntityId(99)));
+            });
+            var removal = CannonTests.BulletRemovals(driver.StepCollecting()).Single();
+            Assert.AreEqual(id, removal.EntityId);
+            Assert.AreEqual(RemovalReason.Disposal, removal.RemovalReason);
+            Assert.AreEqual(0, driver.Battle.Snapshot.Bullets.Length);
         }
 
         // Common level mode, decision 2.

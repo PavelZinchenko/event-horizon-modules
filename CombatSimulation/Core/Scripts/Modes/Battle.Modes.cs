@@ -117,6 +117,17 @@ namespace CombatSimulation.Core
             return true;
         }
 
+        // Stage 1: the bullet leaves at stage 12 without its triggers, as a bullet attached to a removed ship.
+        internal bool ModeVanishBullet(EntityId id)
+        {
+            RequireAction();
+            if (!_world.Entities.TryGet(id, out var handle) || !_world.Bullets.TryGet(handle, out var index)) return false;
+            ref var bullet = ref _world.Bullets[index];
+            bullet.SkipTriggers = true;
+            if (bullet.PendingRemoval == RemovalReason.None) bullet.PendingRemoval = RemovalReason.Disposal;
+            return true;
+        }
+
         // Stage 1, before the engine and the physics. A body with a fixed position keeps its zero velocity.
         internal bool ModeSetVelocity(EntityId id, Vec2 velocity)
         {
