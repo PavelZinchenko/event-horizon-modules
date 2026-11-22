@@ -1188,10 +1188,14 @@ namespace CombatView
 
             baseView.UpdateView(deltaTime);
 
-            // Legacy DistanceJointVisualizer: the rope ends at the drawn ship; without it the rope is hidden.
+            // Legacy DistanceJointVisualizer: the rope ends at the drawn ship; without it the rope is hidden. The hook and
+            // the ship each take their image nearest to the anchor, so a pair across the anchor's far side would be about
+            // a world apart. The rope ends at the ship's image nearest to the hook.
             var rope = view.Setup.Rope;
             if (rope)
-                rope.UpdateRope(_ships.TryGetValue(view.ParentId, out var ship) && ship.HasPose ? ship.Position : (Vector2?)null);
+                rope.UpdateRope(_ships.TryGetValue(view.ParentId, out var ship) && ship.HasPose
+                    ? Placement.NearestImage(_torus, view.Position, new Vec2(ship.Position.x, ship.Position.y))
+                    : (Vector2?)null);
         }
 
         // Legacy TextEffect with fading: opacity 1 - t^2 and scale 1 - t^3 of the camera's orthographic size, where t

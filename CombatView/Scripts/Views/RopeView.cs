@@ -49,11 +49,13 @@ namespace CombatView.Views
 
         private void UpdateChainPositions(Vector3 targetPosition)
         {
-            var length = targetPosition.sqrMagnitude;
-            if (length > _length*_length)
-                _length = Mathf.Sqrt(length);
+            // Legacy DistanceJoint2D held the ship within maxLength. The core rope is soft, so a stretch past it must not
+            // leave the rope slack after the ships come closer again.
+            var distance = targetPosition.magnitude;
+            if (distance > _length)
+                _length = Mathf.Min(distance, _maxLength);
 
-            if (_length < _maxLength*0.5f)
+            if (_length < _maxLength*0.5f || distance >= _length)
             {
                 for (int i = 0; i < _segments; i++)
                     _chainPoints[i] = targetPosition * i / (_segments - 1);
