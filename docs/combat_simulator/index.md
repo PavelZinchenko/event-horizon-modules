@@ -22,7 +22,7 @@ History in Event Horizon: physics and the phase 2 core (steps 1–11) exist; pha
 | [Network library](network.md) | Peer and transport contracts, channels, encoding, tick clock. |
 | [Runtime network session](runtime_session.md) | Session API, handshake, session thread, duel scene and lobby, controls, wire format. |
 | [Core foundation](core.md) | Battle setup, tick stages, identity, roster, engine, contacts, damage, result and timer, allegiance, snapshots, pilots, scripted battle. |
-| [Battle modes](battle_modes.md) | Rules and modes, mode actions and commands, respawn, unit performance, `RosterMode`, world size. |
+| [Battle modes](battle_modes.md) | Rules and modes, mode actions and commands, pickups, respawn, unit performance, `RosterMode`, world size. |
 | [Core network authority](core_network.md) | Authority, outgoing hits, inbound owner records, fire confirmations, corrections, homing missile sync. |
 | [Core weapons and bullets](core_weapons.md) | Bullets, missiles, triggers, impacts, damage effects, harpoons, satellites, weapon classes, beams. |
 | [Core devices](core_devices.md) | Point defense, drone bays, repair bots, decoys, shields, teleporter, gravity generator, asteroids, device statuses. |

@@ -7,7 +7,7 @@ The core runs the world: physics, ships, devices, bullets, contacts, damage and 
 | Mode | Assembly | Game |
 | --- | --- | --- |
 | `RosterMode` | `CombatSimulation.Modes` | Event Horizon's roster battle and online duel. Frontier's PvP duel can use it. |
-| Frontier's modes | A Frontier engine-free assembly (planned) | The common level, the arena and the other Frontier modes. |
+| Frontier's modes | Frontier's engine-free `CombatModes` | The common level, the arena and the other Frontier modes. |
 
 ## Rules and mode
 
@@ -45,6 +45,10 @@ The actions run at once, in call order, before the queued commands. They have no
 | `SpawnAsteroid(AsteroidSetup)` | Adds an asteroid at once and returns its entity ID (decision 2). The ID is new in the battle: the setup's asteroids take the numbers 0 to n − 1, and each spawn takes the next. A free storage entry is reused with a new generation. |
 | `VanishAsteroid(EntityId)` | The asteroid leaves at stage 12 with an `AsteroidRemoval` event whose `RemovalReason` is `Vanish`: the view plays no explosion, and a mode gives no loot. |
 | `VanishBullet(EntityId)` | The bullet or beam leaves at stage 12 with a `Removal` event whose `RemovalReason` is `Disposal`, and runs no triggers: no detonation and no children. Frontier's preparation clears the enemy's bullets with it, as legacy does. |
+| `SpawnPickup(PickupSetup)` | Adds a pickup at once and returns its entity ID. See "Pickups". |
+| `VanishPickup(EntityId)` | The pickup leaves at stage 12 with a `PickupRemoval` event whose `RemovalReason` is `Vanish`. |
+| `SetCollector(UnitId, PickupCollector)` | What the unit's ship does with pickups: `Collect`, `Attract`, both or `None`. The flags stay through respawns and `ChangeRules` until the mode clears them. |
+| `RestoreDrone(DroneBayKey)` | One drone back in the bay's hangar, when the bay has room. No build cycles: a drone that docks, not a rebuild. False for an unknown unit, a device that is not a drone bay, or a full bay. Frontier's salvage drones dock with it. |
 | `SetVelocity(EntityId, Vec2)` | Sets the ship's linear velocity at once. `BeginTick` runs before the engine and the physics, so the snapshot's velocity is the ship's velocity until this call. A body with a fixed position keeps its zero velocity. |
 | `Drain(UnitId, armorFraction, shieldFraction)` | At stage 10, after the damage: the unit's active ship of a local owner loses the fractions of its maximum armor and shield. No resistance; both delays restart. |
 | `SetNoDamage(UnitId, bool)` | Legacy `NoDamageSystem` (Frontier's preparation ships, the god mode cheat). The unit's ship gets its full armor back at stage 10 after the damage of each tick, so no hit kills it. The hit still counts in the performance and gives damage events; shield and energy change as without it. Drains, `DestroyUnit` and the unit's drones are not covered. The flag stays through respawns and `ChangeRules` until the mode clears it; `UnitState.NoDamage` shows it. |
@@ -56,6 +60,21 @@ Rules:
 1. An action outside `BeginTick` throws. `Publish` is also allowed in `EndTick`.
 2. With remote owners every action except `Drain`, `Publish` and `Random` throws (D10). The online duel runs only `RosterMode`, which uses only `Drain`. A networked mode can come later: a mode changes the battle only through actions, so authority can be added to them.
 3. A mode reads no Unity state, no wall time and no `Dictionary` enumeration order.
+
+## Pickups
+
+Frontier's loot (Frontier `TODO/loot.md`, F06). A pickup is a small object that moves, lives for a time, follows a collecting ship and is collected once. The core knows only an opaque `long` reward ID. The mode decides what drops and where; the application turns the reward ID into its item and grants it on the `Collected` removal.
+
+1. **Setup.** `PickupSetup` gives the position, velocity, angle, spin (radians per second), scale, reward ID and lifetime (`DefaultLifetimeTicks` 9000, legacy 180 s). The collection circle has radius scale / 2. The ID takes the next pickup number (`SpawnIdentity.CreatePickup`), so it never repeats in the battle.
+2. **Kinematic.** A pickup has no physics body and no contacts. Nothing pushes it, and it pushes nothing (legacy loot is a body of weight 0.1; owner, 2026-11-23).
+3. **Motion (stage 4).** Constant velocity with the torus wrap. The legacy magnet pulls it toward the nearest `Attract` ship within 4 + ship scale / 2 + pickup scale / 2: acceleration `(direction × 10 + ship velocity − pickup velocity) × 10` per second. The lower entity ID wins a tie.
+4. **Collection (after stage 9).** A `Collect` ship takes the pickup when the torus distance is below the pickup radius plus the ship's hull radius. It is an overlap test, not a contact, so `NoContacts` does not stop it. When two ships reach it in one tick, the lower entity ID wins. A long hull collects a little early at its sides; legacy uses the exact collider. The ceasefire does not stop it, as legacy.
+5. **Collectors.** A roster ship collects by its unit's `SetCollector` flags. A drone collects (never attracts) when its definition has `ShipDefinition.CollectsPickups`. Only local ships collect.
+6. **Removal (stage 12).** In storage order: the collected, the vanished, then the expired. Each gives a `PickupRemoval` event ([Snapshots and events](core.md#snapshots-and-events)). The pickup lives `LifetimeTicks` ticks, its spawn tick included.
+7. **Snapshot.** `BattleSnapshot.Pickups` lists the live pickups: entity, reward ID, scale, position, angle, velocity, expiry tick and `Life` (the remaining share of the lifetime). Views read the snapshot, so a pickup has no spawn event.
+8. **Drops.** The ship `Removal` event carries the ship's last position (`Point`) and velocity (`Velocity`), so a mode can place a drop at the next `BeginTick`.
+
+Local battles only: the four actions throw with remote owners (D10). Main uses none of them, so its scripted digest did not change. `PickupTests` covers the motion and wrap, the magnet, the collection by the lower ID, a `NoContacts` collecting drone, the expiry, `RestoreDrone` and the remote-owner rejection.
 
 ## Mode commands
 
