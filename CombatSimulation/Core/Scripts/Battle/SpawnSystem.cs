@@ -77,8 +77,14 @@ namespace CombatSimulation.Core
                 var origin = Physics.GetPosition(parent.Body);
                 var angle = Physics.GetAngle(parent.Body);
                 Physics.SetPose(body, origin, angle);
-                Physics.TryFindFreePosition(body, origin, SearchDistance, out var position);
-                Physics.SetPose(body, position, angle);
+                // A drone without contacts (ShipDefinition.PermanentStatus: Frontier's salvage drone) overlaps nothing,
+                // so it stays at the mothership's centre, as legacy SalvageDroneBay launches it from there. The search
+                // ignores collision filters, so it would push the drone out of the mothership's hull.
+                if ((ship.Status & ShipStatusFlags.NoContacts) == 0)
+                {
+                    Physics.TryFindFreePosition(body, origin, SearchDistance, out var position);
+                    Physics.SetPose(body, position, angle);
+                }
             }
             Satellites.Add(_world, ship);
 

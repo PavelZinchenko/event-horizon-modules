@@ -170,7 +170,24 @@ namespace CombatSimulation.Core.Tests
             Assert.Greater(HitsOnDrone(control, normal), 0, "The same drone without the status absorbs them.");
         }
 
-        private static (Driver, ScriptRules, ShipEntity) LaunchSalvageDrone(bool salvage)
+        // Legacy SalvageDroneBay launches from the mothership's centre; a drone with contacts is pushed out of its hull.
+        [Test]
+        public void ADroneWithNoContactsLaunchesAtTheMothershipCentre()
+        {
+            Assert.Less(LaunchOffset(salvage: true), 0.01f);
+            Assert.Greater(LaunchOffset(salvage: false), 0.5f, "A drone with contacts clears the carrier's hull.");
+        }
+
+        private static float LaunchOffset(bool salvage)
+        {
+            var (driver, _, drone) = LaunchSalvageDrone(salvage, place: false);
+            var ships = driver.Battle.Snapshot.Ships.ToArray();
+            var carrier = ships.Single(ship => !ship.IsDrone && ship.UnitId == Player);
+            var launched = ships.Single(ship => ship.Id == drone.Id);
+            return (launched.Position - carrier.Position).Length;
+        }
+
+        private static (Driver, ScriptRules, ShipEntity) LaunchSalvageDrone(bool salvage, bool place = true)
         {
             var droneDefinition = new ShipDefinition(0.5f, 1f, Fixtures.Engine, 100f, new ResourceDefinition(0f),
                 new ResourceDefinition(100f), collectsPickups: salvage,
@@ -186,7 +203,7 @@ namespace CombatSimulation.Core.Tests
             driver.Place(1, new Vec2(50f, 50f), Vec2.Zero);
             driver.Place(101, new Vec2(150f, 150f), Vec2.Zero);
             var drone = DroneBayTests.Launch(driver);
-            DroneBayTests.Place(driver, drone, new Vec2(55f, 50f));
+            if (place) DroneBayTests.Place(driver, drone, new Vec2(55f, 50f));
             return (driver, rules, drone);
         }
 
