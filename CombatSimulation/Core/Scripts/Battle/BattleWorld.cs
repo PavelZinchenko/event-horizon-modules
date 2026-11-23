@@ -23,6 +23,7 @@ namespace CombatSimulation.Core
             });
             Units = new UnitTable(setup);
             Asteroids = new Asteroids(this);
+            Pickups = new Pickups(this);
         }
 
         public BattleSetup Setup { get; }
@@ -43,6 +44,7 @@ namespace CombatSimulation.Core
         public RepairBots RepairBots { get; set; }
         public SatelliteStore SatelliteStore { get; set; }
         public Asteroids Asteroids { get; }
+        public Pickups Pickups { get; }
         public Decoys Decoys { get; set; }
         public EntityRegistry Entities { get; } = new EntityRegistry();
         public ShapeTable Shapes { get; } = new ShapeTable();
@@ -116,10 +118,12 @@ namespace CombatSimulation.Core
             Drones.Insert(index, ship);
         }
 
-        public void AddShipShapes(ShipEntity ship, Filter filter)
+        // The hull filter follows the ship's status, so a permanent NoContacts (ShipDefinition.PermanentStatus) holds from
+        // the spawn tick on.
+        public void AddShipShapes(ShipEntity ship)
         {
             var shapeDef = ShapeDef.Default;
-            shapeDef.Filter = filter;
+            shapeDef.Filter = ShipStatusRules.HullFilter(ship);
             var parts = ship.Definition.HullParts;
             for (var i = 0; i < parts.Count; ++i)
             {

@@ -218,6 +218,9 @@ namespace CombatSimulation.Core
         // ModeContext.SetNoDamage.
         public readonly bool NoDamage;
 
+        // ModeContext.SetCollector.
+        public readonly PickupCollector Collector;
+
         internal UnitState(Unit slot)
         {
             UnitId = slot.UnitId;
@@ -233,6 +236,7 @@ namespace CombatSimulation.Core
             DamageFraction = slot.OwnerDamageFraction ?? GetDamageFraction(slot);
             Performance = slot.Performance;
             NoDamage = slot.NoDamage;
+            Collector = slot.Collector;
         }
 
         private static float GetDamageFraction(Unit slot)

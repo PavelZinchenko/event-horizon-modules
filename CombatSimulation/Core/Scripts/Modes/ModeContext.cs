@@ -82,6 +82,22 @@ namespace CombatSimulation.Core
         // The asteroid leaves at stage 12 with an AsteroidRemoval event whose RemovalReason is Vanish.
         public bool VanishAsteroid(EntityId id) => _battle.ModeVanishAsteroid(id);
 
+        // Adds a pickup at once (loot plan, L1, L2). Its ID is new in the battle. It moves from this tick on, and the
+        // snapshot of this tick lists it. A battle with remote owners throws (D10).
+        public EntityId SpawnPickup(in PickupSetup pickup) => _battle.ModeSpawnPickup(pickup);
+
+        // The pickup leaves at stage 12 with a PickupRemoval event whose RemovalReason is Vanish.
+        public bool VanishPickup(EntityId id) => _battle.ModeVanishPickup(id);
+
+        // What the unit's ship does with pickups (loot plan, L5). The flags stay through respawns and ChangeRules until the
+        // mode clears them. A battle with remote owners throws (D10).
+        public bool SetCollector(UnitId id, PickupCollector flags) => _battle.ModeSetCollector(id, flags);
+
+        // One drone back in the bay's hangar (loot plan, L9: a salvage drone docks). It applies only when the bay has room,
+        // so the mode calls it after the drone's removal, in a later tick than its vanish. False for an unknown unit, a
+        // device that is not a drone bay, or a full bay. A battle with remote owners throws (D10).
+        public bool RestoreDrone(DroneBayKey bay) => _battle.ModeRestoreDrone(bay);
+
         // The unit's ship, from this tick on, gets its full armor back after the damage of each tick, so no hit kills it
         // (legacy NoDamageSystem: Frontier's preparation ships and the god mode cheat). Shield, energy and the damage
         // events stay as without it; drains, a forced destruction and the unit's drones are not covered. The flag stays

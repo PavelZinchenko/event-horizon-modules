@@ -290,7 +290,7 @@ namespace CombatSimulation.Core
                 // Initialize with the owner's retained resources, not values inferred from a prediction.
                 slot.Import(record, null);
                 ship.Initialize(operation.EntityId, slot, body, operation.Tick, Setup.DamageTypes.Count);
-                _world.AddShipShapes(ship, CollisionFilters.Ship(ship.Allegiance));
+                _world.AddShipShapes(ship);
                 SetSpawnPose(body, operation.Pose);
                 Satellites.Add(_world, ship);
                 _world.Events.Add(BattleEvent.Spawn(BattleId, Tick, _world.Events.Count, ship));
@@ -325,7 +325,7 @@ namespace CombatSimulation.Core
             if (restored) bay.RecordRemoteRestore();
             var body = Physics.CreateBody(new BodyDef { Mass = bay.Drone.Mass });
             ship.InitializeDrone(operation.EntityId, bay, body, operation.Tick, Setup.DamageTypes.Count);
-            _world.AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));
+            _world.AddShipShapes(ship);
             SetSpawnPose(body, operation.Pose);
             Satellites.Add(_world, ship);
             _world.AddDrone(ship);

@@ -70,7 +70,7 @@ namespace CombatSimulation.Core
 
             var body = Physics.CreateBody(new BodyDef { Mass = bay.Drone.Mass });
             ship.InitializeDrone(id, bay, body, Tick, Setup.DamageTypes.Count);
-            _world.AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));
+            _world.AddShipShapes(ship);
             if (parent.Definition.Devices[request.DeviceIndex] is ClonningCenterDefinition) PlaceClone(parent, ship);
             else
             {

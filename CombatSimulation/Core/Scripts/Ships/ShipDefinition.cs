@@ -17,10 +17,11 @@ namespace CombatSimulation.Core
             IReadOnlyList<BarrelDefinition> barrels = null, IReadOnlyList<DeviceDefinition> devices = null,
             IReadOnlyList<DamageResistance> resistances = null, float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal,
             IReadOnlyList<SatelliteDefinition> satellites = null, float chanceToAvoidMissile = 0f,
-            float armorRepairRate = 0f, float armorRepairDelay = 0f, BodyFlags bodyFlags = BodyFlags.None)
+            float armorRepairRate = 0f, float armorRepairDelay = 0f, BodyFlags bodyFlags = BodyFlags.None,
+            bool collectsPickups = false, ShipStatusFlags permanentStatus = ShipStatusFlags.None)
             : this(CircleHull(hullRadius, extraHullParts), mass, engine, armor, shield, energy, engineWithoutEnergy,
                 rammingDamageMultiplier, barrels, devices, resistances, scale, teleportImmune, targetPriority, satellites,
-                chanceToAvoidMissile, armorRepairRate, armorRepairDelay, bodyFlags)
+                chanceToAvoidMissile, armorRepairRate, armorRepairDelay, bodyFlags, collectsPickups, permanentStatus)
         {
         }
 
@@ -32,7 +33,8 @@ namespace CombatSimulation.Core
             IReadOnlyList<DeviceDefinition> devices = null, IReadOnlyList<DamageResistance> resistances = null,
             float scale = 0f, bool teleportImmune = false, TargetPriority targetPriority = TargetPriority.Normal,
             IReadOnlyList<SatelliteDefinition> satellites = null, float chanceToAvoidMissile = 0f,
-            float armorRepairRate = 0f, float armorRepairDelay = 0f, BodyFlags bodyFlags = BodyFlags.None)
+            float armorRepairRate = 0f, float armorRepairDelay = 0f, BodyFlags bodyFlags = BodyFlags.None,
+            bool collectsPickups = false, ShipStatusFlags permanentStatus = ShipStatusFlags.None)
         {
             if (hull == null) throw new ArgumentNullException(nameof(hull));
             if (hull.Count == 0) throw new ArgumentException("A hull needs at least one shape.", nameof(hull));
@@ -106,6 +108,8 @@ namespace CombatSimulation.Core
             Scale = scale > 0f ? scale : 2f * hullRadius;
             TeleportImmune = teleportImmune;
             BodyFlags = bodyFlags;
+            CollectsPickups = collectsPickups;
+            PermanentStatus = permanentStatus;
             TargetPriority = targetPriority;
             ChanceToAvoidMissile = chanceToAvoidMissile;
             HullParts = parts.AsReadOnly();
@@ -143,6 +147,14 @@ namespace CombatSimulation.Core
         // Legacy prefab constraints (exploration plan, E15): a starbase has a fixed position, a turret also a fixed
         // rotation. The ship's body has these flags; contacts and impulses do not move it.
         public BodyFlags BodyFlags { get; }
+
+        // Loot plan, L5: a drone with it collects pickups (Frontier's salvage drone). A roster ship collects by
+        // ModeContext.SetCollector instead.
+        public bool CollectsPickups { get; }
+
+        // Loot plan, L9: stage 3 adds these flags to the ship's status every tick, from its spawn on, as BodyFlags do for
+        // the body (Frontier's salvage drone: NoContacts, legacy UntouchableSystem).
+        public ShipStatusFlags PermanentStatus { get; }
 
         public TargetPriority TargetPriority { get; }
 

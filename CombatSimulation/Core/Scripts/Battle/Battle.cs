@@ -166,6 +166,7 @@ namespace CombatSimulation.Core
             StepPhysics();
             _contacts.Collect();
             _contacts.Resolve();
+            _world.Pickups.Collect();
             _network?.AccumulateRemoteDamage();
             _world.RepairBots.ApplyDamage();
             _world.SatelliteStore.ApplyDamage();
@@ -220,6 +221,7 @@ namespace CombatSimulation.Core
         internal TailSegment FindSegment(EntityId id) => _tails.FindSegment(id);
         internal Asteroids Asteroids => _world.Asteroids;
         internal Asteroid FindAsteroid(EntityId id) => _world.Asteroids.Find(id);
+        internal Pickups Pickups => _world.Pickups;
         internal void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse) =>
             _tails.QueueSegmentHit(segment, damage, impulse);
         internal int TriggerParentCount => _triggers.TriggerParentCount;
@@ -386,8 +388,9 @@ namespace CombatSimulation.Core
                     ((StealthDevice)ship.GetDevice(d)).OnDeviceActivated(DeviceContext, ship, d < active);
         }
 
-        // Stage 3 (phase 5, step 7). Collects the status of each ship's running device uses. A change of NoContacts
-        // changes the hull filters; physics follows at this tick's step.
+        // Stage 3 (phase 5, step 7). Collects the status of each ship's running device uses, over the definition's
+        // permanent status (loot plan, L9). A change of NoContacts changes the hull filters; physics follows at this tick's
+        // step.
         private void EvaluateModifiers()
         {
             for (var i = 0; i < _world.ShipEntryCount; ++i)
@@ -395,7 +398,7 @@ namespace CombatSimulation.Core
                 var ship = _world.GetShipEntry(i);
                 if (ship == null) continue;
 
-                var status = new ShipStatus();
+                var status = new ShipStatus { Flags = ship.Definition.PermanentStatus };
                 for (var d = 0; d < ship.DeviceCount; ++d)
                     ship.GetDevice(d).AddStatus(DeviceContext, ship, ref status);
 
@@ -439,6 +442,7 @@ namespace CombatSimulation.Core
             _tails.UpdateSegmentMotion();
             _world.RepairBots.Update();
             _world.Asteroids.RecordPreStepVelocities();
+            _world.Pickups.Move();
 
             // Each missile reads only its own state and the grid, so the storage order has no effect. Owner target
             // records of this tick apply first (P3). A rocket and a beam bolt read only their own state (phase 5, steps
@@ -477,8 +481,8 @@ namespace CombatSimulation.Core
 
         // Stage 12. One batch, in unit order: deaths, then retreat completions, then surrender and kill-all, then the
         // mode's destructions, then the ships of the units the mode removes. Their transitions follow the drones.
-        // Drone deaths follow the roster batch, then tail segments, repair bots, satellites and asteroids. Bullets leave
-        // last, by ID.
+        // Drone deaths follow the roster batch, then tail segments, repair bots, satellites, asteroids and pickups. Bullets
+        // leave last, by ID.
         // Attached beams die with their ship.
         private void ApplyStructureChanges()
         {
@@ -549,6 +553,7 @@ namespace CombatSimulation.Core
             _world.RepairBots.RemoveFinished();
             _world.SatelliteStore.DestroyDead();
             _world.Asteroids.RemoveDead(this);
+            _world.Pickups.RemoveFinished();
             RemoveBullets();
         }
 
@@ -657,7 +662,7 @@ namespace CombatSimulation.Core
             var body = World.CreateBody(new BodyDef { Mass = definition.Mass, Flags = definition.BodyFlags });
             ship.Initialize(id, slot, body, Tick, Setup.DamageTypes.Count);
 
-            _world.AddShipShapes(ship, CollisionFilters.Ship(ship.Allegiance));
+            _world.AddShipShapes(ship);
 
             PlaceDeployment(slot, ship, body, placement);
             Satellites.Add(_world, ship);
@@ -691,7 +696,8 @@ namespace CombatSimulation.Core
             _world.RepairBots.RemoveShip(ship, reason);
             for (var i = 0; i < ship.DeviceCount; ++i) ship.GetDevice(i).Stop(DeviceContext);
             RemoveAttachedBullets(ship);
-            _world.Events.Add(BattleEvent.Removal(BattleId, Tick, _world.Events.Count, ship, reason));
+            _world.Events.Add(BattleEvent.Removal(BattleId, Tick, _world.Events.Count, ship, reason,
+                World.GetPosition(ship.Body), World.GetLinearVelocity(ship.Body)));
             if (ship.IsDrone) CaptureRemoval(ship.Id, ship.Owner, reason, ship.Bay.Key);
             else if (ship.IsDecoy) CaptureRemoval(ship.Id, ship.Owner, reason);
             for (var i = 0; i < ship.ShapeCount; ++i)

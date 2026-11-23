@@ -56,6 +56,15 @@ namespace CombatSimulation.Core
             return true;
         }
 
+        // ModeContext.RestoreDrone (loot plan, L9): one drone back in the hangar when the bay has room, without the build
+        // cycles: a docking drone, not a rebuild.
+        public bool Return()
+        {
+            if (!HasRoom) return false;
+            ++Restored;
+            return true;
+        }
+
         // A remote copy: the owner launched a drone that its replicator restored.
         public void RecordRemoteRestore() => ++Restored;
 

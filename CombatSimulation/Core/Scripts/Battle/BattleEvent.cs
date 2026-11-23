@@ -50,6 +50,11 @@ namespace CombatSimulation.Core
         // For the application (battle modes): an event that the mode published (ModeContext.Publish). ModeEvent has the
         // mode's code and values.
         Mode = 14,
+
+        // A pickup left (loot plan, L7). EntityId is the pickup, Tag its reward ID, Point its last position, and
+        // RemovalReason Collected (ParentId is the collecting ship), Expiry or Vanish. Side is -1. Views read the pickups
+        // from the snapshot, so a pickup has no spawn event.
+        PickupRemoval = 15,
     }
 
     public enum RemovalReason : byte
@@ -65,6 +70,9 @@ namespace CombatSimulation.Core
 
         // A ship left without a death (vanish command, D12). The roster records a retreat.
         Vanish,
+
+        // A ship took a pickup (loot plan, L7). Pickups only; never sent.
+        Collected,
     }
 
     // The same set as the application's roster change reasons (phase 3a).
@@ -134,10 +142,12 @@ namespace CombatSimulation.Core
 
         public readonly BattleResult Result;
 
-        // Hit: the attacker, the damage before the shield, and the contact point (zero for a ship touch).
+        // Hit: the attacker, the damage before the shield, and the contact point (zero for a ship touch). Ship removal:
+        // the ship's last position, and Velocity its linear velocity (loot plan, L2: the mode places the drop).
         public readonly EntityId AttackerId;
         public readonly float Damage;
         public readonly Vec2 Point;
+        public readonly Vec2 Velocity;
         // Point-defense or gravity-wave hit, disarm: index on the attacking ship. Teleport and gravity wave: the device.
         // Other events use -1.
         public readonly int DeviceIndex;
@@ -171,7 +181,7 @@ namespace CombatSimulation.Core
             BattleEventAuthority authority = BattleEventAuthority.Committed, EntityId previousId = default,
             bool isDecoy = false, Vec2 destination = default,
             BulletTriggerConditions removalConditions = BulletTriggerConditions.None, ModeEvent modeEvent = default,
-            long tag = 0)
+            long tag = 0, Vec2 velocity = default)
         {
             BattleId = battleId;
             Tick = tick;
@@ -197,6 +207,7 @@ namespace CombatSimulation.Core
             AttackerId = attackerId;
             Damage = damage;
             Point = point;
+            Velocity = velocity;
             DeviceIndex = deviceIndex;
             Destination = destination;
             BulletDefinition = bulletDefinition;
@@ -213,10 +224,12 @@ namespace CombatSimulation.Core
                 ship.Owner, ship.Definition, RemovalReason.None, default, default, UnitTransitionReason.None, 0, 0f, 0f,
                 default, parentId: ship.MothershipId, bayKey: ship.Bay?.Key, authority: authority, isDecoy: ship.IsDecoy);
 
-        internal static BattleEvent Removal(BattleId battleId, long tick, int sequence, ShipEntity ship, RemovalReason reason) =>
+        internal static BattleEvent Removal(BattleId battleId, long tick, int sequence, ShipEntity ship, RemovalReason reason,
+            Vec2 position, Vec2 velocity) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.Removal, ship.Id, ship.Slot?.UnitId ?? default, ship.Side,
                 ship.Owner, ship.Definition, reason, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
-                parentId: ship.MothershipId, bayKey: ship.Bay?.Key, isDecoy: ship.IsDecoy);
+                point: position, parentId: ship.MothershipId, bayKey: ship.Bay?.Key, isDecoy: ship.IsDecoy,
+                velocity: velocity);
 
         internal static BattleEvent BulletSpawn(BattleId battleId, long tick, int sequence, in BulletEntity bullet,
             BattleEventAuthority authority = BattleEventAuthority.Committed) =>
@@ -289,6 +302,11 @@ namespace CombatSimulation.Core
                 asteroid.Owner, null, reason, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
                 point: position, tag: asteroid.Setup.Tag);
 
+        internal static BattleEvent PickupRemoval(BattleId battleId, long tick, int sequence, Pickup pickup) =>
+            new BattleEvent(battleId, tick, sequence, BattleEventKind.PickupRemoval, pickup.Id, default, -1, 0, null,
+                pickup.PendingRemoval, default, default, UnitTransitionReason.None, 0, 0f, 0f, default,
+                point: pickup.Position, parentId: pickup.Collector, tag: pickup.RewardId);
+
         internal static BattleEvent AuxiliaryRemoval(BattleId battleId, long tick, int sequence, EntityId id, int owner,
             EntityId shipId, Vec2 position, RemovalReason reason) =>
             new BattleEvent(battleId, tick, sequence, BattleEventKind.AuxiliaryRemoval, id, default, -1, owner, null, reason,
@@ -344,6 +362,10 @@ namespace CombatSimulation.Core
                     return $"{Tick}.{Sequence} Damage {EntityId} type {DeviceIndex}: {Damage}";
                 case BattleEventKind.Mode:
                     return $"{Tick}.{Sequence} Mode {ModeEvent.Code} ({ModeEvent.Value0}, {ModeEvent.Value1})";
+                case BattleEventKind.PickupRemoval:
+                    return RemovalReason == RemovalReason.Collected
+                        ? $"{Tick}.{Sequence} Pickup {EntityId} (reward {Tag}) collected by {ParentId}"
+                        : $"{Tick}.{Sequence} Pickup {EntityId} (reward {Tag}) {RemovalReason}";
                 default:
                     return $"{Tick}.{Sequence} {Kind}";
             }

@@ -77,7 +77,7 @@ namespace CombatSimulation.Core
 
             var body = Physics.CreateBody(new BodyDef { Mass = definition.Ship.Mass });
             ship.InitializeDecoy(id, parent, definition, body, tick, tick + lifetime, Setup.DamageTypes.Count);
-            _world.AddShipShapes(ship, CollisionFilters.Drone(ship.Allegiance));
+            _world.AddShipShapes(ship);
             Physics.SetPose(body, position, 0f);
             Physics.SetLinearVelocity(body, velocity);
             Physics.SetAngularVelocity(body, spin * (float)(Math.PI / 180.0));

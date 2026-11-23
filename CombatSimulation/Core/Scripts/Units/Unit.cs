@@ -117,5 +117,9 @@ namespace CombatSimulation.Core
         // ModeContext.SetNoDamage: the unit's ship gets its armor back after the damage of each tick (legacy
         // NoDamageSystem). Its drones do not. It stays through respawns and ChangeRules until the mode clears it.
         internal bool NoDamage { get; set; }
+
+        // ModeContext.SetCollector (loot plan, L5): what the unit's ship does with pickups. It stays through respawns and
+        // ChangeRules until the mode clears it.
+        internal PickupCollector Collector { get; set; }
     }
 }

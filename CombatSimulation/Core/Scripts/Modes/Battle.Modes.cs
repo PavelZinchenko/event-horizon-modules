@@ -182,6 +182,37 @@ namespace CombatSimulation.Core
             return _world.Asteroids.Vanish(id);
         }
 
+        internal EntityId ModeSpawnPickup(in PickupSetup pickup)
+        {
+            RequireAction();
+            return _world.Pickups.Spawn(pickup, Tick);
+        }
+
+        internal bool ModeVanishPickup(EntityId id)
+        {
+            RequireAction();
+            return _world.Pickups.Vanish(id);
+        }
+
+        internal bool ModeSetCollector(UnitId id, PickupCollector flags)
+        {
+            RequireAction();
+            var slot = Units.Find(id);
+            if (slot == null) return false;
+            slot.Collector = flags;
+            return true;
+        }
+
+        internal bool ModeRestoreDrone(DroneBayKey key)
+        {
+            RequireAction();
+            var slot = Units.Find(key.UnitId);
+            var devices = slot?.Setup.Ship.Devices;
+            if (devices == null || key.DeviceIndex >= devices.Count || !(devices[key.DeviceIndex] is DroneBayDefinition))
+                return false;
+            return slot.GetBay(key.DeviceIndex).Return();
+        }
+
         internal bool ModeSetNoDamage(UnitId id, bool noDamage)
         {
             RequireAction();

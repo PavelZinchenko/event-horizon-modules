@@ -46,6 +46,9 @@ namespace CombatSimulation.Core
         // Live asteroids in setup order (phase 5, step 14).
         public ReadOnlySpan<AsteroidState> Asteroids => new ReadOnlySpan<AsteroidState>(_asteroids, 0, _asteroidCount);
 
+        // Live pickups in storage order; the order has no meaning (loot plan, L7).
+        public ReadOnlySpan<PickupState> Pickups => new ReadOnlySpan<PickupState>(_pickups, 0, _pickupCount);
+
         // Every unit in table order: the setup's units, then the ones a mode added.
         public ReadOnlySpan<UnitState> Units => new ReadOnlySpan<UnitState>(_roster, 0, _unitCount);
 
@@ -106,6 +109,7 @@ namespace CombatSimulation.Core
             target._shieldCount = Copy(_shields, _shieldCount, ref target._shields);
             target._segmentCount = Copy(_segments, _segmentCount, ref target._segments);
             target._asteroidCount = Copy(_asteroids, _asteroidCount, ref target._asteroids);
+            target._pickupCount = Copy(_pickups, _pickupCount, ref target._pickups);
             target._eventCount = Copy(_events, _eventCount, ref target._events);
             target._hitCount = Copy(_outgoingHits, _hitCount, ref target._outgoingHits);
             target._operationCount = Copy(_outgoingOperations, _operationCount, ref target._outgoingOperations);
@@ -205,6 +209,13 @@ namespace CombatSimulation.Core
             for (var i = 0; i < asteroids.Count; ++i)
                 if (asteroids[i] != null) _asteroids[_asteroidCount++] = new AsteroidState(asteroids[i], world);
 
+            var pickups = battle.Pickups;
+            if (_pickups.Length < pickups.AliveCount)
+                _pickups = new PickupState[Math.Max(pickups.AliveCount, _pickups.Length * 2)];
+            _pickupCount = 0;
+            for (var i = 0; i < pickups.Items.Count; ++i)
+                if (pickups.Items[i].IsAlive) _pickups[_pickupCount++] = new PickupState(pickups.Items[i], tick);
+
             if (_events.Length < events.Count)
                 _events = new BattleEvent[Math.Max(events.Count, _events.Length * 2)];
             events.CopyTo(_events);
@@ -244,6 +255,8 @@ namespace CombatSimulation.Core
         private int _segmentCount;
         private AsteroidState[] _asteroids = Array.Empty<AsteroidState>();
         private int _asteroidCount;
+        private PickupState[] _pickups = Array.Empty<PickupState>();
+        private int _pickupCount;
         private BattleEvent[] _events = new BattleEvent[16];
         private int _eventCount;
         private ResolvedHit[] _outgoingHits = new ResolvedHit[16];

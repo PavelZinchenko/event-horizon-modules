@@ -10,6 +10,7 @@ namespace CombatSimulation.Core
         // Tag 3 is CounterRandom's.
         private const byte AsteroidTag = 4;
         private const byte ZoneTag = 5;
+        private const byte PickupTag = 6;
 
         // Root: tag 1, battle u64, roster u32, deployment u32, tick u64.
         // A roster deployment creates one root, so its spawn slot is implicit.
@@ -59,6 +60,15 @@ namespace CombatSimulation.Core
             var hash = StableHash.Begin(ZoneTag);
             hash = StableHash.Append(hash, battleId.Value, 8);
             hash = StableHash.Append(hash, index, 4);
+            return Finish(hash);
+        }
+
+        // Pickup (loot plan, L1): tag 6, battle u64, number u32. Each mode spawn takes the next number.
+        internal static EntityId CreatePickup(BattleId battleId, uint number)
+        {
+            var hash = StableHash.Begin(PickupTag);
+            hash = StableHash.Append(hash, battleId.Value, 8);
+            hash = StableHash.Append(hash, number, 4);
             return Finish(hash);
         }
 

@@ -18,6 +18,9 @@ namespace CombatSimulation.Core
 
         // Destructible satellites (SatelliteStore; satellite plan, phase 6).
         Satellite = 6,
+
+        // Pickups (Pickups; loot plan, L1).
+        Pickup = 7,
     }
 
     // Internal storage handle: kind, index and generation. Never exposed as a public ID.
@@ -357,7 +360,7 @@ namespace CombatSimulation.Core
             RetreatCompletionTick = NoRetreat;
             PendingDeath = false;
             PendingVanish = false;
-            Status = ShipStatusFlags.None;
+            Status = definition.PermanentStatus;
             BlockedDevices = 0;
             LastContactTick = NoContact;
             LastBodyContact = default;
