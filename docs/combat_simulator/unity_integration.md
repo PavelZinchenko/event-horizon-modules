@@ -71,7 +71,7 @@ Editor menu *Tools/Combat/Check AI Replay* runs every armed built-in build again
 
 ## Exploration
 
-Migration phase 6, exploration part. The plan and its decisions (E1–E15) are in Frontier's `TODO/exploration_main.md`. The shared runtime is `ExplorationMode` ([Battle modes](battle_modes.md), exploration). The legacy reference is `ExplorationSceneManager`.
+Migration phase 6, exploration part. The plan and its decisions (E1–E15) are in Frontier's `TODO/exploration_main.md`. The runtime is Event Horizon's `ExplorationMode` in its own `CombatModes` assembly (Event Horizon's `docs/combat_modes.md`). The legacy reference is `ExplorationSceneManager`.
 
 1. **Scene.** `ExplorationState` reads `UseNewCombatSimulator` in its constructor and loads `GameScene.CoreExploration`. The scene is a copy of the legacy one: `PlanetBackground`, the HUD panels, and the scan, loot and menu windows. `CoreExplorationSceneInstaller` binds `ExplorationData`, the adapter, the HUD presenter, the panels and input. It binds no legacy manager, scene, AI or factory. `ExplorationState` binds the `Planet` and opens the menu on Escape, as before.
 2. **Setup.** `CoreExplorationSetup` turns `ExplorationData` into the layout input, the `BattleSetup` and the `ExplorationRules`. The world is 1000 square. The layout comes from the planet seed, so the same planet gives the same level; the match seed comes from `UnityEngine.Random`.
