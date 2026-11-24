@@ -96,6 +96,12 @@ namespace CombatSimulation.Modes
         public int LivesLeft(UnitId unit) => Get(unit).LivesLeft;
         public int Deaths(UnitId unit) => Get(unit).Deaths;
 
+        // A Waiting unit's tick of the respawn or the decision.
+        public long DueTick(UnitId unit) => Get(unit).DueTick;
+
+        // A Waiting unit's death spent a life, so it respawns at DueTick without a decision.
+        public bool Respawns(UnitId unit) => Get(unit).Respawns;
+
         // Stage 1: the decisions answered, then the waiting units that are due, in Track order.
         public void BeginTick(ModeContext context)
         {

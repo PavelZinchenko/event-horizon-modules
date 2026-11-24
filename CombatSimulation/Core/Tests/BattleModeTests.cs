@@ -457,6 +457,41 @@ namespace CombatSimulation.Core.Tests
         }
 
         [Test]
+        public void StartEnergyAppliesToEachLaterDeployment()
+        {
+            var rules = new ScriptRules();
+            var units = new List<UnitSetup>
+            {
+                new UnitSetup(new UnitId(1), 0, Fixtures.Ship),
+                new UnitSetup(new UnitId(101), 1, Fixtures.Ship),
+            };
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, units, rules: rules));
+            rules.Mode.Next.Add(context =>
+            {
+                Assert.IsTrue(context.SetStartEnergy(new UnitId(1), 0f));
+                Assert.IsFalse(context.SetStartEnergy(new UnitId(7), 0f));
+                Assert.Throws<ArgumentOutOfRangeException>(() => context.SetStartEnergy(new UnitId(1), 1.5f));
+                Assert.Throws<ArgumentOutOfRangeException>(() => context.SetStartEnergy(new UnitId(1), float.NaN));
+            });
+            driver.Step();
+            driver.Deploy(1);
+            driver.Deploy(101);
+            driver.Step();
+            Assert.AreEqual(0f, driver.Ship(1).Energy.Value, "The spend starts the recharge delay.");
+            Assert.AreEqual(Fixtures.Energy.Max, driver.Ship(101).Energy.Value);
+            Assert.AreEqual(0f, Unit(driver.Battle, new UnitId(1)).StartEnergy);
+
+            driver.Kill(1);
+            driver.Step();
+            rules.Mode.Next.Add(context => Assert.IsTrue(context.Respawn(new UnitId(1))));
+            driver.Step();
+            driver.Deploy(1);
+            driver.Step();
+            Assert.AreEqual(UnitStatus.Active, driver.Status(1));
+            Assert.AreEqual(0f, driver.Ship(1).Energy.Value, "A respawn keeps the start energy.");
+        }
+
+        [Test]
         public void RespawnRefillsTheBayAndTheNewShipTakesTheLiveDrones()
         {
             var rules = new ScriptRules();

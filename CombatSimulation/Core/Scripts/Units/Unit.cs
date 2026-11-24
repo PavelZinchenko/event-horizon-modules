@@ -118,6 +118,10 @@ namespace CombatSimulation.Core
         // NoDamageSystem). Its drones do not. It stays through respawns and ChangeRules until the mode clears it.
         internal bool NoDamage { get; set; }
 
+        // ModeContext.SetStartEnergy: the share of the energy that each new ship of the unit starts with (legacy
+        // CombatantShipSpawner.Settings.NoEnergy). It stays through respawns and ChangeRules until the mode changes it.
+        internal float StartEnergy { get; set; } = 1f;
+
         // ModeContext.SetCollector (loot plan, L5): what the unit's ship does with pickups. It stays through respawns and
         // ChangeRules until the mode clears it.
         internal PickupCollector Collector { get; set; }

@@ -221,6 +221,9 @@ namespace CombatSimulation.Core
         // ModeContext.SetCollector.
         public readonly PickupCollector Collector;
 
+        // ModeContext.SetStartEnergy.
+        public readonly float StartEnergy;
+
         internal UnitState(Unit slot)
         {
             UnitId = slot.UnitId;
@@ -237,6 +240,7 @@ namespace CombatSimulation.Core
             Performance = slot.Performance;
             NoDamage = slot.NoDamage;
             Collector = slot.Collector;
+            StartEnergy = slot.StartEnergy;
         }
 
         private static float GetDamageFraction(Unit slot)

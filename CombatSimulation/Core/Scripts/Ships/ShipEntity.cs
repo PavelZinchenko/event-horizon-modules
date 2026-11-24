@@ -390,6 +390,8 @@ namespace CombatSimulation.Core
             // As legacy ShipInfo.Create: the deficit is a spend, so it starts the recharge delay.
             if (slot != null && slot.ArmorDeficit > 0f) Armor.Consume(slot.ArmorDeficit);
             if (slot != null && slot.ShieldDeficit > 0f) Shield.Consume(slot.ShieldDeficit);
+            // Legacy CombatantShipSpawner.ApplySettings spends the energy the ship does not start with.
+            if (slot != null && slot.StartEnergy < 1f) Energy.Consume((1f - slot.StartEnergy) * Energy.Max);
 
             EngineHasEnergy = false;
             ClearControls();

@@ -222,6 +222,16 @@ namespace CombatSimulation.Core
             return true;
         }
 
+        internal bool ModeSetStartEnergy(UnitId id, float fraction)
+        {
+            RequireAction();
+            if (!(fraction >= 0f && fraction <= 1f)) throw new ArgumentOutOfRangeException(nameof(fraction));
+            var slot = Units.Find(id);
+            if (slot == null) return false;
+            slot.StartEnergy = fraction;
+            return true;
+        }
+
         internal void ModeDrain(UnitId id, float armorFraction, float shieldFraction)
         {
             if (_modeStage != ModeStage.Begin)

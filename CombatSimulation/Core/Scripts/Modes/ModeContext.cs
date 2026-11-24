@@ -104,6 +104,12 @@ namespace CombatSimulation.Core
         // through respawns and ChangeRules until the mode clears it. A battle with remote owners throws (D10).
         public bool SetNoDamage(UnitId id, bool noDamage) => _battle.ModeSetNoDamage(id, noDamage);
 
+        // Each later deployment of the unit starts with this share of its maximum energy (Frontier's arena ships start
+        // with none: legacy CombatantShipSpawner.Settings.NoEnergy). The missing energy is a spend, so it starts the
+        // recharge delay. The value stays through respawns and ChangeRules until the mode changes it; 1 is the default.
+        // A fraction outside 0 to 1 throws. A battle with remote owners throws (D10).
+        public bool SetStartEnergy(UnitId id, float fraction) => _battle.ModeSetStartEnergy(id, fraction);
+
         // At stage 10, after the damage: the unit's active ship, when it has one of a local owner, loses the fractions of
         // its maximum armor and shield. No resistance; both delays restart. Drains apply in call order.
         public void Drain(UnitId id, float armorFraction, float shieldFraction) =>
