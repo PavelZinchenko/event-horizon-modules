@@ -55,7 +55,8 @@ namespace CombatSimulation.Core
             _world.Bullets.CollectStuckHits(Physics, _world.Entities, _world.Shapes, _world.Ships, _world.Segments, _resolver,
                 _world.RepairBots, _world.Asteroids);
             _ramming.Collect(Physics, _world.Shapes, _world.Ships, _world.Segments, _resolver,
-                Setup.DamageTypes.RammingDamageType, _world.RepairBots, _world.Asteroids, _world.SatelliteStore);
+                Setup.DamageTypes.RammingDamageType, _world.RepairBots, _world.Asteroids, _world.SatelliteStore,
+                _world.Obstacles);
 
             var duplicates = _resolver.Sort();
             if (duplicates > 0)
@@ -280,6 +281,13 @@ namespace CombatSimulation.Core
                     {
                         // An asteroid rams (phase 5, step 14); physics already bounced the bodies.
                         owner = rammer.Owner;
+                        deviceIndex = -1;
+                        kind = HitImpactKind.Impact;
+                    }
+                    else if (_world.Obstacles.Get(hit.AttackerHandle) is Obstacle obstacle)
+                    {
+                        // The island rams as an asteroid does.
+                        owner = obstacle.Owner;
                         deviceIndex = -1;
                         kind = HitImpactKind.Impact;
                     }

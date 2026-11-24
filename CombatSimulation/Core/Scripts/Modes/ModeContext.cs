@@ -82,6 +82,14 @@ namespace CombatSimulation.Core
         // The asteroid leaves at stage 12 with an AsteroidRemoval event whose RemovalReason is Vanish.
         public bool VanishAsteroid(EntityId id) => _battle.ModeVanishAsteroid(id);
 
+        // Adds a static obstacle at once (Frontier's island, TODO/other_modes.md, O8). Its ID is new in the battle, and the
+        // snapshot of this tick lists it. It stays through ChangeRules until a mode removes it. A battle with remote owners
+        // throws (D10).
+        public EntityId AddObstacle(ObstacleSetup obstacle) => _battle.ModeAddObstacle(obstacle);
+
+        // The obstacle leaves at stage 12, without an event.
+        public bool RemoveObstacle(EntityId id) => _battle.ModeRemoveObstacle(id);
+
         // Adds a pickup at once (loot plan, L1, L2). Its ID is new in the battle. It moves from this tick on, and the
         // snapshot of this tick lists it. A battle with remote owners throws (D10).
         public EntityId SpawnPickup(in PickupSetup pickup) => _battle.ModeSpawnPickup(pickup);

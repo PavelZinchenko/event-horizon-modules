@@ -182,6 +182,19 @@ namespace CombatSimulation.Core
             return _world.Asteroids.Vanish(id);
         }
 
+        internal EntityId ModeAddObstacle(ObstacleSetup obstacle)
+        {
+            RequireAction();
+            if (obstacle == null) throw new ArgumentNullException(nameof(obstacle));
+            return _world.Obstacles.Add(obstacle)?.Id ?? default;
+        }
+
+        internal bool ModeRemoveObstacle(EntityId id)
+        {
+            RequireAction();
+            return _world.Obstacles.Remove(id);
+        }
+
         internal EntityId ModeSpawnPickup(in PickupSetup pickup)
         {
             RequireAction();

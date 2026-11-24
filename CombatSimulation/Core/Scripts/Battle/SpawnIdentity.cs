@@ -11,6 +11,7 @@ namespace CombatSimulation.Core
         private const byte AsteroidTag = 4;
         private const byte ZoneTag = 5;
         private const byte PickupTag = 6;
+        private const byte ObstacleTag = 7;
 
         // Root: tag 1, battle u64, roster u32, deployment u32, tick u64.
         // A roster deployment creates one root, so its spawn slot is implicit.
@@ -67,6 +68,15 @@ namespace CombatSimulation.Core
         internal static EntityId CreatePickup(BattleId battleId, uint number)
         {
             var hash = StableHash.Begin(PickupTag);
+            hash = StableHash.Append(hash, battleId.Value, 8);
+            hash = StableHash.Append(hash, number, 4);
+            return Finish(hash);
+        }
+
+        // Obstacle (Frontier's island): tag 7, battle u64, number u32. Each mode addition takes the next number.
+        internal static EntityId CreateObstacle(BattleId battleId, uint number)
+        {
+            var hash = StableHash.Begin(ObstacleTag);
             hash = StableHash.Append(hash, battleId.Value, 8);
             hash = StableHash.Append(hash, number, 4);
             return Finish(hash);

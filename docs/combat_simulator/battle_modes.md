@@ -47,6 +47,7 @@ The actions run at once, in call order, before the queued commands. They have no
 | `VanishBullet(EntityId)` | The bullet or beam leaves at stage 12 with a `Removal` event whose `RemovalReason` is `Disposal`, and runs no triggers: no detonation and no children. Frontier's preparation clears the enemy's bullets with it, as legacy does. |
 | `SpawnPickup(PickupSetup)` | Adds a pickup at once and returns its entity ID. See "Pickups". |
 | `VanishPickup(EntityId)` | The pickup leaves at stage 12 with a `PickupRemoval` event whose `RemovalReason` is `Vanish`. |
+| `AddObstacle(ObstacleSetup)`, `RemoveObstacle(EntityId)` | Adds a static obstacle at once and returns its entity ID; the removal applies at stage 12, without an event. See "Obstacles". |
 | `SetCollector(UnitId, PickupCollector)` | What the unit's ship does with pickups: `Collect`, `Attract`, both or `None`. The flags stay through respawns and `ChangeRules` until the mode clears them. |
 | `RestoreDrone(DroneBayKey)` | One drone back in the bay's hangar, when the bay has room. No build cycles: a drone that docks, not a rebuild. False for an unknown unit, a device that is not a drone bay, or a full bay. Frontier's salvage drones dock with it. |
 | `SetVelocity(EntityId, Vec2)` | Sets the ship's linear velocity at once. `BeginTick` runs before the engine and the physics, so the snapshot's velocity is the ship's velocity until this call. A body with a fixed position keeps its zero velocity. |
@@ -77,6 +78,19 @@ Frontier's loot (Frontier `TODO/loot.md`, F06). A pickup is a small object that 
 
 Local battles only: the four actions throw with remote owners (D10). Main uses none of them, so its scripted digest did not change. `PickupTests` covers the motion and wrap, the magnet, the collection by the lower ID, a `NoContacts` collecting drone, the expiry, `RestoreDrone` and the remote-owner rejection.
 
+## Obstacles
+
+Frontier's island (Frontier `TODO/other_modes.md`, O8; legacy `AsteroidPlatform` and `StaticPlatform`). An obstacle is a static outline that blocks some bodies and ignores the rest. The core knows no island rule: the application makes the outline.
+
+1. **Setup.** `ObstacleSetup` gives the outline in body units (3 or more points, concave allowed), the position, the angle, the allegiance, the mass, the ramming multiplier and an opaque tag. The constructor splits the outline with `ConvexDecomposition`, so an invalid outline throws. The ID takes the next obstacle number (`SpawnIdentity.CreateObstacle`).
+2. **Body.** One body with `FixedPosition | FixedRotation` and one shape for each convex part. It never moves and takes no damage, push or effect.
+3. **Collisions.** As legacy layer `Platform` (`CollisionFilters.Obstacle`): it blocks asteroids and the ships of the other allegiance groups. Bullets, beams, missiles, drones, tail segments and the ships of its own group pass through. Point defense and the gravity wave ignore it.
+4. **Ramming.** It rams a hostile ship or an asteroid as legacy `DefaultCollisionBehaviour` does (`RammingTracker`): 0.1 × relative speed × the smaller mass × its multiplier, once per touch. A ship that touches it deals it nothing. The touch counts as the ship's last body contact.
+5. **Spawn placement.** `TryFindFreePosition` tests every body, so `Auto` and `Near` placements move a ship off an obstacle. A ship that stands on a friendly island needs `At`.
+6. **Snapshot.** `BattleSnapshot.Obstacles` lists the live obstacles: entity, tag, allegiance, outline, position and angle. The view adds and removes its copies by the snapshot.
+
+Local battles only: the actions throw with remote owners (D10). Main uses none of them, so its scripted digest did not change. `ObstacleTests` covers the validation, the snapshot and removal, a blocked and rammed hostile ship, a friendly ship and a bolt that pass, an asteroid that bounces and takes the ram, and the queries.
+
 ## Mode commands
 
 `ModeCommand` is an application input that the simulation cannot decide: the player buys a life, a cheat button, an exit. It carries battle ID, command ID, target tick, a kind and two `long` arguments. The core does not interpret it. It goes through `Battle.Submit` and the command queue, so it shares the command ID namespace and the "past tick" check, and a replay gives it again. `BattleRunner.SubmitModeCommand` assigns the command ID.
@@ -106,7 +120,7 @@ D12: one local `Battle` lives for a whole level visit (preparation, combat, resu
 1. **After the result.** `BattleSetup.ContinueAfterResult` (default false) lets the battle step and take commands after its result. The first completed result latches: later results of the mode are ignored, and the `Result` event comes once. The mode's `BeginTick` and `EndTick` keep running. `IsCompleted` means "has a result"; `IsStopped` means "has a result and steps no more". `BattleRunner` keeps the pilots thinking. A setup with remote owners rejects the flag: Main's online duel stops at its result.
 2. **Battle commands.** `BattleCommand` carries battle ID, command ID, target tick and a kind: `Ceasefire(enabled)` or `ChangeRules(rules)`. It shares the command ID namespace and the "past tick" check. Stage 1 applies the commands of its tick first, in command ID order, before the mode's `BeginTick`, so a replay gives them again. A battle with remote owners throws at `Submit`. `BattleRunner.Ceasefire` and `BattleRunner.ChangeRules` assign the command ID.
 3. **Ceasefire.** As legacy `CeasefireSignal`: while it is on, every ship's `Systems` is 0 and the frames' turret requests are dropped; `RequestedSystems` keeps the frame's bits, and the engine controls stay. A change applies at stage 1 after `PreviousSystems`, so the devices see the release, and a held button presses again when the ceasefire ends. It covers the player, the AI and drones. A running device finishes its duration, and bullets in flight still hit. `BattleSnapshot.Ceasefire` publishes it.
-4. **`ChangeRules`.** `Submit` validates the rules against the setup (`IBattleRules.Validate` throws as at setup). At stage 1 the battle creates the new mode (null rules: an open battle), clears the latched result and the ceasefire, and sets every unit's performance to zero. `Battle.Rules` gives the running rules; `Setup.Rules` keeps the first ones. The units, the ships, the entity IDs, the world size, the asteroids and the zones stay. The new mode starts from the current units: it reads them through its context. The application reads the performance for the reward before it submits the command.
+4. **`ChangeRules`.** `Submit` validates the rules against the setup (`IBattleRules.Validate` throws as at setup). At stage 1 the battle creates the new mode (null rules: an open battle), clears the latched result and the ceasefire, and sets every unit's performance to zero. `Battle.Rules` gives the running rules; `Setup.Rules` keeps the first ones. The units, the ships, the entity IDs, the world size, the asteroids, the zones and the obstacles stay. The new mode starts from the current units: it reads them through its context. The application reads the performance for the reward before it submits the command.
 
 With the flag off and no battle commands, the battle steps as before: Main's scripted battle digest does not change.
 

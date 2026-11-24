@@ -222,6 +222,7 @@ namespace CombatSimulation.Core
         internal Asteroids Asteroids => _world.Asteroids;
         internal Asteroid FindAsteroid(EntityId id) => _world.Asteroids.Find(id);
         internal Pickups Pickups => _world.Pickups;
+        internal Obstacles Obstacles => _world.Obstacles;
         internal void QueueSegmentHit(TailSegment segment, float damage, Vec2 impulse) =>
             _tails.QueueSegmentHit(segment, damage, impulse);
         internal int TriggerParentCount => _triggers.TriggerParentCount;
@@ -554,6 +555,7 @@ namespace CombatSimulation.Core
             _world.SatelliteStore.DestroyDead();
             _world.Asteroids.RemoveDead(this);
             _world.Pickups.RemoveFinished();
+            _world.Obstacles.RemoveFinished(this);
             RemoveBullets();
         }
 

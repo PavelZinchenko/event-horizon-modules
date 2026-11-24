@@ -21,6 +21,9 @@ namespace CombatSimulation.Core
 
         // Pickups (Pickups; loot plan, L1).
         Pickup = 7,
+
+        // Static obstacles (Obstacles; Frontier's island).
+        Obstacle = 8,
     }
 
     // Internal storage handle: kind, index and generation. Never exposed as a public ID.

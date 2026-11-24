@@ -18,6 +18,12 @@ namespace CombatSimulation.Core
         private const int AsteroidClass = 4;
         public static readonly Filter Asteroid = new Filter(1UL << (AsteroidClass * Allegiances.GroupCount), 0);
 
+        // Frontier's island: legacy layer Platform, which pairs with Default (asteroids), the ships of the other groups
+        // and the platforms. It ignores every other category, the queries' too (gravity wave, point defense).
+        private const int ObstacleClass = 5;
+        public static Filter Obstacle(Allegiance allegiance) => new Filter(Category(ObstacleClass, allegiance),
+            ~(ClassMask(ShipClass) & ~ShipCategory(allegiance) | Asteroid.Categories));
+
         public static ulong ShipCategory(Allegiance allegiance) => Category(ShipClass, allegiance);
         public static ulong EnergyCategory(Allegiance allegiance) => Category(EnergyClass, allegiance);
         public static ulong MissileCategory(Allegiance allegiance) => Category(MissileClass, allegiance);
