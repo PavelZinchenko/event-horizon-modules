@@ -71,21 +71,10 @@ namespace CombatSimulation.Core
             var body = Physics.CreateBody(new BodyDef { Mass = bay.Drone.Mass });
             ship.InitializeDrone(id, bay, body, Tick, Setup.DamageTypes.Count);
             _world.AddShipShapes(ship);
+            // A clone beside the mothership. A drone at its centre, as legacy DroneBay.CreateDrone and SalvageDroneBay:
+            // a drone ignores the ships of its own side, so nothing pushes it out of the hull.
             if (parent.Definition.Devices[request.DeviceIndex] is ClonningCenterDefinition) PlaceClone(parent, ship);
-            else
-            {
-                var origin = Physics.GetPosition(parent.Body);
-                var angle = Physics.GetAngle(parent.Body);
-                Physics.SetPose(body, origin, angle);
-                // A drone without contacts (ShipDefinition.PermanentStatus: Frontier's salvage drone) overlaps nothing,
-                // so it stays at the mothership's centre, as legacy SalvageDroneBay launches it from there. The search
-                // ignores collision filters, so it would push the drone out of the mothership's hull.
-                if ((ship.Status & ShipStatusFlags.NoContacts) == 0)
-                {
-                    Physics.TryFindFreePosition(body, origin, SearchDistance, out var position);
-                    Physics.SetPose(body, position, angle);
-                }
-            }
+            else Physics.SetPose(body, Physics.GetPosition(parent.Body), Physics.GetAngle(parent.Body));
             Satellites.Add(_world, ship);
 
             _world.AddDrone(ship);

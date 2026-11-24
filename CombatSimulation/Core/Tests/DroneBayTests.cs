@@ -335,25 +335,25 @@ namespace CombatSimulation.Core.Tests
         }
 
         [Test]
-        public void LaunchFindsFreePositionAndPreservesMothershipHeading()
+        public void LaunchStartsAtTheMothershipCentreWithItsHeading()
         {
             var driver = Start();
             driver.Place(1, new Vec2(50f, 50f), new Vec2(5f, 0f), 0.7f);
             var drone = Launch(driver);
             Assert.AreEqual(0.7f, driver.Battle.World.GetAngle(drone.Body), 1e-5f);
             Assert.AreEqual(Vec2.Zero, driver.Battle.World.GetLinearVelocity(drone.Body));
-            // The mothership moves after the query; allied ships may then overlap their drone.
+            // The mothership moves after the launch; the drone stays where it was, inside the hull.
             var launchOrigin = driver.Battle.World.GetPosition(driver.Ship(1).Body) -
                 driver.Battle.World.GetLinearVelocity(driver.Ship(1).Body) * Battle.TickDuration;
-            Assert.GreaterOrEqual(driver.Battle.World.Torus.Delta(launchOrigin,
-                driver.Battle.World.GetPosition(drone.Body)).Length, 1.499f);
+            Assert.Less(driver.Battle.World.Torus.Delta(launchOrigin,
+                driver.Battle.World.GetPosition(drone.Body)).Length, 1e-3f);
         }
 
         [Test]
-        public void BlockedLaunchStillSpendsEnergyAndUsesLeastOverlapPosition()
+        public void ALaunchIntoAnObstacleStillSpendsEnergy()
         {
             var driver = Start();
-            // An immovable obstacle covers the whole search disk; launch must still commit.
+            // An immovable obstacle covers the old search disk; launch must still commit.
             var obstacle = driver.Battle.World.CreateBody(new BodyDef
                 { Position = new Vec2(50f, 50f), Mass = 1f, Flags = BodyFlags.FixedPosition | BodyFlags.FixedRotation });
             var shape = ShapeDef.Default;
@@ -404,7 +404,12 @@ namespace CombatSimulation.Core.Tests
             var driver = Start(Carrier(2));
             Launch(driver);
             driver.StepUntil(42);
-            foreach (var drone in Drones(driver))
+            // Both drones launch at the carrier's centre and touch from the start: part them, then bring them together.
+            var drones = Drones(driver);
+            for (var i = 0; i < drones.Length; ++i)
+                Place(driver, driver.Battle.FindShip(drones[i].Id), new Vec2(75f + 10f * i, 75f));
+            driver.Step();
+            foreach (var drone in drones)
                 Place(driver, driver.Battle.FindShip(drone.Id), new Vec2(75f, 75f));
             driver.Step();
             Assert.Greater(driver.Battle.World.BeginEvents.Length, 0);

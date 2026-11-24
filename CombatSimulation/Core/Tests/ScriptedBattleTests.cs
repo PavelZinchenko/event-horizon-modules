@@ -17,7 +17,7 @@ namespace CombatSimulation.Core.Tests
             using var sha = System.Security.Cryptography.SHA256.Create();
             var digest = BitConverter.ToString(sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(text))).Replace("-", "");
             TestContext.WriteLine($"Baseline: {battle.Log.Count} lines, SHA256 {digest}");
-            Assert.AreEqual("40CD8981E393D76A25275938E4D4E0C193F9900D28DAFC141632C405F64BB6FB", digest);
+            Assert.AreEqual("A934EA0DB22A0B7558CBD2D64FD4D80A80718F207FACDBF5C1050E1A16AF62EA", digest);
         }
 
         [Test]

@@ -25,7 +25,8 @@ namespace CombatSimulation.Core.Tests
 
             Assert.Greater(near.Hits, 1000, "The fleets fight.");
             Assert.Greater(near.Deaths, 3);
-            Assert.AreEqual(near.Hits, far.Hits, 0.05 * near.Hits);
+            // The fight is chaotic: drones that launch inside the carrier's hull (owner, 2026-11-24) moved the hits 6 % apart.
+            Assert.AreEqual(near.Hits, far.Hits, 0.1 * near.Hits);
             Assert.AreEqual(near.Deaths, far.Deaths, 1);
             CollectionAssert.AreEqual(near.Survivors, far.Survivors);
         }

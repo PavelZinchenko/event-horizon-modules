@@ -170,12 +170,12 @@ namespace CombatSimulation.Core.Tests
             Assert.Greater(HitsOnDrone(control, normal), 0, "The same drone without the status absorbs them.");
         }
 
-        // Legacy SalvageDroneBay launches from the mothership's centre; a drone with contacts is pushed out of its hull.
+        // Legacy DroneBay and SalvageDroneBay launch from the mothership's centre, with contacts or without.
         [Test]
-        public void ADroneWithNoContactsLaunchesAtTheMothershipCentre()
+        public void EveryDroneLaunchesAtTheMothershipCentre()
         {
             Assert.Less(LaunchOffset(salvage: true), 0.01f);
-            Assert.Greater(LaunchOffset(salvage: false), 0.5f, "A drone with contacts clears the carrier's hull.");
+            Assert.Less(LaunchOffset(salvage: false), 0.01f, "A drone ignores its own side's ships.");
         }
 
         private static float LaunchOffset(bool salvage)
