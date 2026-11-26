@@ -188,6 +188,42 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(3, driver.Battle.Snapshot.CopyTo(copy).Units.Length);
         }
 
+        // TODO/captain_perks.md, C11: the mode's teleport wraps the position, sets the angle, stops the ship, and adds a
+        // Teleport event with device index -1.
+        [Test]
+        public void TeleportMovesAndStopsTheShip()
+        {
+            var rules = new ScriptRules();
+            var driver = new Driver(new BattleSetup(new BattleId(1), 7, Array.Empty<UnitSetup>(), 400f, 400f,
+                rules: rules));
+            rules.Mode.Next.Add(context =>
+            {
+                context.AddUnit(new UnitSetup(new UnitId(1), 0, Fixtures.Ship));
+                Assert.IsTrue(context.Deploy(new UnitId(1), SpawnPlacement.At(new Vec2(50f, 50f), 0f, new Vec2(5f, 0f), 1f)));
+            });
+            driver.Step();
+            var ship = driver.Entity(1);
+            var from = driver.Battle.Snapshot.Ships[0].Position;
+            rules.Mode.Next.Add(context =>
+            {
+                Assert.IsTrue(context.Teleport(ship, new Vec2(430f, 60f), 2f));
+                Assert.IsFalse(context.Teleport(new EntityId(999), Vec2.Zero, 0f), "Unknown.");
+                Assert.Throws<ArgumentOutOfRangeException>(() => context.Teleport(ship, Vec2.Zero, float.NaN));
+            });
+            driver.Step();
+
+            var state = driver.Battle.Snapshot.Ships[0];
+            Assert.AreEqual(30f, state.Position.X, 0.1f, "The torus wraps the position.");
+            Assert.AreEqual(60f, state.Position.Y, 0.1f);
+            Assert.AreEqual(2f, state.Angle, 0.05f);
+            Assert.AreEqual(0f, state.LinearVelocity.Length, 0.1f, "Only the engine moves it after the jump.");
+            var item = driver.Battle.Snapshot.Events.ToArray().Single(e => e.Kind == BattleEventKind.Teleport);
+            Assert.AreEqual(ship, item.EntityId);
+            Assert.AreEqual(-1, item.DeviceIndex);
+            Assert.AreEqual(from.X, item.Point.X, 0.5f);
+            Assert.AreEqual(30f, item.Destination.X, 0.1f);
+        }
+
         // Exploration objects, step 3: an objective's death needs no new event. At stage 13 the mode reads a tagged
         // asteroid's removal and a unit's Killed transition in the tick's events.
         [Test]
@@ -249,6 +285,7 @@ namespace CombatSimulation.Core.Tests
                 Assert.Throws<InvalidOperationException>(() => context.Deploy(new UnitId(1), SpawnPlacement.Auto));
                 Assert.Throws<InvalidOperationException>(() => context.DestroyUnit(new UnitId(1)));
                 Assert.Throws<InvalidOperationException>(() => context.SetVelocity(default, Vec2.Zero));
+                Assert.Throws<InvalidOperationException>(() => context.Teleport(default, Vec2.Zero, 0f));
                 Assert.Throws<InvalidOperationException>(() => context.SetNoDamage(new UnitId(1), true));
                 Assert.Throws<InvalidOperationException>(() => context.RemoveUnit(new UnitId(1)));
                 Assert.Throws<InvalidOperationException>(() => context.VanishAsteroid(default));

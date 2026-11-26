@@ -165,7 +165,8 @@ namespace CombatView
             effect?.Run(look.Lifetime, Vector2.zero, 0f);
         }
 
-        // Step 7a: legacy TeleporterDevice at both ends of the jump (phase 5, step 11b).
+        // Step 7a: legacy TeleporterDevice at both ends of the jump (phase 5, step 11b). A mode's teleport has device index
+        // -1: the ship snaps, with no device effect (Frontier's cheater).
         public void AddTeleport(in BattleEvent item)
         {
             if (!_ships.TryGetValue(item.EntityId, out var view))

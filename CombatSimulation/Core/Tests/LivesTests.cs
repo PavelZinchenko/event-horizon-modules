@@ -110,6 +110,39 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(2, _lives.Deaths(First));
         }
 
+        // Frontier's cheater (TODO/captain_perks.md, C14): a spared death spends no life, counts no death and starts no
+        // delay; the unit stays Alive and the mode deploys it itself. The flag lasts one EndTick.
+        [Test]
+        public void ASparedDeathDoesNotCount()
+        {
+            Create(Setup(1));
+            _driver.Kill(1);
+            _mode.End = context =>
+            {
+                _lives.Spare(First);
+                _lives.EndTick(context);
+            };
+            var events = _driver.StepCollecting();
+            Transition(events, First, UnitTransitionReason.Killed);
+            Assert.AreEqual(UnitStatus.Destroyed, _driver.Status(1));
+            Assert.AreEqual(LifeStatus.Alive, _lives.Status(First));
+            Assert.AreEqual(1, _lives.LivesLeft(First));
+            Assert.AreEqual(0, _lives.Deaths(First));
+            Assert.IsEmpty(ModeEvents(events, Changed));
+
+            _mode.End = context => _lives.EndTick(context);
+            _mode.Next.Add(context => Assert.IsTrue(ModeStartDeploy(context)));
+            _driver.Step();
+            Assert.AreEqual(UnitStatus.Active, _driver.Status(1));
+            _driver.Kill(1);
+            _driver.Step();
+            Assert.AreEqual(LifeStatus.Waiting, _lives.Status(First), "The flag lasted one tick.");
+            Assert.AreEqual(1, _lives.Deaths(First));
+        }
+
+        private static bool ModeStartDeploy(ModeContext context) =>
+            context.Respawn(First) && context.Deploy(First, SpawnPlacement.At(Start, 0f));
+
         // Exploration: near the dead ship's pose of the last snapshot, with zero velocity. A ship that dies in its spawn
         // tick is not in the snapshot, so the respawn uses the placement.
         [Test]

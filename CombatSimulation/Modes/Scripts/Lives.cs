@@ -92,6 +92,11 @@ namespace CombatSimulation.Modes
             if (entry.Status == LifeStatus.Deciding) entry.Status = LifeStatus.Out;
         }
 
+        // The unit's death in this tick spends no life, counts no death and starts no delay: it stays Alive, and the mode
+        // deploys it again itself (Frontier's cheater: the extra life, TODO/captain_perks.md, C14). Call it before
+        // EndTick; EndTick clears it.
+        public void Spare(UnitId unit) => Get(unit).Spared = true;
+
         public LifeStatus Status(UnitId unit) => Get(unit).Status;
         public int LivesLeft(UnitId unit) => Get(unit).LivesLeft;
         public int Deaths(UnitId unit) => Get(unit).Deaths;
@@ -154,9 +159,12 @@ namespace CombatSimulation.Modes
 
                 if (item.TransitionReason == UnitTransitionReason.ForcedDestruction ||
                     item.TransitionReason == UnitTransitionReason.Removed) _entries.Remove(entry);
-                else if (item.TransitionReason == UnitTransitionReason.Killed && entry.Status == LifeStatus.Alive)
+                else if (item.TransitionReason == UnitTransitionReason.Killed && entry.Status == LifeStatus.Alive &&
+                         !entry.Spared)
                     Die(context, entry, item.EntityId);
             }
+
+            foreach (var entry in _entries) entry.Spared = false;
 
             PublishChanges(context);
         }
@@ -218,6 +226,9 @@ namespace CombatSimulation.Modes
             // The death spent a life, so the unit respawns when it is due.
             public bool Respawns;
             public SpawnPlacement RespawnPlacement;
+
+            // Spare: this tick's death does not count.
+            public bool Spared;
 
             public Entry(UnitId unit, in LivesSetup setup)
             {

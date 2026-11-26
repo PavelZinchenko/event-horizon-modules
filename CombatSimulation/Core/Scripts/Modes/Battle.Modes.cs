@@ -139,6 +139,24 @@ namespace CombatSimulation.Core
             return true;
         }
 
+        // Stage 1, as a teleporter jump (TeleporterDevice.Jump), with the mode's angle.
+        internal bool ModeTeleport(EntityId id, Vec2 position, float angle)
+        {
+            RequireAction();
+            if (!position.IsFinite) throw new ArgumentOutOfRangeException(nameof(position), "The position must be finite.");
+            if (float.IsNaN(angle) || float.IsInfinity(angle))
+                throw new ArgumentOutOfRangeException(nameof(angle), "The angle must be finite.");
+            var ship = _world.FindShip(id);
+            if (ship == null) return false;
+            var from = World.GetPosition(ship.Body);
+            World.TeleportGroup(ship.Body, position, angle);
+            World.SetLinearVelocity(ship.Body, Vec2.Zero);
+            World.SetAngularVelocity(ship.Body, 0f);
+            _world.Events.Add(BattleEvent.Teleport(BattleId, Tick, _world.Events.Count, ship, -1, from,
+                World.GetPosition(ship.Body), _world.Authority(ship.Owner)));
+            return true;
+        }
+
         internal bool ModeChangeAllegiance(EntityId id, Allegiance allegiance)
         {
             RequireAction();

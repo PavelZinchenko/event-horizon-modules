@@ -66,6 +66,11 @@ namespace CombatSimulation.Core
         // throws (D10).
         public bool SetVelocity(EntityId id, Vec2 velocity) => _battle.ModeSetVelocity(id, velocity);
 
+        // The ship jumps at once to the position (torus wrap) and the angle, with its satellites (TeleportGroup); its
+        // velocity and spin become 0 (Frontier's cheater: TODO/captain_perks.md, C11). A Teleport event with device index
+        // -1 tells the view to snap the ship without a device effect. A battle with remote owners throws (D10).
+        public bool Teleport(EntityId id, Vec2 position, float angle) => _battle.ModeTeleport(id, position, angle);
+
         // Destroys a unit at stage 12, as surrender does for each unit of a side. A Ready unit has no entity.
         public bool DestroyUnit(UnitId id) => _battle.ModeDestroyUnit(id);
 
