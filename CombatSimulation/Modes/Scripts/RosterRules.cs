@@ -33,12 +33,15 @@ namespace CombatSimulation.Modes
             TimerMode timerMode = TimerMode.Draw,
             int playerSide = 0,
             IReadOnlyList<int> maxActiveShipsBySide = null,
-            bool onlyOneShip = false)
+            bool onlyOneShip = false,
+            long eliminationDelayTicks = 0)
         {
             if (timeLimitTicks < 0)
                 throw new ArgumentOutOfRangeException(nameof(timeLimitTicks), "Time limit must be zero (none) or positive.");
             if (maxActiveShipsPerSide < 1)
                 throw new ArgumentOutOfRangeException(nameof(maxActiveShipsPerSide), "A side must allow at least one active ship.");
+            if (eliminationDelayTicks < 0)
+                throw new ArgumentOutOfRangeException(nameof(eliminationDelayTicks), "Elimination delay must be zero (none) or positive.");
             if (timerMode > TimerMode.DrainPlayerHp)
                 throw new ArgumentOutOfRangeException(nameof(timerMode));
             if (playerSide < 0 || playerSide >= BattleSetup.SideCount)
@@ -64,6 +67,7 @@ namespace CombatSimulation.Modes
             TimerMode = timerMode;
             PlayerSide = playerSide;
             OnlyOneShip = onlyOneShip;
+            EliminationDelayTicks = eliminationDelayTicks;
         }
 
         // Ticks both sides must have an active ship before the timer expires (TimerMode). Zero means no timer.
@@ -83,6 +87,11 @@ namespace CombatSimulation.Modes
         // Legacy PlayerShipSelectionMode.OnlyOneShip: the first death of a player roster ship ends the battle
         // RosterMode.ShipLostTicks later, unless an elimination comes first; the player reserves stay ready.
         public bool OnlyOneShip { get; }
+
+        // Ticks between the death of a side's last ship and the Elimination result; the alive counts at the end decide,
+        // so a winner that dies meanwhile gives a draw. An online duel's last explosion plays before the battle stops
+        // (Frontier TODO/online_duel.md, step 6a). Zero: the result comes in the tick of the death.
+        public long EliminationDelayTicks { get; }
 
         // The sides the legacy player rules (the DrainPlayerHp drain, OnlyOneShip) apply to: PlayerSide alone, or
         // both sides with remote owners (phase 7, Q1). Single-player battles are unchanged.

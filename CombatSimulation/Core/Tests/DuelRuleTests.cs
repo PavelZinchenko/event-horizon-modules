@@ -98,6 +98,25 @@ namespace CombatSimulation.Core.Tests
             Assert.AreEqual(1, owner.Battle.RejectedCommandCount);
         }
 
+        // Frontier's online duel (Frontier TODO/online_duel.md, step 6a): one ship per side, OnlyOneShip as the record.
+        [TestCase(false)]
+        [TestCase(true)]
+        public void BothCoresEndTheDelayAfterTheLastDeath(bool onlyOneShip)
+        {
+            var p = new NetPair(onlyOneShip: onlyOneShip, eliminationDelayTicks: RosterMode.ShipLostTicks);
+            p.Step(10);
+            var deathTick = p.A.Tick;
+            p.A.Kill(101);
+            p.Step((int)RosterMode.ShipLostTicks - 10);
+            Assert.IsFalse(p.A.Battle.IsCompleted || p.B.Battle.IsCompleted, "Both cores keep stepping.");
+
+            var result = RunToResult(p);
+            Assert.AreEqual(BattleOutcome.Victory, result.Outcome);
+            Assert.AreEqual(0, result.WinningSide);
+            Assert.AreEqual(BattleEndReason.Elimination, result.Reason);
+            Assert.AreEqual(deathTick + RosterMode.ShipLostTicks, result.Tick);
+        }
+
         // Both cores reach the same result in the same pair step.
         private static BattleResult RunToResult(NetPair p)
         {

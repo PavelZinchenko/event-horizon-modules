@@ -13,11 +13,13 @@ namespace CombatSimulation.Modes
             _mode = rules.TimerMode;
             _playerSide = rules.PlayerSide;
             _onlyOneShip = rules.OnlyOneShip;
+            _eliminationDelay = rules.EliminationDelayTicks;
             _remoteOwners = setup.HasRemoteOwners;
             foreach (var slot in setup.Units)
                 if (slot.Side == 0) ++_confirmed.Alive0; else ++_confirmed.Alive1;
             _confirmed.Tick = -1;
             _confirmed.LossDeadline = long.MaxValue;
+            _confirmed.EliminationDeadline = long.MaxValue;
         }
 
         internal void Add(long tick, int side, UnitStatus before, UnitStatus after)
@@ -47,7 +49,8 @@ namespace CombatSimulation.Modes
             while (state.Tick < end)
             {
                 var next = index < _pending.Count ? _pending[index].Tick : long.MaxValue;
-                var gapEnd = Math.Min(Math.Min(end, next - 1), state.LossDeadline);
+                var deadline = Deadline(state);
+                var gapEnd = Math.Min(Math.Min(end, next - 1), deadline);
                 if (gapEnd > state.Tick)
                 {
                     var count = gapEnd - state.Tick;
@@ -64,7 +67,7 @@ namespace CombatSimulation.Modes
                     }
                     state.Tick = gapEnd;
                 }
-                if (state.Tick == state.LossDeadline) return ShipLost(state);
+                if (state.Tick == deadline) return AtDeadline(state);
                 if (state.Tick == end) break;
                 state.Tick = next;
                 var resets = Resets.None;
@@ -84,8 +87,10 @@ namespace CombatSimulation.Modes
                 }
                 if (ShouldReset(resets, state)) state.Elapsed = 0;
                 if (state.Alive0 == 0 || state.Alive1 == 0)
-                    return new BattleResult(state.Alive0 == state.Alive1 ? BattleOutcome.Draw : BattleOutcome.Victory,
-                        state.Alive0 == state.Alive1 || state.Alive0 > 0 ? 0 : 1, BattleEndReason.Elimination, next);
+                {
+                    if (_eliminationDelay == 0) return Elimination(state, next);
+                    if (state.EliminationDeadline == long.MaxValue) state.EliminationDeadline = next + _eliminationDelay;
+                }
                 if (state.Active0 > 0 && state.Active1 > 0)
                 {
                     ++state.Elapsed;
@@ -93,10 +98,24 @@ namespace CombatSimulation.Modes
                     if (limit > 0 && state.Elapsed >= limit)
                         return new BattleResult(BattleOutcome.Draw, 0, BattleEndReason.Timeout, next);
                 }
-                if (next == state.LossDeadline) return ShipLost(state);
+                if (next == Deadline(state)) return AtDeadline(state);
             }
             return default;
         }
+
+        // A pending elimination replaces the OnlyOneShip deadline: without the delay it would have ended the battle
+        // first. The timer needs no hold: the eliminated side has no active ship.
+        private static long Deadline(in State state) =>
+            state.EliminationDeadline != long.MaxValue ? state.EliminationDeadline : state.LossDeadline;
+
+        private static BattleResult AtDeadline(in State state) => state.EliminationDeadline != long.MaxValue
+            ? Elimination(state, state.EliminationDeadline)
+            : ShipLost(state);
+
+        // The first eliminated side loses; both sides without a ship: a draw.
+        private static BattleResult Elimination(in State state, long tick) =>
+            new BattleResult(state.Alive0 == state.Alive1 ? BattleOutcome.Draw : BattleOutcome.Victory,
+                state.Alive0 == state.Alive1 || state.Alive0 > 0 ? 0 : 1, BattleEndReason.Elimination, tick);
 
         // OnlyOneShip: the first death sets the deadline. With remote owners either side can lose, and first deaths
         // of both sides in one tick are a draw (phase 7, Q1).
@@ -162,6 +181,9 @@ namespace CombatSimulation.Modes
             internal long Tick, Elapsed;
             // OnlyOneShip: the tick that ends the battle after the first death; long.MaxValue while none.
             internal long LossDeadline;
+            // RosterRules.EliminationDelayTicks: the tick of the Elimination result after a side lost its last ship;
+            // long.MaxValue while none.
+            internal long EliminationDeadline;
             // OnlyOneShip: the side whose death set LossDeadline; -1 when both sides lost a ship in that tick.
             internal int LosingSide;
             internal int Alive0, Alive1, Active0, Active1;
@@ -180,6 +202,7 @@ namespace CombatSimulation.Modes
         private readonly TimerMode _mode;
         private readonly int _playerSide;
         private readonly bool _onlyOneShip;
+        private readonly long _eliminationDelay;
         private readonly bool _remoteOwners;
         private readonly List<Transition> _pending = new List<Transition>();
     }

@@ -679,9 +679,10 @@ namespace CombatSimulation.Core.Tests
         public const int OwnerB = 10;
 
         public NetPair(ShipDefinition ship1 = null, ShipDefinition ship101 = null, int delayB = 0, int delayA = 0,
-            TimerMode timerMode = TimerMode.Draw, long timeLimitTicks = 0, bool onlyOneShip = false, bool reserves = false)
+            TimerMode timerMode = TimerMode.Draw, long timeLimitTicks = 0, bool onlyOneShip = false, bool reserves = false,
+            long eliminationDelayTicks = 0)
         {
-            var rules = new Rules(timerMode, timeLimitTicks, onlyOneShip, reserves);
+            var rules = new Rules(timerMode, timeLimitTicks, onlyOneShip, reserves, eliminationDelayTicks);
             A = new Driver(Setup(OwnerA, ship1, ship101, delayB, delayA, rules));
             B = new Driver(Setup(OwnerB, ship1, ship101, delayB, delayA, rules));
             A.Deploy(101);
@@ -762,7 +763,8 @@ namespace CombatSimulation.Core.Tests
                 roster.Add(new UnitSetup(new UnitId(102), 1, Fixtures.Ship, OwnerA));
             }
             return new BattleSetup(new BattleId(77), 13, roster,
-                rules: new RosterRules(timeLimitTicks: rules.TimeLimitTicks, timerMode: rules.TimerMode, onlyOneShip: rules.OnlyOneShip),
+                rules: new RosterRules(timeLimitTicks: rules.TimeLimitTicks, timerMode: rules.TimerMode, onlyOneShip: rules.OnlyOneShip,
+                    eliminationDelayTicks: rules.EliminationDelayTicks),
                 localOwners: new[] { localOwner },
                 ownerDelays: new Dictionary<int, int> { [OwnerB] = delayB, [OwnerA] = delayA });
         }
@@ -773,8 +775,12 @@ namespace CombatSimulation.Core.Tests
             public readonly long TimeLimitTicks;
             public readonly bool OnlyOneShip;
             public readonly bool Reserves;
-            public Rules(TimerMode timerMode, long timeLimitTicks, bool onlyOneShip, bool reserves)
-            { TimerMode = timerMode; TimeLimitTicks = timeLimitTicks; OnlyOneShip = onlyOneShip; Reserves = reserves; }
+            public readonly long EliminationDelayTicks;
+            public Rules(TimerMode timerMode, long timeLimitTicks, bool onlyOneShip, bool reserves, long eliminationDelayTicks)
+            {
+                TimerMode = timerMode; TimeLimitTicks = timeLimitTicks; OnlyOneShip = onlyOneShip; Reserves = reserves;
+                EliminationDelayTicks = eliminationDelayTicks;
+            }
         }
 
         private readonly CorrectionBatch _batch = new CorrectionBatch();
