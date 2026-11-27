@@ -31,6 +31,7 @@
     <string name="FleetUploadTimeDescription">Time elapsed since your fleet was last uploaded to the server. Other players will encounter this fleet.</string>
     <string name="ArenaCheaterWarning">It appears that your opponent may be cheating. A report has already been sent to the server. Would you like to continue the fight regardless? If not, you can skip this opponent.</string>
     <string name="OnlineDuelTitle">Online Duel</string>
+    <string name="OnlineDuelDescription">Play a one-on-one duel match against a friend online.</string>
     <string name="ServerAddress">Server Address</string>
     <string name="ServerPort">Port</string>
     <string name="DuelNoShips">Your active fleet has no ships.</string>
