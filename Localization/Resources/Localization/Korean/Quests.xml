@@ -32,7 +32,7 @@
 <string name="SOS_DEADSHIP_ACTION_Salvage">유용한 아이템 찾기</string>
 <string name="SOS_OUTOFFUEL_Message">환영합니다! 저희는 연료가 다 떨어져서 이 행성계를 빠져나가지 못하고 있습니다. 도와주실수 있으신가요?</string>
 <string name="SOS_OUTOFFUEL_Reward">정말 감사합니다! 답례로 이걸 받아주세요.</string>
-<string name="SOS_OUTOFFUEL_ACTION_Give"> $1 만큼의 연료를 주기</string>
+<string name="SOS_OUTOFFUEL_ACTION_Give">연료를 나눠 주기</string>
 <string name="SOS_OUTOFFUEL_ACTION_Attack">공격</string>
 <string name="SOS_OUTOFFUEL_ACTION_Decline">거절</string>
 <string name="SOS_TRAP_Message">목적지에 도착한 뒤, 곧바로 공격받았습니다. 이 신호는 함정이었던것 같습니다.</string>

@@ -38,7 +38,7 @@
     <string name="SOS_DEADSHIP_ACTION_Salvage">İşe yarar eşyaları ara</string>
     <string name="SOS_OUTOFFUEL_Message">Selamlar! Yakıtımız bitti ve bu sistemden kurtulamıyoruz. Bize yardım edebilir misin?</string>
     <string name="SOS_OUTOFFUEL_Reward">Çok teşekkürler! Bunu ödül olarak kabul edin.</string>
-    <string name="SOS_OUTOFFUEL_ACTION_Give">$1 ${1|ünite|ünite} yakıt ver</string>
+    <string name="SOS_OUTOFFUEL_ACTION_Give">Onlara biraz yakıt ver</string>
     <string name="SOS_OUTOFFUEL_ACTION_Attack">Saldır</string>
     <string name="SOS_OUTOFFUEL_ACTION_Decline">Reddet</string>
     <string name="SOS_TRAP_Message">Hedefe vardık ve hemen saldırıya uğradık. Bu yardım sinyali bir tuzak gibi görünüyor.</string>

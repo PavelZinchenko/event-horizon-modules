@@ -39,7 +39,7 @@
     <string name="SOS_DEADSHIP_ACTION_Salvage">Nach nutzbaren Gegenständen durchsuchen</string>
     <string name="SOS_OUTOFFUEL_Message">Seid Gegrüßt! Wir haben keinen Treibstoff mehr und können nicht mehr aus diesem System. Könntest du uns helfen?</string>
     <string name="SOS_OUTOFFUEL_Reward">Habt vielen Dank! Bitte, nehmt dies als Belohnung.</string>
-    <string name="SOS_OUTOFFUEL_ACTION_Give">$1 ${1|Einheit|Einheiten} Treibstoff geben.</string>
+    <string name="SOS_OUTOFFUEL_ACTION_Give">Ihnen etwas Treibstoff geben</string>
     <string name="SOS_OUTOFFUEL_ACTION_Attack">Angreifen</string>
     <string name="SOS_OUTOFFUEL_ACTION_Decline">Keinen Treibstoff geben</string>
     <string name="SOS_TRAP_Message">Wir sind an der Bake angekommen und wurden direkt attackiert. Es war eine Falle.</string>
