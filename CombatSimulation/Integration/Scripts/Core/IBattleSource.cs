@@ -6,7 +6,7 @@ using CoreEntityId = CombatSimulation.Core.EntityId;
 namespace Combat.Integration.Core
 {
     // Where CoreBattleHost's snapshots come from (phase 9, step 2, S4): a BattleRunner on the main thread
-    // (LocalBattleSource), or a session on another thread (Main's online duel).
+    // (LocalBattleSource), or a session on another thread (CoreDuelSource).
     public interface IBattleSource
     {
         int LocalSide { get; }

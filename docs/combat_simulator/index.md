@@ -43,12 +43,14 @@ History in Event Horizon: physics and the phase 2 core (steps 1–11) exist; pha
 | `CombatSimulation.Runtime.Tests` (Editor) | `Runtime/Tests/` | `CombatSimulation.Core`, `CombatSimulation.Modes`, `CombatSimulation.Physics`, `CombatSimulation.Network`, `CombatSimulation.Runtime` |
 | `CombatSimulation.Network` | `Network/` | `Utilites` |
 | `CombatSimulation.Network.Tests` (Editor) | `Network/Tests/` | `CombatSimulation.Network`, `Utilites` |
+| `CombatSimulation.Relay` | `Relay/` | `CombatSimulation.Network`, Unity Transport, Collections, Services (Core, Authentication, Multiplayer) |
+| `CombatSimulation.Relay.Tests` (Editor) | `Relay/Tests/` | `CombatSimulation.Relay`, `CombatSimulation.Network`, Unity Transport, Collections |
 
 Rules:
 
 1. Physics, Core, Modes, Runtime and Network are engine-free (`noEngineReferences: true`). Follow the [engine-free module rules](../../../../docs/architecture.md#engine-free-modules).
 2. The new core and the old `BattleSimulator` do not reference each other, in either direction.
 3. Phase 2 does not reference `Database` or `ShipConstructor`. Phase 4 adds the database path using contracts shared with Frontier.
-4. Unit tests go into `Physics/Tests/`, `Core/Tests/`, `Network/Tests/` or `Runtime/Tests/` with an Editor-only asmdef. `Tests~/EngineFree.Tests.csproj` compiles all four. Existing pilot tests remain in `Core/Tests/`.
+4. Unit tests go into `Physics/Tests/`, `Core/Tests/`, `Network/Tests/` or `Runtime/Tests/` with an Editor-only asmdef. `Tests~/EngineFree.Tests.csproj` compiles all four. `Relay` is not engine-free: its tests run only in the Unity Test Runner. Existing pilot tests remain in `Core/Tests/`.
 5. Core grants internal access to Runtime and the Core, Runtime and AI test assemblies. Core does not reference Network or the application.
 6. Physics, Core, Modes and Runtime are `autoReferenced`, so the application adapter in Assembly-CSharp can use them. An asmdef cannot reference Assembly-CSharp, where the application contracts live.

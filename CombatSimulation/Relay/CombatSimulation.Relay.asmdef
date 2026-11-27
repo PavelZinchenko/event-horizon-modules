@@ -1,0 +1,21 @@
+{
+    "name": "CombatSimulation.Relay",
+    "rootNamespace": "CombatSimulation.Relay",
+    "references": [
+        "CombatSimulation.Network",
+        "Unity.Collections",
+        "Unity.Networking.Transport",
+        "Unity.Services.Authentication",
+        "Unity.Services.Core",
+        "Unity.Services.Multiplayer"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

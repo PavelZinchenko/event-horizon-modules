@@ -92,7 +92,7 @@ Unity frames do not pace the ticks (gate D1). Single-player battles keep the mai
 `RelayTransport` sets Transport's limits to the same 10 s: a guest stops connecting after 10 attempts of 1 s, and Transport
 closes a link without any packet for 10 s (defaults: 60 attempts, 30 s). `TimedOut` tells such a close from a peer that left.
 
-`RelayTransport` (OnlineDuel) can run on the worker. Unity allows `Allocator.Temp` only on the main thread and inside jobs.
+`RelayTransport` (`CombatSimulation.Relay`) can run on the worker. Unity allows `Allocator.Temp` only on the main thread and inside jobs.
 `BeginSend` and `PopEvent` allocate with it, and `NetworkSettings(Allocator.Temp)` too. So `TrySend` queues datagrams in
 persistent native lists, and a job sends them before the driver update or flush. The driver uses `PopEventForConnection`,
 `Accept` and `Disconnect` directly, which do not allocate. Job scheduling and `Complete` from the worker work in Unity
@@ -113,7 +113,8 @@ Phase 7, step 6 (2026-11-14). An online duel runs in `CoreCombatScene` with a `C
 2. The battle scene reuses the mapper and the slots of `CoreDuelSetup`'s last `Build`: each `Map` call makes new definitions,
    and the views look up the session's definitions in the mapper that made them. `DuelCombatModel` holds the fleets as
    `ShipInfo` (local ships `CombatSide.Player`) and gives no loot and no experience.
-3. `CoreCombatAdapter` with a duel: each frame its `CoreBattleHost` takes every snapshot copy, oldest first, through the same handling as a
+3. `CoreCombatAdapter` with a duel: its `CoreBattleHost` reads `CoreDuelSource` (`CombatSimulation.Integration`), which sees
+   the duel through `IRemoteBattle`; `CoreDuelBattle` implements it. Each frame the host takes every snapshot copy, oldest first, through the same handling as a
    single-player step. Commands go to `SessionThread.Post`. The render alpha is the time since the newest copy was published.
    No enemy commander, kill-all, reinforcement, asteroids or effect preview.
 4. Threads: `PlayerPilot` and the player pilot map of `CorePilotProvider` sit behind locks. Player input reaches the trees
